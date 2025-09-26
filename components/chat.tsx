@@ -155,7 +155,10 @@ export default function Chat() {
 
   // Track when we have data to trigger animation unless user closed panel
   useEffect(() => {
-    if ((burnRateData?.data || barChartData?.data || sqlData?.data) && !panelClosed) {
+    if (
+      (burnRateData?.data || barChartData?.data || sqlData?.data) &&
+      !panelClosed
+    ) {
       setHasData(true);
     }
   }, [burnRateData?.data, barChartData?.data, sqlData?.data, panelClosed]);
@@ -164,8 +167,7 @@ export default function Chat() {
     burnRateData?.data && burnRateData.data.stage === "complete";
   const hasBarChartData =
     barChartData?.data && barChartData.data.stage === "complete";
-  const hasSqlData =
-    sqlData?.data && sqlData.data.stage === "complete";
+  const hasSqlData = sqlData?.data && sqlData.data.stage === "complete";
   const visibleMessages = clearedChat
     ? []
     : messages.filter((message) =>
@@ -190,45 +192,44 @@ export default function Chat() {
         <div
           className={`${hasData ? "w-1/2" : "w-full"} transition-all duration-200 ease-in-out flex flex-col h-full`}
         >
-
           {/* Chat Header */}
           {hasData && (
-          <div className="flex items-center justify-between p-6 bg-card border-b border-border">            
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setPanelClosed(true);
-                  setClearedChat(true);
-                }}
-                className="p-2 hover:bg-accent rounded-lg transition-all duration-200 shadow-sm border border-border"
-                title="Back to starters"
-              >
-                <ArrowLeftIcon className="h-4 w-4 text-muted-foreground" />
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => {
-                  if (hasData) {
-                    setHasData(false);
+            <div className="flex items-center justify-between p-6 bg-card border-b border-border">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
                     setPanelClosed(true);
-                  } else {
-                    setHasData(true);
-                    setPanelClosed(false);
-                  }
-                }}
-                className={`p-2 rounded-lg transition-all duration-200 shadow-sm border border-border ${
-                  hasData 
-                    ? "bg-primary/10 text-primary" 
-                    : "hover:bg-accent text-muted-foreground"
-                }`}
-                title={hasData ? "Hide analysis" : "Show analysis"}
-              >
-                <PresentationChartBarIcon className="h-4 w-4" />
-              </button>
+                    setClearedChat(true);
+                  }}
+                  className="p-2 hover:bg-accent rounded-lg transition-all duration-200 shadow-sm border border-border"
+                  title="Back to starters"
+                >
+                  <ArrowLeftIcon className="h-4 w-4 text-muted-foreground" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (hasData) {
+                      setHasData(false);
+                      setPanelClosed(true);
+                    } else {
+                      setHasData(true);
+                      setPanelClosed(false);
+                    }
+                  }}
+                  className={`p-2 rounded-lg transition-all duration-200 shadow-sm border border-border ${
+                    hasData
+                      ? "bg-primary/10 text-primary"
+                      : "hover:bg-accent text-muted-foreground"
+                  }`}
+                  title={hasData ? "Hide analysis" : "Show analysis"}
+                >
+                  <PresentationChartBarIcon className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-          </div>
           )}
 
           {/* Messages */}
@@ -236,11 +237,12 @@ export default function Chat() {
             {visibleMessages.length === 0 && !hasData && (
               <div className="text-center space-y-8 max-w-4xl mx-auto">
                 <div className="space-y-4">
-                <h2 className="text-7xl font-medium text-foreground animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
+                  <h2 className="text-7xl font-medium text-foreground animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
                     Good evening
-                </h2>
+                  </h2>
                   <p className="text-lg text-muted-foreground max-w-2xl mx-auto animate-in fade-in-0 slide-in-from-bottom-7 duration-800">
-                    Ask me to analyze data and I'll create interactive charts and insights
+                    Ask me to analyze data and I'll create interactive charts
+                    and insights
                   </p>
                 </div>
 
@@ -257,14 +259,18 @@ export default function Chat() {
                   >
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-8 h-8 bg-destructive/80 rounded-lg flex items-center justify-center">
-                        <span className="text-destructive-foreground text-sm font-bold"> <FireIcon className="h-4 w-4" /> </span>
+                        <span className="text-destructive-foreground text-sm font-bold">
+                          {" "}
+                          <FireIcon className="h-4 w-4" />{" "}
+                        </span>
                       </div>
                       <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
                         Analyze TechCorp Burn Rate
                       </h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Generate financial analysis with 6 months of revenue, expenses, and cash flow data.
+                      Generate financial analysis with 6 months of revenue,
+                      expenses, and cash flow data.
                     </p>
                   </button>
 
@@ -279,14 +285,18 @@ export default function Chat() {
                   >
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-8 h-8 bg-chart-2 rounded-lg flex items-center justify-center">
-                        <span className="text-primary-foreground text-sm font-bold"> <BanknotesIcon className="h-4 w-4" /> </span>
+                        <span className="text-primary-foreground text-sm font-bold">
+                          {" "}
+                          <BanknotesIcon className="h-4 w-4" />{" "}
+                        </span>
                       </div>
                       <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
                         Monthly Sales Chart
                       </h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Visualize monthly sales performance with interactive bar charts.
+                      Visualize monthly sales performance with interactive bar
+                      charts.
                     </p>
                   </button>
 
@@ -301,14 +311,18 @@ export default function Chat() {
                   >
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-8 h-8 bg-chart-3 rounded-lg flex items-center justify-center">
-                        <span className="text-primary-foreground text-sm font-bold"> <LanguageIcon className="h-4 w-4" /> </span>
+                        <span className="text-primary-foreground text-sm font-bold">
+                          {" "}
+                          <LanguageIcon className="h-4 w-4" />{" "}
+                        </span>
                       </div>
                       <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
                         Language Comparison
                       </h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Compare programming language usage and performance metrics.
+                      Compare programming language usage and performance
+                      metrics.
                     </p>
                   </button>
 
@@ -323,14 +337,18 @@ export default function Chat() {
                   >
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-8 h-8 bg-chart-4 rounded-lg flex items-center justify-center">
-                        <span className="text-primary-foreground text-sm font-bold"> <ShoppingBagIcon className="h-4 w-4" /> </span>
+                        <span className="text-primary-foreground text-sm font-bold">
+                          {" "}
+                          <ShoppingBagIcon className="h-4 w-4" />{" "}
+                        </span>
                       </div>
                       <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
                         Product Sales
                       </h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Analyze product performance and sales distribution across categories.
+                      Analyze product performance and sales distribution across
+                      categories.
                     </p>
                   </button>
 
@@ -345,14 +363,18 @@ export default function Chat() {
                   >
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-8 h-8 bg-chart-5 rounded-lg flex items-center justify-center">
-                        <span className="text-primary-foreground text-sm font-bold"> <TrophyIcon className="h-4 w-4" /> </span>
+                        <span className="text-primary-foreground text-sm font-bold">
+                          {" "}
+                          <TrophyIcon className="h-4 w-4" />{" "}
+                        </span>
                       </div>
                       <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
                         Team Performance
                       </h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Track and compare team performance metrics and achievements.
+                      Track and compare team performance metrics and
+                      achievements.
                     </p>
                   </button>
 
@@ -367,14 +389,18 @@ export default function Chat() {
                   >
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                        <span className="text-primary-foreground text-sm font-bold"> <ArrowTrendingUpIcon className="h-4 w-4" /> </span>
+                        <span className="text-primary-foreground text-sm font-bold">
+                          {" "}
+                          <ArrowTrendingUpIcon className="h-4 w-4" />{" "}
+                        </span>
                       </div>
                       <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
                         Trend Analysis
                       </h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Discover trends and patterns in financial health and growth metrics.
+                      Discover trends and patterns in financial health and
+                      growth metrics.
                     </p>
                   </button>
 
@@ -389,14 +415,18 @@ export default function Chat() {
                   >
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-8 h-8 bg-secondary rounded-lg flex items-center justify-center">
-                        <span className="text-secondary-foreground text-sm font-bold"> <ChartBarIcon className="h-4 w-4" /> </span>
+                        <span className="text-secondary-foreground text-sm font-bold">
+                          {" "}
+                          <ChartBarIcon className="h-4 w-4" />{" "}
+                        </span>
                       </div>
                       <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
                         SQL Query
                       </h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Execute custom SQL queries and display results in an interactive table.
+                      Execute custom SQL queries and display results in an
+                      interactive table.
                     </p>
                   </button>
                 </div>
@@ -510,8 +540,10 @@ export default function Chat() {
                 <AnalysisPanel />
               ) : hasSqlData && sqlData.data ? (
                 <SqlAnalysisPanel />
+              ) : sqlData?.data ? (
+                <SqlLoading />
               ) : (
-                sqlData?.data ? <SqlLoading /> : <BurnRateLoading />
+                <BurnRateLoading />
               )}
             </div>
           </div>

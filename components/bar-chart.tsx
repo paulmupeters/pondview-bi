@@ -1,11 +1,7 @@
 "use client";
 
 import { useArtifact } from "@ai-sdk-tools/artifacts/client";
-import {
-  BarChart3,
-  CheckCircle,
-  TrendingUp,
-} from "lucide-react";
+import { BarChart3, CheckCircle, TrendingUp } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -17,13 +13,9 @@ import {
 } from "recharts";
 import { BarChartArtifact } from "@/ai/artifacts/bar-chart";
 
-
-
 export function BarChartComponent() {
-
   // Get data directly from the artifact hook
   const barChartData = useArtifact(BarChartArtifact);
-
 
   // Extract data with fallbacks
   const title = barChartData?.data?.title || "Bar Chart";
@@ -42,7 +34,6 @@ export function BarChartComponent() {
     }).format(value);
   };
 
-
   if (!barChartData?.data) return null;
 
   return (
@@ -50,9 +41,7 @@ export function BarChartComponent() {
       <div className="w-full flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-2">
-          <h2 className="text-xl font-semibold text-foreground">
-            {title}
-          </h2>
+          <h2 className="text-xl font-semibold text-foreground">{title}</h2>
         </div>
 
         {/* Progress Bar */}
@@ -90,7 +79,10 @@ export function BarChartComponent() {
               <div>
                 <div className="h-96">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis
                         dataKey="label"
@@ -103,19 +95,22 @@ export function BarChartComponent() {
                       <YAxis
                         tick={{ fontSize: 12 }}
                         tickFormatter={formatNumber}
-                        label={{ 
-                          value: yAxisLabel || 'Value', 
-                          angle: -90, 
-                          position: 'insideLeft' 
+                        label={{
+                          value: yAxisLabel || "Value",
+                          angle: -90,
+                          position: "insideLeft",
                         }}
                       />
                       <Tooltip
-                        formatter={(value: number) => [formatNumber(value), "Value"]}
-                        labelStyle={{ color: 'var(--foreground)' }}
+                        formatter={(value: number) => [
+                          formatNumber(value),
+                          "Value",
+                        ]}
+                        labelStyle={{ color: "var(--foreground)" }}
                         contentStyle={{
-                          backgroundColor: 'var(--popover)',
-                          border: '1px solid var(--border)',
-                          borderRadius: 'var(--radius)',
+                          backgroundColor: "var(--popover)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius)",
                         }}
                       />
                       <Bar
@@ -195,7 +190,7 @@ export function BarChartComponent() {
                     <div className="space-y-2">
                       {summary.insights.map((insight, index) => (
                         <div
-// biome-ignore lint/suspicious/noArrayIndexKey: not relevant
+                          // biome-ignore lint/suspicious/noArrayIndexKey: not relevant
                           key={`insight-${index}`}
                           className="bg-accent border border-border p-3 rounded-lg"
                         >

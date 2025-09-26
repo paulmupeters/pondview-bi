@@ -2,20 +2,21 @@
 
 import { useArtifact } from "@ai-sdk-tools/artifacts/client";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
+import { DynamicChart } from "@/components/dynamic-chart";
 
-export function SqlResultsTable() {
+export function SqlChart() {
   const sqlData = useArtifact(ExecuteSqlArtifact);
 
   if (!sqlData?.data || sqlData.data.stage !== "complete") {
     return null;
   }
 
-  const { columns, rows, summary } = sqlData.data;
+  const { rows, chartConfig, summary } = sqlData.data;
 
-  if (!rows.length) {
+  if (!chartConfig || !rows.length) {
     return (
       <div className="p-6 text-center text-muted-foreground">
-        No results found
+        No chart data available
       </div>
     );
   }
@@ -36,42 +37,9 @@ export function SqlResultsTable() {
         </div>
       )}
 
-      {/* Table */}
-      <div className="border rounded-lg overflow-hidden">
-        <div className="overflow-x-auto max-h-96">
-          <table className="w-full border-collapse">
-            <thead className="bg-muted/50 sticky top-0">
-              <tr>
-                {columns.map((column, index) => (
-                  <th
-                    key={index}
-                    className="text-left p-3 font-medium text-sm border-b border-border"
-                  >
-                    {column.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, rowIndex) => (
-                <tr
-                  key={rowIndex}
-                  className="hover:bg-muted/30 border-b border-border last:border-b-0"
-                >
-                  {columns.map((column, colIndex) => (
-                    <td
-                      key={colIndex}
-                      className="p-3 text-sm max-w-xs truncate"
-                      title={String(row[column.name] || "")}
-                    >
-                      {String(row[column.name] || "")}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Chart */}
+      <div className="w-full">
+        <DynamicChart chartData={rows} chartConfig={chartConfig} />
       </div>
 
       {/* Insights */}

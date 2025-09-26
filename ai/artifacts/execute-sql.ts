@@ -1,5 +1,6 @@
 import { artifact } from "@ai-sdk-tools/artifacts";
 import { z } from "zod";
+import { configSchema } from "@/lib/types";
 
 // Define the execute SQL artifact schema
 export const ExecuteSqlArtifact = artifact(
@@ -26,9 +27,11 @@ export const ExecuteSqlArtifact = artifact(
       )
       .default([]),
 
-    rows: z
-      .array(z.record(z.string(), z.any()))
-      .default([]),
+    rows: z.array(z.record(z.string(), z.any())).default([]),
+    visualType: z.enum(["table", "chart"]).default("table"),
+
+    // Chart configuration (only present when visualType is "chart")
+    chartConfig: configSchema.optional(),
 
     // Summary insights
     summary: z

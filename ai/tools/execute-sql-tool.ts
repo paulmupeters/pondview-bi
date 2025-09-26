@@ -4,14 +4,20 @@ import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { getCurrentUser } from "@/ai/context";
 import { delay } from "@/lib/delay";
 import { runDuckDbCli } from "@/lib/duckdb/duckdb-cli";
+import type { Config, Result } from "@/lib/types";
+import { generateChartConfig } from "./generate-chart-config-tool";
 
 export const executeSqlTool = tool({
   description:
     "Execute a SQL query and return the results, returns a maximum of 50 rows",
   inputSchema: z.object({
     sql: z.string().describe("The SQL query to execute"),
+    userQuery: z
+      .string()
+      .optional()
+      .describe("The original user query/question that led to this SQL"),
   }),
-  execute: async ({ sql }) => {
+  execute: async ({ sql, userQuery }) => {
     // Get current user context
     const user = getCurrentUser();
 
@@ -25,17 +31,34 @@ export const executeSqlTool = tool({
       rows: [],
     });
 
+    const debugContext = {
+      artifactId: sqlArtifact.id,
+      userId: user.id,
+    };
+
+    console.debug("[executeSqlTool] Step 1 (loading) initialized", {
+      ...debugContext,
+      query: sql,
+    });
+
     await delay(300);
 
     // Step 2: Processing - execute query
     sqlArtifact.progress = 0.2;
     await sqlArtifact.update({ stage: "processing" });
 
+    console.debug("[executeSqlTool] Step 2 (processing) started", debugContext);
+
     const startTime = Date.now();
     const { code, stdout, stderr } = await runDuckDbCli({
       dbPath: `md:my_db?motherduck_token=${process.env.MOTHERDUCK_TOKEN}`,
       args: [sql],
       json: true,
+    });
+
+    console.debug("[executeSqlTool] Step 2 (processing) finished", {
+      ...debugContext,
+      exitCode: code,
     });
 
     const executionTime = Date.now() - startTime;
@@ -50,9 +73,39 @@ export const executeSqlTool = tool({
     // Step 3: Analyzing - process results
     await sqlArtifact.update({ stage: "analyzing", progress: 0.6 });
 
-    let parsedResults: Record<string, unknown>[] = [];
+    console.debug("[executeSqlTool] Step 3 (analyzing) started", debugContext);
+
+    let parsedResults: Result[] = [];
     try {
-      parsedResults = JSON.parse(stdout);
+      const rawResults = JSON.parse(stdout) as Record<string, unknown>[];
+
+      const normalizeValue = (
+        value: unknown
+      ): string | number | boolean | Date => {
+        if (value instanceof Date) {
+          return value;
+        }
+        if (
+          typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean"
+        ) {
+          return value;
+        }
+        if (value === null || value === undefined) {
+          return "";
+        }
+        return JSON.stringify(value);
+      };
+
+      parsedResults = rawResults.map((row) => {
+        const normalizedRow: Record<string, string | number | boolean | Date> =
+          {};
+        for (const [key, value] of Object.entries(row)) {
+          normalizedRow[key] = normalizeValue(value);
+        }
+        return normalizedRow;
+      });
     } catch {
       await sqlArtifact.error("Failed to parse SQL results");
       throw new Error("Failed to parse SQL results");
@@ -73,12 +126,12 @@ export const executeSqlTool = tool({
 
     if (rowCount > 0) {
       insights.push(
-        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`,
+        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`
       );
 
       if (rowCount === 50) {
         insights.push(
-          "Results limited to 50 rows - there may be more data available",
+          "Results limited to 50 rows - there may be more data available"
         );
       }
 
@@ -92,7 +145,9 @@ export const executeSqlTool = tool({
 
       if (numericColumns.length > 0) {
         insights.push(
-          `Found ${numericColumns.length} numeric column${numericColumns.length === 1 ? "" : "s"} for analysis`,
+          `Found ${numericColumns.length} numeric column${
+            numericColumns.length === 1 ? "" : "s"
+          } for analysis`
         );
       }
     } else {
@@ -104,6 +159,31 @@ export const executeSqlTool = tool({
 
     await delay(300);
 
+    // Determine if data is suitable for charting and generate chart config
+    let chartConfig: Config | undefined;
+    let visualType: "table" | "chart" = "table";
+
+    const isChartWorthy =
+      rowCount > 0 && rowCount <= 50 && queryType === "SELECT";
+    const hasNumericData = columns.some((col) => {
+      const sampleValue = parsedResults[0]?.[col.name];
+      return (
+        typeof sampleValue === "number" || !Number.isNaN(Number(sampleValue))
+      );
+    });
+
+    if (isChartWorthy && hasNumericData && userQuery) {
+      try {
+        const chartResult = await generateChartConfig(parsedResults, userQuery);
+        chartConfig = chartResult.config;
+        visualType = "chart";
+        insights.push("Chart visualization generated based on data analysis");
+      } catch (error) {
+        console.error("Failed to generate chart config:", error);
+        insights.push("Chart generation failed, showing table view");
+      }
+    }
+
     // Step 4: Complete with results
     const finalData = {
       title: "SQL Query Results",
@@ -114,6 +194,8 @@ export const executeSqlTool = tool({
       rowCount,
       columns,
       rows: parsedResults,
+      visualType,
+      chartConfig,
       summary: {
         totalRows: rowCount,
         executionTimeMs: executionTime,
@@ -123,6 +205,14 @@ export const executeSqlTool = tool({
     };
 
     await sqlArtifact.complete(finalData);
+
+    console.debug("[executeSqlTool] Step 4 (complete) finished", {
+      ...debugContext,
+      executionTimeMs: executionTime,
+      rowCount,
+      visualType,
+      hasChartConfig: Boolean(chartConfig),
+    });
 
     // Return the artifact data in the format expected by the AI SDK
     return {
@@ -139,7 +229,13 @@ export const executeSqlTool = tool({
           },
         },
       ],
-      text: `Executed ${queryType} query successfully (User: ${user.fullName} - ${user.id}). Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(". ")}.`,
+      text: `Executed ${queryType} query successfully (User: ${
+        user.fullName
+      } - ${
+        user.id
+      }). Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
+        ". "
+      )}.`,
     };
   },
 });

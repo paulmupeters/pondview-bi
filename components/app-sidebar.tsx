@@ -3,6 +3,7 @@
 import {
   AtSymbolIcon,
   BanknotesIcon,
+  Bars3Icon,
   BookOpenIcon,
   FolderIcon,
   HomeIcon,
@@ -15,33 +16,59 @@ import Link from "next/link";
 import { useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
   SidebarMenu,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 export function AppSidebar() {
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
+  const { open, toggleSidebar } = useSidebar();
 
   return (
-    <Sidebar className="group-data-[side=left]:border-r-0 bg-sidebar">
+    <Sidebar
+      variant="inset"
+      collapsible="icon"
+      className="group-data-[side=left]:border-r-0 bg-sidebar"
+    >
       <SidebarHeader className="border-b border-sidebar-border pb-6">
         <SidebarMenu>
           <div className="flex flex-col gap-6 pt-4">
-            <div className="flex items-center gap-3 px-2 py-3 rounded-xl">
-              <span className="font-mono mx-auto text-sidebar-foreground">
-                Data Assistant AI
-              </span>
+            <div
+              className={`flex justify-between items-center gap-3 px-2 rounded-xl ${open ? "" : "flex-col"}`}
+            >
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="flex text-sidebar-foreground hover:text-primary transition-colors"
+              >
+                <Bars3Icon className="w-4 h-4" />
+              </button>
+              {open ? (
+                <span className="font-mono text-sidebar-foreground">
+                  Data Assistant AI
+                </span>
+              ) : (
+                <span className="font-mono text-md text-sidebar-foreground">
+                  DashGen
+                </span>
+              )}
             </div>
           </div>
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent className="px-4 py-6">
+      <SidebarContent className="px-4 py-6 mt-4 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-0">
         <nav className="space-y-8">
-          <div>
-            <div className="flex items-center gap-2 mb-4">
+          <div className="group-data-[collapsible=icon]:hidden">
+            <div className="flex items-center gap-2 my-4">
               <HomeIcon className="w-4 h-4 text-muted-foreground" />
               <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
                 Main
@@ -63,8 +90,34 @@ export function AppSidebar() {
               </li>
             </ul>
           </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="hidden group-data-[collapsible=icon]:flex items-center justify-center w-full p-0 hover:bg-sidebar-accent rounded-lg transition-colors"
+              >
+                <HomeIcon className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="right" align="start" className="w-48 p-2">
+              <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Main
+              </div>
+              <ul className="space-y-1">
+                <li>
+                  <Link
+                    href="/"
+                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
+                  >
+                    <HomeIcon className="w-4 h-4" />
+                    <span>Dashboard</span>
+                  </Link>
+                </li>
+              </ul>
+            </PopoverContent>
+          </Popover>
 
-          <div>
+          <div className="group-data-[collapsible=icon]:hidden">
             <div className="flex items-center gap-2 mb-4">
               <FolderIcon className="w-4 h-4 text-muted-foreground" />
               <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
@@ -100,8 +153,47 @@ export function AppSidebar() {
               </li>
             </ul>
           </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="hidden group-data-[collapsible=icon]:flex items-center justify-center w-full p-0 hover:bg-sidebar-accent rounded-lg transition-colors"
+              >
+                <FolderIcon className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="right" align="start" className="w-48 p-2">
+              <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Analysis
+              </div>
+              <ul className="space-y-1">
+                <li>
+                  <Link
+                    href="/"
+                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
+                  >
+                    <div className="w-4 h-4 bg-destructive/20 rounded flex items-center justify-center">
+                      <div className="w-2 h-2 bg-destructive rounded-full"></div>
+                    </div>
+                    <span>Burndown Rate Analysis</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/"
+                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
+                  >
+                    <div className="w-4 h-4 bg-chart-1/20 rounded flex items-center justify-center">
+                      <div className="w-2 h-2 bg-chart-1 rounded-full"></div>
+                    </div>
+                    <span>Sales Chart Analysis</span>
+                  </Link>
+                </li>
+              </ul>
+            </PopoverContent>
+          </Popover>
 
-          <div>
+          <div className="group-data-[collapsible=icon]:hidden">
             <div className="flex items-center gap-2 mb-4">
               <PencilIcon className="w-4 h-4 text-muted-foreground" />
               <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
@@ -137,8 +229,47 @@ export function AppSidebar() {
               </li>
             </ul>
           </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="hidden group-data-[collapsible=icon]:flex items-center justify-center w-full p-0 hover:bg-sidebar-accent rounded-lg transition-colors"
+              >
+                <PencilIcon className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="right" align="start" className="w-48 p-2">
+              <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Dashboards
+              </div>
+              <ul className="space-y-1">
+                <li>
+                  <Link
+                    href="/"
+                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
+                  >
+                    <div className="w-4 h-4 bg-chart-2/20 rounded flex items-center justify-center">
+                      <div className="w-2 h-2 bg-chart-2 rounded-full"></div>
+                    </div>
+                    <span>Burndown Rate Dashboard</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/"
+                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
+                  >
+                    <div className="w-4 h-4 bg-chart-3/20 rounded flex items-center justify-center">
+                      <div className="w-2 h-2 bg-chart-3 rounded-full"></div>
+                    </div>
+                    <span>Sales Chart Dashboard</span>
+                  </Link>
+                </li>
+              </ul>
+            </PopoverContent>
+          </Popover>
 
-          <div>
+          <div className="group-data-[collapsible=icon]:hidden">
             <div className="flex items-center gap-2 mb-4">
               <BanknotesIcon className="w-4 h-4 text-muted-foreground" />
               <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
@@ -182,9 +313,56 @@ export function AppSidebar() {
               </li>
             </ul>
           </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="hidden group-data-[collapsible=icon]:flex items-center justify-center w-full p-0 hover:bg-sidebar-accent rounded-lg transition-colors"
+              >
+                <BanknotesIcon className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="right" align="start" className="w-48 p-2">
+              <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Data Sources
+              </div>
+              <ul className="space-y-1">
+                <li>
+                  <Link
+                    href="/"
+                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
+                  >
+                    <PlusIcon className="w-4 h-4" />
+                    <span>Upload Data</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/view-data"
+                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
+                  >
+                    <BookOpenIcon className="w-4 h-4" />
+                    <span>View Data</span>
+                  </Link>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => setIsConnectDialogOpen(true)}
+                    className="flex w-full items-center gap-3 px-2 py-1 rounded hover:bg-accent text-left text-sm"
+                  >
+                    <div className="w-4 h-4 bg-primary rounded flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 bg-primary-foreground rounded-full"></div>
+                    </div>
+                    <span>Connect Data</span>
+                  </button>
+                </li>
+              </ul>
+            </PopoverContent>
+          </Popover>
         </nav>
 
-        <div className="mt-auto pt-8">
+        <div className="mt-auto pt-8 group-data-[collapsible=icon]:hidden">
           <div className="bg-muted/50 rounded-xl p-4 border border-border">
             <div className="flex items-center gap-2 mb-2">
               <StarIcon className="w-4 h-4 text-primary" />

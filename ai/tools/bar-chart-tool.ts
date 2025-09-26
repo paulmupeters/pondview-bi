@@ -15,7 +15,10 @@ export const generateBarChartTool = tool({
           label: z.string().describe("Label for the data point"),
           value: z.number().describe("Numeric value for the data point"),
           color: z.string().optional().describe("Optional color for the bar"),
-          category: z.string().optional().describe("Optional category grouping"),
+          category: z
+            .string()
+            .optional()
+            .describe("Optional category grouping"),
         }),
       )
       .describe("Array of data points to visualize"),
@@ -65,42 +68,56 @@ export const generateBarChartTool = tool({
     await chart.update({ stage: "analyzing" });
     chart.progress = 0.8;
 
-    const totalValue = chart.data.chartData.reduce((sum, d) => sum + d.value, 0);
-    const sortedData = [...chart.data.chartData].sort((a, b) => b.value - a.value);
+    const totalValue = chart.data.chartData.reduce(
+      (sum, d) => sum + d.value,
+      0,
+    );
+    const sortedData = [...chart.data.chartData].sort(
+      (a, b) => b.value - a.value,
+    );
     const highestValue = sortedData[0];
     const lowestValue = sortedData[sortedData.length - 1];
     const averageValue = totalValue / chart.data.chartData.length;
 
     // Generate insights
     const insights: string[] = [];
-    
+
     if (highestValue && lowestValue) {
       const range = highestValue.value - lowestValue.value;
       const rangePercentage = ((range / averageValue) * 100).toFixed(1);
-      insights.push(`Range between highest and lowest values is ${rangePercentage}% of the average`);
-      
+      insights.push(
+        `Range between highest and lowest values is ${rangePercentage}% of the average`,
+      );
+
       if (highestValue.value > averageValue * 2) {
-        insights.push(`"${highestValue.label}" significantly outperforms others`);
+        insights.push(
+          `"${highestValue.label}" significantly outperforms others`,
+        );
       }
-      
+
       if (lowestValue.value < averageValue * 0.5) {
         insights.push(`"${lowestValue.label}" is notably below average`);
       }
     }
 
     // Check for distribution patterns
-    const aboveAverage = chart.data.chartData.filter(d => d.value > averageValue).length;
+    const aboveAverage = chart.data.chartData.filter(
+      (d) => d.value > averageValue,
+    ).length;
     const belowAverage = chart.data.chartData.length - aboveAverage;
-    
+
     if (aboveAverage === 1) {
       insights.push("Distribution shows one clear leader");
     } else if (belowAverage === 1) {
       insights.push("Distribution shows one clear laggard");
-    }
-    else if (aboveAverage < chart.data.chartData.length * 0.3) {
-      insights.push("Most values are below average - distribution is top-heavy");
+    } else if (aboveAverage < chart.data.chartData.length * 0.3) {
+      insights.push(
+        "Most values are below average - distribution is top-heavy",
+      );
     } else if (aboveAverage > chart.data.chartData.length * 0.7) {
-      insights.push("Most values are above average - distribution is bottom-heavy");
+      insights.push(
+        "Most values are above average - distribution is bottom-heavy",
+      );
     }
 
     await delay(300);

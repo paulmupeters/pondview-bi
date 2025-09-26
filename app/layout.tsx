@@ -5,9 +5,6 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-
-
-
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
@@ -34,7 +31,15 @@ export default function RootLayout({
         className={`${notoSans.variable} ${geistMono.variable} antialiased h-full bg-background`}
       >
         <TooltipProvider>
-          <SidebarProvider defaultOpen={true}>
+          <SidebarProvider
+            defaultOpen={true}
+            style={
+              {
+                "--sidebar-width": "15rem",
+                "--sidebar-width-icon": "5rem",
+              } as React.CSSProperties
+            }
+          >
             <div className="flex h-full w-full">
               <AppSidebar />
               <SidebarInset className="flex-1 overflow-hidden">

@@ -192,7 +192,7 @@ export function DynamicChart({
             >
               {chartData.map((_, index) => (
                 <Cell
-                // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
+                  // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
                   key={`cell-${index}`}
                   fill={colors[index % colors.length]}
                 />

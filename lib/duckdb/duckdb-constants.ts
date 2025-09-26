@@ -1,3 +1,1 @@
-export const DEFAULT_DUCKDB_PATH = 'data/app.duckdb'
-
-
+export const DEFAULT_DUCKDB_PATH = "data/app.duckdb";

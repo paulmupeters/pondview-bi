@@ -1,12 +1,6 @@
 import { generateObject } from "ai";
-import { configSchema} from "@/lib/types";
+import { configSchema, type Result } from "@/lib/types";
 
-export type Result = {
-    // biome-ignore lint/suspicious/noExplicitAny: can be any
-      result: [Record<string, any>];
-    
-    };
-    
 export const generateChartConfig = async (
   results: Result[],
   userQuery: string,

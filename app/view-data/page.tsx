@@ -18,8 +18,8 @@ export default function ViewDataPage() {
           Connected Tables
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Review the tables you have connected locally. These entries are
-          stored in your browser&apos;s local storage and only visible to you.
+          Review the tables you have connected locally. These entries are stored
+          in your browser&apos;s local storage and only visible to you.
         </p>
       </header>
       <Separator />
@@ -81,4 +81,3 @@ export default function ViewDataPage() {
     </div>
   );
 }
-

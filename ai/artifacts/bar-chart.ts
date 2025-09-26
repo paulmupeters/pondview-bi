@@ -19,7 +19,6 @@ export const BarChartArtifact = artifact(
     // showLegend: z.boolean().default(true),
     // showGrid: z.boolean().default(true),
 
-
     // Chart data
     chartData: z
       .array(

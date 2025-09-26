@@ -2,14 +2,7 @@
 
 import { generateObject } from "ai";
 import { runDuckDbCli } from "@/lib/duckdb/duckdb-cli";
-import { configSchema} from "@/lib/types";
-
-
-export type Result = {
-// biome-ignore lint/suspicious/noExplicitAny: can be any
-  result: [Record<string, any>];
-
-};
+import { configSchema, type Result } from "@/lib/types";
 
 export const getTables = async () => {
   const fullDbPath = `md:my_db?motherduck_token=${process.env.MOTHERDUCK_TOKEN}`;

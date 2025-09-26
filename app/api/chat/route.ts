@@ -13,7 +13,14 @@ export const maxDuration = 30;
 
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json();
-  const connectedTables =	[{"type":"duckdb","databasePath":"bla.db","table":"main.unicorns","description":"all unicorn companies valued above 1 billion dollars"}]
+  const connectedTables = [
+    {
+      type: "duckdb",
+      databasePath: "bla.db",
+      table: "main.unicorns",
+      description: "all unicorn companies valued above 1 billion dollars",
+    },
+  ];
 
   const stream = createUIMessageStream({
     execute: ({ writer }) => {

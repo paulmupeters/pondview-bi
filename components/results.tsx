@@ -93,7 +93,10 @@ export const Results = ({
                         key={cellIndex}
                         className="px-6 py-4 whitespace-nowrap text-sm text-foreground"
                       >
-                        {formatCellValue(column, company[column as keyof Result])}
+                        {formatCellValue(
+                          column,
+                          company[column as keyof Result],
+                        )}
                       </TableCell>
                     ))}
                   </TableRow>

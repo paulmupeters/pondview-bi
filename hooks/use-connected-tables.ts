@@ -20,13 +20,9 @@ export function useConnectedTables() {
     window.addEventListener(CONNECTED_TABLES_UPDATED_EVENT, handleUpdate);
 
     return () => {
-      window.removeEventListener(
-        CONNECTED_TABLES_UPDATED_EVENT,
-        handleUpdate,
-      );
+      window.removeEventListener(CONNECTED_TABLES_UPDATED_EVENT, handleUpdate);
     };
   }, []);
 
   return tables;
 }
-
