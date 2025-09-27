@@ -3,8 +3,13 @@
 import { useArtifact } from "@ai-sdk-tools/artifacts/client";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { DynamicChart } from "@/components/dynamic-chart";
+import type { Config } from "@/lib/types";
 
-export function SqlChart() {
+export function SqlChart({
+  customChartConfig,
+}: {
+  customChartConfig?: Config;
+}) {
   const sqlData = useArtifact(ExecuteSqlArtifact);
 
   if (!sqlData?.data || sqlData.data.stage !== "complete") {
@@ -13,7 +18,9 @@ export function SqlChart() {
 
   const { rows, chartConfig, summary } = sqlData.data;
 
-  if (!chartConfig || !rows.length) {
+  const effectiveChartConfig = customChartConfig || chartConfig;
+
+  if (!effectiveChartConfig || !rows.length) {
     return (
       <div className="p-6 text-center text-muted-foreground">
         No chart data available
@@ -39,7 +46,10 @@ export function SqlChart() {
 
       {/* Chart */}
       <div className="w-full">
-        <DynamicChart chartData={rows} chartConfig={chartConfig} />
+        <DynamicChart
+          chartData={rows}
+          chartConfig={effectiveChartConfig as Config}
+        />
       </div>
 
       {/* Insights */}
@@ -48,6 +58,7 @@ export function SqlChart() {
           <h4 className="font-medium">Insights</h4>
           <ul className="space-y-1 text-sm text-muted-foreground">
             {summary.insights.map((insight, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
               <li key={index} className="flex items-start gap-2">
                 <span className="w-1 h-1 rounded-full bg-primary mt-2 flex-shrink-0" />
                 {insight}

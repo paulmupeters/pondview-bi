@@ -174,6 +174,8 @@ export const executeSqlTool = tool({
 
     if (isChartWorthy && hasNumericData && userQuery) {
       try {
+        // Add delay to avoid rate limit errors
+        await delay(2000);
         const chartResult = await generateChartConfig(parsedResults, userQuery);
         chartConfig = chartResult.config;
         visualType = "chart";

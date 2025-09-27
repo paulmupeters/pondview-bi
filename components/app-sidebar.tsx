@@ -5,6 +5,8 @@ import {
   BanknotesIcon,
   Bars3Icon,
   BookOpenIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   FolderIcon,
   HomeIcon,
   PencilIcon,
@@ -71,51 +73,21 @@ export function AppSidebar() {
             <div className="flex items-center gap-2 my-4">
               <HomeIcon className="w-4 h-4 text-muted-foreground" />
               <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                Main
+                Home
               </h2>
-              <div className="flex-1 h-px bg-border ml-2"></div>
+              <div className="flex-1 h-px ml-2"></div>
               <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
                 1
               </span>
             </div>
-            <ul className="space-y-2">
-              <li>
-                <Link
-                  href="/"
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200 group"
-                >
-                  <HomeIcon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                  <span>Dashboard</span>
-                </Link>
-              </li>
-            </ul>
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="hidden group-data-[collapsible=icon]:flex items-center justify-center w-full p-0 hover:bg-sidebar-accent rounded-lg transition-colors"
-              >
-                <HomeIcon className="w-4 h-4 text-muted-foreground" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent side="right" align="start" className="w-48 p-2">
-              <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                Main
-              </div>
-              <ul className="space-y-1">
-                <li>
-                  <Link
-                    href="/"
-                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
-                  >
-                    <HomeIcon className="w-4 h-4" />
-                    <span>Dashboard</span>
-                  </Link>
-                </li>
-              </ul>
-            </PopoverContent>
-          </Popover>
+
+          <button
+            type="button"
+            className="hidden group-data-[collapsible=icon]:flex items-center justify-center w-full p-0 hover:bg-sidebar-accent rounded-lg transition-colors"
+          >
+            <HomeIcon className="w-4 h-4 text-muted-foreground" />
+          </button>
 
           <div className="group-data-[collapsible=icon]:hidden">
             <div className="flex items-center gap-2 mb-4">
@@ -123,7 +95,7 @@ export function AppSidebar() {
               <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
                 Analysis
               </h2>
-              <div className="flex-1 h-px bg-border ml-2"></div>
+              <div className="flex-1 h-px ml-2"></div>
               <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
                 2
               </span>
@@ -199,7 +171,7 @@ export function AppSidebar() {
               <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
                 Dashboards
               </h2>
-              <div className="flex-1 h-px bg-border ml-2"></div>
+              <div className="flex-1 h-px ml-2"></div>
               <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
                 3
               </span>
@@ -275,7 +247,7 @@ export function AppSidebar() {
               <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
                 Data Sources
               </h2>
-              <div className="flex-1 h-px bg-border ml-2"></div>
+              <div className="flex-1 h-px ml-2"></div>
               <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
                 4
               </span>

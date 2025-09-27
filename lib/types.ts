@@ -49,6 +49,12 @@ export const configSchema = z
       .describe("Mapping of data keys to color values for chart elements")
       .optional(),
     legend: z.boolean().describe("Whether to show legend"),
+    countMode: z
+      .boolean()
+      .describe(
+        "For bar charts: whether to count occurrences of xKey values instead of using yKeys",
+      )
+      .optional(),
   })
   .describe("Chart configuration object");
 

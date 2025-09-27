@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
   Area,
   AreaChart,
@@ -24,6 +23,7 @@ import {
 } from "@/components/ui/chart";
 import { transformDataForMultiLineChart } from "@/lib/rechart-format";
 import type { Config, Result } from "@/lib/types";
+import { getChartColors } from "@/lib/utils";
 
 function toTitleCase(str: string): string {
   return str
@@ -31,16 +31,6 @@ function toTitleCase(str: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
-const colors = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-  "hsl(var(--chart-6))",
-  "hsl(var(--chart-7))",
-  "hsl(var(--chart-8))",
-];
 
 export function DynamicChart({
   chartData,
@@ -51,6 +41,7 @@ export function DynamicChart({
 }) {
   const renderChart = () => {
     if (!chartData || !chartConfig) return <div>No chart data</div>;
+
     const parsedChartData = chartData.map((item) => {
       const parsedItem: { [key: string]: any } = {};
       for (const [key, value] of Object.entries(item)) {
@@ -72,14 +63,28 @@ export function DynamicChart({
       }
       return data;
     };
-
+    console.log(chartConfig, "chartConfig");
+    console.log(colors, "colors array");
     chartData = processChartData(chartData, chartConfig.type);
     // console.log({ chartData, chartConfig });
 
     switch (chartConfig.type) {
-      case "bar":
+      case "bar": {
+        let dataToUse = chartData;
+        if (chartConfig.countMode) {
+          // Aggregate by xKey and count
+          const countMap = new Map<string, number>();
+          for (const item of chartData) {
+            const key = String(item[chartConfig.xKey]);
+            countMap.set(key, (countMap.get(key) || 0) + 1);
+          }
+          dataToUse = Array.from(countMap.entries()).map(([key, count]) => ({
+            [chartConfig.xKey]: key,
+            count,
+          }));
+        }
         return (
-          <BarChart data={chartData}>
+          <BarChart data={dataToUse}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey={chartConfig.xKey}>
               <Label
@@ -90,22 +95,31 @@ export function DynamicChart({
             </XAxis>
             <YAxis>
               <Label
-                value={toTitleCase(chartConfig.yKeys[0])}
+                value={
+                  chartConfig.countMode
+                    ? "Count"
+                    : toTitleCase(chartConfig.yKeys[0])
+                }
                 angle={-90}
                 position="insideLeft"
               />
             </YAxis>
             <ChartTooltip content={<ChartTooltipContent />} />
             {chartConfig.legend && <Legend />}
-            {chartConfig.yKeys.map((key, index) => (
-              <Bar
-                key={key}
-                dataKey={key}
-                fill={colors[index % colors.length]}
-              />
-            ))}
+            {chartConfig.countMode ? (
+              <Bar key="count" dataKey="count" fill={colors[0]} />
+            ) : (
+              chartConfig.yKeys.map((key, index) => (
+                <Bar
+                  key={key}
+                  dataKey={key}
+                  fill={colors[index % colors.length]}
+                />
+              ))
+            )}
           </BarChart>
         );
+      }
       case "line": {
         const { data, xAxisField, lineFields } = transformDataForMultiLineChart(
           chartData,
@@ -206,22 +220,27 @@ export function DynamicChart({
         return <div>Unsupported chart type: {chartConfig.type}</div>;
     }
   };
+  const colors = getChartColors();
 
   return (
     <div className="w-full flex flex-col justify-center items-center">
       <h2 className="text-lg font-bold mb-2">{chartConfig.title}</h2>
       {chartConfig && chartData.length > 0 && (
         <ChartContainer
-          config={chartConfig.yKeys.reduce(
-            (acc, key, index) => {
-              acc[key] = {
-                label: key,
-                color: colors[index % colors.length],
-              };
-              return acc;
-            },
-            {} as Record<string, { label: string; color: string }>,
-          )}
+          config={
+            chartConfig.countMode
+              ? { count: { label: "Count", color: colors[0] } }
+              : chartConfig.yKeys.reduce(
+                (acc, key, index) => {
+                  acc[key] = {
+                    label: key,
+                    color: colors[index % colors.length],
+                  };
+                  return acc;
+                },
+                {} as Record<string, { label: string; color: string }>,
+              )
+          }
           className="h-[320px] w-full"
         >
           {renderChart()}

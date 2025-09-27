@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { BarChartArtifact } from "@/ai/artifacts/bar-chart";
+import { ChartContainer } from "./ui/chart";
 
 export function BarChartComponent() {
   // Get data directly from the artifact hook
@@ -78,6 +79,7 @@ export function BarChartComponent() {
               {/* Bar Chart */}
               <div>
                 <div className="h-96">
+                  <ChartContainer config={{}}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={chartData}
@@ -120,6 +122,7 @@ export function BarChartComponent() {
                       />
                     </BarChart>
                   </ResponsiveContainer>
+                  </ChartContainer>
                 </div>
                 {xAxisLabel && (
                   <div className="text-center mt-2">

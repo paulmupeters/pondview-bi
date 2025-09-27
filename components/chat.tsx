@@ -19,7 +19,7 @@ import {
   TrophyIcon,
 } from "@heroicons/react/24/outline";
 import { DefaultChatTransport } from "ai";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { BarChartArtifact } from "@/ai/artifacts/bar-chart";
 import { BurnRateArtifact } from "@/ai/artifacts/burn-rate";
@@ -42,6 +42,41 @@ export default function Chat() {
   const [hasData, setHasData] = useState(false);
   const [panelClosed, setPanelClosed] = useState(false);
   const [clearedChat, setClearedChat] = useState(false);
+  const [rightPanelWidth, setRightPanelWidth] = useState(50); // percentage
+  const [isResizing, setIsResizing] = useState(false);
+
+  const handleMouseDown = useCallback(() => {
+    setIsResizing(true);
+  }, []);
+
+  const handleMouseMove = useCallback(
+    (e: Event) => {
+      if (!isResizing) return;
+      const mouseEvent = e as MouseEvent;
+      const container = document.querySelector(".chat-container");
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const newWidth = ((rect.right - mouseEvent.clientX) / rect.width) * 100;
+      const clampedWidth = Math.max(20, Math.min(80, newWidth));
+      setRightPanelWidth(clampedWidth);
+    },
+    [isResizing],
+  );
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      return () => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+      };
+    }
+  }, [isResizing, handleMouseMove, handleMouseUp]);
 
   // Use the burn rate artifact with event listeners
   const burnRateData = useArtifact(BurnRateArtifact, {
@@ -184,13 +219,14 @@ export default function Chat() {
   return (
     <>
       <div
-        className={`h-screen flex transition-all duration-200 ease-in-out ${
+        className={`chat-container h-screen flex transition-all duration-200 ease-in-out ${
           hasData ? "flex-row" : "flex-col items-center justify-center"
         }`}
       >
         {/* Left Panel - Chat */}
         <div
-          className={`${hasData ? "w-1/2" : "w-full"} transition-all duration-200 ease-in-out flex flex-col h-full`}
+          className={`${hasData ? "" : "w-full"} transition-all duration-200 ease-in-out flex flex-col h-full`}
+          style={hasData ? { width: `${100 - rightPanelWidth}%` } : {}}
         >
           {/* Chat Header */}
           {hasData && (
@@ -516,7 +552,17 @@ export default function Chat() {
 
         {/* Right Panel - Analysis */}
         {hasData && (
-          <div className="w-1/2 border-l border-border flex flex-col h-full">
+          // biome-ignore lint/a11y/noStaticElementInteractions: needed for resizing
+          <div
+            className="w-2 cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors"
+            onMouseDown={handleMouseDown}
+          />
+        )}
+        {hasData && (
+          <div
+            className="border-l border-border flex flex-col h-full"
+            style={{ width: `${rightPanelWidth}%` }}
+          >
             {/* Analysis Header */}
             <div className="flex items-center justify-between p-0 mx-2">
               <h2 className="text-md font-semibold text-foreground ml-1">
