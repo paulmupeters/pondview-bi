@@ -32,11 +32,11 @@ export default function RootLayout({
       >
         <TooltipProvider>
           <SidebarProvider
-            defaultOpen={true}
+            defaultOpen={false}
             style={
               {
                 "--sidebar-width": "15rem",
-                "--sidebar-width-icon": "5rem",
+                "--sidebar-width-icon": "3rem",
               } as React.CSSProperties
             }
           >

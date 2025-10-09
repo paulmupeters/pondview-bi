@@ -80,48 +80,48 @@ export function BarChartComponent() {
               <div>
                 <div className="h-96">
                   <ChartContainer config={{}}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={chartData}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fontSize: 12 }}
-                        angle={-45}
-                        textAnchor="end"
-                        // height={80}
-                        interval={0}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 12 }}
-                        tickFormatter={formatNumber}
-                        label={{
-                          value: yAxisLabel || "Value",
-                          angle: -90,
-                          position: "insideLeft",
-                        }}
-                      />
-                      <Tooltip
-                        formatter={(value: number) => [
-                          formatNumber(value),
-                          "Value",
-                        ]}
-                        labelStyle={{ color: "var(--foreground)" }}
-                        contentStyle={{
-                          backgroundColor: "var(--popover)",
-                          border: "1px solid var(--border)",
-                          borderRadius: "var(--radius)",
-                        }}
-                      />
-                      <Bar
-                        dataKey="value"
-                        fill="var(--primary)"
-                        radius={[4, 4, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={chartData}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fontSize: 12 }}
+                          angle={-45}
+                          textAnchor="end"
+                          // height={80}
+                          interval={0}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 12 }}
+                          tickFormatter={formatNumber}
+                          label={{
+                            value: yAxisLabel || "Value",
+                            angle: -90,
+                            position: "insideLeft",
+                          }}
+                        />
+                        <Tooltip
+                          formatter={(value: number) => [
+                            formatNumber(value),
+                            "Value",
+                          ]}
+                          labelStyle={{ color: "var(--foreground)" }}
+                          contentStyle={{
+                            backgroundColor: "var(--popover)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "var(--radius)",
+                          }}
+                        />
+                        <Bar
+                          dataKey="value"
+                          fill="var(--primary)"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </ChartContainer>
                 </div>
                 {xAxisLabel && (

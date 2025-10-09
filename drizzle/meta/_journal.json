@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1759086276936,
+      "tag": "0000_shiny_bill_hollister",
+      "breakpoints": true
+    }
+  ]
+}

@@ -7,16 +7,30 @@ import type { Config } from "@/lib/types";
 
 export function SqlChart({
   customChartConfig,
+  dataOverride,
 }: {
   customChartConfig?: Config;
+    dataOverride?: {
+      stage?: "loading" | "processing" | "analyzing" | "complete";
+      rows: Record<string, unknown>[];
+      chartConfig?: Config;
+      summary?: {
+        totalRows: number;
+        executionTimeMs?: number;
+        insights: string[];
+        queryType?: string;
+      };
+    };
 }) {
   const sqlData = useArtifact(ExecuteSqlArtifact);
 
-  if (!sqlData?.data || sqlData.data.stage !== "complete") {
+  const payload = dataOverride ?? sqlData?.data;
+
+  if (!payload || payload.stage !== "complete") {
     return null;
   }
 
-  const { rows, chartConfig, summary } = sqlData.data;
+  const { rows, chartConfig, summary } = payload;
 
   const effectiveChartConfig = customChartConfig || chartConfig;
 

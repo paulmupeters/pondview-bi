@@ -3,14 +3,30 @@
 import { useArtifact } from "@ai-sdk-tools/artifacts/client";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 
-export function SqlResultsTable() {
+export function SqlResultsTable({
+  dataOverride,
+}: {
+  dataOverride?: {
+    stage?: "loading" | "processing" | "analyzing" | "complete";
+    columns: { name: string; type?: string }[];
+    rows: Record<string, unknown>[];
+    summary?: {
+      totalRows: number;
+      executionTimeMs?: number;
+      insights: string[];
+      queryType?: string;
+    };
+  };
+}) {
   const sqlData = useArtifact(ExecuteSqlArtifact);
 
-  if (!sqlData?.data || sqlData.data.stage !== "complete") {
+  const payload = dataOverride ?? sqlData?.data;
+
+  if (!payload || payload.stage !== "complete") {
     return null;
   }
 
-  const { columns, rows, summary } = sqlData.data;
+  const { columns, rows, summary } = payload;
 
   if (!rows.length) {
     return (
@@ -42,9 +58,9 @@ export function SqlResultsTable() {
           <table className="w-full border-collapse">
             <thead className="bg-muted/50 sticky top-0">
               <tr>
-                {columns.map((column, index) => (
+                {columns.map((column) => (
                   <th
-                    key={index}
+                    key={column.name}
                     className="text-left p-3 font-medium text-sm border-b border-border"
                   >
                     {column.name}
@@ -53,14 +69,18 @@ export function SqlResultsTable() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, rowIndex) => (
-                <tr
-                  key={rowIndex}
+              {rows.map((row) => {
+                const rowKey = columns
+                  .map((c) => String(row[c.name] ?? ""))
+                  .join("|");
+                return (
+                  <tr
+                    key={rowKey}
                   className="hover:bg-muted/30 border-b border-border last:border-b-0"
                 >
-                  {columns.map((column, colIndex) => (
+                    {columns.map((column) => (
                     <td
-                      key={colIndex}
+                      key={column.name}
                       className="p-3 text-sm max-w-xs truncate"
                       title={String(row[column.name] || "")}
                     >
@@ -68,7 +88,8 @@ export function SqlResultsTable() {
                     </td>
                   ))}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -79,8 +100,8 @@ export function SqlResultsTable() {
         <div className="space-y-2">
           <h4 className="font-medium">Insights</h4>
           <ul className="space-y-1 text-sm text-muted-foreground">
-            {summary.insights.map((insight, index) => (
-              <li key={index} className="flex items-start gap-2">
+            {summary.insights.map((insight) => (
+              <li key={insight} className="flex items-start gap-2">
                 <span className="w-1 h-1 rounded-full bg-primary mt-2 flex-shrink-0" />
                 {insight}
               </li>

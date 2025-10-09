@@ -80,7 +80,7 @@ export const executeSqlTool = tool({
       const rawResults = JSON.parse(stdout) as Record<string, unknown>[];
 
       const normalizeValue = (
-        value: unknown
+        value: unknown,
       ): string | number | boolean | Date => {
         if (value instanceof Date) {
           return value;
@@ -126,12 +126,12 @@ export const executeSqlTool = tool({
 
     if (rowCount > 0) {
       insights.push(
-        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`
+        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`,
       );
 
       if (rowCount === 50) {
         insights.push(
-          "Results limited to 50 rows - there may be more data available"
+          "Results limited to 50 rows - there may be more data available",
         );
       }
 
@@ -147,7 +147,7 @@ export const executeSqlTool = tool({
         insights.push(
           `Found ${numericColumns.length} numeric column${
             numericColumns.length === 1 ? "" : "s"
-          } for analysis`
+          } for analysis`,
         );
       }
     } else {
@@ -175,7 +175,7 @@ export const executeSqlTool = tool({
     if (isChartWorthy && hasNumericData && userQuery) {
       try {
         // Add delay to avoid rate limit errors
-        await delay(2000);
+        await delay(5000);
         const chartResult = await generateChartConfig(parsedResults, userQuery);
         chartConfig = chartResult.config;
         visualType = "chart";
@@ -236,7 +236,7 @@ export const executeSqlTool = tool({
       } - ${
         user.id
       }). Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
-        ". "
+        ". ",
       )}.`,
     };
   },

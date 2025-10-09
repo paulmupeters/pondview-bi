@@ -7,11 +7,13 @@ import {
   type UIMessage,
 } from "ai";
 import { setContext } from "@/ai/context";
+import { analysisPrompt } from "@/ai/prompts";
 import { tools } from "@/ai/tools";
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
 
+// This route is kept for backward compatibility. The new per-chat route is at `app/api/chat/[chatId]/route.ts`.
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json();
   const connectedTables = [
@@ -34,26 +36,10 @@ export async function POST(req: Request) {
 
       const result = streamText({
         model: "openai/gpt-5-nano",
-        system: `You are a helpful financial analysis assistant and an expert in postgres and duckdb.
-        dont use more than 4 sentences to answer questions
-
-  When users ask about burn rate analysis, financial health, runway calculations, or expense tracking, use the analyzeBurnRateTool to create interactive charts and insights.
-  When users ask about unicorn companies, use the executeSqlTool to execute a sql query and return the results. Use it when for example the user asks how many unicorn companies are there in the world. You can then do a count of the results to answer the question.
-  Before writing a SQL query, use the getTableSchemaTool to understand the table structure and available columns.
-  You have access to the following tables: ${JSON.stringify(connectedTables)}.
-
-  Key capabilities:
-  - Analyze monthly financial data (revenue, expenses, cash balance)
-  - Calculate burn rate and runway metrics
-  - Generate trend analysis (improving, stable, declining)
-  - Provide alerts and recommendations
-  - Create interactive visualizations
-  - Execute sql queries on postgres and duckdb
-  - Get table schemas to inform query writing
-
-  Always use the tool when users provide financial data or ask for burn rate analysis.
-
-  `,
+        system: analysisPrompt.replace(
+          "{connectedTables}",
+          JSON.stringify(connectedTables)
+        ),
         messages: convertToModelMessages(messages),
         tools,
         stopWhen: stepCountIs(10),

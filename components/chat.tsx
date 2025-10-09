@@ -4,45 +4,45 @@ import { useArtifact } from "@ai-sdk-tools/artifacts/client";
 import { AIDevtools } from "@ai-sdk-tools/devtools";
 import { useChat } from "@ai-sdk-tools/store";
 import {
-  ArrowLeftIcon,
   ArrowTrendingUpIcon,
   BanknotesIcon,
   ChartBarIcon,
-  EllipsisHorizontalIcon,
   FireIcon,
   LanguageIcon,
   PaperAirplaneIcon,
   PlusIcon,
-  PresentationChartBarIcon,
   ShoppingBagIcon,
   SparklesIcon,
   TrophyIcon,
 } from "@heroicons/react/24/outline";
+import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { BarChartArtifact } from "@/ai/artifacts/bar-chart";
-import { BurnRateArtifact } from "@/ai/artifacts/burn-rate";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { AnalysisPanel } from "@/components/analysis-panel";
-import { BurnRateAnalysisPanel } from "@/components/burn-rate-analysis-panel";
-import { BurnRateChart } from "@/components/burn-rate-chart";
-import { BurnRateLoading } from "@/components/burn-rate-loading";
 import { SqlAnalysisPanel } from "@/components/sql-analysis-panel";
 import { SqlLoading } from "@/components/sql-loading";
 
-export default function Chat() {
+export default function Chat({
+  chatId,
+  // initialMessages = [],
+}: {
+  chatId: string;
+  initialMessages?: UIMessage[];
+}) {
   const { messages, sendMessage, status } = useChat({
+    id: chatId,
+    // initialMessages,
     transport: new DefaultChatTransport({
-      api: "/api/chat",
+      api: `/api/chat/${chatId}`,
     }),
   });
   const [input, setInput] = useState("");
-  const [showBurnRateChart, setShowBurnRateChart] = useState(false);
-  const [hasData, setHasData] = useState(false);
-  const [panelClosed, setPanelClosed] = useState(false);
+
   const [clearedChat, setClearedChat] = useState(false);
-  const [rightPanelWidth, setRightPanelWidth] = useState(50); // percentage
+  const [rightPanelWidth, setRightPanelWidth] = useState(75); // percentage - 2/3 of screen
   const [isResizing, setIsResizing] = useState(false);
 
   const handleMouseDown = useCallback(() => {
@@ -77,45 +77,6 @@ export default function Chat() {
       };
     }
   }, [isResizing, handleMouseMove, handleMouseUp]);
-
-  // Use the burn rate artifact with event listeners
-  const burnRateData = useArtifact(BurnRateArtifact, {
-    onStatusChange: (newStatus, oldStatus) => {
-      if (newStatus === "loading" && oldStatus === "idle") {
-        toast.loading("Starting burn rate analysis...", {
-          id: "burn-rate-analysis",
-        });
-      } else if (newStatus === "complete" && oldStatus === "streaming") {
-        const alerts = burnRateData?.data?.summary?.alerts?.length || 0;
-        const recommendations =
-          burnRateData?.data?.summary?.recommendations?.length || 0;
-        toast.success(
-          `Analysis complete! Found ${alerts} alerts and ${recommendations} recommendations.`,
-          { id: "burn-rate-analysis" },
-        );
-      }
-    },
-    onUpdate: (newData, oldData) => {
-      // Show different toasts based on stage changes
-      if (newData.stage === "processing" && oldData?.stage === "loading") {
-        toast.loading("Processing financial data...", {
-          id: "burn-rate-analysis",
-        });
-      } else if (
-        newData.stage === "analyzing" &&
-        oldData?.stage === "processing"
-      ) {
-        toast.loading("Analyzing trends and generating insights...", {
-          id: "burn-rate-analysis",
-        });
-      }
-    },
-    onError: (error) => {
-      toast.error(`Analysis failed: ${error}`, {
-        id: "burn-rate-analysis",
-      });
-    },
-  });
 
   // Use the SQL artifact with event listeners
   const sqlData = useArtifact(ExecuteSqlArtifact, {
@@ -189,17 +150,6 @@ export default function Chat() {
   });
 
   // Track when we have data to trigger animation unless user closed panel
-  useEffect(() => {
-    if (
-      (burnRateData?.data || barChartData?.data || sqlData?.data) &&
-      !panelClosed
-    ) {
-      setHasData(true);
-    }
-  }, [burnRateData?.data, barChartData?.data, sqlData?.data, panelClosed]);
-
-  const hasAnalysisData =
-    burnRateData?.data && burnRateData.data.stage === "complete";
   const hasBarChartData =
     barChartData?.data && barChartData.data.stage === "complete";
   const hasSqlData = sqlData?.data && sqlData.data.stage === "complete";
@@ -220,57 +170,17 @@ export default function Chat() {
     <>
       <div
         className={`chat-container h-screen flex transition-all duration-200 ease-in-out ${
-          hasData ? "flex-row" : "flex-col items-center justify-center"
+          hasBarChartData || hasSqlData ? "flex-row" : "flex-col items-center justify-center"
         }`}
       >
         {/* Left Panel - Chat */}
         <div
-          className={`${hasData ? "" : "w-full"} transition-all duration-200 ease-in-out flex flex-col h-full`}
-          style={hasData ? { width: `${100 - rightPanelWidth}%` } : {}}
+          className={`${hasBarChartData || hasSqlData ? "" : "w-full"} transition-all duration-200 ease-in-out flex flex-col h-full`}
+          style={hasBarChartData || hasSqlData ? { width: `${100 - rightPanelWidth}%` } : {}}
         >
-          {/* Chat Header */}
-          {hasData && (
-            <div className="flex items-center justify-between p-6 bg-card border-b border-border">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPanelClosed(true);
-                    setClearedChat(true);
-                  }}
-                  className="p-2 hover:bg-accent rounded-lg transition-all duration-200 shadow-sm border border-border"
-                  title="Back to starters"
-                >
-                  <ArrowLeftIcon className="h-4 w-4 text-muted-foreground" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (hasData) {
-                      setHasData(false);
-                      setPanelClosed(true);
-                    } else {
-                      setHasData(true);
-                      setPanelClosed(false);
-                    }
-                  }}
-                  className={`p-2 rounded-lg transition-all duration-200 shadow-sm border border-border ${
-                    hasData
-                      ? "bg-primary/10 text-primary"
-                      : "hover:bg-accent text-muted-foreground"
-                  }`}
-                  title={hasData ? "Hide analysis" : "Show analysis"}
-                >
-                  <PresentationChartBarIcon className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-8 space-y-6 flex flex-col items-start mx-auto bg-background">
-            {visibleMessages.length === 0 && !hasData && (
+            {visibleMessages.length === 0 && !hasBarChartData && !hasSqlData && (
               <div className="text-center space-y-8 max-w-4xl mx-auto">
                 <div className="space-y-4">
                   <h2 className="text-7xl font-medium text-foreground animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
@@ -518,7 +428,6 @@ export default function Chat() {
                 if (input.trim()) {
                   sendMessage({ text: input });
                   setInput("");
-                  setPanelClosed(false);
                   setClearedChat(false);
                 }
               }}
@@ -551,14 +460,14 @@ export default function Chat() {
         </div>
 
         {/* Right Panel - Analysis */}
-        {hasData && (
+        {hasBarChartData || hasSqlData && (
           // biome-ignore lint/a11y/noStaticElementInteractions: needed for resizing
           <div
             className="w-2 cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors"
             onMouseDown={handleMouseDown}
           />
         )}
-        {hasData && (
+        {hasBarChartData || hasSqlData && (
           <div
             className="border-l border-border flex flex-col h-full"
             style={{ width: `${rightPanelWidth}%` }}
@@ -568,41 +477,29 @@ export default function Chat() {
               <h2 className="text-md font-semibold text-foreground ml-1">
                 Analysis
               </h2>
-              <button
-                type="button"
-                className="p-2 hover:bg-accent rounded-lg transition-colors"
-                onClick={() => setShowBurnRateChart(true)}
-                title="Show burn rate chart"
-              >
-                <EllipsisHorizontalIcon className="h-5 w-5" />
-              </button>
             </div>
 
             {/* Analysis Content */}
             <div className="flex-1 overflow-y-auto">
-              {hasAnalysisData ? (
-                <BurnRateAnalysisPanel />
-              ) : hasBarChartData && barChartData.data ? (
+
+              {hasBarChartData && barChartData.data ? (
                 <AnalysisPanel />
               ) : hasSqlData && sqlData.data ? (
                 <SqlAnalysisPanel />
               ) : sqlData?.data ? (
                 <SqlLoading />
               ) : (
-                <BurnRateLoading />
-              )}
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <p className="text-gray-500">No analysis data available</p>
+                  </div>
+                </div>
+              )
+              }
             </div>
           </div>
         )}
       </div>
-
-      {/* Burn Rate Chart Modal */}
-      {burnRateData?.data && (
-        <BurnRateChart
-          isOpen={showBurnRateChart}
-          onClose={() => setShowBurnRateChart(false)}
-        />
-      )}
       <AIDevtools />
     </>
   );

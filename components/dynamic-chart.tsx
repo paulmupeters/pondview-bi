@@ -39,13 +39,24 @@ export function DynamicChart({
   chartData: Result[];
   chartConfig: Config;
 }) {
+  const defaultColors = getChartColors();
+
+  // Use custom colors from chartConfig if available, otherwise use default colors
+  const getColorForKey = (key: string, index: number): string => {
+    if (chartConfig.colors?.[key]) {
+      return chartConfig.colors[key];
+    }
+    return defaultColors[index % defaultColors.length];
+  };
+
   const renderChart = () => {
     if (!chartData || !chartConfig) return <div>No chart data</div>;
 
     const parsedChartData = chartData.map((item) => {
-      const parsedItem: { [key: string]: any } = {};
+      const parsedItem: { [key: string]: string | number | boolean | Date } =
+        {};
       for (const [key, value] of Object.entries(item)) {
-        parsedItem[key] = isNaN(Number(value)) ? value : Number(value);
+        parsedItem[key] = Number.isNaN(Number(value)) ? value : Number(value);
       }
       return parsedItem;
     });
@@ -63,10 +74,7 @@ export function DynamicChart({
       }
       return data;
     };
-    console.log(chartConfig, "chartConfig");
-    console.log(colors, "colors array");
     chartData = processChartData(chartData, chartConfig.type);
-    // console.log({ chartData, chartConfig });
 
     switch (chartConfig.type) {
       case "bar": {
@@ -107,14 +115,32 @@ export function DynamicChart({
             <ChartTooltip content={<ChartTooltipContent />} />
             {chartConfig.legend && <Legend />}
             {chartConfig.countMode ? (
-              <Bar key="count" dataKey="count" fill={colors[0]} />
+              <Bar
+                key="count"
+                dataKey="count"
+              >
+                {dataToUse.map((entry, index) => (
+                  <Cell
+                    // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
+                    key={`cell-${index}`}
+                    fill={getColorForKey(String(entry[chartConfig.xKey]), index)}
+                  />
+                ))}
+              </Bar>
             ) : (
               chartConfig.yKeys.map((key, index) => (
                 <Bar
                   key={key}
                   dataKey={key}
-                  fill={colors[index % colors.length]}
-                />
+                >
+                  {dataToUse.map((entry, entryIndex) => (
+                    <Cell
+                      // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
+                      key={`cell-${entryIndex}`}
+                      fill={getColorForKey(String(entry[chartConfig.xKey]), entryIndex)}
+                    />
+                  ))}
+                </Bar>
               ))
             )}
           </BarChart>
@@ -129,8 +155,6 @@ export function DynamicChart({
           chartConfig.multipleLines &&
           chartConfig.measurementColumn &&
           chartConfig.yKeys.includes(chartConfig.measurementColumn);
-        // console.log(useTransformedData, "useTransformedData");
-        // const useTransformedData = false;
         return (
           <LineChart data={useTransformedData ? data : chartData}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -160,7 +184,7 @@ export function DynamicChart({
                     key={key}
                     type="monotone"
                     dataKey={key}
-                    stroke={colors[index % colors.length]}
+                  stroke={getColorForKey(key, index)}
                   />
                 ))
               : chartConfig.yKeys.map((key, index) => (
@@ -168,7 +192,7 @@ export function DynamicChart({
                     key={key}
                     type="monotone"
                     dataKey={key}
-                    stroke={colors[index % colors.length]}
+                  stroke={getColorForKey(key, index)}
                   />
                 ))}
           </LineChart>
@@ -187,8 +211,8 @@ export function DynamicChart({
                 key={key}
                 type="monotone"
                 dataKey={key}
-                fill={colors[index % colors.length]}
-                stroke={colors[index % colors.length]}
+                fill={getColorForKey(key, index)}
+                stroke={getColorForKey(key, index)}
               />
             ))}
           </AreaChart>
@@ -204,11 +228,11 @@ export function DynamicChart({
               cy="50%"
               outerRadius={120}
             >
-              {chartData.map((_, index) => (
+              {chartData.map((entry, index) => (
                 <Cell
                   // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
                   key={`cell-${index}`}
-                  fill={colors[index % colors.length]}
+                  fill={getColorForKey(String(entry[chartConfig.xKey]), index)}
                 />
               ))}
             </Pie>
@@ -220,7 +244,6 @@ export function DynamicChart({
         return <div>Unsupported chart type: {chartConfig.type}</div>;
     }
   };
-  const colors = getChartColors();
 
   return (
     <div className="w-full flex flex-col justify-center items-center">
@@ -229,12 +252,12 @@ export function DynamicChart({
         <ChartContainer
           config={
             chartConfig.countMode
-              ? { count: { label: "Count", color: colors[0] } }
+              ? { count: { label: "Count", color: "hsl(var(--chart-1))" } }
               : chartConfig.yKeys.reduce(
                 (acc, key, index) => {
                   acc[key] = {
                     label: key,
-                    color: colors[index % colors.length],
+                    color: `hsl(var(--chart-${(index % 8) + 1}))`,
                   };
                   return acc;
                 },
