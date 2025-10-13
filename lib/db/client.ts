@@ -1,12 +1,16 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+
 import * as schema from "./schema";
 
 const filePath = process.env.DATABASE_PATH || "./sqlite.db";
 export const sqlite = new Database(filePath);
 
+// Ensure foreign key constraints are enforced (for ON DELETE CASCADE)
+sqlite.run(`PRAGMA foreign_keys = ON;`);
+
 // Lightweight bootstrap to ensure tables exist in dev environments
-sqlite.exec(`
+sqlite.run(`
 CREATE TABLE IF NOT EXISTS chats (
   id TEXT PRIMARY KEY,
   title TEXT,
@@ -29,5 +33,3 @@ CREATE INDEX IF NOT EXISTS messages_chat_idx ON messages(chat_id, created_at);
 `);
 
 export const db = drizzle(sqlite, { schema });
-
-

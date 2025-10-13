@@ -1,42 +1,28 @@
 "use client";
 
 import {
-  BanknotesIcon,
-  Bars3Icon,
-  BookOpenIcon,
-  ClockIcon,
-  FolderIcon,
-  HomeIcon,
-  PencilIcon,
-  PlusIcon,
-} from "@heroicons/react/24/outline";
+  Database,
+  MessageSquare,
+  PanelLeftClose,
+  Plus,
+  Settings,
+} from "lucide-react";
 import Link from "next/link";
+import type { MouseEvent } from "react";
 import { useEffect, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarMenu,
-  useSidebar,
-} from "@/components/ui/sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
-export function AppSidebar() {
+interface ChatSidebarProps {
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
+export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
-  const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
-  const [isDashboardsOpen, setIsDashboardsOpen] = useState(false);
-  const [isDataSourcesOpen, setIsDataSourcesOpen] = useState(false);
-  const { open, toggleSidebar } = useSidebar();
   const [recentChats, setRecentChats] = useState<
     { id: string; title: string | null; updatedAt: number }[]
   >([]);
@@ -59,418 +45,187 @@ export function AppSidebar() {
     };
   }, []);
 
+  const handleDeleteChat = async (chatId: string) => {
+    // Optimistically remove from UI
+    setRecentChats(
+      (current: { id: string; title: string | null; updatedAt: number }[]) =>
+        current.filter(
+          (c: { id: string; title: string | null; updatedAt: number }) =>
+            c.id !== chatId,
+        ),
+    );
+    try {
+      const res = await fetch(`/api/chat/${chatId}`, { method: "DELETE" });
+      if (!res.ok) {
+        // Reload list on failure to restore
+        const reload = await fetch("/api/chats", { cache: "no-store" });
+        if (reload.ok) {
+          const data = (await reload.json()) as {
+            chats: { id: string; title: string | null; updatedAt: number }[];
+          };
+          setRecentChats(data.chats ?? []);
+        }
+      }
+    } catch {
+      try {
+        const reload = await fetch("/api/chats", { cache: "no-store" });
+        if (reload.ok) {
+          const data = (await reload.json()) as {
+            chats: { id: string; title: string | null; updatedAt: number }[];
+          };
+          setRecentChats(data.chats ?? []);
+        }
+      } catch { }
+    }
+  };
+
+  const formatDate = (timestamp: number) => {
+    const now = Date.now();
+    const diff = now - timestamp;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (days === 0) return "Today";
+    if (days === 1) return "Yesterday";
+    if (days < 7) return `${days} days ago`;
+    if (days < 14) return "Last week";
+    return "Older";
+  };
+
   return (
-    <Sidebar
-      variant="inset"
-      collapsible="icon"
-      className="group-data-[side=left]:border-r-0 bg-sidebar"
+    <div
+      className={cn(
+        "relative flex flex-col border-r border-border bg-sidebar transition-all duration-300",
+        isOpen ? "w-64" : "w-0",
+      )}
     >
-      <SidebarHeader className="border-b border-sidebar-border pb-6">
-        <SidebarMenu>
-          <div className="flex flex-col gap-6 pt-4">
-            <div
-              className={`flex justify-between items-center gap-3 px-2 rounded-xl ${open ? "" : "flex-col"}`}
-            >
-              <button
-                type="button"
-                onClick={toggleSidebar}
-                className="flex text-sidebar-foreground hover:text-primary transition-colors"
-              >
-                <Bars3Icon className="w-4 h-4" />
-              </button>
-              {open ? (
-                <span className="font-mono text-sidebar-foreground">
-                  Data Assistant AI
-                </span>
-              ) : (
-                <span className="font-mono text-md text-sidebar-foreground">
-                    ⡿Ai⣷
-                </span>
-              )}
-            </div>
-          </div>
-        </SidebarMenu>
-      </SidebarHeader>
-
-      <SidebarContent className="px-4 py-6 mt-4 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-0">
-        <nav className="space-y-8">
-          {/* Recent chats - expanded */}
-          <div className="group-data-[collapsible=icon]:hidden">
-            <div className="flex items-center gap-2 my-4">
-              <ClockIcon className="w-4 h-4 text-muted-foreground" />
-              <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                Recent
-              </h2>
-              <div className="flex-1 h-px ml-2"></div>
-              <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
-                {recentChats.length}
+      {isOpen && (
+        <div className="flex h-full flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-border p-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+                <Database className="h-4 w-4 text-primary-foreground" />
+              </div>
+              <span className="font-semibold text-sidebar-foreground">
+                DataChat
               </span>
             </div>
-            {recentChats.length > 0 ? (
-              <ul className="space-y-2">
-                {recentChats.map((c) => (
-                  <li key={c.id}>
-                    <Link
-                      href={`/${c.id}`}
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200 group"
-                    >
-                      <div className="w-4 h-4 bg-muted rounded flex items-center justify-center">
-                        <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
-                      </div>
-                      <span className="truncate max-w-[180px]">
-                        {c.title || c.id}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="px-3 text-xs text-muted-foreground">
-                No recent chats
-              </div>
-            )}
+            <div className="flex items-center gap-1">
+              <ThemeToggle />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onToggle}
+                className="h-8 w-8"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
-          {/* Recent chats - collapsed */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="hidden group-data-[collapsible=icon]:flex items-center justify-center w-full p-0 hover:bg-sidebar-accent rounded-lg transition-colors"
-              >
-                <ClockIcon className="w-4 h-4 text-muted-foreground" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent side="right" align="start" className="w-56 p-2">
-              <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                Recent
-              </div>
-              {recentChats.length > 0 ? (
-                <ul className="space-y-1">
-                  {recentChats.map((c) => (
-                    <li key={c.id}>
+          {/* New Chat Button */}
+          <div className="p-3">
+            <Link href="/">
+              <Button className="w-full justify-start gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+                <Plus className="h-4 w-4" />
+                New Analysis
+              </Button>
+            </Link>
+          </div>
+
+          {/* Chat History */}
+          <div className="flex-1 overflow-hidden">
+            <div className="px-3 py-2">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                History
+              </h3>
+            </div>
+            <ScrollArea className="h-full px-2">
+              <div className="space-y-1">
+                {recentChats.length > 0 ? (
+                  recentChats.map((chat) => (
+                    <div key={chat.id} className="group relative">
                       <Link
-                        href={`/${c.id}`}
-                        className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
+                        href={`/${chat.id}`}
+                        className="flex w-full flex-col items-start gap-1 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent"
                       >
-                        <div className="w-4 h-4 bg-muted rounded flex items-center justify-center">
-                          <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium text-sidebar-foreground line-clamp-1">
+                            {chat.title || chat.id}
+                          </span>
                         </div>
-                        <span className="truncate">{c.title || c.id}</span>
+                        <span className="pl-6 text-xs text-muted-foreground">
+                          {formatDate(chat.updatedAt)}
+                        </span>
                       </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="px-2 text-xs text-muted-foreground">
-                  No recent chats
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
-
-          <div className="group-data-[collapsible=icon]:hidden">
-            <div className="flex items-center gap-2 my-4">
-              <HomeIcon className="w-4 h-4 text-muted-foreground" />
-              <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                Home
-              </h2>
-              <div className="flex-1 h-px ml-2"></div>
-              <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
-                1
-              </span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            className="hidden group-data-[collapsible=icon]:flex items-center justify-center w-full p-0 hover:bg-sidebar-accent rounded-lg transition-colors"
-          >
-            <HomeIcon className="w-4 h-4 text-muted-foreground" />
-          </button>
-
-          <div className="group-data-[collapsible=icon]:hidden">
-            <Collapsible open={isAnalysisOpen} onOpenChange={setIsAnalysisOpen}>
-              <CollapsibleTrigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center gap-2 mb-4 w-full hover:opacity-80 transition-opacity"
-                >
-                  <FolderIcon className="w-4 h-4 text-muted-foreground" />
-                  <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                    Analysis
-                  </h2>
-                  <div className="flex-1 h-px ml-2"></div>
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
-                    2
-                  </span>
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <ul className="space-y-2">
-                  <li>
-                    <Link
-                      href="/"
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200 group"
-                    >
-                      <div className="w-4 h-4 bg-destructive/20 rounded flex items-center justify-center">
-                        <div className="w-2 h-2 bg-destructive rounded-full"></div>
-                      </div>
-                      <span>Burndown Rate Analysis</span>
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      href="/"
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200 group"
-                    >
-                      <div className="w-4 h-4 bg-chart-1/20 rounded flex items-center justify-center">
-                        <div className="w-2 h-2 bg-chart-1 rounded-full"></div>
-                      </div>
-                      <span>Sales Chart Analysis</span>
-                    </Link>
-                  </li>
-                </ul>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="hidden group-data-[collapsible=icon]:flex items-center justify-center w-full p-0 hover:bg-sidebar-accent rounded-lg transition-colors"
-              >
-                <FolderIcon className="w-4 h-4 text-muted-foreground" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent side="right" align="start" className="w-48 p-2">
-              <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                Analysis
+                      <button
+                        type="button"
+                        onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void handleDeleteChat(chat.id);
+                        }}
+                        className="absolute right-2 top-2 p-1 rounded-md z-10 text-muted-foreground hover:text-destructive hover:bg-sidebar-accent/80 transition-all duration-200 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 backdrop-blur-sm bg-background/80"
+                        aria-label="Delete chat"
+                        title="Delete chat"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <title>Delete chat</title>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-3 text-xs text-muted-foreground">
+                    No recent chats
+                  </div>
+                )}
               </div>
-              <ul className="space-y-1">
-                <li>
-                  <Link
-                    href="/"
-                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
-                  >
-                    <div className="w-4 h-4 bg-destructive/20 rounded flex items-center justify-center">
-                      <div className="w-2 h-2 bg-destructive rounded-full"></div>
-                    </div>
-                    <span>Burndown Rate Analysis</span>
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/"
-                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
-                  >
-                    <div className="w-4 h-4 bg-chart-1/20 rounded flex items-center justify-center">
-                      <div className="w-2 h-2 bg-chart-1 rounded-full"></div>
-                    </div>
-                    <span>Sales Chart Analysis</span>
-                  </Link>
-                </li>
-              </ul>
-            </PopoverContent>
-          </Popover>
-
-          <div className="group-data-[collapsible=icon]:hidden">
-            <Collapsible
-              open={isDashboardsOpen}
-              onOpenChange={setIsDashboardsOpen}
-            >
-              <CollapsibleTrigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center gap-2 mb-4 w-full hover:opacity-80 transition-opacity"
-                >
-                  <PencilIcon className="w-4 h-4 text-muted-foreground" />
-                  <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                    Dashboards
-                  </h2>
-                  <div className="flex-1 h-px ml-2"></div>
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
-                    3
-                  </span>
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <ul className="space-y-2">
-                  <li>
-                    <Link
-                      href="/"
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200 group"
-                    >
-                      <div className="w-4 h-4 bg-chart-2/20 rounded flex items-center justify-center">
-                        <div className="w-2 h-2 bg-chart-2 rounded-full"></div>
-                      </div>
-                      <span>Burndown Rate Dashboard</span>
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      href="/"
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200 group"
-                    >
-                      <div className="w-4 h-4 bg-chart-3/20 rounded flex items-center justify-center">
-                        <div className="w-2 h-2 bg-chart-3 rounded-full"></div>
-                      </div>
-                      <span>Sales Chart Dashboard</span>
-                    </Link>
-                  </li>
-                </ul>
-              </CollapsibleContent>
-            </Collapsible>
+            </ScrollArea>
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="hidden group-data-[collapsible=icon]:flex items-center justify-center w-full p-0 hover:bg-sidebar-accent rounded-lg transition-colors"
-              >
-                <PencilIcon className="w-4 h-4 text-muted-foreground" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent side="right" align="start" className="w-48 p-2">
-              <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                Dashboards
-              </div>
-              <ul className="space-y-1">
-                <li>
-                  <Link
-                    href="/"
-                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
-                  >
-                    <div className="w-4 h-4 bg-chart-2/20 rounded flex items-center justify-center">
-                      <div className="w-2 h-2 bg-chart-2 rounded-full"></div>
-                    </div>
-                    <span>Burndown Rate Dashboard</span>
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/"
-                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
-                  >
-                    <div className="w-4 h-4 bg-chart-3/20 rounded flex items-center justify-center">
-                      <div className="w-2 h-2 bg-chart-3 rounded-full"></div>
-                    </div>
-                    <span>Sales Chart Dashboard</span>
-                  </Link>
-                </li>
-              </ul>
-            </PopoverContent>
-          </Popover>
 
-          <div className="group-data-[collapsible=icon]:hidden">
-            <Collapsible
-              open={isDataSourcesOpen}
-              onOpenChange={setIsDataSourcesOpen}
+          {/* Settings Section */}
+          <div className="border-t border-border p-3">
+            <button
+              type="button"
+              onClick={() => setIsConnectDialogOpen(true)}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent"
             >
-              <CollapsibleTrigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center gap-2 mb-4 w-full hover:opacity-80 transition-opacity"
-                >
-                  <BanknotesIcon className="w-4 h-4 text-muted-foreground" />
-                  <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                    Data Sources
-                  </h2>
-                  <div className="flex-1 h-px ml-2"></div>
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
-                    4
-                  </span>
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <ul className="space-y-2">
-                  <li>
-                    <Link
-                      href="/"
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200 group"
-                    >
-                      <PlusIcon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                      <span>Upload Data</span>
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      href="/view-data"
-                      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200 group"
-                    >
-                      <BookOpenIcon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                      <span>View Data</span>
-                    </Link>
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      onClick={() => setIsConnectDialogOpen(true)}
-                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-sidebar-foreground transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group"
-                    >
-                      <div className="w-4 h-4 bg-primary rounded flex items-center justify-center">
-                        <div className="w-1.5 h-1.5 bg-primary-foreground rounded-full"></div>
-                      </div>
-                      <span>Connect Data</span>
-                    </button>
-                  </li>
-                </ul>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="hidden group-data-[collapsible=icon]:flex items-center justify-center w-full p-0 hover:bg-sidebar-accent rounded-lg transition-colors"
-              >
-                <BanknotesIcon className="w-4 h-4 text-muted-foreground" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent side="right" align="start" className="w-48 p-2">
-              <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              <Database className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-sidebar-foreground">
                 Data Sources
-              </div>
-              <ul className="space-y-1">
-                <li>
-                  <Link
-                    href="/"
-                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
-                  >
-                    <PlusIcon className="w-4 h-4" />
-                    <span>Upload Data</span>
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/view-data"
-                    className="flex items-center gap-3 px-2 py-1 rounded hover:bg-accent text-sm"
-                  >
-                    <BookOpenIcon className="w-4 h-4" />
-                    <span>View Data</span>
-                  </Link>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => setIsConnectDialogOpen(true)}
-                    className="flex w-full items-center gap-3 px-2 py-1 rounded hover:bg-accent text-left text-sm"
-                  >
-                    <div className="w-4 h-4 bg-primary rounded flex items-center justify-center">
-                      <div className="w-1.5 h-1.5 bg-primary-foreground rounded-full"></div>
-                    </div>
-                    <span>Connect Data</span>
-                  </button>
-                </li>
-              </ul>
-            </PopoverContent>
-          </Popover>
-        </nav>
-      </SidebarContent>
+              </span>
+            </button>
+            <Link href="/view-data">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent"
+              >
+                <Settings className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-sidebar-foreground">
+                  View Data
+                </span>
+              </button>
+            </Link>
+          </div>
+        </div>
+      )}
       <ConnectDataDialog
         open={isConnectDialogOpen}
         onOpenChange={setIsConnectDialogOpen}
       />
-    </Sidebar>
+    </div>
   );
 }

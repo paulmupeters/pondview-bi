@@ -5,7 +5,12 @@ export const CONNECTED_TABLES_UPDATED_EVENT = "connectedTablesUpdated";
 export type ConnectedTable = {
   type: string;
   databasePath: string;
-  table: string;
+  // For backward compatibility keep `table` optional now
+  table?: string;
+  // New: allow storing schema instead of table
+  schema?: string;
+  // Optional list of selected tables within a schema
+  tables?: string[];
   description?: string;
 };
 
@@ -27,14 +32,20 @@ export function readConnectedTablesFromStorage(): ConnectedTable[] {
       return [];
     }
 
-    return parsed.filter(
-      (entry): entry is ConnectedTable =>
-        typeof entry === "object" &&
-        entry !== null &&
-        typeof entry.type === "string" &&
-        typeof entry.databasePath === "string" &&
-        typeof entry.table === "string",
-    );
+    return parsed.filter((entry): entry is ConnectedTable => {
+      if (typeof entry !== "object" || entry === null) return false;
+      if (typeof (entry as any).type !== "string") return false;
+      if (typeof (entry as any).databasePath !== "string") return false;
+      // Accept either table or schema for compatibility
+      const hasTable = typeof (entry as any).table === "string";
+      const hasSchema = typeof (entry as any).schema === "string";
+      const maybeTables = (entry as any).tables;
+      const tablesValid =
+        maybeTables === undefined ||
+        (Array.isArray(maybeTables) &&
+          maybeTables.every((t) => typeof t === "string"));
+      return tablesValid && (hasTable || hasSchema);
+    });
   } catch (error) {
     console.error("Failed to read connected tables from storage", error);
     return [];

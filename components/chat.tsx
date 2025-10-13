@@ -4,20 +4,14 @@ import { useArtifact } from "@ai-sdk-tools/artifacts/client";
 import { AIDevtools } from "@ai-sdk-tools/devtools";
 import { useChat } from "@ai-sdk-tools/store";
 import {
-  ArrowTrendingUpIcon,
-  BanknotesIcon,
-  ChartBarIcon,
-  FireIcon,
-  LanguageIcon,
   PaperAirplaneIcon,
   PlusIcon,
-  ShoppingBagIcon,
   SparklesIcon,
-  TrophyIcon,
 } from "@heroicons/react/24/outline";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { BarChartArtifact } from "@/ai/artifacts/bar-chart";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
@@ -27,19 +21,22 @@ import { SqlLoading } from "@/components/sql-loading";
 
 export default function Chat({
   chatId,
-  // initialMessages = [],
+  initialMessages = [],
 }: {
   chatId: string;
   initialMessages?: UIMessage[];
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { messages, sendMessage, status } = useChat({
     id: chatId,
-    // initialMessages,
+    messages: initialMessages.length > 0 ? initialMessages : undefined,
     transport: new DefaultChatTransport({
       api: `/api/chat/${chatId}`,
     }),
   });
   const [input, setInput] = useState("");
+  const [autoSentFromQuery, setAutoSentFromQuery] = useState(false);
 
   const [clearedChat, setClearedChat] = useState(false);
   const [rightPanelWidth, setRightPanelWidth] = useState(75); // percentage - 2/3 of screen
@@ -77,6 +74,25 @@ export default function Chat({
       };
     }
   }, [isResizing, handleMouseMove, handleMouseUp]);
+
+  // Auto-send initial message from ?q= when opening a fresh chat URL
+  useEffect(() => {
+    const q = searchParams?.get("q") || "";
+    if (autoSentFromQuery) return;
+    if (typeof window === "undefined") return;
+    const flagKey = `autoSent:${chatId}`;
+    if (window.localStorage.getItem(flagKey)) {
+      setAutoSentFromQuery(true);
+      return;
+    }
+    if (q.trim().length > 0) {
+      // Drop the query param to avoid duplicate sends on remounts
+      router.replace(`/${chatId}`);
+      window.localStorage.setItem(flagKey, "1");
+      setAutoSentFromQuery(true);
+      sendMessage({ text: q });
+    }
+  }, [chatId, searchParams, sendMessage, autoSentFromQuery, router]);
 
   // Use the SQL artifact with event listeners
   const sqlData = useArtifact(ExecuteSqlArtifact, {
@@ -183,198 +199,12 @@ export default function Chat({
             {visibleMessages.length === 0 && !hasBarChartData && !hasSqlData && (
               <div className="text-center space-y-8 max-w-4xl mx-auto">
                 <div className="space-y-4">
-                  <h2 className="text-7xl font-medium text-foreground animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
-                    Good evening
+                  <h2 className="text-4xl font-medium text-foreground animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
+                    Ready to help
                   </h2>
                   <p className="text-lg text-muted-foreground max-w-2xl mx-auto animate-in fade-in-0 slide-in-from-bottom-7 duration-800">
-                    Ask me to analyze data and I'll create interactive charts
-                    and insights
+                    Ask me anything about data analysis, charts, or SQL queries
                   </p>
-                </div>
-
-                {/* Example prompts */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-8">
-                  <button
-                    type="button"
-                    className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
-                    onClick={() =>
-                      setInput(
-                        "Analyze burn rate for TechCorp with 6 months of data: Jan 2024: $50k revenue, $80k expenses, $200k cash. Feb: $55k revenue, $85k expenses, $170k cash. Mar: $60k revenue, $90k expenses, $140k cash. Apr: $65k revenue, $88k expenses, $117k cash. May: $70k revenue, $92k expenses, $95k cash. Jun: $75k revenue, $95k expenses, $75k cash.",
-                      )
-                    }
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 bg-destructive/80 rounded-lg flex items-center justify-center">
-                        <span className="text-destructive-foreground text-sm font-bold">
-                          {" "}
-                          <FireIcon className="h-4 w-4" />{" "}
-                        </span>
-                      </div>
-                      <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
-                        Analyze TechCorp Burn Rate
-                      </h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Generate financial analysis with 6 months of revenue,
-                      expenses, and cash flow data.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
-                    onClick={() =>
-                      setInput(
-                        "Create a bar chart showing monthly sales data: January: $12000, February: $15000, March: $18000, April: $14000, May: $20000, June: $22000",
-                      )
-                    }
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 bg-chart-2 rounded-lg flex items-center justify-center">
-                        <span className="text-primary-foreground text-sm font-bold">
-                          {" "}
-                          <BanknotesIcon className="h-4 w-4" />{" "}
-                        </span>
-                      </div>
-                      <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
-                        Monthly Sales Chart
-                      </h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Visualize monthly sales performance with interactive bar
-                      charts.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
-                    onClick={() =>
-                      setInput(
-                        "Generate a bar chart comparing programming languages: JavaScript: 85, Python: 92, Java: 78, C++: 65, Go: 71",
-                      )
-                    }
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 bg-chart-3 rounded-lg flex items-center justify-center">
-                        <span className="text-primary-foreground text-sm font-bold">
-                          {" "}
-                          <LanguageIcon className="h-4 w-4" />{" "}
-                        </span>
-                      </div>
-                      <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
-                        Language Comparison
-                      </h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Compare programming language usage and performance
-                      metrics.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
-                    onClick={() =>
-                      setInput(
-                        "Create a bar chart for product sales: Product A: 150 units, Product B: 230 units, Product C: 180 units, Product D: 95 units",
-                      )
-                    }
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 bg-chart-4 rounded-lg flex items-center justify-center">
-                        <span className="text-primary-foreground text-sm font-bold">
-                          {" "}
-                          <ShoppingBagIcon className="h-4 w-4" />{" "}
-                        </span>
-                      </div>
-                      <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
-                        Product Sales
-                      </h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Analyze product performance and sales distribution across
-                      categories.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
-                    onClick={() =>
-                      setInput(
-                        "Show a bar chart of team scores: Team Alpha: 340, Team Beta: 285, Team Gamma: 425, Team Delta: 310",
-                      )
-                    }
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 bg-chart-5 rounded-lg flex items-center justify-center">
-                        <span className="text-primary-foreground text-sm font-bold">
-                          {" "}
-                          <TrophyIcon className="h-4 w-4" />{" "}
-                        </span>
-                      </div>
-                      <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
-                        Team Performance
-                      </h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Track and compare team performance metrics and
-                      achievements.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
-                    onClick={() =>
-                      setInput(
-                        "Show me trends for a company with improving financial health",
-                      )
-                    }
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                        <span className="text-primary-foreground text-sm font-bold">
-                          {" "}
-                          <ArrowTrendingUpIcon className="h-4 w-4" />{" "}
-                        </span>
-                      </div>
-                      <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
-                        Trend Analysis
-                      </h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Discover trends and patterns in financial health and
-                      growth metrics.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
-                    onClick={() =>
-                      setInput(
-                        "Execute SQL: SELECT Company, Valuation, Industry FROM unicorns WHERE Country = 'United States' ORDER BY Valuation DESC LIMIT 10",
-                      )
-                    }
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 bg-secondary rounded-lg flex items-center justify-center">
-                        <span className="text-secondary-foreground text-sm font-bold">
-                          {" "}
-                          <ChartBarIcon className="h-4 w-4" />{" "}
-                        </span>
-                      </div>
-                      <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
-                        SQL Query
-                      </h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Execute custom SQL queries and display results in an
-                      interactive table.
-                    </p>
-                  </button>
                 </div>
               </div>
             )}

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Noto_Sans, Roboto } from "next/font/google";
+import { Geist_Mono, Noto_Sans } from "next/font/google";
 import "./globals.css";
-import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarLayout } from "@/components/sidebar-layout";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/lib/theme-provider";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -19,37 +19,24 @@ export const metadata: Metadata = {
   title: "Data Assistant - Analytics Dashboard",
   description: "Interactive data analysis and visualization platform",
 };
-
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  console.log("layout rendered");
   return (
     <html lang="en" className="h-full">
       <body
         className={`${notoSans.variable} ${geistMono.variable} antialiased h-full bg-background`}
       >
-        <TooltipProvider>
-          <SidebarProvider
-            defaultOpen={false}
-            style={
-              {
-                "--sidebar-width": "15rem",
-                "--sidebar-width-icon": "3rem",
-              } as React.CSSProperties
-            }
-          >
-            <div className="flex h-full w-full">
-              <AppSidebar />
-              <SidebarInset className="flex-1 overflow-hidden">
-                <div className="h-full bg-background/80 backdrop-blur-sm">
-                  {children}
-                </div>
-              </SidebarInset>
-            </div>
-          </SidebarProvider>
-        </TooltipProvider>
+        <ThemeProvider defaultTheme="system" storageKey="bi-chat-theme">
+          <TooltipProvider>
+            <SidebarLayout>
+              {children}
+            </SidebarLayout>
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

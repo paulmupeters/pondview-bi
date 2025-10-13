@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { appendConnectedTable } from "@/lib/connected-tables";
+import { getSchemas, getTablesForSchema } from "@/actions/queries";
 import { cn } from "@/lib/utils";
 
 type DatabaseType = "duckdb" | "postgres" | "mysql" | null;
@@ -81,8 +82,12 @@ export function ConnectDataDialog({
 }: ConnectDataDialogProps) {
   const [selectedDatabase, setSelectedDatabase] = useState<DatabaseType>(null);
   const [databasePath, setDatabasePath] = useState("");
-  const [connectedTables, setConnectedTables] = useState<string[]>([]);
-  const [selectedTable, setSelectedTable] = useState<string>("");
+  const [schemas, setSchemas] = useState<string[]>([]);
+  const [selectedSchema, setSelectedSchema] = useState<string>("");
+  const [schemaTablesPreview, setSchemaTablesPreview] = useState<string[]>([]);
+  const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
+  const [isLoadingSchemas, setIsLoadingSchemas] = useState(false);
+  const [isLoadingTables, setIsLoadingTables] = useState(false);
   const [tableDescription, setTableDescription] = useState("");
   const [hasConnected, setHasConnected] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -90,8 +95,9 @@ export function ConnectDataDialog({
   const resetState = useCallback(() => {
     setSelectedDatabase(null);
     setDatabasePath("");
-    setConnectedTables([]);
-    setSelectedTable("");
+    setSchemas([]);
+    setSelectedSchema("");
+    setSchemaTablesPreview([]);
     setTableDescription("");
     setHasConnected(false);
     setErrorMessage(null);
@@ -103,7 +109,7 @@ export function ConnectDataDialog({
     }
   }, [open, resetState]);
 
-  const handleConnectClick = useCallback(() => {
+  const handleConnectClick = useCallback(async () => {
     if (selectedDatabase !== "duckdb") {
       setErrorMessage("Only DuckDB connections are supported right now.");
       return;
@@ -114,13 +120,22 @@ export function ConnectDataDialog({
       return;
     }
 
-    setHasConnected(true);
-    setErrorMessage(null);
-    setConnectedTables(duckdbTables);
+    try {
+      setIsLoadingSchemas(true);
+      setErrorMessage(null);
+      const fetchedSchemas = await getSchemas(databasePath.trim());
+      setSchemas(fetchedSchemas);
+      setHasConnected(true);
+    } catch (e: any) {
+      console.error(e);
+      setErrorMessage(e?.message || "Failed to connect or fetch schemas.");
+    } finally {
+      setIsLoadingSchemas(false);
+    }
   }, [databasePath, selectedDatabase]);
 
   const handleAddTable = useCallback(() => {
-    if (!selectedDatabase || !selectedTable.trim() || !databasePath.trim()) {
+    if (!selectedDatabase || !selectedSchema.trim() || !databasePath.trim()) {
       return;
     }
 
@@ -128,7 +143,8 @@ export function ConnectDataDialog({
       const newEntry = {
         type: selectedDatabase,
         databasePath: databasePath.trim(),
-        table: selectedTable,
+        schema: selectedSchema,
+        tables: Array.from(selectedTables),
         description: tableDescription.trim(),
       };
 
@@ -143,18 +159,19 @@ export function ConnectDataDialog({
     databasePath,
     onOpenChange,
     selectedDatabase,
-    selectedTable,
+    selectedSchema,
+    selectedTables,
     tableDescription,
   ]);
 
   const isAddDisabled = useMemo(() => {
     return (
       !selectedDatabase ||
-      !selectedTable.trim() ||
+      !selectedSchema.trim() ||
       !databasePath.trim() ||
       !tableDescription.trim()
     );
-  }, [databasePath, selectedDatabase, selectedTable, tableDescription]);
+  }, [databasePath, selectedDatabase, selectedSchema, tableDescription]);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -183,7 +200,7 @@ export function ConnectDataDialog({
           </div>
 
           <div className="space-y-6 px-6 py-5">
-            {connectedTables.length === 0 && (
+            {schemas.length === 0 && (
               <section className="space-y-3">
                 <header className="space-y-1">
                   <p className="text-sm font-medium text-foreground">
@@ -205,7 +222,8 @@ export function ConnectDataDialog({
                           setSelectedDatabase(option.value);
                           setErrorMessage(null);
                           if (option.value !== "duckdb") {
-                            setConnectedTables([]);
+                            setSchemas([]);
+                            setSchemaTablesPreview([]);
                             setHasConnected(false);
                           }
                         }}
@@ -257,8 +275,17 @@ export function ConnectDataDialog({
                     className="sm:w-fit"
                     onClick={handleConnectClick}
                   >
-                    <LinkIcon className="size-4" />
-                    Connect
+                    {isLoadingSchemas ? (
+                      <span className="flex items-center gap-2">
+                        <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                        Connecting...
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                          <LinkIcon className="size-4" />
+                          Connect
+                      </span>
+                    )}
                   </Button>
                 </div>
 
@@ -284,23 +311,40 @@ export function ConnectDataDialog({
               </section>
             )}
 
-            {connectedTables.length > 0 && (
+            {schemas.length > 0 && (
               <section className="space-y-3">
                 <header className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">Tables</p>
+                  <p className="text-sm font-medium text-foreground">Schemas</p>
                   <p className="text-xs text-muted-foreground">
-                    Choose a table to add from the connected DuckDB database.
+                    Choose a schema to add from the connected DuckDB database.
                   </p>
                 </header>
                 <div className="max-h-56 overflow-y-auto pr-2">
                   <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                    {connectedTables.map((table) => {
-                      const isSelected = selectedTable === table;
+                    {schemas.map((schema) => {
+                      const isSelected = selectedSchema === schema;
                       return (
                         <button
-                          key={table}
+                          key={schema}
                           type="button"
-                          onClick={() => setSelectedTable(table)}
+                          onClick={async () => {
+                            setSelectedSchema(schema);
+                            setSelectedTables(new Set());
+                            try {
+                              setIsLoadingTables(true);
+                              const tables = await getTablesForSchema(
+                                databasePath.trim(),
+                                schema,
+                                20,
+                              );
+                              setSchemaTablesPreview(tables);
+                            } catch (e) {
+                              console.error(e);
+                              setSchemaTablesPreview([]);
+                            } finally {
+                              setIsLoadingTables(false);
+                            }
+                          }}
                           className={cn(
                             "rounded-xl border px-4 py-3 text-left text-sm font-medium transition",
                             isSelected
@@ -308,7 +352,7 @@ export function ConnectDataDialog({
                               : "border-border hover:border-primary hover:bg-primary/5",
                           )}
                         >
-                          {table}
+                          {schema}
                         </button>
                       );
                     })}
@@ -317,14 +361,72 @@ export function ConnectDataDialog({
               </section>
             )}
 
-            {connectedTables.length > 0 && (
+            {selectedSchema && (
               <section className="space-y-3">
                 <header className="space-y-1">
                   <p className="text-sm font-medium text-foreground">
-                    Table Description
+                    Tables in "{selectedSchema}"
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Describe the table so your collaborators understand its
+                    Preview of up to 20 tables in the selected schema.
+                  </p>
+                </header>
+                <div className="max-h-40 overflow-y-auto pr-2">
+                  {isLoadingTables ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                      Loading tables...
+                    </div>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                      {schemaTablesPreview.length === 0 ? (
+                        <span className="text-xs text-muted-foreground col-span-full">
+                          No tables found or failed to load.
+                        </span>
+                      ) : (
+                        schemaTablesPreview.map((t) => {
+                          const isChecked = selectedTables.has(t);
+                          return (
+                            <label
+                              key={t}
+                              className={cn(
+                                "rounded-xl border px-4 py-2 text-left text-xs flex items-center gap-2 cursor-pointer",
+                                isChecked
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border hover:border-primary hover:bg-primary/5 text-muted-foreground",
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  setSelectedTables((prev) => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(t);
+                                    else next.delete(t);
+                                    return next;
+                                  });
+                                }}
+                              />
+                              <span className="truncate">{t}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {schemas.length > 0 && (
+              <section className="space-y-3">
+                <header className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    Schema Description
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Describe the schema so your collaborators understand its
                     contents.
                   </p>
                 </header>
@@ -332,7 +434,7 @@ export function ConnectDataDialog({
                   className="min-h-[90px] w-full rounded-xl border border-input bg-transparent px-3 py-2 text-sm text-foreground shadow-xs outline-none transition focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                   value={tableDescription}
                   onChange={(event) => setTableDescription(event.target.value)}
-                  placeholder="e.g. Daily unicorn company valuations with regional breakdown."
+                  placeholder="e.g. Business intelligence curated tables for analytics."
                 />
               </section>
             )}
@@ -355,7 +457,7 @@ export function ConnectDataDialog({
               onClick={handleAddTable}
               disabled={isAddDisabled}
             >
-              Add Table
+              Add Schema
             </Button>
           </div>
         </Dialog.Content>

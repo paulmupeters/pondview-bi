@@ -42,7 +42,7 @@ export async function POST(req: Request) {
         ),
         messages: convertToModelMessages(messages),
         tools,
-        stopWhen: stepCountIs(10),
+        stopWhen: stepCountIs(5),
       });
 
       writer.merge(result.toUIMessageStream());
