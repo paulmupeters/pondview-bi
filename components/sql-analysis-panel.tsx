@@ -1,6 +1,6 @@
 "use client";
 
-import { useArtifact } from "@ai-sdk-tools/artifacts/client";
+import { useArtifact } from "@/hooks/use-artifacts";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import {
   ChartBar,
@@ -140,6 +140,7 @@ function StageIndicator({ currentStage, progress = 0 }: StageIndicatorProps) {
 }
 
 export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
+  // Subscribe to the active execute-sql artifact for this storeId
   const sqlData: any = useArtifact(ExecuteSqlArtifact, undefined, storeId);
   const latestPayload: any | null = sqlData?.data ?? null;
   const [activeView, setActiveView] = useState<"table" | "chart">("table");
@@ -168,10 +169,11 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
 
   console.log("rendering sql analysis panel", latestPayload);
 
-  // Append completed payloads to history based on fingerprint; ignore store churn
+  // Append completed payloads to history when a new analysis completes
   useEffect(() => {
     const p = latestPayload;
-    if (!p || p.stage !== "complete") return;
+    const stage = p?.stage;
+    if (!p || stage !== "complete") return;
 
     const fingerprint = `${p.query ?? ""}|${p.executionTime ?? 0}|${p.rowCount ?? 0}|${p.columns?.length ?? 0}|${p.summary?.totalRows ?? 0}`;
     if (lastFingerprintRef.current === fingerprint) return;
@@ -199,9 +201,18 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
       if (exists) return prev;
       return [...prev, snapshot];
     });
-
-    setCurrentIndex((prev) => (prev < 0 ? 0 : prev));
   }, [latestPayload]);
+
+  // When history grows, auto-navigate to the latest result
+  const prevHistoryLenRef = useRef(0);
+  useEffect(() => {
+    if (history.length > prevHistoryLenRef.current) {
+      setCurrentIndex(history.length - 1);
+    } else if (currentIndex < 0 && history.length > 0) {
+      setCurrentIndex(0);
+    }
+    prevHistoryLenRef.current = history.length;
+  }, [history.length, currentIndex]);
 
   const hasHistory = history.length > 0 && currentIndex >= 0;
   const selected = hasHistory ? history[currentIndex] : latestPayload ?? null;
@@ -222,8 +233,6 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
   const currentStage = ((latestPayload?.stage) || "loading") as Stage;
   const currentProgress = (latestPayload?.progress ?? 0) as number;
   const isProcessing = currentStage !== "complete";
-
-  console.log("rendering sql analysis panel");
 
 
   return (

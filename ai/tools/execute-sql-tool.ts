@@ -47,7 +47,7 @@ export const executeSqlTool = tool({
 
     // Step 2: Processing - execute query
     await sqlArtifact.update({ stage: "processing", progress: 0.2 });
-    await delay(1000);
+    await delay(2000);
 
     console.debug("[executeSqlTool] Step 2 (processing) started", debugContext);
 
@@ -71,7 +71,7 @@ export const executeSqlTool = tool({
     }
     // Step 3: Analyzing - process results
     await sqlArtifact.update({ stage: "analyzing", progress: 0.6 });
-    await delay(1000);
+    await delay(2000);
 
     console.debug("[executeSqlTool] Step 3 (analyzing) started", debugContext);
 
@@ -187,6 +187,12 @@ export const executeSqlTool = tool({
         insights.push("Chart generation failed, showing table view");
       }
     }
+
+    console.debug("[executeSqlTool] Step 4 (visualizing) finished", {
+      ...debugContext,
+      chartConfig,
+      visualType,
+    });
 
     // Step 4: Complete with results
     const finalData = {

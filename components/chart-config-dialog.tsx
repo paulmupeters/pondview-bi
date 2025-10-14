@@ -51,7 +51,7 @@ export function ChartConfigDialog({
       colors: undefined,
       countMode: (() => {
         const yKeysRaw = formData.getAll("yKeys") as string[];
-        return yKeysRaw.includes("count") ? true : undefined;
+        return yKeysRaw.includes("count") ? true : false;
       })(),
     };
 

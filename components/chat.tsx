@@ -92,7 +92,6 @@ export default function Chat({
       }
     }
   }, [chatId, searchParams, autoSentFromQuery, router]);
-  console.log("rendering chat");
 
   // Derive whether we have any SQL artifact from chat messages (more stable than artifacts store)
   const hasSqlData = useMemo(() => {
@@ -104,6 +103,20 @@ export default function Chat({
         )
         : false,
     );
+  }, [messages]);
+
+  // Determine the latest execute-sql artifact id from messages to force remount on new analyses
+  const latestArtifactId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const parts = (messages[i]?.parts as any[]) || [];
+      for (let j = parts.length - 1; j >= 0; j--) {
+        const p: any = parts[j];
+        if (p?.type === `data-artifact-${ExecuteSqlArtifact.id}`) {
+          return p?.data?.id ?? p?.id ?? null;
+        }
+      }
+    }
+    return null;
   }, [messages]);
 
   return (
@@ -236,7 +249,7 @@ export default function Chat({
             <div className="flex-1 overflow-y-auto">
 
               {hasSqlData ? (
-                <SqlAnalysisPanel storeId={chatId} />
+                <SqlAnalysisPanel key={latestArtifactId ?? "none"} storeId={chatId} />
                 // <div>SqlAnalysisPanel</div>
               ) : (
                 <div className="flex items-center justify-center h-full">

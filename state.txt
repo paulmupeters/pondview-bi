@@ -1,0 +1,48 @@
+colors: {unicorns: "hsl(var(--chart-1))"}
+
+countMode: false
+
+description: "Line chart showing the annual count of unicorns in China from 2014 to 2022 to reveal year-over-year trends."
+
+legend: true
+
+lineCategories: [] (0)
+
+measurementColumn: "unicorns"
+
+multipleLines: false
+
+takeaway: "Unicorn counts fluctuate year to year with notable spikes around 2018 and 2021."
+
+title: "Trends of unicorns in China (2014-2022)"
+
+type: "line"
+
+xKey: "year"
+
+yKeys: ["unicorns"] (1)
+
+
+colors: undefined
+
+countMode: false
+
+description: "Line chart showing the annual count of unicorns in China from 2014 to 2022 to reveal year-over-year trends."
+
+legend: false
+
+lineCategories: [] (0)
+
+measurementColumn: undefined
+
+multipleLines: false
+
+takeaway: "Unicorn counts fluctuate year to year with notable spikes around 2018 and 2021."
+
+title: "Trends of unicorns in China (2014-2022)"
+
+type: "line"
+
+xKey: "year"
+
+yKeys: ["unicorns"] (1)
