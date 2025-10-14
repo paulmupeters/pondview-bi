@@ -8,7 +8,7 @@ export const ExecuteSqlArtifact = artifact(
   z.object({
     title: z.string(),
     stage: z
-      .enum(["loading", "processing", "analyzing", "complete"])
+      .enum(["loading", "processing", "analyzing", 'visualizing', "complete"])
       .default("loading"),
     progress: z.number().min(0).max(1).default(0),
 

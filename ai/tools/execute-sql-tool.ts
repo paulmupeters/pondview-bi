@@ -45,8 +45,8 @@ export const executeSqlTool = tool({
       ...debugContext,
       query: sql,
     });
-
-    await delay(300);
+    console.log("sql", sql);
+    await delay(500);
 
     // Step 2: Processing - execute query
     sqlArtifact.progress = 0.2;
@@ -72,8 +72,8 @@ export const executeSqlTool = tool({
       await sqlArtifact.error(stderr);
       throw new Error(stderr);
     }
-
-    await delay(200);
+    console.log("stdout", stdout);
+    await delay(500);
 
     // Step 3: Analyzing - process results
     await sqlArtifact.update({ stage: "analyzing", progress: 0.6 });
@@ -161,8 +161,8 @@ export const executeSqlTool = tool({
 
     // Determine query type
     const queryType = sql.trim().split(/\s+/)[0].toUpperCase();
-
-    await delay(300);
+    console.log("queryType", queryType);
+    await delay(500);
 
     // Determine if data is suitable for charting and generate chart config
     let chartConfig: Config | undefined;
@@ -180,6 +180,7 @@ export const executeSqlTool = tool({
     if (isChartWorthy && hasNumericData && userQuery && generateChart) {
       try {
         // Add delay to avoid rate limit errors
+        console.log("Generating chart config");
         await delay(5000);
         const chartResult = await generateChartConfig(parsedResults, userQuery);
         chartConfig = chartResult.config;
@@ -190,6 +191,7 @@ export const executeSqlTool = tool({
         insights.push("Chart generation failed, showing table view");
       }
     }
+    console.log("chartConfig", chartConfig);
 
     // Step 4: Complete with results
     const finalData = {

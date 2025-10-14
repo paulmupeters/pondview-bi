@@ -2,7 +2,17 @@
 
 import { useArtifact } from "@ai-sdk-tools/artifacts/client";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
-import { ChartBar, ChevronDown, ChevronLeft, ChevronRight, Table } from "lucide-react";
+import {
+  ChartBar,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Table,
+  Loader2,
+  Database,
+  Search,
+  CheckCircle2
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
@@ -15,14 +25,127 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import type { Config, Result } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+type Stage = "loading" | "processing" | "analyzing" | "visualizing" | "complete";
+
+interface StageIndicatorProps {
+  currentStage: Stage;
+  progress?: number;
+}
+
+function StageIndicator({ currentStage, progress = 0 }: StageIndicatorProps) {
+  const stages = [
+    {
+      id: "loading" as const,
+      label: "Preparing",
+      icon: Loader2,
+      description: "Initializing query execution",
+    },
+    {
+      id: "processing" as const,
+      label: "Processing",
+      icon: Database,
+      description: "Executing SQL query",
+    },
+    {
+      id: "analyzing" as const,
+      label: "Analyzing",
+      icon: Search,
+      description: "Processing results and generating insights",
+    },
+    {
+      id: "visualizing" as const,
+      label: "Visualizing",
+      icon: ChartBar,
+      description: "Generating chart visualization",
+    },
+    {
+      id: "complete" as const,
+      label: "Complete",
+      icon: CheckCircle2,
+      description: "Ready to view",
+    },
+  ];
+
+  const currentStageIndex = stages.findIndex((s) => s.id === currentStage);
+
+  return (
+    <div className="bg-muted/30 border rounded-lg p-4 space-y-3">
+      {/* Progress bar */}
+      <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+        <div
+          className="bg-primary h-full transition-all duration-500 ease-out"
+          style={{ width: `${progress * 100}%` }}
+        />
+      </div>
+
+      {/* Stage indicators */}
+      <div className="flex items-center justify-between gap-2">
+        {stages.map((stage, index) => {
+          const Icon = stage.icon;
+          const isActive = stage.id === currentStage;
+          const isCompleted = index < currentStageIndex;
+          const isPending = index > currentStageIndex;
+
+          return (
+            <div
+              key={stage.id}
+              className={cn(
+                "flex flex-col items-center gap-2 flex-1",
+                "transition-opacity duration-300",
+                isPending && "opacity-40"
+              )}
+            >
+              <div
+                className={cn(
+                  "flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300",
+                  isActive && "border-primary bg-primary/10 scale-110",
+                  isCompleted && "border-green-500 bg-green-500/10",
+                  isPending && "border-muted-foreground/30 bg-muted"
+                )}
+              >
+                <Icon
+                  className={cn(
+                    "w-5 h-5 transition-all duration-300",
+                    isActive && "text-primary animate-pulse",
+                    isCompleted && "text-green-500",
+                    isPending && "text-muted-foreground"
+                  )}
+                />
+              </div>
+              <div className="text-center">
+                <div
+                  className={cn(
+                    "text-xs font-medium transition-colors duration-300",
+                    isActive && "text-primary",
+                    isCompleted && "text-green-500",
+                    isPending && "text-muted-foreground"
+                  )}
+                >
+                  {stage.label}
+                </div>
+                {isActive && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {stage.description}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export function SqlAnalysisPanel() {
   const sqlData = useArtifact(ExecuteSqlArtifact);
   const [activeView, setActiveView] = useState<"table" | "chart">("table");
-  const [customConfig, setCustomConfig] = useState<Config | null>(null);
+  const [chartConfig, setChartConfig] = useState<Config | null>(null);
   const [history, setHistory] = useState<
     Array<{
-      stage?: "loading" | "processing" | "analyzing" | "complete";
+      stage?: "loading" | "processing" | "analyzing" | "visualizing" | "complete";
       query?: string;
       executionTime?: number;
       rowCount?: number;
@@ -40,6 +163,8 @@ export function SqlAnalysisPanel() {
   >([]);
   const [currentIndex, setCurrentIndex] = useState<number>(-1);
   const lastFingerprintRef = useRef<string | null>(null);
+
+  console.log("sqlData", sqlData);
 
   // Append new completed results to history
   useEffect(() => {
@@ -67,12 +192,31 @@ export function SqlAnalysisPanel() {
 
   const hasHistory = history.length > 0 && currentIndex >= 0;
   const selected = hasHistory ? history[currentIndex] : sqlData?.data ?? null;
+
+  // Set chart config from sqlData when it becomes available and auto-switch to chart view
+  useEffect(() => {
+    if (selected?.chartConfig && !chartConfig) {
+      setChartConfig(selected.chartConfig);
+      setActiveView("chart");
+    }
+  }, [selected?.chartConfig, chartConfig]);
   if (!sqlData?.data || sqlData.status === "idle") {
     return null;
   }
 
+  const currentStage = (sqlData.data.stage || "loading") as Stage;
+  const currentProgress = sqlData.data.progress ?? 0;
+  const isProcessing = currentStage !== "complete";
+
   return (
     <div className="space-y-6">
+      {/* Stage Indicator - Show when processing or always for context */}
+      {isProcessing && (
+        <div className="p-4">
+          <StageIndicator currentStage={currentStage} progress={currentProgress} />
+        </div>
+      )}
+
       {/* View Toggle + History Navigation */}
       <div className="flex items-center justify-between gap-2 p-4 border-b">
         <div className="flex gap-2">
@@ -140,20 +284,14 @@ export function SqlAnalysisPanel() {
                   Configure
                 </Button>
               }
-              config={customConfig}
+              config={chartConfig}
               columns={selected?.columns ?? sqlData.data.columns}
-              onConfigChange={setCustomConfig}
+              onConfigChange={setChartConfig}
             />
           </div>
 
           {/* Chart content */}
-          {customConfig ? (
-            <SqlChart customChartConfig={customConfig} dataOverride={selected ?? undefined} />
-          ) : (
-            <div className="flex items-center justify-center h-64 text-muted-foreground">
-              Add configuration first
-            </div>
-          )}
+          <SqlChart customChartConfig={chartConfig ?? undefined} dataOverride={selected ?? undefined} />
         </div>
       ) : (
           <SqlResultsTable dataOverride={selected ?? undefined} />

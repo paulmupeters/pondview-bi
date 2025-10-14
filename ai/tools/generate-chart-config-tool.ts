@@ -6,7 +6,6 @@ export const generateChartConfig = async (
   userQuery: string,
 ) => {
   "use server";
-
   try {
     const { object: config } = await generateObject({
       model: "openai/gpt-5-nano",
@@ -34,7 +33,6 @@ export const generateChartConfig = async (
       ${JSON.stringify(results, null, 2)}`,
       schema: configSchema,
     });
-
     // Override with shadcn theme colors
     const colors: Record<string, string> = {};
     config.yKeys.forEach((key, index) => {

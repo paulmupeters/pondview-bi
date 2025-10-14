@@ -7,7 +7,7 @@ export function SqlResultsTable({
   dataOverride,
 }: {
   dataOverride?: {
-    stage?: "loading" | "processing" | "analyzing" | "complete";
+    stage?: "loading" | "processing" | "analyzing" | "visualizing" | "complete";
     columns: { name: string; type?: string }[];
     rows: Record<string, unknown>[];
     summary?: {

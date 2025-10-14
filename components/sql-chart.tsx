@@ -11,7 +11,7 @@ export function SqlChart({
 }: {
   customChartConfig?: Config;
     dataOverride?: {
-      stage?: "loading" | "processing" | "analyzing" | "complete";
+      stage?: "loading" | "processing" | "analyzing" | "visualizing" | "complete";
     rows: Result[];
     chartConfig?: Config;
     summary?: {
