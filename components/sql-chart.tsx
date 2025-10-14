@@ -1,7 +1,5 @@
 "use client";
 
-import { useArtifact } from "@ai-sdk-tools/artifacts/client";
-import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { DynamicChart } from "@/components/dynamic-chart";
 import type { Config, Result } from "@/lib/types";
 
@@ -22,9 +20,7 @@ export function SqlChart({
     };
   };
 }) {
-  const sqlData = useArtifact(ExecuteSqlArtifact);
-
-  const payload = dataOverride ?? sqlData?.data;
+  const payload = dataOverride; // parent supplies data; avoid extra subscription
 
   if (!payload || payload.stage !== "complete") {
     return null;

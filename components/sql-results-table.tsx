@@ -1,7 +1,5 @@
 "use client";
 
-import { useArtifact } from "@ai-sdk-tools/artifacts/client";
-import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 
 export function SqlResultsTable({
   dataOverride,
@@ -18,9 +16,7 @@ export function SqlResultsTable({
     };
   };
 }) {
-  const sqlData = useArtifact(ExecuteSqlArtifact);
-
-  const payload = dataOverride ?? sqlData?.data;
+  const payload = dataOverride; // parent supplies data; avoid extra subscription
 
   if (!payload || payload.stage !== "complete") {
     return null;

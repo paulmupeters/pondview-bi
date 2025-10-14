@@ -1,6 +1,6 @@
 "use client";
 
-import { useArtifacts } from "@ai-sdk-tools/artifacts/client";
+import { useArtifact } from "@ai-sdk-tools/artifacts/client";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import {
   ChartBar,
@@ -13,7 +13,7 @@ import {
   Search,
   CheckCircle2
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { SqlChart } from "@/components/sql-chart";
@@ -140,12 +140,8 @@ function StageIndicator({ currentStage, progress = 0 }: StageIndicatorProps) {
 }
 
 export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
-  const { artifacts: allArtifacts } = useArtifacts({ storeId });
-  const sqlArtifacts = useMemo(() =>
-    allArtifacts.filter((a: any) => a?.type === ExecuteSqlArtifact.id),
-    [allArtifacts]);
-  const latestArtifact: any | null = sqlArtifacts[0] ?? null; // sorted desc by createdAt
-  const latestPayload: any | null = latestArtifact?.payload ?? null;
+  const sqlData: any = useArtifact(ExecuteSqlArtifact, undefined, storeId);
+  const latestPayload: any | null = sqlData?.data ?? null;
   const [activeView, setActiveView] = useState<"table" | "chart">("table");
   const [chartConfig, setChartConfig] = useState<Config | null>(null);
   const [history, setHistory] = useState<
@@ -168,56 +164,67 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
   >([]);
   const [currentIndex, setCurrentIndex] = useState<number>(-1);
   const lastFingerprintRef = useRef<string | null>(null);
+  const lastAutoSwitchQueryRef = useRef<string | null>(null);
 
-  // Append new completed results to history
+  console.log("rendering sql analysis panel", latestPayload);
+
+  // Append completed payloads to history based on fingerprint; ignore store churn
   useEffect(() => {
-    // Build snapshots from all completed artifacts of this type
-    const completed = sqlArtifacts.filter((a: any) => a?.status === "complete");
-    const snapshots = completed.map((a: any) => {
-      const p = a.payload ?? {};
-      const fingerprint = `${p.query ?? ""}|${p.executionTime ?? 0}|${p.rowCount ?? 0}|${p.columns?.length ?? 0}|${p.summary?.totalRows ?? 0}`;
-      // store last fingerprint just for potential future use
-      lastFingerprintRef.current = fingerprint;
-      return {
-        stage: p.stage,
-        query: p.query,
-        executionTime: p.executionTime,
-        rowCount: p.rowCount,
-        columns: (p.columns as { name: string; type?: string }[]) ?? [],
-        rows: (p.rows as Result[] | undefined) ?? [],
-        visualType: p.visualType,
-        chartConfig: p.chartConfig,
-        summary: p.summary,
-      };
+    const p = latestPayload;
+    if (!p || p.stage !== "complete") return;
+
+    const fingerprint = `${p.query ?? ""}|${p.executionTime ?? 0}|${p.rowCount ?? 0}|${p.columns?.length ?? 0}|${p.summary?.totalRows ?? 0}`;
+    if (lastFingerprintRef.current === fingerprint) return;
+    lastFingerprintRef.current = fingerprint;
+
+    const snapshot = {
+      stage: p.stage,
+      query: p.query,
+      executionTime: p.executionTime,
+      rowCount: p.rowCount,
+      columns: (p.columns as { name: string; type?: string }[]) ?? [],
+      rows: (p.rows as Result[] | undefined) ?? [],
+      visualType: p.visualType,
+      chartConfig: p.chartConfig,
+      summary: p.summary,
+    };
+
+    setHistory((prev) => {
+      const exists = prev.some(
+        (s) =>
+          (s.query ?? "") === (snapshot.query ?? "") &&
+          (s.executionTime ?? 0) === (snapshot.executionTime ?? 0) &&
+          (s.summary?.totalRows ?? 0) === (snapshot.summary?.totalRows ?? 0),
+      );
+      if (exists) return prev;
+      return [...prev, snapshot];
     });
 
-    // Only update index if we were at the end (auto-advance) or uninitialized
-    setHistory((prev) => {
-      const prevWasAtEnd = currentIndex === -1 || currentIndex === prev.length - 1;
-      if (prev.length !== snapshots.length) {
-        setCurrentIndex(prevWasAtEnd ? snapshots.length - 1 : Math.min(currentIndex, snapshots.length - 1));
-      }
-      return snapshots;
-    });
-  }, [sqlArtifacts]);
+    setCurrentIndex((prev) => (prev < 0 ? 0 : prev));
+  }, [latestPayload]);
 
   const hasHistory = history.length > 0 && currentIndex >= 0;
   const selected = hasHistory ? history[currentIndex] : latestPayload ?? null;
 
-  // Set chart config from sqlData when it becomes available and auto-switch to chart view
+  // Set chart config when it becomes available and auto-switch to chart view once per query
   useEffect(() => {
-    if (selected?.chartConfig && !chartConfig) {
+    const q = selected?.query ?? null;
+    if (selected?.chartConfig && !chartConfig && q && lastAutoSwitchQueryRef.current !== q) {
       setChartConfig(selected.chartConfig);
       setActiveView("chart");
+      lastAutoSwitchQueryRef.current = q;
     }
-  }, [selected?.chartConfig, chartConfig]);
-  if (!latestArtifact && !hasHistory) {
+  }, [selected?.chartConfig, selected?.query, chartConfig]);
+  if (!latestPayload && !hasHistory) {
     return null;
   }
 
   const currentStage = ((latestPayload?.stage) || "loading") as Stage;
-  const currentProgress = (latestArtifact?.progress ?? latestPayload?.progress ?? 0) as number;
+  const currentProgress = (latestPayload?.progress ?? 0) as number;
   const isProcessing = currentStage !== "complete";
+
+  console.log("rendering sql analysis panel");
+
 
   return (
     <div className="space-y-6">

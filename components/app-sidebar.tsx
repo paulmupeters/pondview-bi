@@ -106,6 +106,11 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
     // Check if we're deleting the currently active chat
     const isDeletingActiveChat = chatId === activeChatId;
 
+    // If deleting the active chat, navigate home immediately
+    if (isDeletingActiveChat) {
+      router.push("/");
+    }
+
     // Optimistically remove from UI
     setRecentChats(
       (current: { id: string; title: string | null; updatedAt: number }[]) =>
@@ -125,9 +130,6 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
           };
           setRecentChats(data.chats ?? []);
         }
-      } else if (isDeletingActiveChat) {
-        // Successfully deleted the active chat, redirect to home
-        router.push("/");
       }
     } catch {
       try {

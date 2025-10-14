@@ -1,6 +1,5 @@
 "use client";
 
-import { useArtifact, useArtifacts } from "@ai-sdk-tools/artifacts/client";
 import { AIDevtools } from "@ai-sdk-tools/devtools";
 import { useChat } from "@ai-sdk-tools/store";
 import {
@@ -10,12 +9,10 @@ import {
 } from "@heroicons/react/24/outline";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { toast } from "sonner";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { SqlAnalysisPanel } from "@/components/sql-analysis-panel";
-import { SqlLoading } from "@/components/sql-loading";
 
 export default function Chat({
   chatId,
@@ -24,15 +21,17 @@ export default function Chat({
   chatId: string;
   initialMessages?: UIMessage[];
 }) {
+  const transport = useMemo(
+    () => new DefaultChatTransport({ api: `/${"api/chat"}/${chatId}` }),
+    [chatId],
+  );
   const router = useRouter();
   const searchParams = useSearchParams();
   const { messages, sendMessage, status } = useChat({
     id: chatId,
     storeId: chatId,
     messages: initialMessages.length > 0 ? initialMessages : undefined,
-    transport: new DefaultChatTransport({
-      api: `/api/chat/${chatId}`,
-    }),
+    transport,
   });
   const [input, setInput] = useState("");
   const [autoSentFromQuery, setAutoSentFromQuery] = useState(false);
@@ -77,75 +76,35 @@ export default function Chat({
   // Auto-send initial message from ?q= when opening a fresh chat URL
   useEffect(() => {
     const q = searchParams?.get("q") || "";
-    if (autoSentFromQuery) return;
-    if (typeof window === "undefined") return;
-    const flagKey = `autoSent:${chatId}`;
-    if (window.localStorage.getItem(flagKey)) {
-      setAutoSentFromQuery(true);
-      return;
-    }
-    if (q.trim().length > 0) {
-      // Drop the query param to avoid duplicate sends on remounts
-      router.replace(`/${chatId}`);
-      window.localStorage.setItem(flagKey, "1");
-      setAutoSentFromQuery(true);
-      sendMessage({ text: q });
-    }
-  }, [chatId, searchParams, sendMessage, autoSentFromQuery, router]);
-
-  // Use the SQL artifact with event listeners
-  const sqlData = useArtifact(ExecuteSqlArtifact, {
-    onStatusChange: (newStatus, oldStatus) => {
-      console.log("sqlData status change", newStatus, oldStatus);
-      if (newStatus === "loading" && oldStatus === "idle") {
-        toast.loading("Executing SQL query...", {
-          id: "sql-execution",
-        });
-      } else if (newStatus === "complete" && oldStatus === "streaming") {
-        const rowCount = sqlData?.data?.summary?.totalRows || 0;
-        toast.success(`Query complete! Retrieved ${rowCount} rows.`, {
-          id: "sql-execution",
-        });
+    if (q.trim().length > 0 && !autoSentFromQuery) {
+      if (typeof window === "undefined") return;
+      const flagKey = `autoSent:${chatId}`;
+      if (window.localStorage.getItem(flagKey)) {
+        setAutoSentFromQuery(true);
+        return;
       }
-    },
-    onUpdate: (newData, oldData) => {
-      console.log("sqlData update", newData, oldData);
-      if (newData.stage === "processing" && oldData?.stage === "loading") {
-        toast.loading("Processing query...", {
-          id: "sql-execution",
-        });
-      } else if (
-        newData.stage === "analyzing" &&
-        oldData?.stage === "processing"
-      ) {
-        toast.loading("Analyzing results...", {
-          id: "sql-execution",
-        });
+      if (q.trim().length > 0) {
+        // Drop the query param to avoid duplicate sends on remounts
+        router.replace(`/${chatId}`);
+        window.localStorage.setItem(flagKey, "1");
+        setAutoSentFromQuery(true);
+        sendMessage({ text: q });
       }
-    },
-    onError: (error) => {
-      toast.error(`Query failed: ${error}`, {
-        id: "sql-execution",
-      });
-    },
-  }, chatId);
-  console.log("sqlData", sqlData);
+    }
+  }, [chatId, searchParams, autoSentFromQuery, router]);
+  console.log("rendering chat");
 
-  // Track artifacts for this chat (storeId = chatId)
-  const { artifacts: allArtifacts } = useArtifacts({ storeId: chatId });
-  const hasSqlData = allArtifacts.some((a: any) => a?.type === ExecuteSqlArtifact.id);
-  const visibleMessages = clearedChat
-    ? []
-    : messages.filter((message) =>
-        Array.isArray(message.parts)
-          ? message.parts.some(
-              (part) =>
-                part?.type === "text" &&
-                typeof part.text === "string" &&
-                part.text.trim().length > 0,
-            )
-          : false,
-      );
+  // Derive whether we have any SQL artifact from chat messages (more stable than artifacts store)
+  const hasSqlData = useMemo(() => {
+    return messages.some((m) =>
+      Array.isArray(m.parts)
+        ? m.parts.some(
+          // parts emitted by executeSqlTool
+          (p: any) => p?.type === `data-artifact-${ExecuteSqlArtifact.id}`,
+        )
+        : false,
+    );
+  }, [messages]);
 
   return (
     <>
@@ -160,7 +119,7 @@ export default function Chat({
         >
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-8 space-y-6 flex flex-col items-start mx-auto bg-background">
-            {visibleMessages.length === 0 && !hasSqlData && (
+            {messages.length === 0 && !hasSqlData && (
               <div className="text-center space-y-8 max-w-4xl mx-auto">
                 <div className="space-y-4">
                   <h2 className="text-4xl font-medium text-foreground animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
@@ -173,7 +132,7 @@ export default function Chat({
               </div>
             )}
 
-            {visibleMessages.map((message) => (
+            {messages.map((message) => (
               <div
                 key={message.id}
                 className={`flex w-full ${
@@ -278,6 +237,7 @@ export default function Chat({
 
               {hasSqlData ? (
                 <SqlAnalysisPanel storeId={chatId} />
+                // <div>SqlAnalysisPanel</div>
               ) : (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">

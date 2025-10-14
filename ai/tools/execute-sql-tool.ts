@@ -35,7 +35,6 @@ export const executeSqlTool = tool({
       columns: [],
       rows: [],
     });
-
     const debugContext = {
       artifactId: sqlArtifact.id,
       userId: user.id,
@@ -45,12 +44,10 @@ export const executeSqlTool = tool({
       ...debugContext,
       query: sql,
     });
-    console.log("sql", sql);
-    await delay(500);
 
     // Step 2: Processing - execute query
-    sqlArtifact.progress = 0.2;
-    await sqlArtifact.update({ stage: "processing" });
+    await sqlArtifact.update({ stage: "processing", progress: 0.2 });
+    await delay(1000);
 
     console.debug("[executeSqlTool] Step 2 (processing) started", debugContext);
 
@@ -72,11 +69,9 @@ export const executeSqlTool = tool({
       await sqlArtifact.error(stderr);
       throw new Error(stderr);
     }
-    console.log("stdout", stdout);
-    await delay(500);
-
     // Step 3: Analyzing - process results
     await sqlArtifact.update({ stage: "analyzing", progress: 0.6 });
+    await delay(1000);
 
     console.debug("[executeSqlTool] Step 3 (analyzing) started", debugContext);
 
@@ -161,9 +156,6 @@ export const executeSqlTool = tool({
 
     // Determine query type
     const queryType = sql.trim().split(/\s+/)[0].toUpperCase();
-    console.log("queryType", queryType);
-    await delay(500);
-
     // Determine if data is suitable for charting and generate chart config
     let chartConfig: Config | undefined;
     let visualType: "table" | "chart" = "table";
@@ -176,12 +168,16 @@ export const executeSqlTool = tool({
         typeof sampleValue === "number" || !Number.isNaN(Number(sampleValue))
       );
     });
+    sqlArtifact.update({ stage: "visualizing", progress: 0.8 });
+    console.debug(
+      "[executeSqlTool] Step 4 (visualizing) started",
+      debugContext
+    );
 
     if (isChartWorthy && hasNumericData && userQuery && generateChart) {
       try {
         // Add delay to avoid rate limit errors
-        console.log("Generating chart config");
-        await delay(5000);
+        await delay(100);
         const chartResult = await generateChartConfig(parsedResults, userQuery);
         chartConfig = chartResult.config;
         visualType = "chart";
@@ -191,7 +187,6 @@ export const executeSqlTool = tool({
         insights.push("Chart generation failed, showing table view");
       }
     }
-    console.log("chartConfig", chartConfig);
 
     // Step 4: Complete with results
     const finalData = {
@@ -215,7 +210,7 @@ export const executeSqlTool = tool({
 
     await sqlArtifact.complete(finalData);
 
-    console.debug("[executeSqlTool] Step 4 (complete) finished", {
+    console.debug("[executeSqlTool] Step 5 (complete) finished", {
       ...debugContext,
       executionTimeMs: executionTime,
       rowCount,
