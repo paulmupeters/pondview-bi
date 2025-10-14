@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { SqlAnalysisPanel } from "@/components/sql-analysis-panel";
+import { showRandomAnimation } from "@/lib/animations";
 
 export default function Chat({
   chatId,
@@ -35,6 +36,7 @@ export default function Chat({
   });
   const [input, setInput] = useState("");
   const [autoSentFromQuery, setAutoSentFromQuery] = useState(false);
+  const [animationFrame, setAnimationFrame] = useState("");
 
   const [clearedChat, setClearedChat] = useState(false);
   const [rightPanelWidth, setRightPanelWidth] = useState(67); // percentage - 2/3 of screen
@@ -92,6 +94,19 @@ export default function Chat({
       }
     }
   }, [chatId, searchParams, autoSentFromQuery, router]);
+
+  // Animation effect for streaming status
+  useEffect(() => {
+    if (status === "streaming") {
+      const animation = showRandomAnimation(
+        undefined,
+        Number.POSITIVE_INFINITY, // Run indefinitely
+        (frame) => setAnimationFrame(frame),
+      );
+      return () => animation.stop();
+    }
+    setAnimationFrame("");
+  }, [status]);
 
   // Derive whether we have any SQL artifact from chat messages (more stable than artifacts store)
   const hasSqlData = useMemo(() => {
@@ -159,9 +174,6 @@ export default function Chat({
                       : "bg-muted p-2 shadow-md"
                   }`}
                 >
-                  <div className="font-medium text-sm">
-                    {message.role === "user" ? "" : <SparklesIcon />}
-                  </div>
                   <div className="space-y-0 mr-2">
                     {message.parts.map((part, partIndex) => {
                       if (part.type === "text") {
@@ -171,6 +183,24 @@ export default function Chat({
                           </span>
                         );
                       }
+                      else if (part.type === 'tool-getTableSchema')
+                        return (
+                          <span key={`${message.id}-part-${partIndex}`}>
+                            Getting table schema... {animationFrame}
+                          </span>
+                        );
+                      else if (part.type === 'tool-executeSql')
+                        return (
+                          <span key={`${message.id}-part-${partIndex}`}>
+                            Executing SQL...{animationFrame}
+                          </span>
+                        );
+                      else if (part.type === 'tool-generateChartConfig')
+                        return (
+                          <span key={`${message.id}-part-${partIndex}`}>
+                            Generating chart config...{animationFrame}
+                          </span>
+                        );
                       return null;
                     })}
                   </div>
@@ -180,7 +210,9 @@ export default function Chat({
             {/* Status indicator */}
             {status !== "ready" && (
               <div className="text-center text-sm text-muted-foreground bg-muted p-2 rounded-xl shadow-md">
-                {status === "streaming" && "AI is thinking..."}
+                {status === "streaming" && (
+                  <span>AI is thinking... {animationFrame}</span>
+                )}
                 {status === "submitted" && "Processing..."}
               </div>
             )}

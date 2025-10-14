@@ -71,7 +71,7 @@ export const executeSqlTool = tool({
     }
     // Step 3: Analyzing - process results
     await sqlArtifact.update({ stage: "analyzing", progress: 0.6 });
-    await delay(2000);
+    await delay(2500);
 
     console.debug("[executeSqlTool] Step 3 (analyzing) started", debugContext);
 

@@ -212,12 +212,12 @@ export function DynamicChart({
         <ChartContainer
           config={
             chartConfig.countMode
-              ? { count: { label: "Count", color: "hsl(var(--chart-1))" } }
+              ? { count: { label: "Count", color: "var(--chart-1)" } }
               : chartConfig.yKeys.reduce(
                 (acc, key, index) => {
                   acc[key] = {
                     label: key,
-                    color: `hsl(var(--chart-${(index % 8) + 1}))`,
+                    color: `var(--chart-${(index % 8) + 1})`,
                   };
                   return acc;
                 },

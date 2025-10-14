@@ -34,10 +34,7 @@ export const generateChartConfig = async (
       schema: configSchema,
     });
     // Override with shadcn theme colors
-    const colors: Record<string, string> = {};
-    config.yKeys.forEach((key, index) => {
-      colors[key] = `hsl(var(--chart-${index + 1}))`;
-    });
+    const colors: undefined = undefined;
 
     const updatedConfig = { ...config, colors };
     return { config: updatedConfig };
