@@ -3,6 +3,8 @@
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   Label,
@@ -145,6 +147,35 @@ export function DynamicChart({
               />
             ))}
           </AreaChart>
+        );
+      case "bar":
+        return (
+          <BarChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey={chartConfig.xKey}>
+              <Label
+                value={toTitleCase(chartConfig.xKey)}
+                offset={0}
+                position="insideBottom"
+              />
+            </XAxis>
+            <YAxis>
+              <Label
+                value={toTitleCase(chartConfig.yKeys[0])}
+                angle={-90}
+                position="insideLeft"
+              />
+            </YAxis>
+            <ChartTooltip content={<ChartTooltipContent />} />
+            {chartConfig.legend && <Legend />}
+            {chartConfig.yKeys.map((key, index) => (
+              <Bar
+                key={key}
+                dataKey={key}
+                fill={getColorForKey(key, index)}
+              />
+            ))}
+          </BarChart>
         );
       case "pie":
         return (

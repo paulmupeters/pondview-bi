@@ -1,6 +1,6 @@
 "use client";
 
-import { useArtifact } from "@ai-sdk-tools/artifacts/client";
+import { useArtifact, useArtifacts } from "@ai-sdk-tools/artifacts/client";
 import { AIDevtools } from "@ai-sdk-tools/devtools";
 import { useChat } from "@ai-sdk-tools/store";
 import {
@@ -28,6 +28,7 @@ export default function Chat({
   const searchParams = useSearchParams();
   const { messages, sendMessage, status } = useChat({
     id: chatId,
+    storeId: chatId,
     messages: initialMessages.length > 0 ? initialMessages : undefined,
     transport: new DefaultChatTransport({
       api: `/api/chat/${chatId}`,
@@ -95,6 +96,7 @@ export default function Chat({
   // Use the SQL artifact with event listeners
   const sqlData = useArtifact(ExecuteSqlArtifact, {
     onStatusChange: (newStatus, oldStatus) => {
+      console.log("sqlData status change", newStatus, oldStatus);
       if (newStatus === "loading" && oldStatus === "idle") {
         toast.loading("Executing SQL query...", {
           id: "sql-execution",
@@ -107,6 +109,7 @@ export default function Chat({
       }
     },
     onUpdate: (newData, oldData) => {
+      console.log("sqlData update", newData, oldData);
       if (newData.stage === "processing" && oldData?.stage === "loading") {
         toast.loading("Processing query...", {
           id: "sql-execution",
@@ -125,24 +128,12 @@ export default function Chat({
         id: "sql-execution",
       });
     },
-  });
+  }, chatId);
+  console.log("sqlData", sqlData);
 
-
-  // Only consider SQL data relevant if this chat has an SQL artifact message
-  const hasSqlArtifactMessage = messages.some((message) =>
-    Array.isArray(message.parts)
-      ? message.parts.some(
-        (part) =>
-          part?.type === `data-artifact-${ExecuteSqlArtifact.id}`,
-      )
-      : false,
-  );
-
-  // Track when we have data for this chat specifically
-  const hasSqlData = Boolean(
-    hasSqlArtifactMessage && sqlData?.data && sqlData.status !== "idle",
-  );
-  console.log("hasSqlData", hasSqlData);
+  // Track artifacts for this chat (storeId = chatId)
+  const { artifacts: allArtifacts } = useArtifacts({ storeId: chatId });
+  const hasSqlData = allArtifacts.some((a: any) => a?.type === ExecuteSqlArtifact.id);
   const visibleMessages = clearedChat
     ? []
     : messages.filter((message) =>
@@ -285,10 +276,8 @@ export default function Chat({
             {/* Analysis Content */}
             <div className="flex-1 overflow-y-auto">
 
-              {hasSqlData && sqlData.data ? (
-                <SqlAnalysisPanel />
-              ) : sqlData?.data ? (
-                <SqlLoading />
+              {hasSqlData ? (
+                <SqlAnalysisPanel storeId={chatId} />
               ) : (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">

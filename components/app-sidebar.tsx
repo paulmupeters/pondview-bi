@@ -8,7 +8,7 @@ import {
   Settings,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { MouseEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
@@ -24,6 +24,7 @@ interface ChatSidebarProps {
 
 export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const activeChatId = pathname?.split("/")[1] ?? null;
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [recentChats, setRecentChats] = useState<
@@ -102,6 +103,9 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
   }, [isOpen, activeChatId, loadChats]);
 
   const handleDeleteChat = async (chatId: string) => {
+    // Check if we're deleting the currently active chat
+    const isDeletingActiveChat = chatId === activeChatId;
+
     // Optimistically remove from UI
     setRecentChats(
       (current: { id: string; title: string | null; updatedAt: number }[]) =>
@@ -121,6 +125,9 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
           };
           setRecentChats(data.chats ?? []);
         }
+      } else if (isDeletingActiveChat) {
+        // Successfully deleted the active chat, redirect to home
+        router.push("/");
       }
     } catch {
       try {
