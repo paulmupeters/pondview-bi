@@ -7,6 +7,7 @@
         "@ai-sdk-tools/artifacts": "^0.4.0",
         "@ai-sdk-tools/devtools": "^0.6.1",
         "@ai-sdk-tools/store": "^0.1.2",
+        "@duckdb/node-api": "^1.4.1-r.1",
         "@heroicons/react": "^2.2.0",
         "@radix-ui/react-collapsible": "^1.1.12",
         "@radix-ui/react-dialog": "^1.1.15",
@@ -17,6 +18,7 @@
         "@radix-ui/react-tabs": "^1.1.13",
         "@radix-ui/react-tooltip": "^1.2.8",
         "ai": "^5.0.48",
+        "bi-chat": ".",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "drizzle-orm": "^0.44.6",
@@ -44,6 +46,15 @@
       },
     },
   },
+  "trustedDependencies": [
+    "@duckdb/node-bindings-win32-x64",
+    "@duckdb/node-bindings-darwin-x64",
+    "@duckdb/node-bindings-darwin-arm64",
+    "@duckdb/node-bindings-linux-arm64",
+    "@duckdb/node-bindings",
+    "@duckdb/node-bindings-linux-x64",
+    "@duckdb/node-api",
+  ],
   "packages": {
     "@ai-sdk-tools/artifacts": ["@ai-sdk-tools/artifacts@0.4.0", "", { "dependencies": { "@ai-sdk-tools/store": "^0.1.2", "zod": "^4.1.8" }, "peerDependencies": { "ai": "^4.0.0", "react": "^18.0.0 || ^19.0.0" } }, "sha512-YVwTag4fsCs+jBdO49oPYiFVHoRWXJTkGFshg/cBudxxVvyIZ3CfbvUM0rfvv5I0HBttPQtGMyE8tgInn+JZdg=="],
 
@@ -102,6 +113,20 @@
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.2.0", "", { "os": "win32", "cpu": "x64" }, "sha512-Nawu5nHjP/zPKTIryh2AavzTc/KEg4um/MxWdXW0A6P/RZOyIpa7+QSjeXwAwX/utJGaCoXRPWtF3m5U/bB3Ww=="],
 
     "@drizzle-team/brocli": ["@drizzle-team/brocli@0.10.2", "", {}, "sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w=="],
+
+    "@duckdb/node-api": ["@duckdb/node-api@1.4.1-r.1", "", { "dependencies": { "@duckdb/node-bindings": "1.4.1-r.1" } }, "sha512-OQgLTZHkHfhbl4lNgn/dD9WwwKujbshPTl6ZW/waqNK10kcZmrtZM70FrMiBVKi4FDbaFSN8/EQ6n8N2K1GlRw=="],
+
+    "@duckdb/node-bindings": ["@duckdb/node-bindings@1.4.1-r.1", "", { "optionalDependencies": { "@duckdb/node-bindings-darwin-arm64": "1.4.1-r.1", "@duckdb/node-bindings-darwin-x64": "1.4.1-r.1", "@duckdb/node-bindings-linux-arm64": "1.4.1-r.1", "@duckdb/node-bindings-linux-x64": "1.4.1-r.1", "@duckdb/node-bindings-win32-x64": "1.4.1-r.1" } }, "sha512-juctO06hK1DVPCt8uLwZh8IY/aqlUPEZ7MuAsecP3DVSfQH8L3T3/KRvanjg0X1PrviLptr81BYilriOarbP8g=="],
+
+    "@duckdb/node-bindings-darwin-arm64": ["@duckdb/node-bindings-darwin-arm64@1.4.1-r.1", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Ji/b0zKg7R2tta3T0CQx29XtLlkrJggDK91d0qaFtPgXSrtnevEBHg7PVS5lC0i0Lwksk1BQB8P5/5aGwUGttA=="],
+
+    "@duckdb/node-bindings-darwin-x64": ["@duckdb/node-bindings-darwin-x64@1.4.1-r.1", "", { "os": "darwin", "cpu": "x64" }, "sha512-4q8jk+mII15UmonkhniEHpXYJ9Motu/J+HgftJoX6aBh8Ic8HnpqrDYdaV1LwVUBQuw9sIuKPT7uvY+sbzKr9Q=="],
+
+    "@duckdb/node-bindings-linux-arm64": ["@duckdb/node-bindings-linux-arm64@1.4.1-r.1", "", { "os": "linux", "cpu": "arm64" }, "sha512-8ugaMZsPSBhys+ZubWzfuJ3Q67anOCOIeu+w34W0HVq3jy0MWA8LOGTNWPbTvdQuVKrS7YyBLtAxjeBy2akiRg=="],
+
+    "@duckdb/node-bindings-linux-x64": ["@duckdb/node-bindings-linux-x64@1.4.1-r.1", "", { "os": "linux", "cpu": "x64" }, "sha512-FZlEpYB+KHUqBmqkXH4kA08i4UHBLBm87i3N1Vu6s10pqFPOW0dLQPruSPheiWFPfnmBF1Go7SreOvTHz17lxA=="],
+
+    "@duckdb/node-bindings-win32-x64": ["@duckdb/node-bindings-win32-x64@1.4.1-r.1", "", { "os": "win32", "cpu": "x64" }, "sha512-8yCoZBD3bJy1wUTfMSlIAfaxhqh3zrSk+XZn7KC3D3mQzx37zDV0i0HGl5W57q0tOYknBCqkamlklDAY8oK8TQ=="],
 
     "@emnapi/runtime": ["@emnapi/runtime@1.5.0", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-97/BJ3iXHww3djw6hYIfErCZFee7qCtrneuLa20UXFCOTCfBM2cvQHjWJ2EG0s0MtdNwInarqCTz35i4wWXHsQ=="],
 
@@ -440,6 +465,8 @@
     "aria-hidden": ["aria-hidden@1.2.6", "", { "dependencies": { "tslib": "^2.0.0" } }, "sha512-ik3ZgC9dY/lYVVM++OISsaYDeg1tb0VtP5uL3ouh1koGOaUMDPpbFIei4JkFimWUFPn90sbMNMXQAIVOlnYKJA=="],
 
     "babel-plugin-macros": ["babel-plugin-macros@3.1.0", "", { "dependencies": { "@babel/runtime": "^7.12.5", "cosmiconfig": "^7.0.0", "resolve": "^1.19.0" } }, "sha512-Cg7TFGpIr01vOQNODXOOaGz2NpCU5gl8x1qJFbb6hbZxR7XrcE2vtbAsTAbJ7/xwJtUuJEw8K8Zr/AE0LHlesg=="],
+
+    "bi-chat": ["bi-chat@root:", {}],
 
     "buffer-from": ["buffer-from@1.1.2", "", {}, "sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ=="],
 

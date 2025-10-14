@@ -2,7 +2,7 @@
 
 import { useArtifact } from "@ai-sdk-tools/artifacts/client";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
-import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Table } from "lucide-react";
+import { ChartBar, ChevronDown, ChevronLeft, ChevronRight, Table } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
@@ -14,7 +14,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import type { Config } from "@/lib/types";
+import type { Config, Result } from "@/lib/types";
 
 export function SqlAnalysisPanel() {
   const sqlData = useArtifact(ExecuteSqlArtifact);
@@ -27,7 +27,7 @@ export function SqlAnalysisPanel() {
       executionTime?: number;
       rowCount?: number;
       columns: { name: string; type?: string }[];
-      rows: Record<string, unknown>[];
+      rows: Result[];
       visualType?: "table" | "chart";
       chartConfig?: Config;
       summary?: {
@@ -56,7 +56,7 @@ export function SqlAnalysisPanel() {
       executionTime: payload.executionTime,
       rowCount: payload.rowCount,
       columns: payload.columns ?? [],
-      rows: payload.rows ?? [],
+      rows: (payload.rows as Result[] | undefined) ?? [],
       visualType: payload.visualType,
       chartConfig: payload.chartConfig,
       summary: payload.summary,
@@ -67,7 +67,7 @@ export function SqlAnalysisPanel() {
 
   const hasHistory = history.length > 0 && currentIndex >= 0;
   const selected = hasHistory ? history[currentIndex] : sqlData?.data ?? null;
-  if (!sqlData?.data) {
+  if (!sqlData?.data || sqlData.status === "idle") {
     return null;
   }
 
@@ -91,7 +91,7 @@ export function SqlAnalysisPanel() {
             onClick={() => setActiveView("chart")}
             className="flex items-center gap-2"
           >
-            <BarChart3 className="w-4 h-4" />
+            <ChartBar className="w-4 h-4" />
             Chart
           </Button>
         </div>

@@ -8,8 +8,9 @@ import {
   Settings,
 } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { MouseEvent } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -22,28 +23,83 @@ interface ChatSidebarProps {
 }
 
 export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
+  const pathname = usePathname();
+  const activeChatId = pathname?.split("/")[1] ?? null;
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [recentChats, setRecentChats] = useState<
     { id: string; title: string | null; updatedAt: number }[]
   >([]);
 
+  const loadChats = useCallback(async (): Promise<
+    { id: string; title: string | null; updatedAt: number }[]
+  > => {
+    try {
+      const res = await fetch("/api/chats", { cache: "no-store" });
+      if (!res.ok) return [];
+      const data = (await res.json()) as {
+        chats: { id: string; title: string | null; updatedAt: number }[];
+      };
+      const list = data.chats ?? [];
+      setRecentChats(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // Fetch when opening sidebar
   useEffect(() => {
+    if (!isOpen) return;
     let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await fetch("/api/chats", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          chats: { id: string; title: string | null; updatedAt: number }[];
-        };
-        if (!cancelled) setRecentChats(data.chats ?? []);
-      } catch { }
-    };
-    load();
+    (async () => {
+      if (!cancelled) await loadChats();
+    })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isOpen, loadChats]);
+
+  // Fetch on route change + brief retry if new chat not yet persisted
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const run = async () => {
+      const latest = await loadChats();
+      if (!activeChatId) return;
+      const alreadyListed = latest.some((c) => c.id === activeChatId);
+
+      if (!alreadyListed) {
+        // Optimistically show the active chat immediately
+        setRecentChats((current) => {
+          const exists = current.some((c) => c.id === activeChatId);
+          if (exists) return current;
+          return [
+            { id: activeChatId, title: null, updatedAt: Date.now() },
+            ...current,
+          ];
+        });
+
+        // Brief retry loop to allow server to persist the new chat
+        for (let i = 0; i < 4 && !cancelled; i++) {
+          const res = await fetch("/api/chats", { cache: "no-store" });
+          if (res.ok) {
+            const data = (await res.json()) as {
+              chats: { id: string; title: string | null; updatedAt: number }[];
+            };
+            if (data.chats?.some((c) => c.id === activeChatId)) {
+              setRecentChats(data.chats ?? []);
+              break;
+            }
+          }
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, activeChatId, loadChats]);
 
   const handleDeleteChat = async (chatId: string) => {
     // Optimistically remove from UI
@@ -147,7 +203,10 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                     <div key={chat.id} className="group relative">
                       <Link
                         href={`/${chat.id}`}
-                        className="flex w-full flex-col items-start gap-1 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent"
+                        className={cn(
+                          "flex w-full flex-col items-start gap-1 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent",
+                          activeChatId === chat.id && "border-2 border-accent/40 bg-sidebar-accent"
+                        )}
                       >
                         <div className="flex items-center gap-2">
                           <MessageSquare className="h-4 w-4 text-muted-foreground" />

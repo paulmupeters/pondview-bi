@@ -2,12 +2,21 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  experimental: {
-    serverComponentsExternalPackages: ["bun:sqlite"],
-  },
+  serverExternalPackages: [
+    "bun:sqlite",
+    "drizzle-orm/bun-sqlite",
+    "@duckdb/node-bindings",
+    "@duckdb/node-api",
+  ],
   webpack: (config, { isServer }) => {
     if (isServer) {
-      config.externals.push("bun:sqlite");
+      // Externalize native bindings so Webpack (when used) doesn't try to bundle them
+      config.externals.push(
+        "bun:sqlite",
+        "drizzle-orm/bun-sqlite",
+        "@duckdb/node-bindings",
+        "@duckdb/node-api"
+      );
     }
     return config;
   },

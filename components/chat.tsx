@@ -13,9 +13,7 @@ import { DefaultChatTransport } from "ai";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { BarChartArtifact } from "@/ai/artifacts/bar-chart";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
-import { AnalysisPanel } from "@/components/analysis-panel";
 import { SqlAnalysisPanel } from "@/components/sql-analysis-panel";
 import { SqlLoading } from "@/components/sql-loading";
 
@@ -39,7 +37,7 @@ export default function Chat({
   const [autoSentFromQuery, setAutoSentFromQuery] = useState(false);
 
   const [clearedChat, setClearedChat] = useState(false);
-  const [rightPanelWidth, setRightPanelWidth] = useState(75); // percentage - 2/3 of screen
+  const [rightPanelWidth, setRightPanelWidth] = useState(67); // percentage - 2/3 of screen
   const [isResizing, setIsResizing] = useState(false);
 
   const handleMouseDown = useCallback(() => {
@@ -129,46 +127,22 @@ export default function Chat({
     },
   });
 
-  // Use the bar chart artifact with event listeners
-  const barChartData = useArtifact(BarChartArtifact, {
-    onStatusChange: (newStatus, oldStatus) => {
-      if (newStatus === "loading" && oldStatus === "idle") {
-        toast.loading("Creating bar chart...", {
-          id: "bar-chart",
-        });
-      } else if (newStatus === "complete" && oldStatus === "streaming") {
-        const insights = barChartData?.data?.summary?.insights?.length || 0;
-        toast.success(`Bar chart complete! Generated ${insights} insights.`, {
-          id: "bar-chart",
-        });
-      }
-    },
-    onUpdate: (newData, oldData) => {
-      // Show different toasts based on stage changes
-      if (newData.stage === "processing" && oldData?.stage === "loading") {
-        toast.loading("Processing chart data...", {
-          id: "bar-chart",
-        });
-      } else if (
-        newData.stage === "analyzing" &&
-        oldData?.stage === "processing"
-      ) {
-        toast.loading("Analyzing data and generating insights...", {
-          id: "bar-chart",
-        });
-      }
-    },
-    onError: (error) => {
-      toast.error(`Chart creation failed: ${error}`, {
-        id: "bar-chart",
-      });
-    },
-  });
 
-  // Track when we have data to trigger animation unless user closed panel
-  const hasBarChartData =
-    barChartData?.data && barChartData.data.stage === "complete";
-  const hasSqlData = sqlData?.data && sqlData.data.stage === "complete";
+  // Only consider SQL data relevant if this chat has an SQL artifact message
+  const hasSqlArtifactMessage = messages.some((message) =>
+    Array.isArray(message.parts)
+      ? message.parts.some(
+        (part) =>
+          part?.type === `data-artifact-${ExecuteSqlArtifact.id}`,
+      )
+      : false,
+  );
+
+  // Track when we have data for this chat specifically
+  const hasSqlData = Boolean(
+    hasSqlArtifactMessage && sqlData?.data && sqlData.status !== "idle",
+  );
+  console.log("hasSqlData", hasSqlData);
   const visibleMessages = clearedChat
     ? []
     : messages.filter((message) =>
@@ -185,18 +159,17 @@ export default function Chat({
   return (
     <>
       <div
-        className={`chat-container h-screen flex transition-all duration-200 ease-in-out ${
-          hasBarChartData || hasSqlData ? "flex-row" : "flex-col items-center justify-center"
+        className={`chat-container h-screen flex ${hasSqlData ? "flex-row" : "flex-col items-center justify-center"
         }`}
       >
         {/* Left Panel - Chat */}
         <div
-          className={`${hasBarChartData || hasSqlData ? "" : "w-full"} transition-all duration-200 ease-in-out flex flex-col h-full`}
-          style={hasBarChartData || hasSqlData ? { width: `${100 - rightPanelWidth}%` } : {}}
+          className={`${hasSqlData ? "" : "w-full"} flex flex-col h-full`}
+          style={hasSqlData ? { width: `${100 - rightPanelWidth}%` } : {}}
         >
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-8 space-y-6 flex flex-col items-start mx-auto bg-background">
-            {visibleMessages.length === 0 && !hasBarChartData && !hasSqlData && (
+            {visibleMessages.length === 0 && !hasSqlData && (
               <div className="text-center space-y-8 max-w-4xl mx-auto">
                 <div className="space-y-4">
                   <h2 className="text-4xl font-medium text-foreground animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
@@ -290,14 +263,14 @@ export default function Chat({
         </div>
 
         {/* Right Panel - Analysis */}
-        {hasBarChartData || hasSqlData && (
+        {hasSqlData && (
           // biome-ignore lint/a11y/noStaticElementInteractions: needed for resizing
           <div
             className="w-2 cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors"
             onMouseDown={handleMouseDown}
           />
         )}
-        {hasBarChartData || hasSqlData && (
+        {hasSqlData && (
           <div
             className="border-l border-border flex flex-col h-full"
             style={{ width: `${rightPanelWidth}%` }}
@@ -312,9 +285,7 @@ export default function Chat({
             {/* Analysis Content */}
             <div className="flex-1 overflow-y-auto">
 
-              {hasBarChartData && barChartData.data ? (
-                <AnalysisPanel />
-              ) : hasSqlData && sqlData.data ? (
+              {hasSqlData && sqlData.data ? (
                 <SqlAnalysisPanel />
               ) : sqlData?.data ? (
                 <SqlLoading />

@@ -12,20 +12,7 @@ interface SidebarLayoutProps {
 
 export function SidebarLayout({ children }: SidebarLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const pathname = usePathname();
 
-  // Auto-close sidebar when navigating to chat pages
-  useEffect(() => {
-    // Check if current path is a chat page (contains a chatId)
-    const isChatPage = pathname && pathname !== "/" && !pathname.startsWith("/view-data") && !pathname.startsWith("/api");
-    
-    if (isChatPage) {
-      setIsSidebarOpen(false);
-    } else {
-      // Reopen sidebar when navigating back to home or other pages
-      setIsSidebarOpen(true);
-    }
-  }, [pathname]);
 
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);

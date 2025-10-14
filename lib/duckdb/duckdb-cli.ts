@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { runSqlAndGetRowObjectsJson } from "./duckdb-node";
 
 // Simple in-process mutex to serialize duckdb CLI access per database file to reduce lock conflicts
 class AsyncMutex {
@@ -53,67 +53,55 @@ function getMutexFor(dbPath: string): AsyncMutex {
 export async function runDuckDbCli(options: {
   dbPath: string;
   args: string[];
-  cwd?: string;
-  json?: boolean;
-  retries?: number;
+  cwd?: string; // ignored in Node API mode, kept for API compatibility
+  json?: boolean; // always JSON in Node API mode
+  retries?: number; // simple retry on transient errors
   retryDelayMs?: number;
 }): Promise<{ code: number; stdout: string; stderr: string }> {
   const {
     dbPath,
     args,
-    cwd,
     json = false,
-    retries = 3,
+    retries = 1,
     retryDelayMs = 150,
   } = options;
   const mutex = getMutexFor(dbPath);
 
+  function extractSql(cliArgs: string[]): string | undefined {
+    // Support both ["-c", sql] and [sql] forms; ignore -json/--json
+    const cIdx = cliArgs.findIndex((a) => a === "-c" || a === "--command");
+    if (cIdx >= 0 && cIdx + 1 < cliArgs.length) return cliArgs[cIdx + 1];
+    const filtered = cliArgs.filter(
+      (a) => a !== "-json" && a !== "--json" && a !== "-c" && a !== "--command"
+    );
+    if (filtered.length === 1) return filtered[0];
+    if (filtered.length > 1) return filtered.join("\n");
+    return undefined;
+  }
+
   return mutex.runExclusive(async () => {
     let attempt = 0;
+    // eslint-disable-next-line no-constant-condition
     while (true) {
-      const cliArgs = [dbPath || ":memory:"];
-      if (json && !args.some((arg) => arg === "--json" || arg === "-json")) {
-        cliArgs.push("--json");
+      try {
+        const sql = extractSql(args);
+        if (!sql || sql.trim().length === 0) {
+          return { code: 1, stdout: "", stderr: "No SQL provided" };
+        }
+
+        const rows = await runSqlAndGetRowObjectsJson(
+          dbPath || ":memory:",
+          sql
+        );
+        const stdout = JSON.stringify(rows);
+        return { code: 0, stdout, stderr: "" };
+      } catch (e) {
+        attempt += 1;
+        if (attempt > (retries < 1 ? 1 : retries)) {
+          return { code: 1, stdout: "", stderr: String(e) };
+        }
+        await new Promise((r) => setTimeout(r, retryDelayMs * attempt));
       }
-      cliArgs.push(...args);
-
-      const result = await new Promise<{
-        code: number;
-        stdout: string;
-        stderr: string;
-      }>((resolve) => {
-        let out = "";
-        let err = "";
-        const proc = spawn("duckdb", cliArgs, {
-          cwd,
-          stdio: "pipe",
-        });
-        proc.stdout?.on("data", (d) => {
-          out += d.toString();
-        });
-        proc.stderr?.on("data", (d) => {
-          err += d.toString();
-        });
-        proc.on("close", (code) =>
-          resolve({ code: code ?? 0, stdout: out, stderr: err }),
-        );
-        proc.on("error", (e) =>
-          resolve({ code: 1, stdout: "", stderr: String(e) }),
-        );
-      });
-
-      // If successful or the error is not a lock error, return immediately
-      const isLockError =
-        /Could not set lock on file|Conflicting lock is held/i.test(
-          result.stderr,
-        );
-      if (result.code === 0 || !isLockError || attempt >= retries) {
-        return result;
-      }
-
-      // Brief backoff then retry
-      attempt += 1;
-      await new Promise((r) => setTimeout(r, retryDelayMs * attempt));
     }
   });
 }

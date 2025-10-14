@@ -3,8 +3,6 @@
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   Cell,
   Label,
@@ -64,7 +62,7 @@ export function DynamicChart({
     chartData = parsedChartData;
 
     const processChartData = (data: Result[], chartType: string) => {
-      if (chartType === "bar" || chartType === "pie") {
+      if (chartType === "pie") {
         if (data.length <= 8) {
           return data;
         }
@@ -77,75 +75,6 @@ export function DynamicChart({
     chartData = processChartData(chartData, chartConfig.type);
 
     switch (chartConfig.type) {
-      case "bar": {
-        let dataToUse = chartData;
-        if (chartConfig.countMode) {
-          // Aggregate by xKey and count
-          const countMap = new Map<string, number>();
-          for (const item of chartData) {
-            const key = String(item[chartConfig.xKey]);
-            countMap.set(key, (countMap.get(key) || 0) + 1);
-          }
-          dataToUse = Array.from(countMap.entries()).map(([key, count]) => ({
-            [chartConfig.xKey]: key,
-            count,
-          }));
-        }
-        return (
-          <BarChart data={dataToUse}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={chartConfig.xKey}>
-              <Label
-                value={toTitleCase(chartConfig.xKey)}
-                offset={0}
-                position="insideBottom"
-              />
-            </XAxis>
-            <YAxis>
-              <Label
-                value={
-                  chartConfig.countMode
-                    ? "Count"
-                    : toTitleCase(chartConfig.yKeys[0])
-                }
-                angle={-90}
-                position="insideLeft"
-              />
-            </YAxis>
-            <ChartTooltip content={<ChartTooltipContent />} />
-            {chartConfig.legend && <Legend />}
-            {chartConfig.countMode ? (
-              <Bar
-                key="count"
-                dataKey="count"
-              >
-                {dataToUse.map((entry, index) => (
-                  <Cell
-                    // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
-                    key={`cell-${index}`}
-                    fill={getColorForKey(String(entry[chartConfig.xKey]), index)}
-                  />
-                ))}
-              </Bar>
-            ) : (
-              chartConfig.yKeys.map((key, index) => (
-                <Bar
-                  key={key}
-                  dataKey={key}
-                >
-                  {dataToUse.map((entry, entryIndex) => (
-                    <Cell
-                      // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
-                      key={`cell-${entryIndex}`}
-                      fill={getColorForKey(String(entry[chartConfig.xKey]), entryIndex)}
-                    />
-                  ))}
-                </Bar>
-              ))
-            )}
-          </BarChart>
-        );
-      }
       case "line": {
         const { data, xAxisField, lineFields } = transformDataForMultiLineChart(
           chartData,

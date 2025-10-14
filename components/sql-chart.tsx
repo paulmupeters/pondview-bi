@@ -3,7 +3,7 @@
 import { useArtifact } from "@ai-sdk-tools/artifacts/client";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { DynamicChart } from "@/components/dynamic-chart";
-import type { Config } from "@/lib/types";
+import type { Config, Result } from "@/lib/types";
 
 export function SqlChart({
   customChartConfig,
@@ -12,15 +12,15 @@ export function SqlChart({
   customChartConfig?: Config;
     dataOverride?: {
       stage?: "loading" | "processing" | "analyzing" | "complete";
-      rows: Record<string, unknown>[];
-      chartConfig?: Config;
-      summary?: {
-        totalRows: number;
-        executionTimeMs?: number;
-        insights: string[];
-        queryType?: string;
-      };
+    rows: Result[];
+    chartConfig?: Config;
+    summary?: {
+      totalRows: number;
+      executionTimeMs?: number;
+      insights: string[];
+      queryType?: string;
     };
+  };
 }) {
   const sqlData = useArtifact(ExecuteSqlArtifact);
 

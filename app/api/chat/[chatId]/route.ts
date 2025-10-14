@@ -10,17 +10,22 @@ import { asc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { setContext } from "@/ai/context";
 import { tools } from "@/ai/tools";
-import { db } from "@/lib/db/client";
+import { getDb } from "@/lib/db/client";
 import { chats, messages } from "@/lib/db/schema";
 import { analysisPrompt } from "@/ai/prompts";
+import type { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
 
-export async function GET(_req: Request, { params }: { params: { chatId: string } }) {
-  const chatId = params.chatId;
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ chatId: string }> }
+) {
+  const { chatId } = await params;
+  const db = getDb();
   const rows = await db
     .select()
     .from(messages)
@@ -43,9 +48,12 @@ export async function GET(_req: Request, { params }: { params: { chatId: string 
   return Response.json({ messages: uiMessages });
 }
 
-export async function POST(req: Request, { params }: { params: { chatId: string } }) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ chatId: string }> }
+) {
   const { messages: uiMessages }: { messages: UIMessage[] } = await req.json();
-  const chatId = params.chatId;
+  const { chatId } = await params;
 
   // We only create the chat upon first user message below
 
@@ -58,6 +66,7 @@ export async function POST(req: Request, { params }: { params: { chatId: string 
     const text = (textPart as { text?: string } | undefined)?.text ?? "";
 
     // Create chat now (first time we receive a user message for this id)
+    const db = getDb();
     await db
       .insert(chats)
       .values({
@@ -102,6 +111,7 @@ export async function POST(req: Request, { params }: { params: { chatId: string 
         : undefined;
       const text = (textPart as { text?: string } | undefined)?.text ?? "";
 
+      const db = getDb();
       await db
         .insert(messages)
         .values({
@@ -148,10 +158,11 @@ export async function POST(req: Request, { params }: { params: { chatId: string 
 }
 
 export async function DELETE(
-  _req: Request,
-  { params }: { params: { chatId: string } }
+  _req: NextRequest,
+  { params }: { params: Promise<{ chatId: string }> }
 ) {
-  const chatId = params.chatId;
+  const { chatId } = await params;
+  const db = getDb();
   await db.delete(chats).where(eq(chats.id, chatId));
   return new Response(null, { status: 204 });
 }

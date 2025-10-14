@@ -1,16 +1,25 @@
-import { Database } from "bun:sqlite";
-import { drizzle } from "drizzle-orm/bun-sqlite";
-
+import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema";
 
-const filePath = process.env.DATABASE_PATH || "./sqlite.db";
-export const sqlite = new Database(filePath);
+let cachedDb: BunSQLiteDatabase<typeof schema> | undefined;
 
-// Ensure foreign key constraints are enforced (for ON DELETE CASCADE)
-sqlite.run(`PRAGMA foreign_keys = ON;`);
+export function getDb(): BunSQLiteDatabase<typeof schema> {
+  if (cachedDb) return cachedDb as BunSQLiteDatabase<typeof schema>;
 
-// Lightweight bootstrap to ensure tables exist in dev environments
-sqlite.run(`
+  // Only import bun:sqlite at runtime under Bun; avoid during Next build
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { Database } = require("bun:sqlite");
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { drizzle } = require("drizzle-orm/bun-sqlite");
+
+  const filePath = process.env.DATABASE_PATH || "./sqlite.db";
+  const sqlite = new Database(filePath);
+
+  // Ensure foreign key constraints are enforced (for ON DELETE CASCADE)
+  sqlite.run(`PRAGMA foreign_keys = ON;`);
+
+  // Lightweight bootstrap to ensure tables exist in dev environments
+  sqlite.run(`
 CREATE TABLE IF NOT EXISTS chats (
   id TEXT PRIMARY KEY,
   title TEXT,
@@ -30,6 +39,9 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS messages_chat_idx ON messages(chat_id, created_at);
+CREATE INDEX IF NOT EXISTS chats_updated_idx ON chats(updated_at);
 `);
 
-export const db = drizzle(sqlite, { schema });
+  cachedDb = drizzle(sqlite, { schema });
+  return cachedDb as BunSQLiteDatabase<typeof schema>;
+}

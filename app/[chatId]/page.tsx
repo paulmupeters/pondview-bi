@@ -1,27 +1,40 @@
 import Chat from "@/components/chat";
-import { headers } from "next/headers";
+import { asc, eq } from "drizzle-orm";
+import type { UIMessage } from "ai";
+import { getDb } from "@/lib/db/client";
+import { messages } from "@/lib/db/schema";
 
-async function getInitialMessages(chatId: string) {
+function safeJsonParse(value: string) {
   try {
-    const envBaseUrl = process.env.NEXT_PUBLIC_APP_URL;
-    const hdrs = await headers();
-    const protocol = hdrs.get("x-forwarded-proto") ?? "http";
-    const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host");
-    const baseUrl = envBaseUrl || (host ? `${protocol}://${host}` : "http://localhost:3000");
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
 
-    const url = new URL(`/api/chat/${chatId}`, baseUrl).toString();
+async function getInitialMessages(chatId: string): Promise<UIMessage[]> {
+  try {
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.chatId, chatId))
+      .orderBy(asc(messages.createdAt));
 
-    const res = await fetch(url, {
-      cache: "no-store",
-      // When running on the same host, empty base URL works in Next.js runtime
-      // but we fallback to NEXT_PUBLIC_APP_URL if provided.
+    const uiMessages: UIMessage[] = rows.map((row: typeof messages.$inferSelect) => {
+      const parsedParts = row.parts ? safeJsonParse(row.parts) : undefined;
+      return {
+        id: row.id,
+        role: row.role as UIMessage["role"],
+        parts: (Array.isArray(parsedParts) && parsedParts.length > 0
+          ? parsedParts
+          : [{ type: "text", text: row.content }]) as UIMessage["parts"],
+      } satisfies UIMessage;
     });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.messages ?? [];
+    return uiMessages;
   } catch (err) {
-    console.error("Error fetching initial messages:", err);
-    return [];
+    console.error("Error loading initial messages:", err);
+    return [] as UIMessage[];
   }
 }
 
