@@ -9,15 +9,20 @@ import { generateChartConfig } from "./generate-chart-config-tool";
 
 export const executeSqlTool = tool({
   description:
-    "Execute a SQL query and return the results, returns a maximum of 50 rows",
+    "Execute a SQL query and return the results, returns a maximum of 50 rows.",
   inputSchema: z.object({
     sql: z.string().describe("The SQL query to execute"),
     userQuery: z
       .string()
       .optional()
       .describe("The original user query/question that led to this SQL"),
+    generateChart: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Whether to generate chart visualization (default: true)"),
   }),
-  execute: async ({ sql, userQuery }) => {
+  execute: async ({ sql, userQuery, generateChart }) => {
     // Get current user context
     const user = getCurrentUser();
 
@@ -80,7 +85,7 @@ export const executeSqlTool = tool({
       const rawResults = JSON.parse(stdout) as Record<string, unknown>[];
 
       const normalizeValue = (
-        value: unknown,
+        value: unknown
       ): string | number | boolean | Date => {
         if (value instanceof Date) {
           return value;
@@ -126,12 +131,12 @@ export const executeSqlTool = tool({
 
     if (rowCount > 0) {
       insights.push(
-        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`,
+        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`
       );
 
       if (rowCount === 50) {
         insights.push(
-          "Results limited to 50 rows - there may be more data available",
+          "Results limited to 50 rows - there may be more data available"
         );
       }
 
@@ -147,7 +152,7 @@ export const executeSqlTool = tool({
         insights.push(
           `Found ${numericColumns.length} numeric column${
             numericColumns.length === 1 ? "" : "s"
-          } for analysis`,
+          } for analysis`
         );
       }
     } else {
@@ -172,7 +177,7 @@ export const executeSqlTool = tool({
       );
     });
 
-    if (isChartWorthy && hasNumericData && userQuery) {
+    if (isChartWorthy && hasNumericData && userQuery && generateChart) {
       try {
         // Add delay to avoid rate limit errors
         await delay(5000);
@@ -236,7 +241,7 @@ export const executeSqlTool = tool({
       } - ${
         user.id
       }). Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
-        ". ",
+        ". "
       )}.`,
     };
   },
