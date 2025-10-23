@@ -8,12 +8,12 @@ import {
 } from "ai";
 import { asc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import type { NextRequest } from "next/server";
 import { setContext } from "@/ai/context";
+import { analysisPrompt } from "@/ai/prompts";
 import { tools } from "@/ai/tools";
 import { getDb } from "@/lib/db/client";
 import { chats, messages } from "@/lib/db/schema";
-import { analysisPrompt } from "@/ai/prompts";
-import type { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 
@@ -140,7 +140,7 @@ export async function POST(
       });
 
       const result = streamText({
-        model: "openai/gpt-5-nano",
+        model: "xai/grok-4-fast-reasoning",
         system: analysisPrompt.replace(
           "{connectedTables}",
           JSON.stringify(connectedTables)
@@ -174,5 +174,3 @@ function safeJsonParse(value: string) {
     return undefined;
   }
 }
-
-

@@ -77,49 +77,45 @@ export function showRandomAnimation(
  */
 export function showAnimation(
   animationName: keyof typeof animations,
-  delay?: number,
-  duration: number = 3000,
-  onFrame?: (frame: string) => void,
-  onComplete?: () => void,
+  options?: {
+    delay?: number;
+    duration?: number;
+    onFrame?: (frame: string) => void;
+    onComplete?: () => void;
+  }
 ) {
   const animation = animations[animationName];
   if (!animation) {
     throw new Error(`Animation "${animationName}" not found`);
   }
 
-  // Use provided delay or animation's default interval
-  const frameDelay = delay ?? animation.interval;
+  const frameDelay = options?.delay ?? animation.interval;
+  const duration = options?.duration ?? 3000;
 
   let currentFrameIndex = 0;
   let animationId: NodeJS.Timeout | null = null;
   const startTime = Date.now();
+  let isPaused = false;
 
   const animate = () => {
-    const elapsed = Date.now() - startTime;
-
-    // Check if duration has passed
-    if (elapsed >= duration) {
-      if (onComplete) onComplete();
+    if (isPaused) {
+      animationId = setTimeout(animate, frameDelay);
       return;
     }
 
-    // Get current frame
-    const currentFrame = animation.frames[currentFrameIndex];
+    const elapsed = Date.now() - startTime;
+    if (elapsed >= duration) {
+      options?.onComplete?.();
+      return;
+    }
 
-    // Call the frame callback
-    if (onFrame) onFrame(currentFrame);
-
-    // Move to next frame
+    options?.onFrame?.(animation.frames[currentFrameIndex]);
     currentFrameIndex = (currentFrameIndex + 1) % animation.frames.length;
-
-    // Schedule next frame
     animationId = setTimeout(animate, frameDelay);
   };
 
-  // Start the animation
   animate();
 
-  // Return control object
   return {
     stop: () => {
       if (animationId) {
@@ -127,9 +123,20 @@ export function showAnimation(
         animationId = null;
       }
     },
+    pause: () => {
+      isPaused = true;
+    },
+    resume: () => {
+      isPaused = false;
+    },
     animationName,
     animation,
+    getProgress: () => Math.min((Date.now() - startTime) / duration, 1),
   };
+}
+
+export function getRandomVerbAiIsThinking() {
+  return aiVerbs[Math.floor(Math.random() * aiVerbs.length)];
 }
 
 export const animations = {
@@ -518,3 +525,20 @@ export const animations = {
     frames: ["🌲", "🎄"],
   },
 };
+
+const aiVerbs = [
+  "thinking",
+  "cooking",
+  "thinking hard",
+  "thinking deeply",
+  "thinking extremely hard",
+  "thinking extremely deeply and hard",
+  "thinking extremely hard and deeply",
+  "thinking extremely deeply",
+  "analyzing",
+  "not confused at all",
+  "dreaming about pizza",
+  "working hard",
+  "creating amazing charts",
+];
+export default aiVerbs;

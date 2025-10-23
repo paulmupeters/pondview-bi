@@ -1,17 +1,16 @@
 "use client";
 
-import { useArtifact } from "@/hooks/use-artifacts";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import {
   ChartBar,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Table,
-  Loader2,
   Database,
+  Loader2,
   Search,
-  CheckCircle2
+  Table,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
@@ -24,10 +23,16 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useArtifact } from "@/hooks/use-artifacts";
 import type { Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Stage = "loading" | "processing" | "analyzing" | "visualizing" | "complete";
+type Stage =
+  | "loading"
+  | "processing"
+  | "analyzing"
+  | "visualizing"
+  | "complete";
 
 interface StageIndicatorProps {
   currentStage: Stage;
@@ -94,7 +99,7 @@ function StageIndicator({ currentStage, progress = 0 }: StageIndicatorProps) {
               className={cn(
                 "flex flex-col items-center gap-2 flex-1",
                 "transition-opacity duration-300",
-                isPending && "opacity-40"
+                isPending && "opacity-40",
               )}
             >
               <div
@@ -102,7 +107,7 @@ function StageIndicator({ currentStage, progress = 0 }: StageIndicatorProps) {
                   "flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300",
                   isActive && "border-primary bg-primary/10 scale-110",
                   isCompleted && "border-green-500 bg-green-500/10",
-                  isPending && "border-muted-foreground/30 bg-muted"
+                  isPending && "border-muted-foreground/30 bg-muted",
                 )}
               >
                 <Icon
@@ -110,7 +115,7 @@ function StageIndicator({ currentStage, progress = 0 }: StageIndicatorProps) {
                     "w-5 h-5 transition-all duration-300",
                     isActive && "text-primary animate-pulse",
                     isCompleted && "text-green-500",
-                    isPending && "text-muted-foreground"
+                    isPending && "text-muted-foreground",
                   )}
                 />
               </div>
@@ -120,7 +125,7 @@ function StageIndicator({ currentStage, progress = 0 }: StageIndicatorProps) {
                     "text-xs font-medium transition-colors duration-300",
                     isActive && "text-primary",
                     isCompleted && "text-green-500",
-                    isPending && "text-muted-foreground"
+                    isPending && "text-muted-foreground",
                   )}
                 >
                   {stage.label}
@@ -147,7 +152,12 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
   const [chartConfig, setChartConfig] = useState<Config | null>(null);
   const [history, setHistory] = useState<
     Array<{
-      stage?: "loading" | "processing" | "analyzing" | "visualizing" | "complete";
+      stage?:
+      | "loading"
+      | "processing"
+      | "analyzing"
+      | "visualizing"
+      | "complete";
       query?: string;
       executionTime?: number;
       rowCount?: number;
@@ -215,12 +225,17 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
   }, [history.length, currentIndex]);
 
   const hasHistory = history.length > 0 && currentIndex >= 0;
-  const selected = hasHistory ? history[currentIndex] : latestPayload ?? null;
+  const selected = hasHistory ? history[currentIndex] : (latestPayload ?? null);
 
   // Set chart config when it becomes available and auto-switch to chart view once per query
   useEffect(() => {
     const q = selected?.query ?? null;
-    if (selected?.chartConfig && !chartConfig && q && lastAutoSwitchQueryRef.current !== q) {
+    if (
+      selected?.chartConfig &&
+      !chartConfig &&
+      q &&
+      lastAutoSwitchQueryRef.current !== q
+    ) {
       setChartConfig(selected.chartConfig);
       setActiveView("chart");
       lastAutoSwitchQueryRef.current = q;
@@ -230,17 +245,19 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
     return null;
   }
 
-  const currentStage = ((latestPayload?.stage) || "loading") as Stage;
+  const currentStage = (latestPayload?.stage || "loading") as Stage;
   const currentProgress = (latestPayload?.progress ?? 0) as number;
   const isProcessing = currentStage !== "complete";
-
 
   return (
     <div className="space-y-6">
       {/* Stage Indicator - Show when processing or always for context */}
       {isProcessing && (
         <div className="p-4">
-          <StageIndicator currentStage={currentStage} progress={currentProgress} />
+          <StageIndicator
+            currentStage={currentStage}
+            progress={currentProgress}
+          />
         </div>
       )}
 
@@ -251,7 +268,7 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
             variant={activeView === "table" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveView("table")}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 hover:text-gray-500"
           >
             <Table className="w-4 h-4" />
             Data
@@ -260,7 +277,7 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
             variant={activeView === "chart" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveView("chart")}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 hover:text-gray-500"
           >
             <ChartBar className="w-4 h-4" />
             Chart
@@ -318,7 +335,10 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
           </div>
 
           {/* Chart content */}
-          <SqlChart customChartConfig={chartConfig ?? undefined} dataOverride={selected ?? undefined} />
+          <SqlChart
+            customChartConfig={chartConfig ?? undefined}
+            dataOverride={selected ?? undefined}
+          />
         </div>
       ) : (
           <SqlResultsTable dataOverride={selected ?? undefined} />

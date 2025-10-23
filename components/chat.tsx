@@ -1,19 +1,25 @@
 "use client";
 
-import { AIDevtools } from "@ai-sdk-tools/devtools";
 import { useChat } from "@ai-sdk-tools/store";
-import {
-  PaperAirplaneIcon,
-  PlusIcon,
-  SparklesIcon,
-} from "@heroicons/react/24/outline";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
+import { Response } from "@/components/ai-elements/response";
+import { PromptInputWrapper } from "@/components/prompt-input-wrapper";
 import { SqlAnalysisPanel } from "@/components/sql-analysis-panel";
-import { showRandomAnimation } from "@/lib/animations";
+import {
+  getRandomVerbAiIsThinking,
+  showRandomAnimation,
+} from "@/lib/animations";
 
 export default function Chat({
   chatId,
@@ -34,13 +40,12 @@ export default function Chat({
     messages: initialMessages.length > 0 ? initialMessages : undefined,
     transport,
   });
-  const [input, setInput] = useState("");
   const [autoSentFromQuery, setAutoSentFromQuery] = useState(false);
   const [animationFrame, setAnimationFrame] = useState("");
 
-  const [clearedChat, setClearedChat] = useState(false);
   const [rightPanelWidth, setRightPanelWidth] = useState(67); // percentage - 2/3 of screen
   const [isResizing, setIsResizing] = useState(false);
+  const [verbAiIsThinking, setVerbAiIsThinking] = useState("is thinking");
 
   const handleMouseDown = useCallback(() => {
     setIsResizing(true);
@@ -63,6 +68,17 @@ export default function Chat({
   const handleMouseUp = useCallback(() => {
     setIsResizing(false);
   }, []);
+
+  const handleSubmit = (message: PromptInputMessage) => {
+    const hasText = Boolean(message.text);
+
+    if (!hasText) {
+      return;
+    }
+    sendMessage({
+      text: message.text ?? "",
+    });
+  };
 
   useEffect(() => {
     if (isResizing) {
@@ -93,11 +109,11 @@ export default function Chat({
         sendMessage({ text: q });
       }
     }
-  }, [chatId, searchParams, autoSentFromQuery, router]);
+  }, [chatId, searchParams, autoSentFromQuery, router, sendMessage]);
 
   // Animation effect for streaming status
   useEffect(() => {
-    if (status === "streaming") {
+    if (status === "streaming" || status === "submitted") {
       const animation = showRandomAnimation(
         undefined,
         Number.POSITIVE_INFINITY, // Run indefinitely
@@ -107,6 +123,10 @@ export default function Chat({
     }
     setAnimationFrame("");
   }, [status]);
+
+  useEffect(() => {
+    setVerbAiIsThinking(getRandomVerbAiIsThinking());
+  }, []);
 
   // Derive whether we have any SQL artifact from chat messages (more stable than artifacts store)
   const hasSqlData = useMemo(() => {
@@ -147,113 +167,70 @@ export default function Chat({
         >
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-8 space-y-6 flex flex-col items-start mx-auto bg-background">
-            {messages.length === 0 && !hasSqlData && (
-              <div className="text-center space-y-8 max-w-4xl mx-auto">
-                <div className="space-y-4">
-                  <h2 className="text-4xl font-medium text-foreground animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
-                    Ready to help
-                  </h2>
-                  <p className="text-lg text-muted-foreground max-w-2xl mx-auto animate-in fade-in-0 slide-in-from-bottom-7 duration-800">
-                    Ask me anything about data analysis, charts, or SQL queries
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex w-full ${
-                  message.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`rounded-xl flex items-center gap-2 max-w-[80%] ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground px-1"
-                      : "bg-muted p-2 shadow-md"
-                  }`}
-                >
-                  <div className="space-y-0 mr-2">
-                    {message.parts.map((part, partIndex) => {
-                      if (part.type === "text") {
-                        return (
-                          <span key={`${message.id}-part-${partIndex}`}>
-                            {part.text}
-                          </span>
-                        );
-                      }
-                      else if (part.type === 'tool-getTableSchema')
-                        return (
-                          <span key={`${message.id}-part-${partIndex}`}>
-                            Getting table schema... {animationFrame}
-                          </span>
-                        );
-                      else if (part.type === 'tool-executeSql')
-                        return (
-                          <span key={`${message.id}-part-${partIndex}`}>
-                            Executing SQL...{animationFrame}
-                          </span>
-                        );
-                      else if (part.type === 'tool-generateChartConfig')
-                        return (
-                          <span key={`${message.id}-part-${partIndex}`}>
-                            Generating chart config...{animationFrame}
-                          </span>
-                        );
-                      return null;
-                    })}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {/* Status indicator */}
-            {status !== "ready" && (
-              <div className="text-center text-sm text-muted-foreground bg-muted p-2 rounded-xl shadow-md">
-                {status === "streaming" && (
-                  <span>AI is thinking... {animationFrame}</span>
+            <Conversation>
+              <ConversationContent>
+                {messages.length === 0 && !hasSqlData && (
+                  <Message from="assistant" key="assistant-ready">
+                    <MessageContent>
+                      <Response key="assistant-ready-response">
+                        Ready to help...
+                      </Response>
+                    </MessageContent>
+                  </Message>
                 )}
-                {status === "submitted" && "Processing..."}
-              </div>
-            )}
-          </div>
 
+                {messages.map((message) => (
+                  <Message from={message.role} key={message.id}>
+                    <MessageContent>
+                      {message.parts.map((part, partIndex) => {
+                        if (part.type === "text") {
+                          return (
+                            <Response key={`${message.id}-part-${partIndex}`}>
+                              {part.text}
+                            </Response>
+                          );
+                        } else if (part.type === "tool-getTableSchema")
+                          return (
+                            <span key={`${message.id}-part-${partIndex}`}>
+                              Getting table schema
+                            </span>
+                          );
+                        else if (part.type === "tool-generateChartConfig")
+                          return (
+                            <span key={`${message.id}-part-${partIndex}`}>
+                              Generating chart config...{animationFrame}
+                            </span>
+                          );
+                        else if (part.type === "tool-executeSql")
+                          return (
+                            <span key={`${message.id}-part-${partIndex}`}>
+                              Processing...
+                            </span>
+                          );
+                        return null;
+                      })}
+                    </MessageContent>
+                  </Message>
+                ))}
+                {status === "submitted" && (
+                  <span key="assistant-submitted-div">{animationFrame}</span>
+                )}
+                {status === "streaming" && (
+                  <span key="assistant-streaming-div">
+                    {animationFrame} {verbAiIsThinking}
+                  </span>
+                )}
+              </ConversationContent>
+              <ConversationScrollButton />
+            </Conversation>
+          </div>
           {/* Input Form */}
-          <div className="p-4 border-t border-border mx-12 mb-4">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (input.trim()) {
-                  sendMessage({ text: input });
-                  setInput("");
-                  setClearedChat(false);
-                }
-              }}
-              className="flex space-x-2"
-            >
-              <div className="flex-1 relative">
-                <button
-                  type="button"
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-accent rounded transition-colors"
-                >
-                  <PlusIcon className="h-4 w-4 text-muted-foreground" />
-                </button>
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  disabled={status !== "ready"}
-                  placeholder="Ask anything"
-                  className="w-full pl-10 pr-4 py-3 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent bg-background text-foreground"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={status !== "ready" || !input.trim()}
-                className="px-4 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <PaperAirplaneIcon className="h-4 w-4" />
-              </button>
-            </form>
+          <div className="p-4 border-t border-border mx-12 mb-8">
+            <PromptInputWrapper
+              onSubmit={handleSubmit}
+              className="mt-4"
+              status={status}
+            />
           </div>
         </div>
 
@@ -279,9 +256,11 @@ export default function Chat({
 
             {/* Analysis Content */}
             <div className="flex-1 overflow-y-auto">
-
               {hasSqlData ? (
-                <SqlAnalysisPanel key={latestArtifactId ?? "none"} storeId={chatId} />
+                <SqlAnalysisPanel
+                  key={latestArtifactId ?? "none"}
+                  storeId={chatId}
+                />
                 // <div>SqlAnalysisPanel</div>
               ) : (
                 <div className="flex items-center justify-center h-full">
@@ -289,13 +268,12 @@ export default function Chat({
                     <p className="text-gray-500">No analysis data available</p>
                   </div>
                 </div>
-              )
-              }
+              )}
             </div>
           </div>
         )}
       </div>
-      <AIDevtools />
+      {/* <AIDevtools /> */}
     </>
   );
 }

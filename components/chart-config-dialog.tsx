@@ -74,7 +74,7 @@ export function ChartConfigDialog({
           {/* Chart Type */}
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium">Chart type</legend>
-            <p className="text-xs text-gray-500">Type of chart</p>
+            <p className="text-xs text-card-foreground">Type of chart</p>
             <div className="flex gap-2">
               {["Line", "Bar", "Pie", "StackBar", "Area"].map((type) => (
                 <label key={type} className="cursor-pointer">
@@ -87,7 +87,7 @@ export function ChartConfigDialog({
                     }
                     className="sr-only peer"
                   />
-                  <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                  <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                     {type}
                   </div>
                 </label>
@@ -248,7 +248,7 @@ export function ChartConfigDialog({
           {/* Hide Legend */}
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium">Hide Legend</legend>
-            <p className="text-xs text-gray-500">Hide/Show legend.</p>
+            <p className="text-xs text-card-foreground">Hide/Show legend.</p>
             <div className="flex gap-2">
               <label className="cursor-pointer">
                 <input
@@ -258,7 +258,7 @@ export function ChartConfigDialog({
                   defaultChecked={!config?.legend}
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                   Yes
                 </div>
               </label>
@@ -293,7 +293,7 @@ export function ChartConfigDialog({
                   value="yes"
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                   Yes
                 </div>
               </label>
@@ -305,7 +305,7 @@ export function ChartConfigDialog({
                   defaultChecked
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                   No
                 </div>
               </label>
@@ -329,7 +329,7 @@ export function ChartConfigDialog({
                   defaultChecked
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                   Yes
                 </div>
               </label>
@@ -340,7 +340,7 @@ export function ChartConfigDialog({
                   value="no"
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                   No
                 </div>
               </label>
@@ -361,7 +361,7 @@ export function ChartConfigDialog({
                   value="yes"
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                   Yes
                 </div>
               </label>
@@ -373,7 +373,7 @@ export function ChartConfigDialog({
                   defaultChecked
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                   No
                 </div>
               </label>
@@ -396,7 +396,7 @@ export function ChartConfigDialog({
                   value="yes"
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                   Yes
                 </div>
               </label>
@@ -408,7 +408,7 @@ export function ChartConfigDialog({
                   defaultChecked
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                   No
                 </div>
               </label>
@@ -466,7 +466,7 @@ export function ChartConfigDialog({
                   value="yes"
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                   Yes
                 </div>
               </label>
@@ -478,7 +478,7 @@ export function ChartConfigDialog({
                   defaultChecked
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
                   No
                 </div>
               </label>

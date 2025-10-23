@@ -4,28 +4,21 @@ import {
   ArrowTrendingUpIcon,
   BanknotesIcon,
   ChartBarIcon,
-  FireIcon,
-  LanguageIcon,
-  ShoppingBagIcon,
-  TrophyIcon,
 } from "@heroicons/react/24/outline";
 import { nanoid } from "nanoid";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
+import { PromptInputWrapper } from "@/components/prompt-input-wrapper";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
-import { Button } from "@/components/ui/button";
-import { Send } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
 
 export default function Home() {
   const router = useRouter();
-  const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const connections = useConnectedTables();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const value = input.trim();
+  const handleSubmit = (message: PromptInputMessage) => {
+    const value = message.text?.trim();
     if (!value || submitting) return;
     setSubmitting(true);
     const id = nanoid();
@@ -33,7 +26,10 @@ export default function Home() {
   };
 
   const handlePromptClick = (prompt: string) => {
-    setInput(prompt);
+    // This will be handled by the PromptInputWrapper component
+    // For now, we'll navigate directly to the chat with the prompt
+    const id = nanoid();
+    router.push(`/${id}?q=${encodeURIComponent(prompt)}`);
   };
 
   return (
@@ -44,34 +40,19 @@ export default function Home() {
             Data Assistant AI
           </h1>
           <p className="text-lg text-muted-foreground">
-            Ask me to analyze data and I'll create interactive charts and insights
+            Ask me to analyze data and I'll create interactive charts and
+            insights
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="mb-8">
-          <div className="relative flex gap-3 rounded-2xl border-2 border-primary/20 bg-card p-2 shadow-2xl shadow-primary/40 transition-all duration-300 hover:border-primary/70 hover:shadow-primary dark:shadow-primary/40">
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask a question about your data..."
-              className="min-h-[70px] resize-none border-0 bg-transparent text-base focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/60"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSubmit(e)
-                }
-              }}
-            />
-            <Button
-              type="submit"
-              size="icon"
-              className="h-[70px] w-[70px] shrink-0 rounded-xl bg-primary hover:bg-primary/90 hover:scale-105 transition-transform shadow-lg"
-              disabled={!input.trim()}
-            >
-              <Send className="h-6 w-6" />
-            </Button>
-          </div>
-        </form>
+        <div className="mb-8">
+          <PromptInputWrapper
+            onSubmit={handleSubmit}
+            placeholder="Ask a question about your data..."
+            className="relative flex gap-3 rounded-2xl border-2 border-primary/20 bg-card p-2 shadow-2xl shadow-primary/40 transition-all duration-300 hover:border-primary/70 hover:shadow-primary dark:shadow-primary/40"
+            status={submitting ? "submitted" : undefined}
+          />
+        </div>
 
         {/* Example prompts */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -79,9 +60,7 @@ export default function Home() {
             type="button"
             className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
             onClick={() =>
-              handlePromptClick(
-                "Show me top 10 contires with most unicorns"
-              )
+              handlePromptClick("Show me top 10 contires with most unicorns")
             }
           >
             <div className="flex items-center gap-3 mb-3">
@@ -104,7 +83,7 @@ export default function Home() {
             className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
             onClick={() =>
               handlePromptClick(
-                "Show me trends of unicorns over the year in China"
+                "Show me trends of unicorns over the year in China",
               )
             }
           >
@@ -119,7 +98,8 @@ export default function Home() {
               </h3>
             </div>
             <p className="text-sm text-muted-foreground">
-              Discover trends and patterns in financial health and growth metrics.
+              Discover trends and patterns in financial health and growth
+              metrics.
             </p>
           </button>
 
@@ -128,7 +108,7 @@ export default function Home() {
             className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
             onClick={() =>
               handlePromptClick(
-                "Execute SQL: SELECT Company, Valuation, Industry FROM unicorns WHERE Country = 'United States' ORDER BY Valuation DESC LIMIT 10"
+                "Execute SQL: SELECT Company, Valuation, Industry FROM unicorns WHERE Country = 'United States' ORDER BY Valuation DESC LIMIT 10",
               )
             }
           >
@@ -143,7 +123,8 @@ export default function Home() {
               </h3>
             </div>
             <p className="text-sm text-muted-foreground">
-              Execute custom SQL queries and display results in an interactive table.
+              Execute custom SQL queries and display results in an interactive
+              table.
             </p>
           </button>
         </div>
