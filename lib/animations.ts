@@ -10,7 +10,7 @@ export function showRandomAnimation(
   delay?: number,
   duration: number = 3000,
   onFrame?: (frame: string) => void,
-  onComplete?: () => void,
+  onComplete?: () => void
 ) {
   // Get all animation names
   const animationNames = Object.keys(animations);
@@ -18,52 +18,14 @@ export function showRandomAnimation(
   // Pick a random animation
   const randomAnimationName =
     animationNames[Math.floor(Math.random() * animationNames.length)];
-  const randomAnimation =
-    animations[randomAnimationName as keyof typeof animations];
 
-  // Use provided delay or animation's default interval
-  const frameDelay = delay ?? randomAnimation.interval;
-
-  let currentFrameIndex = 0;
-  let animationId: NodeJS.Timeout | null = null;
-  const startTime = Date.now();
-
-  const animate = () => {
-    const elapsed = Date.now() - startTime;
-
-    // Check if duration has passed
-    if (elapsed >= duration) {
-      if (onComplete) onComplete();
-      return;
-    }
-
-    // Get current frame
-    const currentFrame = randomAnimation.frames[currentFrameIndex];
-
-    // Call the frame callback
-    if (onFrame) onFrame(currentFrame);
-
-    // Move to next frame
-    currentFrameIndex = (currentFrameIndex + 1) % randomAnimation.frames.length;
-
-    // Schedule next frame
-    animationId = setTimeout(animate, frameDelay);
-  };
-
-  // Start the animation
-  animate();
-
-  // Return control object
-  return {
-    stop: () => {
-      if (animationId) {
-        clearTimeout(animationId);
-        animationId = null;
-      }
-    },
-    animationName: randomAnimationName,
-    animation: randomAnimation,
-  };
+  // Use the existing showAnimation function
+  return showAnimation(randomAnimationName as keyof typeof animations, {
+    delay,
+    duration,
+    onFrame,
+    onComplete,
+  });
 }
 
 /**
@@ -523,6 +485,81 @@ export const animations = {
   christmas: {
     interval: 400,
     frames: ["🌲", "🎄"],
+  },
+  wave: {
+    interval: 100,
+    frames: [
+      "▁",
+      "▂",
+      "▃",
+      "▄",
+      "▅",
+      "▆",
+      "▇",
+      "█",
+      "▇",
+      "▆",
+      "▅",
+      "▄",
+      "▃",
+      "▂",
+    ],
+  },
+  wavyLine: {
+    interval: 80,
+    frames: ["~~~", "~^~", "^~^", "~^~", "~~~"],
+  },
+  expand: {
+    interval: 100,
+    frames: ["◯", "◰", "◱", "◲", "◳", "◴", "◵", "◶"],
+  },
+  pulse: {
+    interval: 150,
+    frames: ["●", "◐", "◑", "◒", "◓", "◒", "◑", "◐"],
+  },
+  dots13: {
+    interval: 80,
+    frames: ["∙∙∙", "●∙∙", "∙●∙", "∙∙●", "∙●∙", "●∙∙"],
+  },
+  growVertical: {
+    interval: 100,
+    frames: ["▖", "▘", "▝", "▗"],
+  },
+  spiral: {
+    interval: 80,
+    frames: ["╱", "─", "╲", "│"],
+  },
+  sparkle: {
+    interval: 100,
+    frames: ["✨", "⭐", "✨", "🌟", "✨", "⭐"],
+  },
+  bars: {
+    interval: 100,
+    frames: ["▐░░▌", "▐▌░▌", "▐─░▌", "▐─▐▌", "▐─▌░", "▐░▌─", "▐░░▌"],
+  },
+  blocks: {
+    interval: 100,
+    frames: ["□□□", "■□□", "■■□", "■■■", "□■■", "□□■"],
+  },
+  flow: {
+    interval: 100,
+    frames: ["◁", "◄", "◅", "→", "▶", "▷"],
+  },
+  dots14: {
+    interval: 100,
+    frames: ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠤", "⠠", "⠠", "⠤", "⠦", "⠖"],
+  },
+  rocket: {
+    interval: 150,
+    frames: ["🚀", "🚀 ", "🚀  ", "🚀   ", "🚀    ", "🚀     "],
+  },
+  loading: {
+    interval: 100,
+    frames: ["█░░", "█░░", "██░", "██░", "███", "███"],
+  },
+  orbit: {
+    interval: 80,
+    frames: ["◴", "◷", "◶", "◵"],
   },
 };
 

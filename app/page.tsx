@@ -49,7 +49,7 @@ export default function Home() {
           <PromptInputWrapper
             onSubmit={handleSubmit}
             placeholder="Ask a question about your data..."
-            className="relative flex gap-3 rounded-2xl border-2 border-primary/20 bg-card p-2 shadow-2xl shadow-primary/40 transition-all duration-300 hover:border-primary/70 hover:shadow-primary dark:shadow-primary/40"
+            className="relative flex gap-3 rounded-2xl border-2 border-primary/20 bg-card p-2 shadow-2xl shadow-primary/40 transition-all duration-300 hover:shadow-primary dark:shadow-primary/40"
             status={submitting ? "submitted" : undefined}
           />
         </div>

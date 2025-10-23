@@ -109,30 +109,30 @@ export function PromptInputWrapper({
             </PromptInputCommand>
           </PromptInputHoverCardContent>
         </PromptInputHoverCard>
-        <PromptInputHoverCard>
+        {/* <PromptInputHoverCard>
           <PromptInputHoverCardTrigger>
             <PromptInputButton size="sm" variant="outline">
               <BeakerIcon className="h-4 w-4 text-muted-foreground" />
             </PromptInputButton>
           </PromptInputHoverCardTrigger>
-          <PromptInputHoverCardContent className="divide-y overflow-hidden p-0">
-            <div className="space-y-2 p-3">
+          <PromptInputHoverCardContent className="overflow-hidden p-0">
+            <div className="space-y-3 p-3">
               <p className="font-medium text-muted-foreground text-sm">
-                Project configuration
+                Rules:
               </p>
-              <ul>
-                <li className="flex items-center gap-2">
-                  <SwatchIcon className="h-4 w-4 text-primary" />
-                  <span>style</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <NumberedListIcon className="h-4 w-4 text-primary" />
-                  <span>rules</span>
-                </li>
-              </ul>
+              <div className="rounded border border-border bg-muted/50 p-2 text-sm">
+                <div className="max-h-[200px] space-y-1 overflow-y-auto text-muted-foreground">
+                  <p>• Rule 1</p>
+                  <p>• Rule 2</p>
+                  <p>• Rule 3</p>
+                </div>
+              </div>
+              <PromptInputButton size="sm" variant="outline" className="w-full">
+                Edit Rules
+              </PromptInputButton>
             </div>
           </PromptInputHoverCardContent>
-        </PromptInputHoverCard>
+        </PromptInputHoverCard> */}
         <PromptInputHoverCard>
           <PromptInputHoverCardTrigger>
             <PromptInputButton size="sm" variant="outline">
