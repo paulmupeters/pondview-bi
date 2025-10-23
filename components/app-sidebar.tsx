@@ -11,7 +11,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { MouseEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
-import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -26,7 +25,6 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const activeChatId = pathname?.split("/")[1] ?? null;
-  const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [recentChats, setRecentChats] = useState<
     { id: string; title: string | null; updatedAt: number }[]
   >([]);
@@ -214,7 +212,8 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                         href={`/${chat.id}`}
                         className={cn(
                           "flex w-full flex-col items-start gap-1 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent",
-                          activeChatId === chat.id && "border-2 border-accent/40 bg-sidebar-accent"
+                          activeChatId === chat.id &&
+                          "border-2 border-accent/40 bg-sidebar-accent",
                         )}
                       >
                         <div className="flex items-center gap-2">
@@ -266,34 +265,29 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
 
           {/* Settings Section */}
           <div className="border-t border-border p-3">
-            <button
-              type="button"
-              onClick={() => setIsConnectDialogOpen(true)}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent"
-            >
-              <Database className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-sidebar-foreground">
-                Data Sources
-              </span>
-            </button>
             <Link href="/view-data">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent"
+              >
+                <Database className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-sidebar-foreground">Data</span>
+              </button>
+            </Link>
+            <Link href="/settings">
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent"
               >
                 <Settings className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm text-sidebar-foreground">
-                  View Data
+                  Settings
                 </span>
               </button>
             </Link>
           </div>
         </div>
       )}
-      <ConnectDataDialog
-        open={isConnectDialogOpen}
-        onOpenChange={setIsConnectDialogOpen}
-      />
     </div>
   );
 }

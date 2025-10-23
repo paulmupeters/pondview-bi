@@ -2,8 +2,8 @@ import { tool } from "ai";
 import { z } from "zod";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { getCurrentUser } from "@/ai/context";
+import { runSqlNormalized } from "@/lib/db/router";
 import { delay } from "@/lib/delay";
-import { runDuckDbCli } from "@/lib/duckdb/duckdb-cli";
 import type { Config, Result } from "@/lib/types";
 import { generateChartConfig } from "./generate-chart-config-tool";
 
@@ -52,64 +52,29 @@ export const executeSqlTool = tool({
     console.debug("[executeSqlTool] Step 2 (processing) started", debugContext);
 
     const startTime = Date.now();
-    const { code, stdout, stderr } = await runDuckDbCli({
-      dbPath: `md:my_db?motherduck_token=${process.env.MOTHERDUCK_TOKEN}`,
-      args: [sql],
-      json: true,
-    });
+    let parsedResults: Result[] = [];
+    try {
+      parsedResults = await runSqlNormalized(`md:my_db`, sql);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      await sqlArtifact.error(errorMessage);
+      throw new Error(errorMessage);
+    }
 
     console.debug("[executeSqlTool] Step 2 (processing) finished", {
       ...debugContext,
-      exitCode: code,
     });
 
     const executionTime = Date.now() - startTime;
 
-    if (code !== 0) {
-      await sqlArtifact.error(stderr);
-      throw new Error(stderr);
-    }
     // Step 3: Analyzing - process results
     await sqlArtifact.update({ stage: "analyzing", progress: 0.6 });
     await delay(2500);
 
     console.debug("[executeSqlTool] Step 3 (analyzing) started", debugContext);
 
-    let parsedResults: Result[] = [];
-    try {
-      const rawResults = JSON.parse(stdout) as Record<string, unknown>[];
-
-      const normalizeValue = (
-        value: unknown
-      ): string | number | boolean | Date => {
-        if (value instanceof Date) {
-          return value;
-        }
-        if (
-          typeof value === "string" ||
-          typeof value === "number" ||
-          typeof value === "boolean"
-        ) {
-          return value;
-        }
-        if (value === null || value === undefined) {
-          return "";
-        }
-        return JSON.stringify(value);
-      };
-
-      parsedResults = rawResults.map((row) => {
-        const normalizedRow: Record<string, string | number | boolean | Date> =
-          {};
-        for (const [key, value] of Object.entries(row)) {
-          normalizedRow[key] = normalizeValue(value);
-        }
-        return normalizedRow;
-      });
-    } catch {
-      await sqlArtifact.error("Failed to parse SQL results");
-      throw new Error("Failed to parse SQL results");
-    }
+    // parsedResults already normalized by runSqlNormalized
 
     // Extract columns from first row if available
     const columns =
@@ -126,12 +91,12 @@ export const executeSqlTool = tool({
 
     if (rowCount > 0) {
       insights.push(
-        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`
+        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`,
       );
 
       if (rowCount === 50) {
         insights.push(
-          "Results limited to 50 rows - there may be more data available"
+          "Results limited to 50 rows - there may be more data available",
         );
       }
 
@@ -147,7 +112,7 @@ export const executeSqlTool = tool({
         insights.push(
           `Found ${numericColumns.length} numeric column${
             numericColumns.length === 1 ? "" : "s"
-          } for analysis`
+          } for analysis`,
         );
       }
     } else {
@@ -171,7 +136,7 @@ export const executeSqlTool = tool({
     sqlArtifact.update({ stage: "visualizing", progress: 0.8 });
     console.debug(
       "[executeSqlTool] Step 4 (visualizing) started",
-      debugContext
+      debugContext,
     );
 
     if (isChartWorthy && hasNumericData && userQuery && generateChart) {
@@ -244,7 +209,7 @@ export const executeSqlTool = tool({
       } - ${
         user.id
       }). Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
-        ". "
+        ". ",
       )}.`,
     };
   },

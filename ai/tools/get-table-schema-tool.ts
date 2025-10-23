@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { runDuckDbCli } from "@/lib/duckdb/duckdb-cli";
+import { runSqlAndGetRowObjectsJson } from "@/lib/duckdb/duckdb-node";
 
 export const getTableSchemaTool = tool({
   description: "Get the schema of a table, including column names and types",
@@ -10,17 +10,10 @@ export const getTableSchemaTool = tool({
   execute: async ({ table }) => {
     const sql = `DESCRIBE ${table}`;
 
-    const { code, stdout, stderr } = await runDuckDbCli({
-      dbPath: `md:my_db?motherduck_token=${process.env.MOTHERDUCK_TOKEN}`,
-      args: [sql],
-      json: true,
-    });
-
-    if (code !== 0) {
-      throw new Error(stderr);
-    }
-
-    const results = JSON.parse(stdout) as Array<{
+    const results = (await runSqlAndGetRowObjectsJson(
+      `md:my_db?motherduck_token=${process.env.MOTHERDUCK_TOKEN}`,
+      sql
+    )) as Array<{
       column_name: string;
       column_type: string;
       null: string;

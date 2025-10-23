@@ -29,7 +29,7 @@ export function SqlChart({
   const { rows, chartConfig, summary } = payload;
 
   const effectiveChartConfig = customChartConfig || chartConfig;
-  console.log("rendering sql chart", effectiveChartConfig);
+
 
   if (!effectiveChartConfig || !rows.length) {
     return (

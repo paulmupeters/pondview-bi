@@ -64,3 +64,29 @@ export const configSchema = z
   .describe("Chart configuration object");
 
 export type Config = z.infer<typeof configSchema>;
+
+// Data model types
+export type RelationshipType =
+  | "one-to-one"
+  | "one-to-many"
+  | "many-to-many";
+
+export type TableIdentifier = {
+  type: string; // e.g., "duckdb" | "postgres"
+  databasePath: string;
+  schema?: string;
+  table?: string;
+};
+
+export type TableRelationship = {
+  id: string;
+  left: TableIdentifier;
+  right: TableIdentifier;
+  relationType: RelationshipType;
+  join?: string;
+  description?: string;
+};
+
+export type DataModel = {
+  relationships: TableRelationship[];
+};

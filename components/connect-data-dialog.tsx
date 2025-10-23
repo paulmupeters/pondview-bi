@@ -7,10 +7,10 @@ import {
 } from "@heroicons/react/24/outline";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getSchemas, getTablesForSchema } from "@/actions/queries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { appendConnectedTable } from "@/lib/connected-tables";
-import { getSchemas, getTablesForSchema } from "@/actions/queries";
 import { cn } from "@/lib/utils";
 
 type DatabaseType = "duckdb" | "postgres" | "mysql" | null;
@@ -24,52 +24,22 @@ const DATABASE_OPTIONS: Array<{
   {
     label: "Postgres",
     value: "postgres",
-    disabled: true,
-    description: "Coming soon",
+      description: "Connect with a Postgres database",
+    },
+    {
+      label: "DuckDB",
+      value: "duckdb",
+      description: "Connect with a local DuckDB file or motherduck",
   },
   {
     label: "MySQL",
     value: "mysql",
     disabled: true,
     description: "Coming soon",
-  },
-  {
-    label: "DuckDB",
-    value: "duckdb",
-  },
+    },
 ];
 
-const DUCKDB_QUERY_RESPONSE = {
-  code: 0,
-  stdout:
-    '[{"table_schema":"hn","table_name":"hacker_news","table_type":"BASE TABLE"},\n' +
-    '{"table_schema":"kaggle","table_name":"movies","table_type":"BASE TABLE"},\n' +
-    '{"table_schema":"main","table_name":"database_snapshots","table_type":"VIEW"},\n' +
-    '{"table_schema":"main","table_name":"databases","table_type":"VIEW"},\n' +
-    '{"table_schema":"main","table_name":"owned_shares","table_type":"VIEW"},\n' +
-    '{"table_schema":"main","table_name":"query_history","table_type":"VIEW"},\n' +
-    '{"table_schema":"main","table_name":"shared_with_me","table_type":"VIEW"},\n' +
-    '{"table_schema":"main","table_name":"storage_info","table_type":"VIEW"},\n' +
-    '{"table_schema":"main","table_name":"storage_info_history","table_type":"VIEW"},\n' +
-    '{"table_schema":"main","table_name":"unicorns","table_type":"BASE TABLE"},\n' +
-    '{"table_schema":"nyc","table_name":"rideshare","table_type":"BASE TABLE"},\n' +
-    '{"table_schema":"nyc","table_name":"service_requests","table_type":"BASE TABLE"},\n' +
-    '{"table_schema":"nyc","table_name":"taxi","table_type":"BASE TABLE"},\n' +
-    '{"table_schema":"stackoverflow_survey","table_name":"survey_results","table_type":"BASE TABLE"},\n' +
-    '{"table_schema":"stackoverflow_survey","table_name":"survey_schemas","table_type":"BASE TABLE"},\n' +
-    '{"table_schema":"who","table_name":"ambient_air_quality","table_type":"BASE TABLE"}]\n',
-  stderr: "",
-};
-
-type DuckDBTable = {
-  table_schema: string;
-  table_name: string;
-  table_type: string;
-};
-
-const duckdbTables: string[] = JSON.parse(DUCKDB_QUERY_RESPONSE.stdout).map(
-  (entry: DuckDBTable) => `${entry.table_schema}.${entry.table_name}`,
-);
+// Removed unused DuckDB preview constants
 
 type ConnectDataDialogProps = {
   open: boolean;
@@ -110,13 +80,8 @@ export function ConnectDataDialog({
   }, [open, resetState]);
 
   const handleConnectClick = useCallback(async () => {
-    if (selectedDatabase !== "duckdb") {
-      setErrorMessage("Only DuckDB connections are supported right now.");
-      return;
-    }
-
     if (!databasePath.trim()) {
-      setErrorMessage("Enter a DuckDB file path before connecting.");
+      setErrorMessage("Enter a database identifier before connecting.");
       return;
     }
 
@@ -126,13 +91,14 @@ export function ConnectDataDialog({
       const fetchedSchemas = await getSchemas(databasePath.trim());
       setSchemas(fetchedSchemas);
       setHasConnected(true);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setErrorMessage(e?.message || "Failed to connect or fetch schemas.");
+      const msg = e instanceof Error ? e.message : String(e ?? "");
+      setErrorMessage(msg || "Failed to connect or fetch schemas.");
     } finally {
       setIsLoadingSchemas(false);
     }
-  }, [databasePath, selectedDatabase]);
+  }, [databasePath]);
 
   const handleAddTable = useCallback(() => {
     if (!selectedDatabase || !selectedSchema.trim() || !databasePath.trim()) {
@@ -207,7 +173,7 @@ export function ConnectDataDialog({
                     Database Type
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Postgres and MySQL are not available yet.
+                    MySQL is not available yet.
                   </p>
                 </header>
                 <div className="grid gap-2 sm:grid-cols-3">
@@ -244,7 +210,8 @@ export function ConnectDataDialog({
                         <span className="text-xs text-muted-foreground">
                           {option.disabled
                             ? (option.description ?? "Unavailable")
-                            : "Connect with a local DuckDB file"}
+                            : (option.description ??
+                              "Connect with a local DuckDB file")}
                         </span>
                       </button>
                     );
@@ -253,19 +220,33 @@ export function ConnectDataDialog({
               </section>
             )}
 
-            {selectedDatabase === "duckdb" && (
+            {selectedDatabase && (
               <section className="space-y-3">
                 <header className="space-y-1">
                   <p className="text-sm font-medium text-foreground">
-                    DuckDB Database Path
+                    {selectedDatabase === "duckdb"
+                      ? "DuckDB Database Path"
+                      : selectedDatabase === "postgres"
+                        ? "Postgres Connection URL"
+                        : "Connection"}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Provide the path to your `.duckdb` file.
+                    {selectedDatabase === "duckdb"
+                      ? "Provide the path to your `.duckdb` file."
+                      : selectedDatabase === "postgres"
+                        ? "Provide a Postgres connection URL (postgres://...) or pg:ALIAS."
+                        : null}
                   </p>
                 </header>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <Input
-                    placeholder="/path/to/database.duckdb"
+                    placeholder={
+                      selectedDatabase === "duckdb"
+                        ? "/path/to/database.duckdb"
+                        : selectedDatabase === "postgres"
+                          ? "postgres://user:pass@host:5432/db?sslmode=require or pg:DEFAULT"
+                          : ""
+                    }
                     value={databasePath}
                     onChange={(event) => setDatabasePath(event.target.value)}
                   />
@@ -316,7 +297,7 @@ export function ConnectDataDialog({
                 <header className="space-y-1">
                   <p className="text-sm font-medium text-foreground">Schemas</p>
                   <p className="text-xs text-muted-foreground">
-                    Choose a schema to add from the connected DuckDB database.
+                    Choose a schema to add from the connected database.
                   </p>
                 </header>
                 <div className="max-h-56 overflow-y-auto pr-2">
@@ -338,7 +319,7 @@ export function ConnectDataDialog({
                                 20,
                               );
                               setSchemaTablesPreview(tables);
-                            } catch (e) {
+                            } catch (e: unknown) {
                               console.error(e);
                               setSchemaTablesPreview([]);
                             } finally {

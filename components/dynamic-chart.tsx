@@ -25,7 +25,10 @@ import { transformDataForMultiLineChart } from "@/lib/rechart-format";
 import type { Config, Result } from "@/lib/types";
 import { getChartColors } from "@/lib/utils";
 
-function toTitleCase(str: string): string {
+function toTitleCase(value: unknown): string {
+  const str =
+    typeof value === "string" ? value : value == null ? "" : String(value);
+  if (str.length === 0) return "";
   return str
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
