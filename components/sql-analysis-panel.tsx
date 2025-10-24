@@ -1,6 +1,6 @@
 "use client";
 
-import { Cog6ToothIcon } from "@heroicons/react/24/outline";
+import { Cog6ToothIcon, PlusIcon } from "@heroicons/react/24/outline";
 import {
   ChartBar,
   CheckCircle2,
@@ -316,7 +316,7 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
       {activeView === "chart" ? (
         <div className="relative">
           {/* Configuration button in top right */}
-          <div className="absolute top-0 right-0 z-10">
+          <div className="absolute top-0 right-0 z-10 flex gap-2">
             <ChartConfigDialog
               trigger={
                 <Button
@@ -332,6 +332,15 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
               columns={selected?.columns ?? latestPayload?.columns}
               onConfigChange={setChartConfig}
             />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActiveView("table")}
+              className="flex items-center gap-2"
+            >
+              <PlusIcon className="w-4 h-4" />
+              Add Chart
+            </Button>
           </div>
 
           {/* Chart content */}
