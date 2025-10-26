@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  BeakerIcon,
-  CircleStackIcon,
-  NumberedListIcon,
-  PaperClipIcon,
-  SwatchIcon,
-} from "@heroicons/react/24/outline";
+import { CircleStackIcon, PaperClipIcon } from "@heroicons/react/24/outline";
 import type { ChatStatus } from "ai";
 import { GlobeIcon } from "lucide-react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
@@ -35,6 +29,7 @@ import {
   PromptInputTabLabel,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
+import { useConnectedTables } from "@/hooks/use-connected-tables";
 
 interface PromptInputWrapperProps {
   onSubmit: (message: PromptInputMessage) => void;
@@ -49,6 +44,39 @@ export function PromptInputWrapper({
   className,
   status,
 }: PromptInputWrapperProps) {
+  const connectedTables = useConnectedTables();
+
+  // Flatten the entries to show each table separately
+  const getEntriesForDisplay = () => {
+    const entries: Array<{ label: string; key: string }> = [];
+
+    connectedTables.forEach((entry, idx) => {
+      if (Array.isArray(entry.tables) && entry.tables.length > 0) {
+        // Show each table separately
+        entry.tables.forEach((tableName) => {
+          entries.push({
+            label: `${entry.databasePath} - ${entry.schema}.${tableName}`,
+            key: `${entry.type}-${entry.databasePath}-${entry.schema}-${tableName}`,
+          });
+        });
+      } else if (entry.table) {
+        entries.push({
+          label: `${entry.databasePath} - ${entry.table}`,
+          key: `${entry.type}-${entry.databasePath}-${entry.table}-${idx}`,
+        });
+      } else if (entry.schema) {
+        entries.push({
+          label: `${entry.databasePath} - ${entry.schema}`,
+          key: `${entry.type}-${entry.databasePath}-${entry.schema}-${idx}`,
+        });
+      }
+    });
+
+    return entries;
+  };
+
+  const displayEntries = getEntriesForDisplay();
+
   return (
     <PromptInput onSubmit={onSubmit} className={className} globalDrop multiple>
       <PromptInputBody>
@@ -68,7 +96,7 @@ export function PromptInputWrapper({
               <PaperClipIcon className="h-4 w-4 text-muted-foreground" />
             </PromptInputButton>
           </PromptInputHoverCardTrigger>
-          <PromptInputHoverCardContent className="w-[400px] p-0">
+          <PromptInputHoverCardContent className="w-[400px] p-0 transform translate-y-[-10px]">
             <PromptInputCommand>
               <PromptInputCommandInput
                 className="border-none focus-visible:ring-0"
@@ -140,45 +168,24 @@ export function PromptInputWrapper({
               <span>Connected data</span>
             </PromptInputButton>
           </PromptInputHoverCardTrigger>
-          <PromptInputHoverCardContent className="w-[300px] space-y-4 px-0 py-3">
+          <PromptInputHoverCardContent className="w-[300px] space-y-4 px-0 py-4 transform translate-y-[-10px]">
             <PromptInputTab>
-              <PromptInputTabLabel>Active</PromptInputTabLabel>
+              <PromptInputTabLabel>Connected data</PromptInputTabLabel>
               <PromptInputTabBody>
-                <PromptInputTabItem>
-                  <GlobeIcon className="h-4 w-4 text-primary" />
-                  <span className="truncate" dir="rtl">
-                    md:my-db.db - main.unicorns
-                  </span>
-                </PromptInputTabItem>
-              </PromptInputTabBody>
-            </PromptInputTab>
-            <PromptInputTab>
-              <PromptInputTabLabel>Other data</PromptInputTabLabel>
-              <PromptInputTabBody>
-                <PromptInputTabItem>
-                  <GlobeIcon className="h-4 w-4 text-primary" />
-                  <span className="truncate" dir="rtl">
-                    nyc.taxi
-                  </span>
-                </PromptInputTabItem>
-                <PromptInputTabItem>
-                  <GlobeIcon className="h-4 w-4 text-primary" />
-                  <span className="truncate" dir="rtl">
-                    nyc.rideshare
-                  </span>
-                </PromptInputTabItem>
-                <PromptInputTabItem>
-                  <GlobeIcon className="h-4 w-4 text-primary" />
-                  <span className="truncate" dir="rtl">
-                    nyc.service_requests
-                  </span>
-                </PromptInputTabItem>
-                <PromptInputTabItem>
-                  <GlobeIcon className="h-4 w-4 text-primary" />
-                  <span className="truncate" dir="rtl">
-                    nyc.taxi
-                  </span>
-                </PromptInputTabItem>
+                {displayEntries.length > 0 ? (
+                  displayEntries.map((entry) => (
+                    <PromptInputTabItem key={entry.key}>
+                      <GlobeIcon className="h-4 w-4 text-primary" />
+                      <span className="truncate" dir="rtl">
+                        {entry.label}
+                      </span>
+                    </PromptInputTabItem>
+                  ))
+                ) : (
+                  <div className="px-3 py-1 text-xs text-muted-foreground">
+                    No connected data.
+                  </div>
+                )}
               </PromptInputTabBody>
             </PromptInputTab>
             <div className="border-t px-3 pt-2 text-muted-foreground text-xs">

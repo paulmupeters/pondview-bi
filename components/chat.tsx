@@ -16,6 +16,7 @@ import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Response } from "@/components/ai-elements/response";
 import { PromptInputWrapper } from "@/components/prompt-input-wrapper";
 import { SqlAnalysisPanel } from "@/components/sql-analysis-panel";
+import { useConnectedTables } from "@/hooks/use-connected-tables";
 import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
@@ -28,9 +29,37 @@ export default function Chat({
   chatId: string;
   initialMessages?: UIMessage[];
 }) {
+  const connectedTables = useConnectedTables();
+
   const transport = useMemo(
-    () => new DefaultChatTransport({ api: `/${"api/chat"}/${chatId}` }),
-    [chatId],
+    () =>
+      new DefaultChatTransport({
+        api: `/${"api/chat"}/${chatId}`,
+        fetch: (() => {
+          const customFetch = (async (
+            url: RequestInfo | URL,
+            options?: RequestInit,
+          ) => {
+            // Add connected tables to the request body
+            if (options?.body) {
+              const body = JSON.parse(options.body as string);
+              return fetch(url, {
+                ...options,
+                body: JSON.stringify({
+                  ...body,
+                  connectedTables,
+                }),
+              });
+            }
+            return fetch(url, options);
+          }) as typeof fetch;
+          // Preserve Next.js augmented fetch.preconnect to satisfy typeof fetch
+          (customFetch as any).preconnect =
+            (fetch as any).preconnect?.bind(fetch) ?? (() => { });
+          return customFetch;
+        })(),
+      }),
+    [chatId, connectedTables],
   );
   const router = useRouter();
   const searchParams = useSearchParams();

@@ -177,7 +177,6 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
   const lastFingerprintRef = useRef<string | null>(null);
   const lastAutoSwitchQueryRef = useRef<string | null>(null);
 
-  console.log("rendering sql analysis chart config:", chartConfig);
 
   // Append completed payloads to history when a new analysis completes
   useEffect(() => {
@@ -262,7 +261,7 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
       )}
 
       {/* View Toggle + History Navigation */}
-      <div className="flex items-center justify-between gap-2 p-4 border-b">
+      <div className="flex items-center justify-between gap-2 p-2">
         <div className="flex gap-2">
           <Button
             variant={activeView === "table" ? "default" : "outline"}
@@ -311,7 +310,18 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
           </div>
         )}
       </div>
-
+      {/* Query Collapsible */}
+      <Collapsible>
+        <CollapsibleTrigger className="flex items-center justify-between w-full p-4 border hover:bg-muted/50 cursor-pointer">
+          <span className="text-sm font-medium">SQL Query</span>
+          <ChevronDown className="w-4 h-4" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="p-4 border-t">
+          <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
+            {selected?.query || latestPayload?.query || "No query available"}
+          </pre>
+        </CollapsibleContent>
+      </Collapsible>
       {/* Render appropriate view */}
       {activeView === "chart" ? (
         <div className="relative">
@@ -352,19 +362,6 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
       ) : (
           <SqlResultsTable dataOverride={selected ?? undefined} />
       )}
-
-      {/* Query Collapsible */}
-      <Collapsible>
-        <CollapsibleTrigger className="flex items-center justify-between w-full p-4 border-t hover:bg-muted/50 cursor-pointer">
-          <span className="text-sm font-medium">SQL Query</span>
-          <ChevronDown className="w-4 h-4" />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="p-4 border-t">
-          <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
-            {selected?.query || latestPayload?.query || "No query available"}
-          </pre>
-        </CollapsibleContent>
-      </Collapsible>
     </div>
   );
 }

@@ -6,14 +6,19 @@ import {
   streamText,
   type UIMessage,
 } from "ai";
-import { asc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { NextRequest } from "next/server";
 import { setContext } from "@/ai/context";
 import { analysisPrompt } from "@/ai/prompts";
 import { tools } from "@/ai/tools";
-import { getDb } from "@/lib/db/client";
-import { chats, messages } from "@/lib/db/schema";
+import type { ConnectedTable } from "@/lib/connected-tables";
+import { messages } from "@/lib/db/schema";
+import {
+  appendAssistantMessage,
+  appendUserMessageTx,
+  listMessagesByChatId,
+  deleteChat,
+} from "@/lib/repositories/chat";
 
 export const runtime = "nodejs";
 
@@ -25,12 +30,7 @@ export async function GET(
   { params }: { params: Promise<{ chatId: string }> }
 ) {
   const { chatId } = await params;
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(messages)
-    .where(eq(messages.chatId, chatId))
-    .orderBy(asc(messages.createdAt));
+  const rows = await listMessagesByChatId(chatId);
 
   const uiMessages: UIMessage[] = rows.map(
     (row: typeof messages.$inferSelect) => {
@@ -52,7 +52,11 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ chatId: string }> }
 ) {
-  const { messages: uiMessages }: { messages: UIMessage[] } = await req.json();
+  const body = await req.json();
+  const {
+    messages: uiMessages,
+    connectedTables = [],
+  }: { messages: UIMessage[]; connectedTables?: ConnectedTable[] } = body;
   const { chatId } = await params;
 
   // We only create the chat upon first user message below
@@ -65,42 +69,21 @@ export async function POST(
       : undefined;
     const text = (textPart as { text?: string } | undefined)?.text ?? "";
 
-    // Create chat now (first time we receive a user message for this id)
-    const db = getDb();
-    await db
-      .insert(chats)
-      .values({
-        id: chatId,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      })
-      .onConflictDoNothing();
+    const deriveTitleFrom = (input: string): string | null => {
+      const trimmed = input.trim();
+      if (!trimmed) return null;
+      return trimmed.length > 20 ? `${trimmed.slice(0, 20)}...` : trimmed;
+    };
 
-    await db
-      .insert(messages)
-      .values({
-        id: last.id || nanoid(),
-        chatId,
-        role: "user",
-        content: text,
-        parts: JSON.stringify(last.parts ?? [{ type: "text", text }]),
-        createdAt: Date.now(),
-      })
-      .onConflictDoNothing();
-
-    await db
-      .update(chats)
-      .set({ updatedAt: Date.now() })
-      .where(eq(chats.id, chatId));
+    await appendUserMessageTx({
+      chatId,
+      messageId: last.id || nanoid(),
+      content: text,
+      partsJson: JSON.stringify(last.parts ?? [{ type: "text", text }]),
+      titleForNewChat: deriveTitleFrom(text),
+    });
   }
-  const connectedTables = [
-    {
-      type: "duckdb",
-      databasePath: "bla.db",
-      table: "main.unicorns",
-      description: "all unicorn companies valued above 1 billion dollars",
-    },
-  ];
+
   const stream = createUIMessageStream<UIMessage>({
     onFinish: async ({ responseMessage }) => {
       // Persist assistant message when stream finishes
@@ -111,25 +94,12 @@ export async function POST(
         : undefined;
       const text = (textPart as { text?: string } | undefined)?.text ?? "";
 
-      const db = getDb();
-      await db
-        .insert(messages)
-        .values({
-          id: responseMessage.id || nanoid(),
-          chatId,
-          role: "assistant",
-          content: text,
-          parts: JSON.stringify(
-            responseMessage.parts ?? [{ type: "text", text }]
-          ),
-          createdAt: Date.now(),
-        })
-        .onConflictDoNothing();
-
-      await db
-        .update(chats)
-        .set({ updatedAt: Date.now() })
-        .where(eq(chats.id, chatId));
+      await appendAssistantMessage(
+        chatId,
+        responseMessage.id || nanoid(),
+        text,
+        JSON.stringify(responseMessage.parts ?? [{ type: "text", text }]),
+      );
     },
     execute: ({ writer }) => {
       // Set up typed context with user information
@@ -162,8 +132,7 @@ export async function DELETE(
   { params }: { params: Promise<{ chatId: string }> }
 ) {
   const { chatId } = await params;
-  const db = getDb();
-  await db.delete(chats).where(eq(chats.id, chatId));
+  await deleteChat(chatId);
   return new Response(null, { status: 204 });
 }
 

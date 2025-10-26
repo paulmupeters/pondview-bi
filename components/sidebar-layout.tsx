@@ -75,7 +75,7 @@ function ChatHistoryPopover({ onNavigate }: ChatHistoryPopoverProps) {
 }
 
 export function SidebarLayout({ children }: SidebarLayoutProps) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isChatHistoryPopoverOpen, setIsChatHistoryPopoverOpen] =
     useState(false);
 

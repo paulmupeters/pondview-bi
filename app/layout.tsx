@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Noto_Sans } from "next/font/google";
 import "./globals.css";
+import { CustomCssLoader } from "@/components/custom-css-loader";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme-provider";
@@ -32,9 +33,8 @@ export default function RootLayout({
       >
         <ThemeProvider defaultTheme="system" storageKey="bi-chat-theme">
           <TooltipProvider>
-            <SidebarLayout>
-              {children}
-            </SidebarLayout>
+            <CustomCssLoader />
+            <SidebarLayout>{children}</SidebarLayout>
           </TooltipProvider>
         </ThemeProvider>
       </body>

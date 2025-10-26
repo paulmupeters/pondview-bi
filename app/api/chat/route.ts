@@ -9,21 +9,21 @@ import {
 import { setContext } from "@/ai/context";
 import { analysisPrompt } from "@/ai/prompts";
 import { tools } from "@/ai/tools";
+import type { ConnectedTable } from "@/lib/connected-tables";
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
 
 // This route is kept for backward compatibility. The new per-chat route is at `app/api/chat/[chatId]/route.ts`.
 export async function POST(req: Request) {
-  const { messages }: { messages: UIMessage[] } = await req.json();
-  const connectedTables = [
-    {
-      type: "duckdb",
-      databasePath: "bla.db",
-      table: "main.unicorns",
-      description: "all unicorn companies valued above 1 billion dollars",
-    },
-  ];
+  const body = await req.json();
+  const { messages }: { messages: UIMessage[] } = body;
+  const {
+    connectedTables = [],
+  }: { messages: UIMessage[]; connectedTables?: ConnectedTable[] } = body as {
+    messages: UIMessage[];
+    connectedTables?: ConnectedTable[];
+  };
 
   const stream = createUIMessageStream({
     execute: ({ writer }) => {

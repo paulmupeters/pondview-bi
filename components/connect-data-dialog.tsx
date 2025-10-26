@@ -44,11 +44,16 @@ const DATABASE_OPTIONS: Array<{
 type ConnectDataDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  // Optional initial values to prefill the form when opening
+  initialSelectedDatabase?: DatabaseType;
+  initialDatabasePath?: string;
 };
 
 export function ConnectDataDialog({
   open,
   onOpenChange,
+  initialSelectedDatabase,
+  initialDatabasePath,
 }: ConnectDataDialogProps) {
   const [selectedDatabase, setSelectedDatabase] = useState<DatabaseType>(null);
   const [databasePath, setDatabasePath] = useState("");
@@ -78,6 +83,18 @@ export function ConnectDataDialog({
       resetState();
     }
   }, [open, resetState]);
+
+  // Prefill values when opening the dialog
+  useEffect(() => {
+    if (open) {
+      if (initialSelectedDatabase) {
+        setSelectedDatabase(initialSelectedDatabase);
+      }
+      if (initialDatabasePath) {
+        setDatabasePath(initialDatabasePath);
+      }
+    }
+  }, [open, initialSelectedDatabase, initialDatabasePath]);
 
   const handleConnectClick = useCallback(async () => {
     if (!databasePath.trim()) {

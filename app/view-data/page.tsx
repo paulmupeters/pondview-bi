@@ -16,6 +16,18 @@ export default function ViewDataPage() {
     new Set(),
   );
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
+  const [prefillDbType, setPrefillDbType] = useState<
+    "duckdb" | "postgres" | "mysql" | null
+  >(null);
+  const [prefillDbPath, setPrefillDbPath] = useState("");
+  const connectedDatabasePaths = Array.from(
+    new Set(tables.map((t) => t.databasePath)),
+  ).map((dbPath) => {
+    return {
+      dbPath,
+      type: tables.find((t) => t.databasePath === dbPath)?.type,
+    };
+  });
 
   const toggleExpanded = (entryKey: string) => {
     setExpandedEntries((prev) => {
@@ -55,7 +67,14 @@ export default function ViewDataPage() {
             visible to you.
           </p>
         </div>
-        <Button type="button" onClick={() => setIsConnectDialogOpen(true)}>
+        <Button
+          type="button"
+          onClick={() => {
+            setPrefillDbType(null);
+            setPrefillDbPath("");
+            setIsConnectDialogOpen(true);
+          }}
+        >
           Connect Data Source
         </Button>
       </header>
@@ -89,79 +108,125 @@ export default function ViewDataPage() {
               </Button>
             </div>
           ) : (
-            <ul className="grid gap-4 md:grid-cols-2">
-              {tables.map((table) => {
-                const entryKey = getEntryKey(table);
-                const isExpanded = expandedEntries.has(entryKey);
-                const hasMultiple = hasMultipleTables(table);
-
-                return (
-                  <li
-                    key={entryKey}
-                    className="group flex h-full flex-col justify-between rounded-2xl border border-border bg-card/60 p-5 shadow-sm transition hover:border-primary hover:shadow-md"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                          {table.type.toUpperCase()}
+              <div className="space-y-4">
+                <div className="flex flex-col gap-2 my-8">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Connected Databases
+                  </h3>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {connectedDatabasePaths.map((db) => (
+                      <Button
+                        key={db.dbPath}
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-2 bg-card/60 p-4 rounded-xl h-24 border border-border group flex-col justify-center"
+                        onClick={() => {
+                          const t =
+                            db.type === "duckdb" ||
+                              db.type === "postgres" ||
+                              db.type === "mysql"
+                              ? db.type
+                              : null;
+                          setPrefillDbType(t);
+                          setPrefillDbPath(db.dbPath);
+                          setIsConnectDialogOpen(true);
+                        }}
+                      >
+                        <span className="text-xs font-medium text-muted-foreground group-hover:hidden">
+                          {db.dbPath}
                         </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {table.databasePath}
+                        {/* type */}
+                        <span className="text-xs font-semibold text-muted-foreground group-hover:hidden">
+                          {db.type}
                         </span>
-                      </div>
-                      <h3 className="text-lg font-semibold text-foreground">
-                        {table.schema ?? table.table ?? "Unknown"}
-                      </h3>
-                      {table.description ? (
-                        <p className="text-sm text-muted-foreground line-clamp-3">
-                          {table.description}
-                        </p>
-                      ) : (
-                        <p className="text-sm italic text-muted-foreground/80">
-                          No description provided.
-                        </p>
-                      )}
-
-                      {hasMultiple && isExpanded && (
-                        <div className="mt-3 space-y-2">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Tables:
-                          </p>
-                          <ul className="space-y-1">
-                            {table.tables?.map((tableName) => (
-                              <li
-                                key={tableName}
-                                className="text-xs text-muted-foreground"
-                              >
-                                • {tableName}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between">
-                      {hasMultiple && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleExpanded(entryKey)}
-                          className="text-xs"
-                        >
-                          {isExpanded
-                            ? "Hide Tables"
-                            : `Show Tables (${table.tables?.length})`}
-                        </Button>
-                      )}
-                      <Button variant="outline" size="sm">
-                        Copy Connection Info
+                        {/* connect */}
+                        <span className="text-xs font-medium text-muted-foreground hidden group-hover:block group-hover:bg-accent w-full">
+                          Add Tables
+                        </span>
                       </Button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold text-foreground my-8">
+                    Tables
+                  </h3>
+                  <ul className="grid gap-4 md:grid-cols-2">
+                    {tables.map((table) => {
+                      const entryKey = getEntryKey(table);
+                      const isExpanded = expandedEntries.has(entryKey);
+                      const hasMultiple = hasMultipleTables(table);
+
+                      return (
+                        <li
+                          key={entryKey}
+                          className="group flex h-full flex-col justify-between rounded-2xl border border-border bg-card/60 p-5 shadow-sm transition hover:border-primary hover:shadow-md"
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                {table.type.toUpperCase()}
+                              </span>
+                              <span className="truncate text-xs text-muted-foreground">
+                                {table.databasePath}
+                              </span>
+                            </div>
+                            <h3 className="text-lg font-semibold text-foreground">
+                              {table.schema ?? table.table ?? "Unknown"}
+                            </h3>
+                            {table.description ? (
+                              <p className="text-sm text-muted-foreground line-clamp-3">
+                                {table.description}
+                              </p>
+                            ) : (
+                              <p className="text-sm italic text-muted-foreground/80">
+                                No description provided.
+                              </p>
+                            )}
+
+                            {hasMultiple && isExpanded && (
+                              <div className="mt-3 space-y-2">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  Tables:
+                                </p>
+                                <ul className="space-y-1">
+                                  {table.tables?.map((tableName) => (
+                                    <li
+                                      key={tableName}
+                                      className="text-xs text-muted-foreground"
+                                    >
+                                      • {tableName}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mt-4 flex items-center justify-between">
+                            {hasMultiple && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => toggleExpanded(entryKey)}
+                                className="text-xs"
+                              >
+                                {isExpanded
+                                  ? "Hide Tables"
+                                  : `Show Tables (${table.tables?.length})`}
+                              </Button>
+                            )}
+                            <Button variant="outline" size="sm">
+                              Copy Connection Info
+                            </Button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </div>
           )}
         </TabsContent>
 
@@ -173,6 +238,8 @@ export default function ViewDataPage() {
       <ConnectDataDialog
         open={isConnectDialogOpen}
         onOpenChange={setIsConnectDialogOpen}
+        initialSelectedDatabase={prefillDbType}
+        initialDatabasePath={prefillDbPath}
       />
     </div>
   );

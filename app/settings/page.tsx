@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { applyCustomCss } from "@/lib/custom-css";
 
 const CSS_PLACEHOLDER = `:root{
   --background: 0 0% 100%;
@@ -28,15 +29,7 @@ const CSS_PLACEHOLDER = `:root{
   /* and more */
 }`;
 
-function applyCustomCss(css: string) {
-  let styleElement = document.getElementById("custom-css-style");
-  if (!styleElement) {
-    styleElement = document.createElement("style");
-    styleElement.id = "custom-css-style";
-    document.head.appendChild(styleElement);
-  }
-  styleElement.textContent = css;
-}
+
 
 export default function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
