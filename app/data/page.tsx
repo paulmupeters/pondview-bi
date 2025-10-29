@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import DataModelEditor from "@/components/data-model-editor";
@@ -9,7 +10,6 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import type { ConnectedTable } from "@/lib/connected-tables";
-import { ChevronDown } from "lucide-react";
 
 export default function ViewDataPage() {
   const tables = useConnectedTables();
@@ -23,7 +23,10 @@ export default function ViewDataPage() {
   >(null);
   const [prefillDbPath, setPrefillDbPath] = useState("");
   const databaseEntries = useMemo(() => {
-    const grouped = new Map<string, { type: string; entries: ConnectedTable[] }>();
+    const grouped = new Map<
+      string,
+      { type: string; entries: ConnectedTable[] }
+    >();
 
     for (const table of tables) {
       const existing = grouped.get(table.databasePath);
@@ -164,8 +167,9 @@ export default function ViewDataPage() {
                             </span>
                           </div>
                           <span className="text-xs text-muted-foreground">
-                            {database.totalTables} {" "}
-                            {database.totalTables === 1 ? "table" : "tables"} saved
+                            {database.totalTables}{" "}
+                            {database.totalTables === 1 ? "table" : "tables"}{" "}
+                            saved
                           </span>
                         </div>
                         <ChevronDown
@@ -198,7 +202,7 @@ export default function ViewDataPage() {
                                   </div>
                                   {hasTableList ? (
                                     <span className="text-xs text-muted-foreground">
-                                      {entry.tables?.length} {" "}
+                                      {entry.tables?.length}{" "}
                                       {entry.tables?.length === 1
                                         ? "table"
                                         : "tables"}
@@ -270,55 +274,52 @@ export default function ViewDataPage() {
 
         <TabsContent value="datasets">
           <div className="container">
-          <h2>Datasets for your visuals in your dashboards</h2>
+            <h2>Datasets for your visuals in your dashboards</h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="border rounded-lg bg-card p-4">
+                <h3>Dataset 1</h3>
+                <p>Description of dataset 1</p>
+                <ul>
+                  <li>id: int</li>
+                  <li>name: string</li>
+                  <li>age: int</li>
+                  <li>email: string</li>
+                  <li>created_at: datetime</li>
+                  <li>updated_at: datetime</li>
+                  <li>is_active: boolean</li>
+                  <li>is_deleted: boolean</li>
+                  <li>is_archived: boolean</li>
+                  <li>is_archived: boolean</li>
+                </ul>
+              </div>
 
-            <div className="border rounded-lg bg-card p-4">
-              <h3>Dataset 1</h3>
-              <p>Description of dataset 1</p>
-              <ul>
-                <li>id: int</li>
-                <li>name: string</li>
-                <li>age: int</li>
-                <li>email: string</li>
-                <li>created_at: datetime</li>
-                <li>updated_at: datetime</li>
-                <li>is_active: boolean</li>
-                <li>is_deleted: boolean</li>
-                <li>is_archived: boolean</li>
-                <li>is_archived: boolean</li>
-              </ul>
-            </div>
+              <div className="border rounded-lg bg-card p-4">
+                <h3>Dataset 2</h3>
+                <p>Description of dataset 2</p>
+                <ul>
+                  <li>id: int</li>
+                  <li>name: string</li>
+                  <li>value: int</li>
+                </ul>
+              </div>
 
-            <div className="border rounded-lg bg-card p-4">
-              <h3>Dataset 2</h3>
-              <p>Description of dataset 2</p>
-              <ul>
-                <li>id: int</li>
-                <li>name: string</li>
-                <li>value: int</li>
-              </ul>
-            </div>
-
-            <div className="border rounded-lg bg-card p-4">
-              <h3>Dataset 3</h3>
-              <p>Description of dataset 3</p>
-              <ul>
-                <li>id:int</li>
-                <li>country: string</li>
-                <li>value: int</li>
-                <li>created_at: datetime</li>
-                <li>updated_at: datetime</li>
-                <li>is_active: boolean</li>
-                <li>is_deleted: boolean</li>
-                <li>is_archived: boolean</li>
-              </ul>
+              <div className="border rounded-lg bg-card p-4">
+                <h3>Dataset 3</h3>
+                <p>Description of dataset 3</p>
+                <ul>
+                  <li>id:int</li>
+                  <li>country: string</li>
+                  <li>value: int</li>
+                  <li>created_at: datetime</li>
+                  <li>updated_at: datetime</li>
+                  <li>is_active: boolean</li>
+                  <li>is_deleted: boolean</li>
+                  <li>is_archived: boolean</li>
+                </ul>
+              </div>
             </div>
           </div>
-          
-          </div>
-
         </TabsContent>
 
         <TabsContent value="model" className="mt-4">

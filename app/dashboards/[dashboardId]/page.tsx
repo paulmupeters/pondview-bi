@@ -14,7 +14,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Settings } from "lucide-react";
+import { GripVertical, Settings, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
@@ -44,6 +44,7 @@ type SortableChartCardProps = {
   config: Config | null;
   rows: Result[];
   onConfigChange: (newChartJson: string) => Promise<void>;
+  onDelete: () => Promise<void>;
 };
 
 function SortableChartCard({
@@ -51,6 +52,7 @@ function SortableChartCard({
   config,
   rows,
   onConfigChange,
+  onDelete,
 }: SortableChartCardProps) {
   const {
     attributes,
@@ -85,7 +87,7 @@ function SortableChartCard({
         </button>
       </div>
       {config && rows.length > 0 ? (
-        <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <ChartConfigDialog
             trigger={
               <button
@@ -107,6 +109,15 @@ function SortableChartCard({
               await onConfigChange(newJson);
             }}
           />
+          <button
+            type="button"
+            onClick={onDelete}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            aria-label="Delete chart"
+            title="Delete chart"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
         </div>
       ) : null}
       {config && rows.length > 0 ? (
@@ -239,6 +250,29 @@ export default function DashboardDetailPage() {
     [],
   );
 
+  const handleChartDelete = useCallback(
+    async (chartId: string) => {
+      try {
+        const res = await fetch(
+          `/api/dashboard/${dashboardId}/charts?chartId=${chartId}`,
+          {
+            method: "DELETE",
+          },
+        );
+        if (!res.ok) throw new Error("Failed to delete chart");
+        setCharts((prev) => prev.filter((chart) => chart.id !== chartId));
+        setChartData((prev) => {
+          const next = { ...prev };
+          delete next[chartId];
+          return next;
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [dashboardId],
+  );
+
   if (loading)
     return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
   if (!dashboard)
@@ -274,6 +308,7 @@ export default function DashboardDetailPage() {
                   onConfigChange={(newJson) =>
                     handleChartConfigChange(c.id, newJson)
                   }
+                  onDelete={() => handleChartDelete(c.id)}
                 />
               );
             })}

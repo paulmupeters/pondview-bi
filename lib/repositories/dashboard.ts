@@ -149,4 +149,23 @@ export async function reorderDashboardCharts(
   });
 }
 
+export async function removeChartFromDashboard(
+  chartId: string,
+  now = Date.now(),
+) {
+  const db = getDb();
+  // Fetch chart first to get parent dashboard id
+  const chart = await getChartById(chartId);
+  if (!chart) return { removed: false };
+  await db
+    .delete(dashboardCharts)
+    .where(eq(dashboardCharts.id, chartId));
+  // bump dashboard updatedAt
+  await db
+    .update(dashboards)
+    .set({ updatedAt: now })
+    .where(eq(dashboards.id, chart.dashboardId));
+  return { removed: true };
+}
+
 
