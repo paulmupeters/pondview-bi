@@ -15,17 +15,19 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
+import { CardConfigDialog } from "@/components/card-config-dialog";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { SqlChart } from "@/components/sql-chart";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useArtifact } from "@/hooks/use-artifacts";
-import type { Config, Result } from "@/lib/types";
+import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Stage =
@@ -157,8 +159,9 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
         rowCount?: number;
         columns?: { name: string; type?: string }[];
         rows?: Result[];
-        visualType?: "table" | "chart";
+        visualType?: "table" | "chart" | "card";
         chartConfig?: Config;
+        cardConfig?: CardConfig;
         summary?: {
           totalRows: number;
           executionTimeMs?: number;
@@ -178,8 +181,9 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
         rowCount?: number;
         columns?: { name: string; type?: string }[];
         rows?: Result[];
-        visualType?: "table" | "chart";
+      visualType?: "table" | "chart" | "card";
         chartConfig?: Config;
+      cardConfig?: CardConfig;
         summary?: {
           totalRows: number;
           executionTimeMs?: number;
@@ -190,6 +194,7 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
       | undefined) ?? null;
   const [activeView, setActiveView] = useState<"table" | "chart">("table");
   const [chartConfig, setChartConfig] = useState<Config | null>(null);
+  const [cardConfig, setCardConfig] = useState<CardConfig | null>(null);
   const [history, setHistory] = useState<
     Array<{
       stage?:
@@ -203,8 +208,9 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
       rowCount?: number;
       columns: { name: string; type?: string }[];
       rows: Result[];
-      visualType?: "table" | "chart";
+      visualType?: "table" | "chart" | "card";
       chartConfig?: Config;
+      cardConfig?: CardConfig;
       summary?: {
         totalRows: number;
         executionTimeMs?: number;
@@ -236,6 +242,7 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
       rows: (p.rows as Result[] | undefined) ?? [],
       visualType: p.visualType,
       chartConfig: p.chartConfig,
+      cardConfig: p.cardConfig,
       summary: p.summary,
     };
 
@@ -291,20 +298,41 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
       }
       : undefined;
 
-  // Set chart config when it becomes available and auto-switch to chart view once per query
+  const selectedForCard =
+    selected?.stage === "complete" &&
+      selected.rows &&
+      selected.rows.length === 1 &&
+      selected.columns &&
+      selected.columns.length === 1
+      ? {
+        stage: selected.stage,
+        columnName: selected.columns[0].name,
+        value: selected.rows[0][selected.columns[0].name],
+      }
+      : undefined;
+
+  // Auto-switch to appropriate view based on visualType
   useEffect(() => {
     const q = selected?.query ?? null;
+    const vt = selected?.visualType ?? latestPayload?.visualType;
+
+    // Auto-switch to chart/visual view when chart config or card config becomes available
     if (
-      selected?.chartConfig &&
-      !chartConfig &&
+      ((selected?.chartConfig && !chartConfig && vt === "chart") ||
+        (selected?.cardConfig && !cardConfig && vt === "card")) &&
       q &&
       lastAutoSwitchQueryRef.current !== q
     ) {
-      setChartConfig(selected.chartConfig);
+      if (selected?.chartConfig && vt === "chart") {
+        setChartConfig(selected.chartConfig);
+      }
+      if (selected?.cardConfig && vt === "card") {
+        setCardConfig(selected.cardConfig);
+      }
       setActiveView("chart");
       lastAutoSwitchQueryRef.current = q;
     }
-  }, [selected?.chartConfig, selected?.query, chartConfig]);
+  }, [selected?.chartConfig, selected?.cardConfig, selected?.visualType, selected?.query, chartConfig, cardConfig, latestPayload?.visualType]);
   if (!latestPayload && !hasHistory) {
     return null;
   }
@@ -344,7 +372,7 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
             className="flex items-center gap-2 hover:text-gray-500"
           >
             <ChartBar className="w-4 h-4" />
-            Chart
+            Visual
           </Button>
         </div>
         {history.length > 0 && (
@@ -390,49 +418,116 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
       {/* Render appropriate view */}
       {activeView === "chart" ? (
         <div className="relative">
-          {/* Configuration button in top right */}
-          <div className="absolute top-0 right-0 z-10 flex gap-2">
-            <ChartConfigDialog
-              trigger={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2"
-                >
-                  <Cog6ToothIcon className="w-4 h-4" />
-                  Configure
-                </Button>
-              }
-              config={chartConfig}
-              columns={columnsForDialog}
-              rows={selectedForChart?.rows ?? []}
-              onConfigChange={setChartConfig}
-            />
-            {/* {selected?.chartConfig && selected?.query && ( */}
-            <AddToDashboardDialog
-              trigger={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2"
-                >
-                  <PlusIcon className="w-4 h-4" />
-                  {/* Add Chart */}
-                </Button>
-                }
-              sql={selected?.query ?? ""}
-              chartConfig={chartConfig ?? selected?.chartConfig ?? { description: "", type: "bar", title: "", xKey: "", yKeys: [], multipleLines: false, legend: false, countMode: false }}
-              defaultTitle={selected?.chartConfig?.title}
-            />
-            {/* )} */}
-          </div>
+          {/* Show card if it's a single value, otherwise show chart */}
+          {selectedForCard ? (
+            <>
+              {/* Configuration button in top right */}
+              <div className="absolute top-0 right-0 z-10 flex gap-2">
+                <CardConfigDialog
+                  trigger={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                    >
+                      <Cog6ToothIcon className="w-4 h-4" />
+                      Configure
+                    </Button>
+                  }
+                  config={cardConfig}
+                  onConfigChange={setCardConfig}
+                />
+                <AddToDashboardDialog
+                  trigger={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                    >
+                      <PlusIcon className="w-4 h-4" />
+                    </Button>
+                  }
+                  sql={selected?.query ?? ""}
+                  cardConfig={cardConfig ?? selected?.cardConfig ?? undefined}
+                  defaultTitle={cardConfig?.title ?? selected?.cardConfig?.title}
+                />
+              </div>
+              <Card className="mx-auto w-fit">
+                <CardHeader>
+                  <CardTitle className="text-base font-medium text-muted-foreground">
+                    {cardConfig?.title ?? selected?.cardConfig?.title ?? selectedForCard.columnName}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-4xl font-bold text-foreground">
+                    {typeof selectedForCard.value === "number"
+                      ? selectedForCard.value.toLocaleString()
+                      : typeof selectedForCard.value === "boolean"
+                        ? selectedForCard.value.toString()
+                        : selectedForCard.value instanceof Date
+                          ? selectedForCard.value.toLocaleString()
+                          : String(selectedForCard.value)}
+                  </div>
+                  {(cardConfig?.description ?? selected?.cardConfig?.description) && (
+                    <div className="text-sm text-muted-foreground mt-2">
+                      {cardConfig?.description ?? selected?.cardConfig?.description}
+                    </div>
+                  )}
+                  {(cardConfig?.takeaway ?? selected?.cardConfig?.takeaway) && (
+                    <div className="text-xs text-muted-foreground mt-2 italic">
+                      {cardConfig?.takeaway ?? selected?.cardConfig?.takeaway}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <>
+                {/* Configuration button in top right */}
+                <div className="absolute top-0 right-0 z-10 flex gap-2">
+                  <ChartConfigDialog
+                    trigger={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-2"
+                      >
+                        <Cog6ToothIcon className="w-4 h-4" />
+                        Configure
+                      </Button>
+                    }
+                    config={chartConfig}
+                    columns={columnsForDialog}
+                    rows={selectedForChart?.rows ?? []}
+                    onConfigChange={setChartConfig}
+                  />
+                  {/* {selected?.chartConfig && selected?.query && ( */}
+                  <AddToDashboardDialog
+                    trigger={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-2"
+                      >
+                        <PlusIcon className="w-4 h-4" />
+                        {/* Add Chart */}
+                      </Button>
+                    }
+                    sql={selected?.query ?? ""}
+                    chartConfig={chartConfig ?? selected?.chartConfig ?? { description: "", type: "bar", title: "", xKey: "", yKeys: [], multipleLines: false, legend: false, countMode: false }}
+                    defaultTitle={selected?.chartConfig?.title}
+                  />
+                  {/* )} */}
+                </div>
 
-          {/* Chart content */}
-          {selectedForChart && (
-            <SqlChart
-              customChartConfig={chartConfig ?? undefined}
-              dataOverride={selectedForChart}
-            />
+                {/* Chart content */}
+                {selectedForChart && (
+                  <SqlChart
+                    customChartConfig={chartConfig ?? undefined}
+                    dataOverride={selectedForChart}
+                  />
+                )}
+              </>
           )}
         </div>
       ) : (

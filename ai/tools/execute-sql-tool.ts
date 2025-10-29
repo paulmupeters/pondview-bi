@@ -4,7 +4,8 @@ import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import { getCurrentUser } from "@/ai/context";
 import { runSqlNormalized } from "@/lib/db/router";
 import { delay } from "@/lib/delay";
-import type { Config, Result } from "@/lib/types";
+import type { CardConfig, Config, Result } from "@/lib/types";
+import { generateCardConfig } from "./generate-card-config-tool";
 import { generateChartConfig } from "./generate-chart-config-tool";
 
 export const executeSqlTool = tool({
@@ -91,12 +92,12 @@ export const executeSqlTool = tool({
 
     if (rowCount > 0) {
       insights.push(
-        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`,
+        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`
       );
 
       if (rowCount === 50) {
         insights.push(
-          "Results limited to 50 rows - there may be more data available",
+          "Results limited to 50 rows - there may be more data available"
         );
       }
 
@@ -112,7 +113,7 @@ export const executeSqlTool = tool({
         insights.push(
           `Found ${numericColumns.length} numeric column${
             numericColumns.length === 1 ? "" : "s"
-          } for analysis`,
+          } for analysis`
         );
       }
     } else {
@@ -123,7 +124,11 @@ export const executeSqlTool = tool({
     const queryType = sql.trim().split(/\s+/)[0].toUpperCase();
     // Determine if data is suitable for charting and generate chart config
     let chartConfig: Config | undefined;
-    let visualType: "table" | "chart" = "table";
+    let cardConfig: CardConfig | undefined;
+    let visualType: "table" | "chart" | "card" = "table";
+
+    // Check if result is a single value (1 row, 1 column) - suitable for card display
+    const isSingleValue = rowCount === 1 && columns.length === 1;
 
     const isChartWorthy =
       rowCount > 0 && rowCount <= 50 && queryType === "SELECT";
@@ -133,13 +138,31 @@ export const executeSqlTool = tool({
         typeof sampleValue === "number" || !Number.isNaN(Number(sampleValue))
       );
     });
-    sqlArtifact.update({ stage: "visualizing", progress: 0.8 });
+    await sqlArtifact.update({ stage: "visualizing", progress: 0.8 });
     console.debug(
       "[executeSqlTool] Step 4 (visualizing) started",
-      debugContext,
+      debugContext
     );
 
-    if (isChartWorthy && hasNumericData && userQuery && generateChart) {
+    if (isSingleValue && userQuery) {
+      try {
+        // Add delay to avoid rate limit errors
+        await delay(100);
+        const singleValue = parsedResults[0]?.[columns[0].name];
+        const cardResult = await generateCardConfig(
+          singleValue,
+          columns[0].name,
+          userQuery
+        );
+        cardConfig = cardResult.config;
+        visualType = "card";
+        insights.push("Card visualization generated based on single value");
+      } catch (error) {
+        console.error("Failed to generate card config:", error);
+        visualType = "card";
+        insights.push("Card view enabled, but config generation failed");
+      }
+    } else if (isChartWorthy && hasNumericData && userQuery && generateChart) {
       try {
         // Add delay to avoid rate limit errors
         await delay(100);
@@ -156,6 +179,7 @@ export const executeSqlTool = tool({
     console.debug("[executeSqlTool] Step 4 (visualizing) finished", {
       ...debugContext,
       chartConfig,
+      cardConfig,
       visualType,
     });
 
@@ -171,6 +195,7 @@ export const executeSqlTool = tool({
       rows: parsedResults,
       visualType,
       chartConfig,
+      cardConfig,
       summary: {
         totalRows: rowCount,
         executionTimeMs: executionTime,
@@ -209,7 +234,7 @@ export const executeSqlTool = tool({
       } - ${
         user.id
       }). Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
-        ". ",
+        ". "
       )}.`,
     };
   },

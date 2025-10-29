@@ -69,6 +69,25 @@ export const configSchema = z
 
 export type Config = z.infer<typeof configSchema>;
 
+export const cardConfigSchema = z
+  .object({
+    title: z
+      .string()
+      .describe("Title for the card displaying the single value"),
+    description: z
+      .string()
+      .describe(
+        "Description of what the card value represents and what it shows"
+      ),
+    takeaway: z
+      .string()
+      .describe("Main insight or takeaway from this single value")
+      .optional(),
+  })
+  .describe("Card configuration object for single-value results");
+
+export type CardConfig = z.infer<typeof cardConfigSchema>;
+
 // Data model types
 export type RelationshipType =
   | "one-to-one"

@@ -19,7 +19,8 @@ import { useParams } from "next/navigation";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { DynamicChart } from "@/components/dynamic-chart";
-import type { Config, Result } from "@/lib/types";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { CardConfig, Config, Result } from "@/lib/types";
 
 type Dashboard = {
   id: string;
@@ -41,11 +42,19 @@ type DashboardChart = {
 
 type SortableChartCardProps = {
   chart: DashboardChart;
-  config: Config | null;
+  config: Config | CardConfig | null;
   rows: Result[];
   onConfigChange: (newChartJson: string) => Promise<void>;
   onDelete: () => Promise<void>;
 };
+
+// Helper function to check if config is a card config
+function isCardConfig(
+  config: Config | CardConfig | null,
+): config is CardConfig {
+  if (!config) return false;
+  return !("yKeys" in config) && !("type" in config) && !("xKey" in config);
+}
 
 function SortableChartCard({
   chart,
@@ -86,7 +95,7 @@ function SortableChartCard({
           <GripVertical className="h-4 w-4" />
         </button>
       </div>
-      {config && rows.length > 0 ? (
+      {config && rows.length > 0 && !isCardConfig(config) ? (
         <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <ChartConfigDialog
             trigger={
@@ -99,7 +108,7 @@ function SortableChartCard({
                 <Settings className="h-4 w-4" />
               </button>
             }
-            config={config}
+            config={config as Config}
             columns={Object.keys(rows[0] || {}).map((name) => ({
               name,
             }))}
@@ -119,13 +128,62 @@ function SortableChartCard({
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
+      ) : config && rows.length > 0 && isCardConfig(config) ? (
+        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            type="button"
+            onClick={onDelete}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            aria-label="Delete card"
+            title="Delete card"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       ) : null}
       {config && rows.length > 0 ? (
-        <DynamicChart
-          chartData={rows}
-          chartConfig={config}
-          className="w-full"
-        />
+        isCardConfig(config) ? (
+          <Card className="w-full">
+            <CardHeader>
+              <CardTitle className="text-base font-medium text-muted-foreground">
+                {config.title}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold text-foreground">
+                {(() => {
+                  const value = rows[0]?.[Object.keys(rows[0] || {})[0]];
+                  if (typeof value === "number") {
+                    return value.toLocaleString();
+                  }
+                  if (typeof value === "boolean") {
+                    return value.toString();
+                  }
+                  if (value instanceof Date) {
+                    return value.toLocaleString();
+                  }
+                  return String(value ?? "");
+                })()}
+              </div>
+              {config.description && (
+                <div className="text-sm text-muted-foreground mt-2">
+                  {config.description}
+                </div>
+              )}
+              {config.takeaway && (
+                <div className="text-xs text-muted-foreground mt-2 italic">
+                  {config.takeaway}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+            <DynamicChart
+              chartData={rows}
+              chartConfig={config as Config}
+              className="w-full"
+            />
+          )
       ) : (
         <div className="text-xs text-muted-foreground">No data</div>
       )}
@@ -292,9 +350,10 @@ export default function DashboardDetailPage() {
         >
           <div className="grid gap-6 md:grid-cols-2">
             {charts.map((c) => {
-              let config: Config | null = null;
+              let config: Config | CardConfig | null = null;
               try {
-                config = JSON.parse(c.chartConfigJson) as Config;
+                const parsed = JSON.parse(c.chartConfigJson);
+                config = parsed as Config | CardConfig;
               } catch {
                 config = null;
               }

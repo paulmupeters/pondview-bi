@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import type { Config } from "@/lib/types";
+import type { CardConfig, Config } from "@/lib/types";
 
 type DashboardLite = { id: string; title: string | null; updatedAt: number };
 
@@ -19,11 +19,13 @@ export function AddToDashboardDialog({
   trigger,
   sql,
   chartConfig,
+  cardConfig,
   defaultTitle,
 }: {
   trigger: React.ReactNode;
   sql: string;
-  chartConfig: Config;
+  chartConfig?: Config;
+  cardConfig?: CardConfig;
   defaultTitle?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -31,8 +33,9 @@ export function AddToDashboardDialog({
   const [loading, setLoading] = useState(false);
   const [selectedDashboardId, setSelectedDashboardId] = useState<string | "new">("new");
   const [newDashboardTitle, setNewDashboardTitle] = useState("My Dashboard");
-  const [chartTitle, setChartTitle] = useState(defaultTitle ?? chartConfig?.title ?? "Chart");
-  const [chartDescription, setChartDescription] = useState("");
+  const config = chartConfig ?? cardConfig;
+  const [chartTitle, setChartTitle] = useState(defaultTitle ?? config?.title ?? (cardConfig ? "Card" : "Chart"));
+  const [chartDescription, setChartDescription] = useState(cardConfig?.description ?? chartConfig?.description ?? "");
 
   useEffect(() => {
     if (!open) return;
@@ -79,7 +82,7 @@ export function AddToDashboardDialog({
           description: chartDescription,
           sql,
           dbIdentifier: "md:my_db",
-          chartConfigJson: JSON.stringify(chartConfig),
+          chartConfigJson: JSON.stringify(chartConfig ?? cardConfig ?? {}),
         }),
       });
       if (!res2.ok) throw new Error("Failed to add chart");
@@ -130,16 +133,16 @@ export function AddToDashboardDialog({
           <Separator />
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Chart title</label>
+            <label className="text-sm font-medium">{cardConfig ? "Card" : "Chart"} title</label>
             <Input
               value={chartTitle}
               onChange={(e) => setChartTitle(e.target.value)}
-              placeholder="e.g. Revenue by Month"
+              placeholder={cardConfig ? "e.g. Total Revenue" : "e.g. Revenue by Month"}
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Chart description (optional)</label>
+            <label className="text-sm font-medium">{cardConfig ? "Card" : "Chart"} description (optional)</label>
             <Input
               value={chartDescription}
               onChange={(e) => setChartDescription(e.target.value)}

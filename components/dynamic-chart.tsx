@@ -223,7 +223,7 @@ export function DynamicChart({
       )}
     >
       <h2 className="text-lg font-bold mb-2">{chartConfig.title}</h2>
-      {chartConfig && chartData.length > 0 && (
+      {chartConfig && chartData.length > 0 && chartConfig.yKeys && (
         <ChartContainer
           config={
             chartConfig.countMode
