@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoIcon } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -21,9 +22,14 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { transformDataForMultiLineChart } from "@/lib/rechart-format";
 import type { Config, Result } from "@/lib/types";
-import { getChartColors } from "@/lib/utils";
+import { cn, getChartColors } from "@/lib/utils";
 
 function toTitleCase(value: unknown): string {
   const str =
@@ -38,9 +44,11 @@ function toTitleCase(value: unknown): string {
 export function DynamicChart({
   chartData,
   chartConfig,
+  className,
 }: {
   chartData: Result[];
   chartConfig: Config;
+    className?: string;
 }) {
   const defaultColors = getChartColors();
 
@@ -89,6 +97,9 @@ export function DynamicChart({
           chartConfig.multipleLines &&
           chartConfig.measurementColumn &&
           chartConfig.yKeys.includes(chartConfig.measurementColumn);
+        console.log("Chart config:", chartConfig);
+        console.log("Use transformed data:", useTransformedData);
+        console.log("Line fields:", lineFields);
         return (
           <LineChart data={useTransformedData ? data : chartData}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -172,11 +183,7 @@ export function DynamicChart({
             <ChartTooltip content={<ChartTooltipContent />} />
             {chartConfig.legend && <Legend />}
             {chartConfig.yKeys.map((key, index) => (
-              <Bar
-                key={key}
-                dataKey={key}
-                fill={getColorForKey(key, index)}
-              />
+              <Bar key={key} dataKey={key} fill={getColorForKey(key, index)} />
             ))}
           </BarChart>
         );
@@ -209,7 +216,12 @@ export function DynamicChart({
   };
 
   return (
-    <div className="w-full flex flex-col justify-center items-center">
+    <div
+      className={cn(
+        "w-full flex flex-col justify-center items-center",
+        className,
+      )}
+    >
       <h2 className="text-lg font-bold mb-2">{chartConfig.title}</h2>
       {chartConfig && chartData.length > 0 && (
         <ChartContainer
@@ -232,10 +244,29 @@ export function DynamicChart({
           {renderChart()}
         </ChartContainer>
       )}
-      <div className="w-full">
-        <p className="mt-4 text-sm">{chartConfig.description}</p>
-        <p className="mt-4 text-sm">{chartConfig.takeaway}</p>
-      </div>
+      {(chartConfig.description || chartConfig.takeaway) && (
+        <HoverCard>
+          <HoverCardTrigger asChild>
+            <button
+              type="button"
+              className="mt-4 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Chart information"
+            >
+              <InfoIcon className="h-5 w-5" />
+            </button>
+          </HoverCardTrigger>
+          <HoverCardContent className="w-80">
+            {chartConfig.description && (
+              <p className="text-sm mb-2">{chartConfig.description}</p>
+            )}
+            {chartConfig.takeaway && (
+              <p className="text-sm text-muted-foreground">
+                {chartConfig.takeaway}
+              </p>
+            )}
+          </HoverCardContent>
+        </HoverCard>
+      )}
     </div>
   );
 }

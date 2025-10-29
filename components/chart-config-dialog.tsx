@@ -11,12 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import type { Config } from "@/lib/types";
+import type { Config, Result } from "@/lib/types";
 
 interface ChartConfigDialogProps {
   trigger: React.ReactNode;
   config: Config | null;
   columns: Array<{ name: string }>;
+  rows?: Result[];
   onConfigChange: (config: Config) => void;
 }
 
@@ -24,9 +25,39 @@ export function ChartConfigDialog({
   trigger,
   config,
   columns,
+  rows = [],
   onConfigChange,
 }: ChartConfigDialogProps) {
   const [open, setOpen] = useState(false);
+  const [chartType, setChartType] = useState<string>(config?.type || "line");
+  const [multipleLines, setMultipleLines] = useState<boolean>(config?.multipleLines || false);
+  const [categoryColumn, setCategoryColumn] = useState<string>(config?.categoryColumn || "");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(config?.lineCategories || []);
+
+  // Get distinct values for a column
+  const getDistinctValues = (columnName: string): string[] => {
+    if (!rows || rows.length === 0) return [];
+    const values = rows.map(row => String(row[columnName])).filter(Boolean);
+    return Array.from(new Set(values)).sort();
+  };
+
+  const availableCategories = categoryColumn ? getDistinctValues(categoryColumn) : [];
+
+  const toggleCategory = (category: string) => {
+    setSelectedCategories(prev =>
+      prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
+
+  const toggleAllCategories = () => {
+    if (selectedCategories.length === availableCategories.length) {
+      setSelectedCategories([]);
+    } else {
+      setSelectedCategories(availableCategories);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -43,9 +74,11 @@ export function ChartConfigDialog({
         return yKeysRaw.filter((key) => key !== "count");
       })(),
       legend: formData.get("legend") === "on",
-      multipleLines: formData.get("multipleLines") === "on",
+      multipleLines: formData.get("multipleLines") === "yes",
       measurementColumn:
         (formData.get("measurementColumn") as string) || undefined,
+      categoryColumn:
+        (formData.get("categoryColumn") as string) || undefined,
       lineCategories:
         (formData.getAll("lineCategories") as string[]) || undefined,
       colors: undefined,
@@ -54,6 +87,14 @@ export function ChartConfigDialog({
         return yKeysRaw.includes("count") ? true : false;
       })(),
     };
+
+    // If multipleLines is enabled, ensure measurementColumn is in yKeys and legend is enabled
+    if (newConfig.multipleLines && newConfig.measurementColumn) {
+      if (!newConfig.yKeys.includes(newConfig.measurementColumn)) {
+        newConfig.yKeys = [...new Set([...newConfig.yKeys, newConfig.measurementColumn])];
+      }
+      newConfig.legend = true;
+    }
 
     onConfigChange(newConfig);
     setOpen(false);
@@ -82,9 +123,8 @@ export function ChartConfigDialog({
                     type="radio"
                     name="type"
                     value={type.toLowerCase()}
-                    defaultChecked={
-                      config?.type === type.toLowerCase() || type === "Line"
-                    }
+                    checked={chartType === type.toLowerCase()}
+                    onChange={(e) => setChartType(e.target.value)}
                     className="sr-only peer"
                   />
                   <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
@@ -162,6 +202,155 @@ export function ChartConfigDialog({
           </fieldset>
 
           <Separator />
+
+          {/* Multi-line Configuration (for line charts only) */}
+          {chartType === "line" && (
+            <>
+              <fieldset className="space-y-3">
+                <legend className="text-sm font-medium">Multi-line Chart</legend>
+                <p className="text-xs text-gray-500">
+                  Enable to compare multiple categories as separate lines
+                </p>
+                <div className="flex gap-2">
+                  <label className="cursor-pointer">
+                    <input
+                      type="radio"
+                      name="multipleLines"
+                      value="yes"
+                      checked={multipleLines}
+                      onChange={() => setMultipleLines(true)}
+                      className="sr-only peer"
+                    />
+                    <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
+                      Yes
+                    </div>
+                  </label>
+                  <label className="cursor-pointer">
+                    <input
+                      type="radio"
+                      name="multipleLines"
+                      value="no"
+                      checked={!multipleLines}
+                      onChange={() => setMultipleLines(false)}
+                      className="sr-only peer"
+                    />
+                    <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
+                      No
+                    </div>
+                  </label>
+                </div>
+              </fieldset>
+
+              {multipleLines && (
+                <>
+                  <Separator />
+
+                  {/* Category Column */}
+                  <div className="space-y-3">
+                    <div>
+                      <label htmlFor="categoryColumn" className="text-sm font-medium">
+                        Category Column
+                      </label>
+                      <p className="text-xs text-gray-500">
+                        Column to group lines by (e.g., Country, Region)
+                      </p>
+                    </div>
+                    <select
+                      id="categoryColumn"
+                      name="categoryColumn"
+                      value={categoryColumn}
+                      onChange={(e) => {
+                        setCategoryColumn(e.target.value);
+                        setSelectedCategories([]);
+                      }}
+                      className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
+                    >
+                      <option value="">Select a column</option>
+                      {columns.map((column) => (
+                        <option key={column.name} value={column.name}>
+                          {column.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {categoryColumn && availableCategories.length > 0 && (
+                    <>
+                      <Separator />
+
+                      {/* Line Categories */}
+                      <fieldset className="space-y-3">
+                        <legend className="text-sm font-medium">Categories</legend>
+                        <p className="text-xs text-gray-500">
+                          Select which categories to display as lines
+                        </p>
+                        <div className="space-y-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={toggleAllCategories}
+                            className="mb-2"
+                          >
+                            {selectedCategories.length === availableCategories.length
+                              ? "Deselect All"
+                              : "Select All"}
+                          </Button>
+                          <div className="space-y-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                            {availableCategories.map((category) => (
+                              <label
+                                key={category}
+                                className="flex items-center gap-2 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  name="lineCategories"
+                                  value={category}
+                                  checked={selectedCategories.includes(category)}
+                                  onChange={() => toggleCategory(category)}
+                                  className="rounded border-input"
+                                />
+                                <span className="text-sm">{category}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </fieldset>
+                    </>
+                  )}
+
+                  <Separator />
+
+                  {/* Measurement Column */}
+                  <div className="space-y-3">
+                    <div>
+                      <label htmlFor="measurementColumn" className="text-sm font-medium">
+                        Measurement Column
+                      </label>
+                      <p className="text-xs text-gray-500">
+                        The numeric column to measure (e.g., num_unicorns, revenue)
+                      </p>
+                    </div>
+                    <select
+                      id="measurementColumn"
+                      name="measurementColumn"
+                      defaultValue={config?.measurementColumn || ""}
+                      className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
+                    >
+                      <option value="">Select a column</option>
+                      {columns.map((column) => (
+                        <option key={column.name} value={column.name}>
+                          {column.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              <Separator />
+            </>
+          )}
 
           {/* Chart Title */}
           <div className="space-y-3">

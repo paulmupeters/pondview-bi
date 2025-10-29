@@ -3,6 +3,7 @@
 import {
   ClockIcon,
   Database,
+  LayoutGrid,
   PanelLeft,
   Plus,
   PlusIcon,
@@ -44,7 +45,6 @@ function ChatHistoryPopover({ onNavigate }: ChatHistoryPopoverProps) {
     router.push(`/${chatId}`);
     onNavigate?.();
   };
-
 
   return (
     <div className="p-4 w-64 flex flex-col gap-3">
@@ -135,7 +135,16 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
               <ThemeToggle />
             </div>
             <div className="absolute bottom-4 z-50 left-4 flex flex-col gap-2">
-              <Link href="/view-data">
+              <Link href="/dashboards">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 bg-background/80 backdrop-blur-sm border shadow-sm"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Link href="/data">
                 <Button
                   variant="ghost"
                   size="icon"

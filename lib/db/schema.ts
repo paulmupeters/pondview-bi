@@ -31,3 +31,41 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   }),
 }));
 
+
+// Dashboards and Charts
+export const dashboards = sqliteTable("dashboards", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const dashboardCharts = sqliteTable("dashboard_charts", {
+  id: text("id").primaryKey(),
+  dashboardId: text("dashboard_id")
+    .notNull()
+    .references(() => dashboards.id, { onDelete: "cascade" }),
+  title: text("title"),
+  description: text("description"),
+  sql: text("sql").notNull(),
+  dbIdentifier: text("db_identifier"),
+  chartConfigJson: text("chart_config_json").notNull(),
+  position: integer("position").notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const dashboardsRelations = relations(dashboards, ({ many }) => ({
+  charts: many(dashboardCharts),
+}));
+
+export const dashboardChartsRelations = relations(
+  dashboardCharts,
+  ({ one }) => ({
+    dashboard: one(dashboards, {
+      fields: [dashboardCharts.dashboardId],
+      references: [dashboards.id],
+    }),
+  }),
+);
+

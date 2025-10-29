@@ -118,7 +118,7 @@ bi-chat/
 ├── app/                  # Next.js app directory
 │   ├── api/             # API routes
 │   ├── [chatId]/        # Dynamic chat pages
-│   └── view-data/       # Data viewing pages
+│   └── data/       # Data viewing pages
 ├── components/           # React components
 │   ├── ui/              # Reusable UI components
 │   ├── chat.tsx         # Main chat interface

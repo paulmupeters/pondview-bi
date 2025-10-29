@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
+import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { SqlChart } from "@/components/sql-chart";
 import { SqlResultsTable } from "@/components/sql-results-table";
@@ -146,8 +147,47 @@ function StageIndicator({ currentStage, progress = 0 }: StageIndicatorProps) {
 
 export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
   // Subscribe to the active execute-sql artifact for this storeId
-  const sqlData: any = useArtifact(ExecuteSqlArtifact, undefined, storeId);
-  const latestPayload: any | null = sqlData?.data ?? null;
+  const sqlData = useArtifact(ExecuteSqlArtifact, undefined, storeId) as
+    | {
+      data?: {
+        stage?: Stage;
+        progress?: number;
+        query?: string;
+        executionTime?: number;
+        rowCount?: number;
+        columns?: { name: string; type?: string }[];
+        rows?: Result[];
+        visualType?: "table" | "chart";
+        chartConfig?: Config;
+        summary?: {
+          totalRows: number;
+          executionTimeMs?: number;
+          insights: string[];
+          queryType?: string;
+        };
+      };
+    }
+    | undefined;
+  const latestPayload =
+    (sqlData?.data as
+      | {
+        stage?: Stage;
+        progress?: number;
+        query?: string;
+        executionTime?: number;
+        rowCount?: number;
+        columns?: { name: string; type?: string }[];
+        rows?: Result[];
+        visualType?: "table" | "chart";
+        chartConfig?: Config;
+        summary?: {
+          totalRows: number;
+          executionTimeMs?: number;
+          insights: string[];
+          queryType?: string;
+        };
+      }
+      | undefined) ?? null;
   const [activeView, setActiveView] = useState<"table" | "chart">("table");
   const [chartConfig, setChartConfig] = useState<Config | null>(null);
   const [history, setHistory] = useState<
@@ -176,7 +216,6 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
   const [currentIndex, setCurrentIndex] = useState<number>(-1);
   const lastFingerprintRef = useRef<string | null>(null);
   const lastAutoSwitchQueryRef = useRef<string | null>(null);
-
 
   // Append completed payloads to history when a new analysis completes
   useEffect(() => {
@@ -225,6 +264,32 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
 
   const hasHistory = history.length > 0 && currentIndex >= 0;
   const selected = hasHistory ? history[currentIndex] : (latestPayload ?? null);
+
+  const columnsForDialog: { name: string }[] = (
+    selected?.columns ??
+    latestPayload?.columns ??
+    []
+  ).map((c) => ({ name: c.name }));
+
+  const selectedForChart =
+    selected?.stage === "complete"
+      ? {
+        stage: selected.stage,
+        rows: selected.rows ?? [],
+        chartConfig: selected.chartConfig,
+        summary: selected.summary,
+      }
+      : undefined;
+
+  const selectedForTable =
+    selected?.stage === "complete"
+      ? {
+        stage: selected.stage,
+        columns: selected.columns ?? [],
+        rows: (selected.rows as unknown as Record<string, unknown>[]) ?? [],
+        summary: selected.summary,
+      }
+      : undefined;
 
   // Set chart config when it becomes available and auto-switch to chart view once per query
   useEffect(() => {
@@ -339,28 +404,39 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
                 </Button>
               }
               config={chartConfig}
-              columns={selected?.columns ?? latestPayload?.columns}
+              columns={columnsForDialog}
+              rows={selectedForChart?.rows ?? []}
               onConfigChange={setChartConfig}
             />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setActiveView("table")}
-              className="flex items-center gap-2"
-            >
-              <PlusIcon className="w-4 h-4" />
-              Add Chart
-            </Button>
+            {/* {selected?.chartConfig && selected?.query && ( */}
+            <AddToDashboardDialog
+              trigger={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  {/* Add Chart */}
+                </Button>
+                }
+              sql={selected?.query ?? ""}
+              chartConfig={chartConfig ?? selected?.chartConfig ?? { description: "", type: "bar", title: "", xKey: "", yKeys: [], multipleLines: false, legend: false, countMode: false }}
+              defaultTitle={selected?.chartConfig?.title}
+            />
+            {/* )} */}
           </div>
 
           {/* Chart content */}
-          <SqlChart
-            customChartConfig={chartConfig ?? undefined}
-            dataOverride={selected ?? undefined}
-          />
+          {selectedForChart && (
+            <SqlChart
+              customChartConfig={chartConfig ?? undefined}
+              dataOverride={selectedForChart}
+            />
+          )}
         </div>
       ) : (
-          <SqlResultsTable dataOverride={selected ?? undefined} />
+          <SqlResultsTable dataOverride={selectedForTable} />
       )}
     </div>
   );

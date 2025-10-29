@@ -39,6 +39,10 @@ export const configSchema = z
         "For line charts only: key for quantitative y-axis column to measure against (eg. values, counts etc.)"
       )
       .optional(),
+    categoryColumn: z
+      .string()
+      .describe("Column to group lines by (e.g., Country)")
+      .optional(),
     lineCategories: z
       .array(z.string())
       .describe(

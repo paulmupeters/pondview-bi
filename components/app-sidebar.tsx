@@ -2,6 +2,7 @@
 
 import {
   Database,
+  LayoutGrid,
   MessageSquare,
   PanelLeftClose,
   Plus,
@@ -265,7 +266,18 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
 
           {/* Settings Section */}
           <div className="border-t border-border p-3">
-            <Link href="/view-data">
+            <Link href="/dashboards">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent"
+              >
+                <LayoutGrid className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-sidebar-foreground">
+                  Dashboards
+                </span>
+              </button>
+            </Link>
+            <Link href="/data">
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent"
