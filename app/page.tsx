@@ -10,12 +10,10 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { PromptInputWrapper } from "@/components/prompt-input-wrapper";
-import { useConnectedTables } from "@/hooks/use-connected-tables";
 
 export default function Home() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
-  const connections = useConnectedTables();
 
   const handleSubmit = (message: PromptInputMessage) => {
     const value = message.text?.trim();
@@ -128,46 +126,6 @@ export default function Home() {
             </p>
           </button>
         </div>
-
-        {connections.length > 0 && (
-          <div className="mt-10">
-            <h2 className="text-xl font-semibold text-foreground mb-3">
-              Connected Data
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {connections.map((entry, idx) => (
-                <div
-                  key={`${entry.type}-${entry.databasePath}-${entry.schema ?? entry.table ?? idx}`}
-                  className="rounded-xl border border-border p-4 bg-card"
-                >
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                      {entry.type.toUpperCase()}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {entry.databasePath}
-                    </span>
-                  </div>
-                  <div className="text-sm font-medium text-foreground">
-                    {entry.schema ?? entry.table ?? "Unknown"}
-                  </div>
-                  {Array.isArray(entry.tables) && entry.tables.length > 0 && (
-                    <ul className="mt-2 text-xs text-muted-foreground list-disc list-inside space-y-0.5">
-                      {entry.tables.map((t) => (
-                        <li key={t}>{t}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {entry.description && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {entry.description}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

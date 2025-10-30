@@ -6,11 +6,13 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import * as Dialog from "@radix-ui/react-dialog";
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSchemas, getTablesForSchema } from "@/actions/queries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { appendConnectedTable } from "@/lib/connected-tables";
+import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 
 type DatabaseType = "duckdb" | "postgres" | "mysql" | null;
@@ -55,6 +57,8 @@ export function ConnectDataDialog({
   initialSelectedDatabase,
   initialDatabasePath,
 }: ConnectDataDialogProps) {
+  const { theme } = useTheme();
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [selectedDatabase, setSelectedDatabase] = useState<DatabaseType>(null);
   const [databasePath, setDatabasePath] = useState("");
   const [schemas, setSchemas] = useState<string[]>([]);
@@ -95,6 +99,43 @@ export function ConnectDataDialog({
       }
     }
   }, [open, initialSelectedDatabase, initialDatabasePath]);
+
+  // Theme detection for logo selection
+  useEffect(() => {
+    const updateDarkMode = () => {
+      if (theme === "dark") {
+        setIsDarkMode(true);
+      } else if (theme === "light") {
+        setIsDarkMode(false);
+      } else {
+        // system theme
+        setIsDarkMode(
+          window.matchMedia("(prefers-color-scheme: dark)").matches,
+        );
+      }
+    };
+
+    updateDarkMode();
+
+    if (theme === "system") {
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const handleChange = () => updateDarkMode();
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
+  }, [theme]);
+
+  const getDatabaseLogo = (dbType: string): string | null => {
+    if (dbType === "duckdb") {
+      return isDarkMode
+        ? "/DuckDB_icon-darkmode.svg"
+        : "/DuckDB_icon-lightmode.svg";
+    }
+    if (dbType === "postgres") {
+      return "/Postgresql_elephant.png";
+    }
+    return null;
+  };
 
   const handleConnectClick = useCallback(async () => {
     if (!databasePath.trim()) {
@@ -212,7 +253,7 @@ export function ConnectDataDialog({
                         }}
                         disabled={option.disabled}
                         className={cn(
-                          "flex h-full flex-col items-start gap-1 rounded-xl border px-4 py-3 text-left transition",
+                          "flex h-full flex-col items-start gap-2 rounded-xl border px-4 py-3 text-left transition",
                           option.disabled
                             ? "cursor-not-allowed border-border/60 bg-muted/30 text-muted-foreground"
                             : "hover:border-primary hover:bg-primary/5",
@@ -221,9 +262,23 @@ export function ConnectDataDialog({
                             : "border-border",
                         )}
                       >
-                        <span className="text-sm font-medium">
-                          {option.label}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const logoPath = getDatabaseLogo(option.value);
+                            return logoPath ? (
+                              <Image
+                                src={logoPath}
+                                alt={option.label}
+                                width={20}
+                                height={20}
+                                className="shrink-0"
+                              />
+                            ) : null;
+                          })()}
+                          <span className="text-sm font-medium">
+                            {option.label}
+                          </span>
+                        </div>
                         <span className="text-xs text-muted-foreground">
                           {option.disabled
                             ? (option.description ?? "Unavailable")

@@ -212,18 +212,18 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                       <Link
                         href={`/${chat.id}`}
                         className={cn(
-                          "flex w-full flex-col items-start gap-1 rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent",
+                          "flex w-full flex-col items-start gap-1 group rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                           activeChatId === chat.id &&
                           "border-2 border-accent/40 bg-sidebar-accent",
                         )}
                       >
                         <div className="flex items-center gap-2">
                           <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm font-medium text-sidebar-foreground line-clamp-1">
+                          <span className={cn("text-sm font-medium text-sidebar-foreground line-clamp-1 group-hover:text-sidebar-accent-foreground", activeChatId === chat.id && "text-sidebar-accent-foreground")}>
                             {chat.title || chat.id}
                           </span>
                         </div>
-                        <span className="pl-6 text-xs text-muted-foreground">
+                        <span className={cn("pl-6 text-xs text-muted-foreground", activeChatId === chat.id && "text-sidebar-accent-foreground")}>
                           {formatDate(chat.updatedAt)}
                         </span>
                       </Link>

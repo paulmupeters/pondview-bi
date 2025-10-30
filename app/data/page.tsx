@@ -1,7 +1,8 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import DataModelEditor from "@/components/data-model-editor";
 import { Button } from "@/components/ui/button";
@@ -10,9 +11,12 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import type { ConnectedTable } from "@/lib/connected-tables";
+import { useTheme } from "@/lib/theme-provider";
 
 export default function ViewDataPage() {
   const tables = useConnectedTables();
+  const { theme } = useTheme();
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const hasTables = tables.length > 0;
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(
     new Set(),
@@ -22,6 +26,30 @@ export default function ViewDataPage() {
     "duckdb" | "postgres" | "mysql" | null
   >(null);
   const [prefillDbPath, setPrefillDbPath] = useState("");
+
+  useEffect(() => {
+    const updateDarkMode = () => {
+      if (theme === "dark") {
+        setIsDarkMode(true);
+      } else if (theme === "light") {
+        setIsDarkMode(false);
+      } else {
+        // system theme
+        setIsDarkMode(
+          window.matchMedia("(prefers-color-scheme: dark)").matches,
+        );
+      }
+    };
+
+    updateDarkMode();
+
+    if (theme === "system") {
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const handleChange = () => updateDarkMode();
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
+  }, [theme]);
   const databaseEntries = useMemo(() => {
     const grouped = new Map<
       string,
@@ -78,6 +106,18 @@ export default function ViewDataPage() {
 
   const getEntryKey = (table: ConnectedTable) => {
     return `${table.type}-${table.databasePath}-${table.schema ?? table.table ?? "unknown"}`;
+  };
+
+  const getDatabaseLogo = (dbType: string): string | null => {
+    if (dbType === "duckdb") {
+      return isDarkMode
+        ? "/DuckDB_icon-darkmode.svg"
+        : "/DuckDB_icon-lightmode.svg";
+    }
+    if (dbType === "postgres") {
+      return "/Postgresql_elephant.png";
+    }
+    return null;
   };
 
   return (
@@ -159,9 +199,22 @@ export default function ViewDataPage() {
                       >
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center gap-3">
-                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                              {normalizedType}
-                            </span>
+                            {(() => {
+                              const logoPath = getDatabaseLogo(database.type);
+                              return logoPath ? (
+                                <Image
+                                  src={logoPath}
+                                  alt={normalizedType}
+                                  width={24}
+                                  height={24}
+                                  className="shrink-0"
+                                />
+                              ) : (
+                                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                    {normalizedType}
+                                  </span>
+                              );
+                            })()}
                             <span className="truncate text-sm font-semibold text-foreground">
                               {database.dbPath}
                             </span>

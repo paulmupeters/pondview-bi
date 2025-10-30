@@ -14,11 +14,12 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Settings, Trash2 } from "lucide-react";
+import { GripVertical, Plus, Settings, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { DynamicChart } from "@/components/dynamic-chart";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CardConfig, Config, Result } from "@/lib/types";
 
@@ -83,7 +84,7 @@ function SortableChartCard({
       style={style}
       className="group relative flex flex-col rounded-xl bg-card p-4 md:p-2"
     >
-      <div className="absolute left-2 top-2 flex items-center gap-1">
+      <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         <button
           type="button"
           aria-label="Reorder chart"
@@ -342,7 +343,13 @@ export default function DashboardDetailPage() {
 
   return (
     <div className="mx-auto flex h-full w-full flex-col gap-1 overflow-y-auto px-6 md:px-12 lg:px-18 pt-2 pb-6 md:pb-10">
-      <h1 className="text-2xl font-semibold">{dashboard.title}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">{dashboard.title}</h1>
+        <Button variant="outline" size="default">
+          <Plus className="h-4 w-4" />
+          Add Filter
+        </Button>
+      </div>
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <SortableContext
           items={charts.map((c) => c.id)}

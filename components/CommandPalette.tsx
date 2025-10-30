@@ -137,17 +137,17 @@ export function CommandPalette() {
       <DialogContent className="p-0 gap-0 max-w-md">
         <DialogTitle className="sr-only">Command Menu</DialogTitle>
         <Command label="Global Command Menu" shouldFilter={false}>
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="p-4 border-b border-border">
             <Command.Input
               value={search}
               onValueChange={setSearch}
               placeholder="Type a command or search..."
-              className="w-full px-3 py-2 text-sm bg-transparent border-none outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400"
+              className="w-full px-3 py-2 text-sm bg-transparent border-none outline-none placeholder:text-muted-foreground"
             />
           </div>
 
           <Command.List className="max-h-76 overflow-y-auto p-2">
-            <Command.Empty className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+            <Command.Empty className="px-3 py-2 text-sm text-muted-foreground">
               No results found.
             </Command.Empty>
 
@@ -165,7 +165,7 @@ export function CommandPalette() {
                     setOpen(false);
                     setSearch("");
                   }}
-                  className="px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 aria-selected:bg-gray-100 dark:aria-selected:bg-gray-700 data-[selected=true]:bg-gray-100 dark:data-[selected=true]:bg-gray-700 aria-selected:text-gray-900 dark:aria-selected:text-gray-100 flex items-center justify-between transition-colors"
+                  className="px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-muted aria-selected:bg-muted data-[selected=true]:bg-muted aria-selected:text-foreground flex items-center justify-between transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     {command.icon}
@@ -176,7 +176,7 @@ export function CommandPalette() {
                       {command.shortcut.map((key) => (
                         <kbd
                           key={key}
-                          className="px-1.5 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 rounded"
+                          className="px-1.5 py-0.5 text-xs bg-muted rounded"
                         >
                           {key}
                         </kbd>
