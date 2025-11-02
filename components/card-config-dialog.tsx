@@ -9,6 +9,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import type { CardConfig } from "@/lib/types";
@@ -17,12 +22,14 @@ interface CardConfigDialogProps {
   trigger: React.ReactNode;
   config: CardConfig | null;
   onConfigChange: (config: CardConfig) => void;
+  tooltip?: string;
 }
 
 export function CardConfigDialog({
   trigger,
   config,
   onConfigChange,
+  tooltip,
 }: CardConfigDialogProps) {
   const [open, setOpen] = useState(false);
 
@@ -42,7 +49,18 @@ export function CardConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {tooltip ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>{trigger}</DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+      )}
       <DialogContent className="max-w-xl bg-card">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

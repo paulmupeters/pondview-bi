@@ -15,6 +15,7 @@ import { appendConnectedTable } from "@/lib/connected-tables";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 
+
 type DatabaseType = "duckdb" | "postgres" | "mysql" | null;
 
 const DATABASE_OPTIONS: Array<{

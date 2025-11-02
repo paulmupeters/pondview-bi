@@ -1,18 +1,24 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { runSqlAndGetRowObjectsJson } from "@/lib/duckdb/duckdb-node";
+import { runSqlNormalized } from "@/lib/db/router";
+import type { Result } from "@/lib/types";
 
 export const getTableSchemaTool = tool({
-  description: "Get the schema of a table, including column names and types",
+  description:
+    "Get the schema of a table, including column names, types and sample data",
   inputSchema: z.object({
     table: z.string().describe("The table name to get schema for"),
+    databasePath: z
+      .string()
+      .describe("Database identifier/path to query (e.g. md:my_db)")
+      .default("md:my_db"),
   }),
-  execute: async ({ table }) => {
-    const sql = `DESCRIBE ${table}`;
+  execute: async ({ table, databasePath }) => {
+    const describeSql = `DESCRIBE ${table}`;
 
-    const results = (await runSqlAndGetRowObjectsJson(
-      `md:my_db?motherduck_token=${process.env.MOTHERDUCK_TOKEN}`,
-      sql
+    const schemaRows = (await runSqlNormalized(
+      databasePath,
+      describeSql
     )) as Array<{
       column_name: string;
       column_type: string;
@@ -22,9 +28,22 @@ export const getTableSchemaTool = tool({
       extra: string | null;
     }>;
 
+    let sampleRows: Result[] = [];
+    try {
+      sampleRows = await runSqlNormalized(
+        databasePath,
+        `SELECT * FROM ${table} LIMIT 5`
+      );
+    } catch (error) {
+      console.warn(
+        `[getTableSchemaTool] Failed to fetch sample rows for ${table}:`,
+        error
+      );
+    }
+
     return {
       table,
-      columns: results.map((col) => ({
+      columns: schemaRows.map((col) => ({
         name: col.column_name,
         type: col.column_type,
         nullable: col.null === "YES",
@@ -32,6 +51,7 @@ export const getTableSchemaTool = tool({
         default: col.default,
         extra: col.extra,
       })),
+      sampleRows,
     };
   },
 });

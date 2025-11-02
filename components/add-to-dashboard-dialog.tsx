@@ -9,6 +9,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import type { CardConfig, Config } from "@/lib/types";
@@ -21,12 +26,14 @@ export function AddToDashboardDialog({
   chartConfig,
   cardConfig,
   defaultTitle,
+  tooltip,
 }: {
   trigger: React.ReactNode;
   sql: string;
   chartConfig?: Config;
   cardConfig?: CardConfig;
   defaultTitle?: string;
+  tooltip?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [dashboards, setDashboards] = useState<DashboardLite[]>([]);
@@ -96,7 +103,18 @@ export function AddToDashboardDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {tooltip ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>{trigger}</DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+      )}
       <DialogContent className="max-w-xl bg-card">
         <DialogHeader>
           <DialogTitle>Add to Dashboard</DialogTitle>
@@ -104,7 +122,7 @@ export function AddToDashboardDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Select dashboard</label>
+            <label htmlFor="dashboard-select" className="text-sm font-medium">Select dashboard</label>
             <select
               className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
               value={selectedDashboardId}
@@ -121,8 +139,9 @@ export function AddToDashboardDialog({
 
           {selectedDashboardId === "new" && (
             <div className="space-y-2">
-              <label className="text-sm font-medium">New dashboard title</label>
+              <label htmlFor="new-dashboard-title" className="text-sm font-medium">New dashboard title</label>
               <Input
+                id="new-dashboard-title"
                 value={newDashboardTitle}
                 onChange={(e) => setNewDashboardTitle(e.target.value)}
                 placeholder="e.g. Sales KPIs"
@@ -133,8 +152,9 @@ export function AddToDashboardDialog({
           <Separator />
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">{cardConfig ? "Card" : "Chart"} title</label>
+            <label htmlFor="chart-title" className="text-sm font-medium">{cardConfig ? "Card" : "Chart"} title</label>
             <Input
+              id="chart-title"
               value={chartTitle}
               onChange={(e) => setChartTitle(e.target.value)}
               placeholder={cardConfig ? "e.g. Total Revenue" : "e.g. Revenue by Month"}
@@ -142,8 +162,9 @@ export function AddToDashboardDialog({
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">{cardConfig ? "Card" : "Chart"} description (optional)</label>
+            <label htmlFor="chart-description" className="text-sm font-medium">{cardConfig ? "Card" : "Chart"} description (optional)</label>
             <Input
+              id="chart-description"
               value={chartDescription}
               onChange={(e) => setChartDescription(e.target.value)}
               placeholder="Short description"

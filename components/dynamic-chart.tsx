@@ -97,9 +97,6 @@ export function DynamicChart({
           chartConfig.multipleLines &&
           chartConfig.measurementColumn &&
           chartConfig.yKeys.includes(chartConfig.measurementColumn);
-        console.log("Chart config:", chartConfig);
-        console.log("Use transformed data:", useTransformedData);
-        console.log("Line fields:", lineFields);
         return (
           <LineChart data={useTransformedData ? data : chartData}>
             <CartesianGrid strokeDasharray="3 3" />

@@ -4,7 +4,7 @@ import { useChat } from "@ai-sdk-tools/store";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import {
   Conversation,
@@ -15,12 +15,21 @@ import { Message, MessageContent } from "@/components/ai-elements/message";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Response } from "@/components/ai-elements/response";
 import { PromptInputWrapper } from "@/components/prompt-input-wrapper";
-import { SqlAnalysisPanel } from "@/components/sql-analysis-panel";
+import {
+  type SqlAnalysisData,
+  SqlAnalysisDisplay,
+  type SqlAnalysisStage,
+} from "@/components/sql-analysis-display";
+import type { ArtifactStatus } from "@/hooks/types";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
+
+const AUTO_SENT_FLAG_PREFIX = "autoSent:";
+const AUTO_SENT_STALE_MS = 5 * 60 * 1000;
+const AUTO_SENT_CLEANUP_DELAY_MS = 3_000;
 
 export default function Chat({
   chatId,
@@ -71,32 +80,8 @@ export default function Chat({
   });
   const [autoSentFromQuery, setAutoSentFromQuery] = useState(false);
   const [animationFrame, setAnimationFrame] = useState("");
-
-  const [rightPanelWidth, setRightPanelWidth] = useState(67); // percentage - 2/3 of screen
-  const [isResizing, setIsResizing] = useState(false);
   const [verbAiIsThinking, setVerbAiIsThinking] = useState("is thinking");
-
-  const handleMouseDown = useCallback(() => {
-    setIsResizing(true);
-  }, []);
-
-  const handleMouseMove = useCallback(
-    (e: Event) => {
-      if (!isResizing) return;
-      const mouseEvent = e as MouseEvent;
-      const container = document.querySelector(".chat-container");
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const newWidth = ((rect.right - mouseEvent.clientX) / rect.width) * 100;
-      const clampedWidth = Math.max(20, Math.min(80, newWidth));
-      setRightPanelWidth(clampedWidth);
-    },
-    [isResizing],
-  );
-
-  const handleMouseUp = useCallback(() => {
-    setIsResizing(false);
-  }, []);
+  const executeSqlArtifactType = `data-artifact-${ExecuteSqlArtifact.id}`;
 
   const handleSubmit = (message: PromptInputMessage) => {
     const hasText = Boolean(message.text);
@@ -109,36 +94,108 @@ export default function Chat({
     });
   };
 
+  // Cleanup any stale auto-send markers that may be leftover from previous sessions
   useEffect(() => {
-    if (isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      return () => {
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
-      };
+    if (typeof window === "undefined") {
+      return;
     }
-  }, [isResizing, handleMouseMove, handleMouseUp]);
+
+    const now = Date.now();
+    const keysToRemove: string[] = [];
+
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (!key?.startsWith(AUTO_SENT_FLAG_PREFIX)) {
+        continue;
+      }
+
+      const rawValue = window.localStorage.getItem(key);
+      if (!rawValue) {
+        keysToRemove.push(key);
+        continue;
+      }
+
+      try {
+        const parsed = JSON.parse(rawValue) as { timestamp?: number };
+        if (
+          typeof parsed.timestamp !== "number" ||
+          now - parsed.timestamp > AUTO_SENT_STALE_MS
+        ) {
+          keysToRemove.push(key);
+        }
+      } catch {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach((key) => {
+      window.localStorage.removeItem(key);
+    });
+  }, []);
 
   // Auto-send initial message from ?q= when opening a fresh chat URL
   useEffect(() => {
     const q = searchParams?.get("q") || "";
     if (q.trim().length > 0 && !autoSentFromQuery) {
       if (typeof window === "undefined") return;
-      const flagKey = `autoSent:${chatId}`;
-      if (window.localStorage.getItem(flagKey)) {
-        setAutoSentFromQuery(true);
-        return;
+      const sanitizedQuery = q.trim();
+      const flagKey = `${AUTO_SENT_FLAG_PREFIX}${chatId}`;
+      const rawFlagValue = window.localStorage.getItem(flagKey);
+
+      if (rawFlagValue) {
+        const now = Date.now();
+        let shouldSkipAutoSend = false;
+
+        try {
+          const parsed = JSON.parse(rawFlagValue) as { timestamp?: number };
+          if (
+            typeof parsed.timestamp === "number" &&
+            now - parsed.timestamp <= AUTO_SENT_STALE_MS
+          ) {
+            shouldSkipAutoSend = true;
+          } else {
+            window.localStorage.removeItem(flagKey);
+          }
+        } catch {
+          window.localStorage.removeItem(flagKey);
+        }
+
+        if (shouldSkipAutoSend) {
+          setAutoSentFromQuery(true);
+          return;
+        }
       }
-      if (q.trim().length > 0) {
-        // Drop the query param to avoid duplicate sends on remounts
-        router.replace(`/${chatId}`);
-        window.localStorage.setItem(flagKey, "1");
-        setAutoSentFromQuery(true);
-        sendMessage({ text: q });
-      }
+
+      // Drop the query param to avoid duplicate sends on remounts
+      router.replace(`/${chatId}`);
+      window.localStorage.setItem(
+        flagKey,
+        JSON.stringify({ timestamp: Date.now() }),
+      );
+      setAutoSentFromQuery(true);
+      sendMessage({ text: sanitizedQuery });
     }
   }, [chatId, searchParams, autoSentFromQuery, router, sendMessage]);
+
+  // Remove the auto-send marker after it served its purpose to avoid storage build-up
+  useEffect(() => {
+    if (!autoSentFromQuery || typeof window === "undefined") {
+      return;
+    }
+
+    const flagKey = `${AUTO_SENT_FLAG_PREFIX}${chatId}`;
+    const timeoutId = window.setTimeout(() => {
+      try {
+        window.localStorage.removeItem(flagKey);
+      } catch {
+        // no-op
+      }
+    }, AUTO_SENT_CLEANUP_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [autoSentFromQuery, chatId]);
 
   // Animation effect for streaming status
   useEffect(() => {
@@ -157,150 +214,152 @@ export default function Chat({
     setVerbAiIsThinking(getRandomVerbAiIsThinking());
   }, []);
 
-  // Derive whether we have any SQL artifact from chat messages (more stable than artifacts store)
-  const hasSqlData = useMemo(() => {
-    return messages.some((m) =>
-      Array.isArray(m.parts)
-        ? m.parts.some(
-          // parts emitted by executeSqlTool
-          (p: any) => p?.type === `data-artifact-${ExecuteSqlArtifact.id}`,
-        )
-        : false,
-    );
-  }, [messages]);
+  const isConversationEmpty = messages.length === 0;
 
-  // Determine the latest execute-sql artifact id from messages to force remount on new analyses
-  const latestArtifactId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const parts = (messages[i]?.parts as any[]) || [];
-      for (let j = parts.length - 1; j >= 0; j--) {
-        const p: any = parts[j];
-        if (p?.type === `data-artifact-${ExecuteSqlArtifact.id}`) {
-          return p?.data?.id ?? p?.id ?? null;
-        }
-      }
-    }
-    return null;
-  }, [messages]);
 
   return (
     <>
       <div
-        className={`chat-container h-screen flex ${hasSqlData ? "flex-row" : "flex-col items-center justify-center"
+        className={`chat-container flex h-screen ${isConversationEmpty
+          ? "flex-col items-center justify-center"
+          : "flex-col"
         }`}
       >
-        {/* Left Panel - Chat */}
-        <div
-          className={`${hasSqlData ? "" : "w-full"} flex flex-col h-full`}
-          style={hasSqlData ? { width: `${100 - rightPanelWidth}%` } : {}}
-        >
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-8 space-y-6 flex flex-col items-start mx-auto bg-background">
-            <Conversation>
-              <ConversationContent>
-                {messages.length === 0 && !hasSqlData && (
-                  <Message from="assistant" key="assistant-ready">
-                    <MessageContent>
-                      <Response key="assistant-ready-response">
-                        Ready to help...
-                      </Response>
-                    </MessageContent>
-                  </Message>
-                )}
+        <div className="flex h-full w-full flex-col">
+          <div className="flex-1 overflow-y-auto bg-background">
+            <div className="mx-auto flex h-full w-full flex-col space-y-6">
+              <Conversation>
+                <ConversationContent className="max-w-6xl mx-auto w-full">
+                  {isConversationEmpty && (
+                    <Message from="assistant" key="assistant-ready">
+                      <MessageContent>
+                        <Response key="assistant-ready-response">
+                          Ready to help...
+                        </Response>
+                      </MessageContent>
+                    </Message>
+                  )}
 
-                {messages.map((message) => (
-                  <Message from={message.role} key={message.id}>
-                    <MessageContent>
-                      {message.parts.map((part, partIndex) => {
-                        if (part.type === "text") {
-                          return (
-                            <Response key={`${message.id}-part-${partIndex}`}>
-                              {part.text}
-                            </Response>
-                          );
-                        } else if (part.type === "tool-getTableSchema")
-                          return (
-                            <span key={`${message.id}-part-${partIndex}`}>
-                              Getting table schema
-                            </span>
-                          );
-                        else if (part.type === "tool-generateChartConfig")
-                          return (
-                            <span key={`${message.id}-part-${partIndex}`}>
-                              Generating chart config...{animationFrame}
-                            </span>
-                          );
-                        else if (part.type === "tool-executeSql")
-                          return (
-                            <span key={`${message.id}-part-${partIndex}`}>
-                              Processing...
-                            </span>
-                          );
-                        return null;
-                      })}
-                    </MessageContent>
-                  </Message>
-                ))}
-                {status === "submitted" && (
-                  <span key="assistant-submitted-div">{animationFrame}</span>
-                )}
-                {status === "streaming" && (
-                  <span key="assistant-streaming-div">
-                    {animationFrame} {verbAiIsThinking}
-                  </span>
-                )}
-              </ConversationContent>
-              <ConversationScrollButton />
-            </Conversation>
+                  {messages.map((message) => (
+                    <Message from={message.role} key={message.id}>
+                      <MessageContent className="w-full">
+                        {message.parts?.map((part, partIndex) => {
+                          if (part.type === "text") {
+                            return (
+                              <Response key={`${message.id}-part-${partIndex}`}>
+                                {part.text}
+                              </Response>
+                            );
+                          }
+
+                          if (part.type === executeSqlArtifactType) {
+                            const artifactPart = part as {
+                              data?: {
+                                status?: ArtifactStatus;
+                                progress?: number;
+                                error?: string;
+                                payload?: SqlAnalysisData;
+                              };
+                            };
+                            const artifactData = artifactPart.data;
+
+                            if (!artifactData) {
+                              return null;
+                            }
+
+                            if (artifactData.status === "error") {
+                              return (
+                                <div
+                                  key={`${message.id}-part-${partIndex}`}
+                                  className="mt-4 max-w-3xl text-sm text-red-500"
+                                >
+                                  {artifactData.error ?? "SQL analysis failed."}
+                                </div>
+                              );
+                            }
+
+                            const payload = (artifactData.payload ??
+                              null) as SqlAnalysisData | null;
+                            const artifactStatus = artifactData.status;
+                            const derivedStage = (payload?.stage ??
+                              (artifactStatus === "complete"
+                                ? "complete"
+                                : "loading")) as SqlAnalysisStage;
+                            const progressValue =
+                              typeof artifactData.progress === "number"
+                                ? artifactData.progress
+                                : (payload?.progress ?? 0);
+
+                            const shouldShowStageIndicator =
+                              artifactStatus !== "complete" &&
+                              derivedStage !== "complete";
+
+                            return (
+                              <div
+                                key={`${message.id}-part-${partIndex}`}
+                                className="mt-4 w-full"
+                              >
+                                <SqlAnalysisDisplay
+                                  data={payload}
+                                  stage={derivedStage}
+                                  progress={progressValue}
+                                  showStageIndicator={shouldShowStageIndicator}
+                                  className="max-w-3xl w-full"
+                                />
+                              </div>
+                            );
+                          }
+
+                          if (part.type === "tool-getTableSchema") {
+                            return (
+                              <span key={`${message.id}-part-${partIndex}`}>
+                                Getting table schema
+                              </span>
+                            );
+                          }
+
+                          if (part.type === "tool-generateChartConfig") {
+                            return (
+                              <span key={`${message.id}-part-${partIndex}`}>
+                                Generating chart config...{animationFrame}
+                              </span>
+                            );
+                          }
+
+                          if (part.type === "tool-executeSql") {
+                            return (
+                              <span key={`${message.id}-part-${partIndex}`}>
+                                Processing...
+                              </span>
+                            );
+                          }
+
+                          return null;
+                        })}
+                      </MessageContent>
+                    </Message>
+                  ))}
+                  {status === "submitted" && (
+                    <span key="assistant-submitted-div">{animationFrame}</span>
+                  )}
+                  {status === "streaming" && (
+                    <span key="assistant-streaming-div">
+                      {animationFrame} {verbAiIsThinking}
+                    </span>
+                  )}
+                </ConversationContent>
+                <ConversationScrollButton />
+              </Conversation>
+            </div>
           </div>
-          {/* Input Form */}
-          <div className="p-4 border-t border-border mx-12 mb-8">
+          <div className="p-1 max-w-6xl w-full mx-auto">
             <PromptInputWrapper
               onSubmit={handleSubmit}
-              className="mt-4"
+              className=""
               status={status}
             />
           </div>
         </div>
-
-        {/* Right Panel - Analysis */}
-        {hasSqlData && (
-          // biome-ignore lint/a11y/noStaticElementInteractions: needed for resizing
-          <div
-            className="w-2 cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors"
-            onMouseDown={handleMouseDown}
-          />
-        )}
-        {hasSqlData && (
-          <div
-            className="border-l border-border flex flex-col h-full"
-            style={{ width: `${rightPanelWidth}%` }}
-          >
-            {/* Analysis Header */}
-            <div className="flex items-center justify-between p-0 mx-2">
-              <h2 className="text-md font-semibold text-foreground ml-1">
-                Analysis
-              </h2>
-            </div>
-
-            {/* Analysis Content */}
-            <div className="flex-1 overflow-y-auto">
-              {hasSqlData ? (
-                <SqlAnalysisPanel
-                  key={latestArtifactId ?? "none"}
-                  storeId={chatId}
-                />
-                // <div>SqlAnalysisPanel</div>
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center">
-                    <p className="text-gray-500">No analysis data available</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
       {/* <AIDevtools /> */}
     </>

@@ -17,6 +17,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, Settings, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
+import { CardConfigDialog } from "@/components/card-config-dialog";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { DynamicChart } from "@/components/dynamic-chart";
 import { Button } from "@/components/ui/button";
@@ -131,6 +132,23 @@ function SortableChartCard({
         </div>
       ) : config && rows.length > 0 && isCardConfig(config) ? (
         <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <CardConfigDialog
+            trigger={
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Configure card"
+                title="Configure card"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            }
+            config={config as CardConfig}
+            onConfigChange={async (newConfig) => {
+              const newJson = JSON.stringify(newConfig);
+              await onConfigChange(newJson);
+            }}
+          />
           <button
             type="button"
             onClick={onDelete}

@@ -2,7 +2,7 @@
 
 import { ChevronDown } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import DataModelEditor from "@/components/data-model-editor";
 import { Button } from "@/components/ui/button";
@@ -10,14 +10,22 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
+import { useUploadedFiles } from "@/hooks/use-uploaded-files";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { useTheme } from "@/lib/theme-provider";
+import {
+  appendUploadedFile,
+  formatFileSize,
+  removeUploadedFile,
+} from "@/lib/uploaded-files";
 
 export default function ViewDataPage() {
   const tables = useConnectedTables();
+  const uploadedFiles = useUploadedFiles();
   const { theme } = useTheme();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const hasTables = tables.length > 0;
+  const hasUploadedFiles = uploadedFiles.length > 0;
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(
     new Set(),
   );
@@ -26,6 +34,10 @@ export default function ViewDataPage() {
     "duckdb" | "postgres" | "mysql" | null
   >(null);
   const [prefillDbPath, setPrefillDbPath] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const updateDarkMode = () => {
@@ -121,8 +133,8 @@ export default function ViewDataPage() {
   };
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-8 overflow-y-auto px-6 py-10">
-      <header className="flex flex-row items-center justify-between space-y-3">
+    <div className="mx-auto flex h-full w-full flex-col gap-8 overflow-y-auto px-6 py-10">
+      <header className="flex flex-row items-center justify-between space-y-3 max-w-5xl mx-auto">
         <div className="">
           <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Data Sources
@@ -136,196 +148,334 @@ export default function ViewDataPage() {
             visible to you.
           </p>
         </div>
-        <Button
-          type="button"
-          onClick={() => {
-            setPrefillDbType(null);
-            setPrefillDbPath("");
-            setIsConnectDialogOpen(true);
-          }}
-        >
-          Connect Data Source
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+          >
+            {isUploading ? (
+              <>
+                <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin mr-2" />
+                Uploading...
+              </>
+            ) : (
+              "Upload Data"
+            )}
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              setPrefillDbType(null);
+              setPrefillDbPath("");
+              setIsConnectDialogOpen(true);
+            }}
+          >
+            Connect Data Source
+          </Button>
+        </div>
       </header>
-      <Separator />
+      <Separator className="max-w-5xl mx-auto" />
 
-      <Tabs defaultValue="sources" className="flex-1">
+      <Tabs defaultValue="sources" className="flex-1 max-w-5xl mx-auto w-full">
         <TabsList>
           <TabsTrigger value="sources">Sources</TabsTrigger>
-          <TabsTrigger value="datasets">Datasets</TabsTrigger>
           <TabsTrigger value="model">Data model</TabsTrigger>
+          <TabsTrigger value="datasets">Datasets</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="sources" className="mt-4">
-          {!hasTables ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-border/60 bg-muted/30 p-10 text-center">
-              <div className="space-y-2">
-                <h2 className="text-lg font-medium text-foreground">
-                  No connected data yet
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Connect to a DuckDB database and add schemas using the
-                  sidebar&apos;s Connect Data action.
-                </p>
-              </div>
-              <Button asChild>
-                <button
-                  type="button"
-                  onClick={() => setIsConnectDialogOpen(true)}
-                >
-                  Connect Data Source
-                </button>
-              </Button>
+        <TabsContent value="sources" className="mt-4 space-y-10 max-w-5xl mx-auto">
+          <section className="space-y-4">
+            <div className="space-y-1">
+              <h2 className="text-base font-semibold text-foreground">
+                Connected Databases
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Databases you&apos;ve connected directly from your local
+                environment.
+              </p>
             </div>
-          ) : (
-            <div className="space-y-6">
-              <div className="grid gap-4">
-                {databaseEntries.map((database) => {
-                  const normalizedType = database.type
-                    ? database.type.toUpperCase()
-                    : "UNKNOWN";
-                  const isExpanded = expandedDatabases.has(database.dbPath);
+            {!hasTables ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-border/60 bg-muted/30 p-10 text-center">
+                <div className="space-y-2">
+                  <h3 className="text-lg font-medium text-foreground">
+                    No connected data yet
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Connect to a DuckDB database and add schemas using the
+                    sidebar&apos;s Connect Data action.
+                  </p>
+                </div>
+                <Button asChild>
+                  <button
+                    type="button"
+                    onClick={() => setIsConnectDialogOpen(true)}
+                  >
+                    Connect Data Source
+                  </button>
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="grid gap-4">
+                  {databaseEntries.map((database) => {
+                    const normalizedType = database.type
+                      ? database.type.toUpperCase()
+                      : "UNKNOWN";
+                    const isExpanded = expandedDatabases.has(database.dbPath);
 
-                  return (
-                    <Card
-                      key={database.dbPath}
-                      className="gap-0 rounded-2xl border border-border/60 bg-card/60 py-0 shadow-sm"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggleDatabase(database.dbPath)}
-                        className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                        aria-expanded={isExpanded}
+                    return (
+                      <Card
+                        key={database.dbPath}
+                        className="gap-0 rounded-2xl border border-border/60 bg-card/60 py-0 shadow-sm"
                       >
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center gap-3">
-                            {(() => {
-                              const logoPath = getDatabaseLogo(database.type);
-                              return logoPath ? (
-                                <Image
-                                  src={logoPath}
-                                  alt={normalizedType}
-                                  width={24}
-                                  height={24}
-                                  className="shrink-0"
-                                />
-                              ) : (
+                        <button
+                          type="button"
+                          onClick={() => toggleDatabase(database.dbPath)}
+                          className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                          aria-expanded={isExpanded}
+                        >
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-3">
+                              {(() => {
+                                const logoPath = getDatabaseLogo(database.type);
+                                return logoPath ? (
+                                  <Image
+                                    src={logoPath}
+                                    alt={normalizedType}
+                                    width={24}
+                                    height={24}
+                                    className="shrink-0"
+                                  />
+                                ) : (
                                   <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                                     {normalizedType}
                                   </span>
-                              );
-                            })()}
-                            <span className="truncate text-sm font-semibold text-foreground">
-                              {database.dbPath}
+                                );
+                              })()}
+                              <span className="truncate text-sm font-semibold text-foreground">
+                                {database.dbPath}
+                              </span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {database.totalTables}{" "}
+                              {database.totalTables === 1 ? "table" : "tables"}{" "}
+                              saved
                             </span>
                           </div>
-                          <span className="text-xs text-muted-foreground">
-                            {database.totalTables}{" "}
-                            {database.totalTables === 1 ? "table" : "tables"}{" "}
-                            saved
-                          </span>
-                        </div>
-                        <ChevronDown
-                          className={`h-4 w-4 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                        />
-                      </button>
-                      {isExpanded && (
-                        <CardContent className="space-y-4 pb-6 pt-0">
-                          {database.entries.map((entry) => {
-                            const entryKey = getEntryKey(entry);
-                            const displayName =
-                              entry.schema ?? entry.table ?? "Unknown";
-                            const hasTableList =
-                              Array.isArray(entry.tables) &&
-                              entry.tables.length > 0;
+                          <ChevronDown
+                            className={`h-4 w-4 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                          />
+                        </button>
+                        {isExpanded && (
+                          <CardContent className="space-y-4 pb-6 pt-0">
+                            {database.entries.map((entry) => {
+                              const entryKey = getEntryKey(entry);
+                              const displayName =
+                                entry.schema ?? entry.table ?? "Unknown";
+                              const hasTableList =
+                                Array.isArray(entry.tables) &&
+                                entry.tables.length > 0;
 
-                            return (
-                              <div
-                                key={entryKey}
-                                className="rounded-xl border border-border/50 bg-background/60 p-4"
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-xs font-medium uppercase text-muted-foreground">
-                                      {entry.schema ? "Schema" : "Table"}
-                                    </p>
-                                    <p className="text-sm font-semibold text-foreground">
-                                      {displayName}
-                                    </p>
+                              return (
+                                <div
+                                  key={entryKey}
+                                  className="rounded-xl border border-border/50 bg-background/60 p-4"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-xs font-medium uppercase text-muted-foreground">
+                                        {entry.schema ? "Schema" : "Table"}
+                                      </p>
+                                      <p className="text-sm font-semibold text-foreground">
+                                        {displayName}
+                                      </p>
+                                    </div>
+                                    {hasTableList ? (
+                                      <span className="text-xs text-muted-foreground">
+                                        {entry.tables?.length}{" "}
+                                        {entry.tables?.length === 1
+                                          ? "table"
+                                          : "tables"}
+                                      </span>
+                                    ) : null}
                                   </div>
+                                  {entry.description ? (
+                                    <p className="mt-2 text-sm text-muted-foreground">
+                                      {entry.description}
+                                    </p>
+                                  ) : (
+                                    <p className="mt-2 text-sm italic text-muted-foreground/80">
+                                      No description provided.
+                                    </p>
+                                  )}
                                   {hasTableList ? (
-                                    <span className="text-xs text-muted-foreground">
-                                      {entry.tables?.length}{" "}
-                                      {entry.tables?.length === 1
-                                        ? "table"
-                                        : "tables"}
-                                    </span>
+                                    <ul className="mt-3 space-y-1">
+                                      {entry.tables?.map((tableName) => (
+                                        <li
+                                          key={`${entryKey}-${tableName}`}
+                                          className="text-xs text-muted-foreground"
+                                        >
+                                          • {tableName}
+                                        </li>
+                                      ))}
+                                    </ul>
                                   ) : null}
                                 </div>
-                                {entry.description ? (
-                                  <p className="mt-2 text-sm text-muted-foreground">
-                                    {entry.description}
-                                  </p>
-                                ) : (
-                                  <p className="mt-2 text-sm italic text-muted-foreground/80">
-                                    No description provided.
-                                  </p>
-                                )}
-                                {hasTableList ? (
-                                  <ul className="mt-3 space-y-1">
-                                    {entry.tables?.map((tableName) => (
-                                      <li
-                                        key={`${entryKey}-${tableName}`}
-                                        className="text-xs text-muted-foreground"
-                                      >
-                                        • {tableName}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : null}
-                              </div>
-                            );
-                          })}
-                        </CardContent>
-                      )}
-                      <CardFooter className="flex items-center justify-end gap-2 border-t border-border/40 bg-background/40 py-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            const type =
-                              database.type === "duckdb" ||
-                              database.type === "postgres" ||
-                              database.type === "mysql"
-                                ? database.type
-                                : null;
-                            setPrefillDbType(type);
-                            setPrefillDbPath(database.dbPath);
-                            setIsConnectDialogOpen(true);
-                          }}
-                        >
-                          Add Tables
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                          }}
-                        >
-                          Copy Connection Info
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  );
-                })}
+                              );
+                            })}
+                          </CardContent>
+                        )}
+                        <CardFooter className="flex items-center justify-end gap-2 border-t border-border/40 bg-background/40 py-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              const type =
+                                database.type === "duckdb" ||
+                                  database.type === "postgres" ||
+                                  database.type === "mysql"
+                                  ? database.type
+                                  : null;
+                              setPrefillDbType(type);
+                              setPrefillDbPath(database.dbPath);
+                              setIsConnectDialogOpen(true);
+                            }}
+                          >
+                            Add Tables
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                            }}
+                          >
+                            Copy Connection Info
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
+            )}
+          </section>
+
+          <Separator />
+
+          <section className="space-y-4">
+            <div className="space-y-1">
+              <h2 className="text-base font-semibold text-foreground">
+                Uploaded Files
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Files you&apos;ve uploaded and stored locally for quick
+                analysis.
+              </p>
             </div>
-          )}
+            {!hasUploadedFiles ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-border/60 bg-muted/30 p-10 text-center">
+                <div className="space-y-2">
+                  <h3 className="text-lg font-medium text-foreground">
+                    No uploaded files yet
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Upload CSV, XLSX, or Parquet files using the Upload Data
+                    button above.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Upload Data
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-4">
+                  {uploadedFiles.map((file) => {
+                    const uploadedDate = new Date(file.uploadedAt);
+                    return (
+                      <Card
+                        key={file.fileId}
+                        className="gap-0 rounded-2xl border border-border/60 bg-card/60 py-0 shadow-sm"
+                      >
+                        <CardContent className="space-y-4 p-6">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-foreground">
+                                  {file.originalName}
+                                </span>
+                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                  {file.fileName
+                                    .split(".")
+                                    .pop()
+                                    ?.toUpperCase() || "FILE"}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                                <span>Size: {formatFileSize(file.size)}</span>
+                                <span>Type: {file.type}</span>
+                                <span>
+                                  Uploaded: {uploadedDate.toLocaleDateString()}{" "}
+                                  {uploadedDate.toLocaleTimeString()}
+                                </span>
+                              </div>
+                              <div className="mt-2">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  File Path:
+                                </p>
+                                <code className="mt-1 block rounded-md bg-muted px-2 py-1.5 text-xs text-foreground">
+                                  {file.filePath}
+                                </code>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                        <CardFooter className="flex items-center justify-end gap-2 border-t border-border/40 bg-background/40 py-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setPrefillDbType("duckdb");
+                              setPrefillDbPath(file.filePath);
+                              setIsConnectDialogOpen(true);
+                            }}
+                          >
+                            Connect
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  `Are you sure you want to remove "${file.originalName}" from the list?`,
+                                )
+                              ) {
+                                removeUploadedFile(file.fileId);
+                              }
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </section>
         </TabsContent>
 
-        <TabsContent value="datasets">
+        <TabsContent value="datasets" className="max-w-7xl w-full mx-auto">
           <div className="container">
             <h2>Datasets for your visuals in your dashboards</h2>
 
@@ -375,10 +525,105 @@ export default function ViewDataPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="model" className="mt-4">
+        <TabsContent value="model" className="mt-4 max-w-5xl mx-auto">
           <DataModelEditor />
         </TabsContent>
       </Tabs>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,.xlsx,.xls,.parquet"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+
+          // Validate file type
+          const validExtensions = [".csv", ".xlsx", ".xls", ".parquet"];
+          const fileExtension = file.name
+            .toLowerCase()
+            .substring(file.name.lastIndexOf("."));
+          if (!validExtensions.includes(fileExtension)) {
+            setUploadError(
+              "Invalid file type. Please upload a CSV, XLSX, or Parquet file.",
+            );
+            return;
+          }
+
+          // Validate file size (e.g., max 50MB)
+          const maxSize = 50 * 1024 * 1024; // 50MB
+          if (file.size > maxSize) {
+            setUploadError(
+              "File size exceeds 50MB. Please choose a smaller file.",
+            );
+            return;
+          }
+
+          setUploadError(null);
+          setUploadSuccess(null);
+          setIsUploading(true);
+
+          try {
+            const uploadFormData = new FormData();
+            uploadFormData.append("file", file);
+
+            const uploadResponse = await fetch("/api/upload", {
+              method: "POST",
+              body: uploadFormData,
+            });
+
+            if (!uploadResponse.ok) {
+              const errorData = await uploadResponse.json();
+              throw new Error(errorData.error || "Failed to upload file");
+            }
+
+            const uploadData = await uploadResponse.json();
+
+            // Save uploaded file info to localStorage
+            appendUploadedFile({
+              fileId: uploadData.fileId,
+              fileName: uploadData.fileName,
+              originalName: file.name,
+              filePath: uploadData.filePath,
+              size: file.size,
+              type: file.type || "application/octet-stream",
+              uploadedAt: new Date().toISOString(),
+            });
+
+            setUploadSuccess(`File "${file.name}" uploaded successfully!`);
+
+            // Clear success message after 5 seconds
+            setTimeout(() => {
+              setUploadSuccess(null);
+            }, 5000);
+          } catch (uploadError) {
+            console.error("File upload error:", uploadError);
+            setUploadError(
+              uploadError instanceof Error
+                ? uploadError.message
+                : "Failed to upload file. Please try again.",
+            );
+          } finally {
+            setIsUploading(false);
+            if (fileInputRef.current) {
+              fileInputRef.current.value = "";
+            }
+          }
+        }}
+      />
+
+      {uploadError && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
+          {uploadError}
+        </div>
+      )}
+
+      {uploadSuccess && (
+        <div className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-xs text-primary">
+          {uploadSuccess}
+        </div>
+      )}
 
       <ConnectDataDialog
         open={isConnectDialogOpen}

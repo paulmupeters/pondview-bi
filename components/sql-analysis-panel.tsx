@@ -1,265 +1,65 @@
 "use client";
 
-import { Cog6ToothIcon, PlusIcon } from "@heroicons/react/24/outline";
-import {
-  ChartBar,
-  CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Database,
-  Loader2,
-  Search,
-  Table,
-} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
-import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
-import { CardConfigDialog } from "@/components/card-config-dialog";
-import { ChartConfigDialog } from "@/components/chart-config-dialog";
-import { SqlChart } from "@/components/sql-chart";
-import { SqlResultsTable } from "@/components/sql-results-table";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+  SqlAnalysisDisplay,
+  type SqlAnalysisData,
+  type SqlAnalysisStage,
+} from "@/components/sql-analysis-display";
 import { useArtifact } from "@/hooks/use-artifacts";
-import type { CardConfig, Config, Result } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import type { Result } from "@/lib/types";
 
-type Stage =
-  | "loading"
-  | "processing"
-  | "analyzing"
-  | "visualizing"
-  | "complete";
+type AnalysisSnapshot = SqlAnalysisData & {
+  columns: { name: string; type?: string }[];
+  rows: Result[];
+};
 
-interface StageIndicatorProps {
-  currentStage: Stage;
-  progress?: number;
-}
+function normalizePayload(payload: SqlAnalysisData | null): AnalysisSnapshot | null {
+  if (!payload) return null;
 
-function StageIndicator({ currentStage, progress = 0 }: StageIndicatorProps) {
-  const stages = [
-    {
-      id: "loading" as const,
-      label: "Preparing",
-      icon: Loader2,
-      description: "Initializing query execution",
-    },
-    {
-      id: "processing" as const,
-      label: "Processing",
-      icon: Database,
-      description: "Executing SQL query",
-    },
-    {
-      id: "analyzing" as const,
-      label: "Analyzing",
-      icon: Search,
-      description: "Processing results and generating insights",
-    },
-    {
-      id: "visualizing" as const,
-      label: "Visualizing",
-      icon: ChartBar,
-      description: "Generating chart visualization",
-    },
-    {
-      id: "complete" as const,
-      label: "Complete",
-      icon: CheckCircle2,
-      description: "Ready to view",
-    },
-  ];
-
-  const currentStageIndex = stages.findIndex((s) => s.id === currentStage);
-
-  return (
-    <div className="bg-muted/30 border rounded-lg p-4 space-y-3">
-      {/* Progress bar */}
-      <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-        <div
-          className="bg-primary h-full transition-all duration-500 ease-out"
-          style={{ width: `${progress * 100}%` }}
-        />
-      </div>
-
-      {/* Stage indicators */}
-      <div className="flex items-center justify-between gap-2">
-        {stages.map((stage, index) => {
-          const Icon = stage.icon;
-          const isActive = stage.id === currentStage;
-          const isCompleted = index < currentStageIndex;
-          const isPending = index > currentStageIndex;
-
-          return (
-            <div
-              key={stage.id}
-              className={cn(
-                "flex flex-col items-center gap-2 flex-1",
-                "transition-opacity duration-300",
-                isPending && "opacity-40",
-              )}
-            >
-              <div
-                className={cn(
-                  "flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300",
-                  isActive && "border-primary bg-primary/10 scale-110",
-                  isCompleted && "border-green-500 bg-green-500/10",
-                  isPending && "border-muted-foreground/30 bg-muted",
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "w-5 h-5 transition-all duration-300",
-                    isActive && "text-primary animate-pulse",
-                    isCompleted && "text-green-500",
-                    isPending && "text-muted-foreground",
-                  )}
-                />
-              </div>
-              <div className="text-center">
-                <div
-                  className={cn(
-                    "text-xs font-medium transition-colors duration-300",
-                    isActive && "text-primary",
-                    isCompleted && "text-green-500",
-                    isPending && "text-muted-foreground",
-                  )}
-                >
-                  {stage.label}
-                </div>
-                {isActive && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {stage.description}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return {
+    ...payload,
+    columns: (payload.columns ?? []).map((column) => ({ ...column })),
+    rows: (payload.rows as Result[] | undefined) ?? [],
+  };
 }
 
 export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
-  // Subscribe to the active execute-sql artifact for this storeId
   const sqlData = useArtifact(ExecuteSqlArtifact, undefined, storeId) as
-    | {
-      data?: {
-        stage?: Stage;
-        progress?: number;
-        query?: string;
-        executionTime?: number;
-        rowCount?: number;
-        columns?: { name: string; type?: string }[];
-        rows?: Result[];
-        visualType?: "table" | "chart" | "card";
-        chartConfig?: Config;
-        cardConfig?: CardConfig;
-        summary?: {
-          totalRows: number;
-          executionTimeMs?: number;
-          insights: string[];
-          queryType?: string;
-        };
-      };
-    }
+    | { data?: SqlAnalysisData }
     | undefined;
-  const latestPayload =
-    (sqlData?.data as
-      | {
-        stage?: Stage;
-        progress?: number;
-        query?: string;
-        executionTime?: number;
-        rowCount?: number;
-        columns?: { name: string; type?: string }[];
-        rows?: Result[];
-      visualType?: "table" | "chart" | "card";
-        chartConfig?: Config;
-      cardConfig?: CardConfig;
-        summary?: {
-          totalRows: number;
-          executionTimeMs?: number;
-          insights: string[];
-          queryType?: string;
-        };
-      }
-      | undefined) ?? null;
-  const [activeView, setActiveView] = useState<"table" | "chart">("table");
-  const [chartConfig, setChartConfig] = useState<Config | null>(null);
-  const [cardConfig, setCardConfig] = useState<CardConfig | null>(null);
-  const [history, setHistory] = useState<
-    Array<{
-      stage?:
-      | "loading"
-      | "processing"
-      | "analyzing"
-      | "visualizing"
-      | "complete";
-      query?: string;
-      executionTime?: number;
-      rowCount?: number;
-      columns: { name: string; type?: string }[];
-      rows: Result[];
-      visualType?: "table" | "chart" | "card";
-      chartConfig?: Config;
-      cardConfig?: CardConfig;
-      summary?: {
-        totalRows: number;
-        executionTimeMs?: number;
-        insights: string[];
-        queryType?: string;
-      };
-    }>
-  >([]);
+
+  const latestPayloadRaw = (sqlData?.data as SqlAnalysisData | null) ?? null;
+  const latestPayload = normalizePayload(latestPayloadRaw);
+
+  const [history, setHistory] = useState<AnalysisSnapshot[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(-1);
   const lastFingerprintRef = useRef<string | null>(null);
-  const lastAutoSwitchQueryRef = useRef<string | null>(null);
+  const prevHistoryLenRef = useRef(0);
 
-  // Append completed payloads to history when a new analysis completes
   useEffect(() => {
-    const p = latestPayload;
-    const stage = p?.stage;
-    if (!p || stage !== "complete") return;
+    if (!latestPayloadRaw || latestPayloadRaw.stage !== "complete") return;
 
-    const fingerprint = `${p.query ?? ""}|${p.executionTime ?? 0}|${p.rowCount ?? 0}|${p.columns?.length ?? 0}|${p.summary?.totalRows ?? 0}`;
+    const fingerprint = `${latestPayloadRaw.query ?? ""}|${latestPayloadRaw.executionTime ?? 0}|${latestPayloadRaw.rowCount ?? 0}|${latestPayloadRaw.columns?.length ?? 0}|${latestPayloadRaw.summary?.totalRows ?? 0}`;
     if (lastFingerprintRef.current === fingerprint) return;
     lastFingerprintRef.current = fingerprint;
 
-    const snapshot = {
-      stage: p.stage,
-      query: p.query,
-      executionTime: p.executionTime,
-      rowCount: p.rowCount,
-      columns: (p.columns as { name: string; type?: string }[]) ?? [],
-      rows: (p.rows as Result[] | undefined) ?? [],
-      visualType: p.visualType,
-      chartConfig: p.chartConfig,
-      cardConfig: p.cardConfig,
-      summary: p.summary,
-    };
+    const snapshot = normalizePayload(latestPayloadRaw);
+    if (!snapshot) return;
 
     setHistory((prev) => {
       const exists = prev.some(
-        (s) =>
-          (s.query ?? "") === (snapshot.query ?? "") &&
-          (s.executionTime ?? 0) === (snapshot.executionTime ?? 0) &&
-          (s.summary?.totalRows ?? 0) === (snapshot.summary?.totalRows ?? 0),
+        (entry) =>
+          (entry.query ?? "") === (snapshot.query ?? "") &&
+          (entry.executionTime ?? 0) === (snapshot.executionTime ?? 0) &&
+          (entry.summary?.totalRows ?? 0) === (snapshot.summary?.totalRows ?? 0),
       );
       if (exists) return prev;
       return [...prev, snapshot];
     });
-  }, [latestPayload]);
+  }, [latestPayloadRaw]);
 
-  // When history grows, auto-navigate to the latest result
-  const prevHistoryLenRef = useRef(0);
   useEffect(() => {
     if (history.length > prevHistoryLenRef.current) {
       setCurrentIndex(history.length - 1);
@@ -270,269 +70,35 @@ export function SqlAnalysisPanel({ storeId }: { storeId?: string }) {
   }, [history.length, currentIndex]);
 
   const hasHistory = history.length > 0 && currentIndex >= 0;
-  const selected = hasHistory ? history[currentIndex] : (latestPayload ?? null);
+  const selected = hasHistory ? history[currentIndex] : latestPayload;
 
-  const columnsForDialog: { name: string }[] = (
-    selected?.columns ??
-    latestPayload?.columns ??
-    []
-  ).map((c) => ({ name: c.name }));
-
-  const selectedForChart =
-    selected?.stage === "complete"
-      ? {
-        stage: selected.stage,
-        rows: selected.rows ?? [],
-        chartConfig: selected.chartConfig,
-        summary: selected.summary,
-      }
-      : undefined;
-
-  const selectedForTable =
-    selected?.stage === "complete"
-      ? {
-        stage: selected.stage,
-        columns: selected.columns ?? [],
-        rows: (selected.rows as unknown as Record<string, unknown>[]) ?? [],
-        summary: selected.summary,
-      }
-      : undefined;
-
-  const selectedForCard =
-    selected?.stage === "complete" &&
-      selected.rows &&
-      selected.rows.length === 1 &&
-      selected.columns &&
-      selected.columns.length === 1
-      ? {
-        stage: selected.stage,
-        columnName: selected.columns[0].name,
-        value: selected.rows[0][selected.columns[0].name],
-      }
-      : undefined;
-
-  // Auto-switch to appropriate view based on visualType
-  useEffect(() => {
-    const q = selected?.query ?? null;
-    const vt = selected?.visualType ?? latestPayload?.visualType;
-
-    // Auto-switch to chart/visual view when chart config or card config becomes available
-    if (
-      ((selected?.chartConfig && !chartConfig && vt === "chart") ||
-        (selected?.cardConfig && !cardConfig && vt === "card")) &&
-      q &&
-      lastAutoSwitchQueryRef.current !== q
-    ) {
-      if (selected?.chartConfig && vt === "chart") {
-        setChartConfig(selected.chartConfig);
-      }
-      if (selected?.cardConfig && vt === "card") {
-        setCardConfig(selected.cardConfig);
-      }
-      setActiveView("chart");
-      lastAutoSwitchQueryRef.current = q;
-    }
-  }, [selected?.chartConfig, selected?.cardConfig, selected?.visualType, selected?.query, chartConfig, cardConfig, latestPayload?.visualType]);
-  if (!latestPayload && !hasHistory) {
+  if (!latestPayloadRaw && !hasHistory) {
     return null;
   }
 
-  const currentStage = (latestPayload?.stage || "loading") as Stage;
-  const currentProgress = (latestPayload?.progress ?? 0) as number;
-  const isProcessing = currentStage !== "complete";
+  const stageForIndicator = (latestPayloadRaw?.stage ?? "loading") as SqlAnalysisStage;
+  const progressForIndicator = latestPayloadRaw?.progress ?? 0;
+  const isProcessing = stageForIndicator !== "complete";
 
   return (
-    <div className="space-y-6">
-      {/* Stage Indicator - Show when processing or always for context */}
-      {isProcessing && (
-        <div className="p-4">
-          <StageIndicator
-            currentStage={currentStage}
-            progress={currentProgress}
-          />
-        </div>
-      )}
-
-      {/* View Toggle + History Navigation */}
-      <div className="flex items-center justify-between gap-2 p-2">
-        <div className="flex gap-2">
-          <Button
-            variant={activeView === "table" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setActiveView("table")}
-            className="flex items-center gap-2 hover:text-gray-500"
-          >
-            <Table className="w-4 h-4" />
-            Data
-          </Button>
-          <Button
-            variant={activeView === "chart" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setActiveView("chart")}
-            className="flex items-center gap-2 hover:text-gray-500"
-          >
-            <ChartBar className="w-4 h-4" />
-            Visual
-          </Button>
-        </div>
-        {history.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-              disabled={currentIndex <= 0}
-              className="flex items-center gap-2"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <span className="text-xs text-muted-foreground min-w-[60px] text-center">
-              {currentIndex + 1} / {history.length}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setCurrentIndex((i) => Math.min(history.length - 1, i + 1))
-              }
-              disabled={currentIndex >= history.length - 1}
-              className="flex items-center gap-2"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
-      </div>
-      {/* Query Collapsible */}
-      <Collapsible>
-        <CollapsibleTrigger className="flex items-center justify-between w-full p-4 border hover:bg-muted/50 cursor-pointer">
-          <span className="text-sm font-medium">SQL Query</span>
-          <ChevronDown className="w-4 h-4" />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="p-4 border-t">
-          <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
-            {selected?.query || latestPayload?.query || "No query available"}
-          </pre>
-        </CollapsibleContent>
-      </Collapsible>
-      {/* Render appropriate view */}
-      {activeView === "chart" ? (
-        <div className="relative">
-          {/* Show card if it's a single value, otherwise show chart */}
-          {selectedForCard ? (
-            <>
-              {/* Configuration button in top right */}
-              <div className="absolute top-0 right-0 z-10 flex gap-2">
-                <CardConfigDialog
-                  trigger={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2"
-                    >
-                      <Cog6ToothIcon className="w-4 h-4" />
-                      Configure
-                    </Button>
-                  }
-                  config={cardConfig}
-                  onConfigChange={setCardConfig}
-                />
-                <AddToDashboardDialog
-                  trigger={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2"
-                    >
-                      <PlusIcon className="w-4 h-4" />
-                    </Button>
-                  }
-                  sql={selected?.query ?? ""}
-                  cardConfig={cardConfig ?? selected?.cardConfig ?? undefined}
-                  defaultTitle={cardConfig?.title ?? selected?.cardConfig?.title}
-                />
-              </div>
-              <Card className="mx-auto w-fit">
-                <CardHeader>
-                  <CardTitle className="text-base font-medium text-muted-foreground">
-                    {cardConfig?.title ?? selected?.cardConfig?.title ?? selectedForCard.columnName}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-4xl font-bold text-foreground">
-                    {typeof selectedForCard.value === "number"
-                      ? selectedForCard.value.toLocaleString()
-                      : typeof selectedForCard.value === "boolean"
-                        ? selectedForCard.value.toString()
-                        : selectedForCard.value instanceof Date
-                          ? selectedForCard.value.toLocaleString()
-                          : String(selectedForCard.value)}
-                  </div>
-                  {(cardConfig?.description ?? selected?.cardConfig?.description) && (
-                    <div className="text-sm text-muted-foreground mt-2">
-                      {cardConfig?.description ?? selected?.cardConfig?.description}
-                    </div>
-                  )}
-                  {(cardConfig?.takeaway ?? selected?.cardConfig?.takeaway) && (
-                    <div className="text-xs text-muted-foreground mt-2 italic">
-                      {cardConfig?.takeaway ?? selected?.cardConfig?.takeaway}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </>
-          ) : (
-            <>
-                {/* Configuration button in top right */}
-                <div className="absolute top-0 right-0 z-10 flex gap-2">
-                  <ChartConfigDialog
-                    trigger={
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex items-center gap-2"
-                      >
-                        <Cog6ToothIcon className="w-4 h-4" />
-                        Configure
-                      </Button>
-                    }
-                    config={chartConfig}
-                    columns={columnsForDialog}
-                    rows={selectedForChart?.rows ?? []}
-                    onConfigChange={setChartConfig}
-                  />
-                  {/* {selected?.chartConfig && selected?.query && ( */}
-                  <AddToDashboardDialog
-                    trigger={
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex items-center gap-2"
-                      >
-                        <PlusIcon className="w-4 h-4" />
-                        {/* Add Chart */}
-                      </Button>
-                    }
-                    sql={selected?.query ?? ""}
-                    chartConfig={chartConfig ?? selected?.chartConfig ?? { description: "", type: "bar", title: "", xKey: "", yKeys: [], multipleLines: false, legend: false, countMode: false }}
-                    defaultTitle={selected?.chartConfig?.title}
-                  />
-                  {/* )} */}
-                </div>
-
-                {/* Chart content */}
-                {selectedForChart && (
-                  <SqlChart
-                    customChartConfig={chartConfig ?? undefined}
-                    dataOverride={selectedForChart}
-                  />
-                )}
-              </>
-          )}
-        </div>
-      ) : (
-          <SqlResultsTable dataOverride={selectedForTable} />
-      )}
-    </div>
+    <SqlAnalysisDisplay
+      data={selected ?? null}
+      stage={stageForIndicator}
+      progress={progressForIndicator}
+      showStageIndicator={isProcessing}
+      history={
+        hasHistory
+          ? {
+              currentIndex,
+              total: history.length,
+              onPrev: () => setCurrentIndex((index) => Math.max(0, index - 1)),
+              onNext: () =>
+                setCurrentIndex((index) =>
+                  Math.min(history.length - 1, index + 1),
+                ),
+            }
+          : undefined
+      }
+    />
   );
 }

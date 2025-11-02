@@ -35,6 +35,7 @@ export const ExecuteSqlArtifact = artifact(
 
     // Card configuration (only present when visualType is "card")
     cardConfig: cardConfigSchema.optional(),
+    dbIdentifier: z.string().optional(),
 
     // Summary insights
     summary: z

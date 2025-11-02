@@ -9,6 +9,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import type { Config, Result } from "@/lib/types";
@@ -19,6 +24,7 @@ interface ChartConfigDialogProps {
   columns: Array<{ name: string }>;
   rows?: Result[];
   onConfigChange: (config: Config) => void;
+  tooltip?: string;
 }
 
 export function ChartConfigDialog({
@@ -27,6 +33,7 @@ export function ChartConfigDialog({
   columns,
   rows = [],
   onConfigChange,
+  tooltip,
 }: ChartConfigDialogProps) {
   const [open, setOpen] = useState(false);
   const [chartType, setChartType] = useState<string>(config?.type || "line");
@@ -102,7 +109,18 @@ export function ChartConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {tooltip ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>{trigger}</DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+      )}
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-card">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

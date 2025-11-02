@@ -13,6 +13,12 @@ export const executeSqlTool = tool({
     "Execute a SQL query and return the results, returns a maximum of 50 rows.",
   inputSchema: z.object({
     sql: z.string().describe("The SQL query to execute"),
+    databasePath: z
+      .string()
+      .describe(
+        "Database identifier/path to run the SQL against (e.g. md:my_db)"
+      )
+      .default("md:my_db"),
     userQuery: z
       .string()
       .optional()
@@ -23,7 +29,7 @@ export const executeSqlTool = tool({
       .default(true)
       .describe("Whether to generate chart visualization (default: true)"),
   }),
-  execute: async ({ sql, userQuery, generateChart }) => {
+  execute: async ({ sql, userQuery, generateChart, databasePath }) => {
     // Get current user context
     const user = getCurrentUser();
 
@@ -39,6 +45,7 @@ export const executeSqlTool = tool({
     const debugContext = {
       artifactId: sqlArtifact.id,
       userId: user.id,
+      databasePath,
     };
 
     console.debug("[executeSqlTool] Step 1 (loading) initialized", {
@@ -55,7 +62,7 @@ export const executeSqlTool = tool({
     const startTime = Date.now();
     let parsedResults: Result[] = [];
     try {
-      parsedResults = await runSqlNormalized(`md:my_db`, sql);
+      parsedResults = await runSqlNormalized(databasePath, sql);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -189,6 +196,7 @@ export const executeSqlTool = tool({
       stage: "complete" as const,
       progress: 1,
       query: sql,
+      dbIdentifier: databasePath,
       executionTime,
       rowCount,
       columns,
@@ -233,7 +241,7 @@ export const executeSqlTool = tool({
         user.fullName
       } - ${
         user.id
-      }). Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
+      }) on ${databasePath}. Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
         ". "
       )}.`,
     };

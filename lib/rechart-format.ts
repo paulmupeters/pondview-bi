@@ -14,14 +14,12 @@ interface TransformationResult {
 
 export function transformDataForMultiLineChart(
   data: InputDataPoint[],
-  chartConfig: Config,
+  chartConfig: Config
 ): TransformationResult {
-  console.log("Input data:", data);
   const { xKey, lineCategories, measurementColumn, categoryColumn } =
     chartConfig;
 
   const fields = Object.keys(data[0]);
-  console.log("Fields:", fields);
 
   const xAxisField = xKey ?? "year"; // Assuming 'year' is always the x-axis
   const lineField = categoryColumn
@@ -30,16 +28,9 @@ export function transformDataForMultiLineChart(
         lineCategories?.includes(data[0][field] as string)
       ) || "";
 
-  console.log("X-axis field:", xAxisField);
-  console.log("Line field:", lineField);
-  console.log("Category column:", categoryColumn);
-
   const xAxisValues = Array.from(
-    new Set(data.map((item) => String(item[xAxisField]))),
+    new Set(data.map((item) => String(item[xAxisField])))
   );
-
-  console.log("X-axis values:", xAxisValues);
-  console.log("Line categories:", lineCategories);
 
   const transformedData: TransformedDataPoint[] = xAxisValues.map((xValue) => {
     const dataPoint: TransformedDataPoint = { [xAxisField]: xValue };
@@ -57,8 +48,6 @@ export function transformDataForMultiLineChart(
   });
 
   transformedData.sort((a, b) => Number(a[xAxisField]) - Number(b[xAxisField]));
-
-  console.log("Transformed data:", transformedData);
 
   return {
     data: transformedData,
