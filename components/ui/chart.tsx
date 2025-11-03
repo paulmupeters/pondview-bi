@@ -300,7 +300,7 @@ function ChartLegendContent({
                   }}
                 />
               )}
-              {itemConfig?.label}
+              {itemConfig?.label ?? item.value ?? key}
             </div>
           );
         })}

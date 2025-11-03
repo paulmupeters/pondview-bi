@@ -64,6 +64,46 @@ export const configSchema = z
       )
       .optional()
       .default(false),
+    showGrid: z
+      .boolean()
+      .describe("Whether to display gridlines on supported charts")
+      .optional(),
+    showXAxis: z
+      .boolean()
+      .describe("Whether to display the X axis on supported charts")
+      .optional(),
+    showYAxis: z
+      .boolean()
+      .describe("Whether to display the Y axis on supported charts")
+      .optional(),
+    showDots: z
+      .boolean()
+      .describe("For line charts: whether to display data point dots")
+      .optional(),
+    showTooltip: z
+      .boolean()
+      .describe("Whether to display the hover tooltip")
+      .optional(),
+    lineSize: z
+      .number()
+      .min(1)
+      .max(10)
+      .describe("Stroke width for line charts in pixels")
+      .optional(),
+    suffixLabelY: z
+      .string()
+      .describe("Suffix applied to the Y axis label and units")
+      .optional(),
+    labelYAngle: z
+      .number()
+      .min(-90)
+      .max(90)
+      .describe("Rotation angle for the Y axis label")
+      .optional(),
+    referenceLineLabel: z
+      .string()
+      .describe("Label to display alongside a reference line if rendered")
+      .optional(),
   })
   .describe("Chart configuration object");
 

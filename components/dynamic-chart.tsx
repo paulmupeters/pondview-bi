@@ -9,7 +9,6 @@ import {
   CartesianGrid,
   Cell,
   Label,
-  Legend,
   Line,
   LineChart,
   Pie,
@@ -19,6 +18,8 @@ import {
 } from "recharts";
 import {
   ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
@@ -87,6 +88,54 @@ export function DynamicChart({
     };
     chartData = processChartData(chartData, chartConfig.type);
 
+    const showGrid = chartConfig.showGrid ?? true;
+    const showXAxis = chartConfig.showXAxis ?? true;
+    const showYAxis = chartConfig.showYAxis ?? true;
+    const showDots = chartConfig.showDots ?? true;
+    const showTooltip = chartConfig.showTooltip ?? true;
+    const lineSize = chartConfig.lineSize ?? 2;
+    const labelYAngle = chartConfig.labelYAngle ?? -90;
+    const suffixLabelY = chartConfig.suffixLabelY ?? "";
+
+    if (chartConfig.countMode) {
+      const countsMap = new Map<
+        string,
+        { xValue: string | number | boolean | Date; count: number }
+      >();
+
+      for (const row of chartData) {
+        const xValue = row[chartConfig.xKey];
+        if (xValue === undefined || xValue === null) continue;
+        const key = String(xValue);
+        const existing = countsMap.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          countsMap.set(key, { xValue, count: 1 });
+        }
+      }
+
+      chartData = Array.from(countsMap.values()).map((entry) => ({
+        [chartConfig.xKey]: entry.xValue,
+        count: entry.count,
+      }));
+
+      const allNumericXValues = chartData.every((item) =>
+        typeof item[chartConfig.xKey] === "number",
+      );
+      if (allNumericXValues) {
+        chartData.sort(
+          (a, b) =>
+            (a[chartConfig.xKey] as number) -
+            (b[chartConfig.xKey] as number),
+        );
+      }
+    }
+
+    const resolvedYKeys = chartConfig.countMode
+      ? ["count"]
+      : chartConfig.yKeys;
+
     switch (chartConfig.type) {
       case "line": {
         const { data, xAxisField, lineFields } = transformDataForMultiLineChart(
@@ -94,61 +143,83 @@ export function DynamicChart({
           chartConfig,
         );
         const useTransformedData =
+          !chartConfig.countMode &&
           chartConfig.multipleLines &&
           chartConfig.measurementColumn &&
           chartConfig.yKeys.includes(chartConfig.measurementColumn);
+
+        const yAxisKey = useTransformedData
+          ? chartConfig.measurementColumn ?? resolvedYKeys[0]
+          : resolvedYKeys[0];
+        const formattedYAxisLabel = (() => {
+          const base = toTitleCase(yAxisKey ?? "");
+          return suffixLabelY ? `${base} (${suffixLabelY})` : base;
+        })();
         return (
           <LineChart data={useTransformedData ? data : chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis
-              dataKey={useTransformedData ? chartConfig.xKey : chartConfig.xKey}
-            >
-              <Label
-                value={toTitleCase(
-                  useTransformedData ? xAxisField : chartConfig.xKey,
-                )}
-                offset={0}
-                position="insideBottom"
-              />
+            {showGrid && <CartesianGrid strokeDasharray="3 3" />}
+            <XAxis dataKey={chartConfig.xKey} hide={!showXAxis}>
+              {showXAxis && (
+                <Label
+                  value={toTitleCase(
+                    useTransformedData ? xAxisField : chartConfig.xKey,
+                  )}
+                  offset={0}
+                  position="insideBottom"
+                />
+              )}
             </XAxis>
-            <YAxis>
-              <Label
-                value={toTitleCase(chartConfig.yKeys[0])}
-                angle={-90}
-                position="insideLeft"
-              />
+            <YAxis hide={!showYAxis} unit={suffixLabelY || undefined}>
+              {showYAxis && (
+                <Label
+                  value={formattedYAxisLabel}
+                  angle={labelYAngle}
+                  position="insideLeft"
+                />
+              )}
             </YAxis>
-            <ChartTooltip content={<ChartTooltipContent />} />
-            {chartConfig.legend && <Legend />}
-            {useTransformedData
-              ? lineFields.map((key, index) => (
-                  <Line
-                    key={key}
-                    type="monotone"
-                    dataKey={key}
+            {showTooltip && <ChartTooltip content={<ChartTooltipContent />} />}
+            {chartConfig.legend && (
+              <ChartLegend content={<ChartLegendContent />} />
+            )}
+            {(useTransformedData ? lineFields : resolvedYKeys).map(
+              (key, index) => (
+                <Line
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
                   stroke={getColorForKey(key, index)}
-                  />
-                ))
-              : chartConfig.yKeys.map((key, index) => (
-                  <Line
-                    key={key}
-                    type="monotone"
-                    dataKey={key}
-                  stroke={getColorForKey(key, index)}
-                  />
-                ))}
+                  strokeWidth={lineSize}
+                  dot={showDots}
+                  activeDot={showDots}
+                />
+              ),
+            )}
           </LineChart>
         );
       }
       case "area":
         return (
           <AreaChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={chartConfig.xKey} />
-            <YAxis />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            {chartConfig.legend && <Legend />}
-            {chartConfig.yKeys.map((key, index) => (
+            {showGrid && <CartesianGrid strokeDasharray="3 3" />}
+            <XAxis dataKey={chartConfig.xKey} hide={!showXAxis} />
+            <YAxis hide={!showYAxis} unit={suffixLabelY || undefined}>
+              {showYAxis && (
+                <Label
+                  value={(() => {
+                    const base = toTitleCase(resolvedYKeys[0] ?? "");
+                    return suffixLabelY ? `${base} (${suffixLabelY})` : base;
+                  })()}
+                  angle={labelYAngle}
+                  position="insideLeft"
+                />
+              )}
+            </YAxis>
+            {showTooltip && <ChartTooltip content={<ChartTooltipContent />} />}
+            {chartConfig.legend && (
+              <ChartLegend content={<ChartLegendContent />} />
+            )}
+            {resolvedYKeys.map((key, index) => (
               <Area
                 key={key}
                 type="monotone"
@@ -162,24 +233,33 @@ export function DynamicChart({
       case "bar":
         return (
           <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={chartConfig.xKey}>
-              <Label
-                value={toTitleCase(chartConfig.xKey)}
-                offset={0}
-                position="insideBottom"
-              />
+            {showGrid && <CartesianGrid strokeDasharray="3 3" />}
+            <XAxis dataKey={chartConfig.xKey} hide={!showXAxis}>
+              {showXAxis && (
+                <Label
+                  value={toTitleCase(chartConfig.xKey)}
+                  offset={0}
+                  position="insideBottom"
+                />
+              )}
             </XAxis>
-            <YAxis>
-              <Label
-                value={toTitleCase(chartConfig.yKeys[0])}
-                angle={-90}
-                position="insideLeft"
-              />
+            <YAxis hide={!showYAxis} unit={suffixLabelY || undefined}>
+              {showYAxis && (
+                <Label
+                  value={(() => {
+                    const base = toTitleCase(resolvedYKeys[0] ?? "");
+                    return suffixLabelY ? `${base} (${suffixLabelY})` : base;
+                  })()}
+                  angle={labelYAngle}
+                  position="insideLeft"
+                />
+              )}
             </YAxis>
-            <ChartTooltip content={<ChartTooltipContent />} />
-            {chartConfig.legend && <Legend />}
-            {chartConfig.yKeys.map((key, index) => (
+            {showTooltip && <ChartTooltip content={<ChartTooltipContent />} />}
+            {chartConfig.legend && (
+              <ChartLegend content={<ChartLegendContent />} />
+            )}
+            {resolvedYKeys.map((key, index) => (
               <Bar key={key} dataKey={key} fill={getColorForKey(key, index)} />
             ))}
           </BarChart>
@@ -189,7 +269,7 @@ export function DynamicChart({
           <PieChart>
             <Pie
               data={chartData}
-              dataKey={chartConfig.yKeys[0]}
+              dataKey={resolvedYKeys[0]}
               nameKey={chartConfig.xKey}
               cx="50%"
               cy="50%"
@@ -203,14 +283,19 @@ export function DynamicChart({
                 />
               ))}
             </Pie>
-            <ChartTooltip content={<ChartTooltipContent />} />
-            {chartConfig.legend && <Legend />}
+            {showTooltip && <ChartTooltip content={<ChartTooltipContent />} />}
+            {chartConfig.legend && (
+              <ChartLegend content={<ChartLegendContent className="translate-y-6 flex-wrap gap-2 *:basis-1/4 *:justify-center" />} />
+            )}
           </PieChart>
         );
       default:
         return <div>Unsupported chart type: {chartConfig.type}</div>;
     }
   };
+
+  const legendEntries = chartConfig.countMode ? ["count"] : chartConfig.yKeys;
+  const hasYData = legendEntries.length > 0;
 
   return (
     <div
@@ -220,12 +305,12 @@ export function DynamicChart({
       )}
     >
       <h2 className="text-lg font-bold mb-2">{chartConfig.title}</h2>
-      {chartConfig && chartData.length > 0 && chartConfig.yKeys && (
+      {chartConfig && chartData.length > 0 && hasYData && (
         <ChartContainer
           config={
             chartConfig.countMode
               ? { count: { label: "Count", color: "var(--chart-1)" } }
-              : chartConfig.yKeys.reduce(
+              : legendEntries.reduce(
                 (acc, key, index) => {
                   acc[key] = {
                     label: key,
@@ -236,7 +321,7 @@ export function DynamicChart({
                 {} as Record<string, { label: string; color: string }>,
               )
           }
-          className="h-[320px] w-full"
+          className="w-full aspect-square max-h-[400px] overflow-y-auto"
         >
           {renderChart()}
         </ChartContainer>

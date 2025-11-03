@@ -14,7 +14,11 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Plus, Settings, Trash2 } from "lucide-react";
+import {
+  ArrowTopRightOnSquareIcon,
+  FunnelIcon,
+} from "@heroicons/react/24/outline";
+import { GripVertical, Settings, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { CardConfigDialog } from "@/components/card-config-dialog";
@@ -22,6 +26,30 @@ import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { DynamicChart } from "@/components/dynamic-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import type { CardConfig, Config, Result } from "@/lib/types";
 
 type Dashboard = {
@@ -96,6 +124,17 @@ function SortableChartCard({
         >
           <GripVertical className="h-4 w-4" />
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            window.open(`/charts/${chart.id}`, "_blank");
+          }}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="View chart"
+          title="View chart"
+        >
+          <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+        </button>
       </div>
       {config && rows.length > 0 && !isCardConfig(config) ? (
         <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -123,7 +162,7 @@ function SortableChartCard({
           <button
             type="button"
             onClick={onDelete}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Delete chart"
             title="Delete chart"
           >
@@ -162,13 +201,13 @@ function SortableChartCard({
       ) : null}
       {config && rows.length > 0 ? (
         isCardConfig(config) ? (
-          <Card className="w-full">
+          <Card className="w-full h-full flex flex-col">
             <CardHeader>
               <CardTitle className="text-base font-medium text-muted-foreground">
                 {config.title}
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-center">
               <div className="text-4xl font-bold text-foreground">
                 {(() => {
                   const value = rows[0]?.[Object.keys(rows[0] || {})[0]];
@@ -217,6 +256,21 @@ export default function DashboardDetailPage() {
   const [charts, setCharts] = useState<DashboardChart[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState<Record<string, Result[]>>({});
+  const [columns, setColumns] = useState<number>(3);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isFiltersPaneOpen, setIsFiltersPaneOpen] = useState(false);
+
+  useEffect(() => {
+    const savedColumns = localStorage.getItem(
+      `dashboard_${dashboardId}_columns`,
+    );
+    if (savedColumns) {
+      const parsed = parseInt(savedColumns, 10);
+      if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= 6) {
+        setColumns(parsed);
+      }
+    }
+  }, [dashboardId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -350,6 +404,28 @@ export default function DashboardDetailPage() {
     [dashboardId],
   );
 
+  const handleColumnsChange = useCallback(
+    (value: string) => {
+      const newColumns = parseInt(value, 10);
+      setColumns(newColumns);
+      localStorage.setItem(`dashboard_${dashboardId}_columns`, value);
+      setIsSettingsOpen(false);
+    },
+    [dashboardId],
+  );
+
+  const getGridColsClass = (cols: number) => {
+    const colMap: Record<number, string> = {
+      1: "grid-cols-1",
+      2: "md:grid-cols-2",
+      3: "md:grid-cols-2 lg:grid-cols-3",
+      4: "md:grid-cols-2 lg:grid-cols-4",
+      5: "md:grid-cols-2 lg:grid-cols-5",
+      6: "md:grid-cols-2 lg:grid-cols-6",
+    };
+    return colMap[cols] || colMap[3];
+  };
+
   if (loading)
     return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
   if (!dashboard)
@@ -363,17 +439,179 @@ export default function DashboardDetailPage() {
     <div className="mx-auto flex h-full w-full flex-col gap-1 overflow-y-auto px-6 md:px-12 lg:px-18 pt-2 pb-6 md:pb-10">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{dashboard.title}</h1>
-        <Button variant="outline" size="default">
-          <Plus className="h-4 w-4" />
-          Add Filter
-        </Button>
+        <div className="flex items-center gap-2">
+          <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="default">
+                <Settings className="h-4 w-4" />
+                Settings
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Dashboard Settings</DialogTitle>
+                <DialogDescription>
+                  Configure your dashboard layout preferences.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-4 py-4">
+                <div className="flex flex-col gap-2">
+                  <label
+                    htmlFor="columns-select"
+                    className="text-sm font-medium"
+                  >
+                    Number of Columns
+                  </label>
+                  <Select
+                    value={columns.toString()}
+                    onValueChange={handleColumnsChange}
+                  >
+                    <SelectTrigger id="columns-select" className="w-full">
+                      <SelectValue placeholder="Select columns" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 Column</SelectItem>
+                      <SelectItem value="2">2 Columns</SelectItem>
+                      <SelectItem value="3">3 Columns</SelectItem>
+                      <SelectItem value="4">4 Columns</SelectItem>
+                      <SelectItem value="5">5 Columns</SelectItem>
+                      <SelectItem value="6">6 Columns</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsSettingsOpen(false)}
+                >
+                  Close
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Button
+            variant="outline"
+            size="default"
+            onClick={() => setIsFiltersPaneOpen(true)}
+          >
+            <FunnelIcon className="h-4 w-4" />
+            Filters
+          </Button>
+        </div>
       </div>
+
+      <Sheet open={isFiltersPaneOpen} onOpenChange={setIsFiltersPaneOpen}>
+        <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto p-4">
+          <SheetHeader>
+            <SheetTitle>Filters</SheetTitle>
+            <SheetDescription>
+              Apply filters to all charts on this dashboard
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-6">
+            {/* Date Range Filter */}
+            <div className="space-y-2">
+              <label htmlFor="date-range-start" className="text-sm font-medium">
+                Date Range
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  id="date-range-start"
+                  type="date"
+                  placeholder="Start date"
+                />
+                <Input id="date-range-end" type="date" placeholder="End date" />
+              </div>
+            </div>
+
+            {/* Category Filter */}
+            <div className="space-y-2">
+              <label htmlFor="category-filter" className="text-sm font-medium">
+                Category
+              </label>
+              <Select>
+                <SelectTrigger id="category-filter">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="sales">Sales</SelectItem>
+                  <SelectItem value="marketing">Marketing</SelectItem>
+                  <SelectItem value="operations">Operations</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Region Filter */}
+            <div className="space-y-2">
+              <label htmlFor="region-filter" className="text-sm font-medium">
+                Region
+              </label>
+              <Select>
+                <SelectTrigger id="region-filter">
+                  <SelectValue placeholder="Select region" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Regions</SelectItem>
+                  <SelectItem value="north">North</SelectItem>
+                  <SelectItem value="south">South</SelectItem>
+                  <SelectItem value="east">East</SelectItem>
+                  <SelectItem value="west">West</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Status Filter */}
+            <div className="space-y-2">
+              <label htmlFor="status-filter" className="text-sm font-medium">
+                Status
+              </label>
+              <Select>
+                <SelectTrigger id="status-filter">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Search Filter */}
+            <div className="space-y-2">
+              <label htmlFor="search-filter" className="text-sm font-medium">
+                Search
+              </label>
+              <Input
+                id="search-filter"
+                type="text"
+                placeholder="Search by keyword..."
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-4">
+              <Button variant="default" className="flex-1">
+                Apply Filters
+              </Button>
+              <Button variant="outline" className="flex-1">
+                Clear All
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <SortableContext
           items={charts.map((c) => c.id)}
           strategy={rectSortingStrategy}
         >
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className={`grid gap-6 ${getGridColsClass(columns)}`}>
             {charts.map((c) => {
               let config: Config | CardConfig | null = null;
               try {

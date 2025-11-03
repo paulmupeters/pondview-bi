@@ -9,13 +9,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import type { Config, Result } from "@/lib/types";
 
 interface ChartConfigDialogProps {
@@ -37,24 +37,32 @@ export function ChartConfigDialog({
 }: ChartConfigDialogProps) {
   const [open, setOpen] = useState(false);
   const [chartType, setChartType] = useState<string>(config?.type || "line");
-  const [multipleLines, setMultipleLines] = useState<boolean>(config?.multipleLines || false);
-  const [categoryColumn, setCategoryColumn] = useState<string>(config?.categoryColumn || "");
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(config?.lineCategories || []);
+  const [multipleLines, setMultipleLines] = useState<boolean>(
+    config?.multipleLines || false,
+  );
+  const [categoryColumn, setCategoryColumn] = useState<string>(
+    config?.categoryColumn || "",
+  );
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(
+    config?.lineCategories || [],
+  );
 
   // Get distinct values for a column
   const getDistinctValues = (columnName: string): string[] => {
     if (!rows || rows.length === 0) return [];
-    const values = rows.map(row => String(row[columnName])).filter(Boolean);
+    const values = rows.map((row) => String(row[columnName])).filter(Boolean);
     return Array.from(new Set(values)).sort();
   };
 
-  const availableCategories = categoryColumn ? getDistinctValues(categoryColumn) : [];
+  const availableCategories = categoryColumn
+    ? getDistinctValues(categoryColumn)
+    : [];
 
   const toggleCategory = (category: string) => {
-    setSelectedCategories(prev =>
+    setSelectedCategories((prev) =>
       prev.includes(category)
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
+        ? prev.filter((c) => c !== category)
+        : [...prev, category],
     );
   };
 
@@ -70,6 +78,22 @@ export function ChartConfigDialog({
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
 
+    const getBooleanField = (name: string, fallback: boolean): boolean => {
+      const value = formData.get(name);
+      if (value === null) return fallback;
+      return String(value) === "true";
+    };
+
+    const getNumberField = (
+      name: string,
+      fallback: number | undefined,
+    ): number | undefined => {
+      const value = formData.get(name);
+      if (value === null || value === "") return fallback;
+      const parsed = Number(value);
+      return Number.isNaN(parsed) ? fallback : parsed;
+    };
+
     const newConfig: Config = {
       description: formData.get("description") as string,
       takeaway: formData.get("takeaway") as string,
@@ -80,12 +104,11 @@ export function ChartConfigDialog({
         const yKeysRaw = formData.getAll("yKeys") as string[];
         return yKeysRaw.filter((key) => key !== "count");
       })(),
-      legend: formData.get("legend") === "on",
+      legend: formData.get("legend") === "yes",
       multipleLines: formData.get("multipleLines") === "yes",
       measurementColumn:
         (formData.get("measurementColumn") as string) || undefined,
-      categoryColumn:
-        (formData.get("categoryColumn") as string) || undefined,
+      categoryColumn: (formData.get("categoryColumn") as string) || undefined,
       lineCategories:
         (formData.getAll("lineCategories") as string[]) || undefined,
       colors: undefined,
@@ -93,12 +116,29 @@ export function ChartConfigDialog({
         const yKeysRaw = formData.getAll("yKeys") as string[];
         return yKeysRaw.includes("count") ? true : false;
       })(),
+      showGrid: getBooleanField("showGrid", config?.showGrid ?? true),
+      showXAxis: getBooleanField("showXAxis", config?.showXAxis ?? true),
+      showYAxis: getBooleanField("showYAxis", config?.showYAxis ?? true),
+      showDots: getBooleanField("showDots", config?.showDots ?? true),
+      showTooltip: getBooleanField("showTooltip", config?.showTooltip ?? true),
+      lineSize: getNumberField("lineSize", config?.lineSize ?? 2),
+      suffixLabelY:
+        ((formData.get("suffixLabelY") as string) || "").trim() || undefined,
+      labelYAngle: getNumberField(
+        "labelYAngle",
+        config?.labelYAngle ?? -90,
+      ),
+      referenceLineLabel:
+        ((formData.get("referenceLineLabel") as string) || "").trim() ||
+        undefined,
     };
 
     // If multipleLines is enabled, ensure measurementColumn is in yKeys and legend is enabled
     if (newConfig.multipleLines && newConfig.measurementColumn) {
       if (!newConfig.yKeys.includes(newConfig.measurementColumn)) {
-        newConfig.yKeys = [...new Set([...newConfig.yKeys, newConfig.measurementColumn])];
+        newConfig.yKeys = [
+          ...new Set([...newConfig.yKeys, newConfig.measurementColumn]),
+        ];
       }
       newConfig.legend = true;
     }
@@ -225,7 +265,9 @@ export function ChartConfigDialog({
           {chartType === "line" && (
             <>
               <fieldset className="space-y-3">
-                <legend className="text-sm font-medium">Multi-line Chart</legend>
+                <legend className="text-sm font-medium">
+                  Multi-line Chart
+                </legend>
                 <p className="text-xs text-gray-500">
                   Enable to compare multiple categories as separate lines
                 </p>
@@ -266,7 +308,10 @@ export function ChartConfigDialog({
                   {/* Category Column */}
                   <div className="space-y-3">
                     <div>
-                      <label htmlFor="categoryColumn" className="text-sm font-medium">
+                      <label
+                        htmlFor="categoryColumn"
+                        className="text-sm font-medium"
+                      >
                         Category Column
                       </label>
                       <p className="text-xs text-gray-500">
@@ -298,7 +343,9 @@ export function ChartConfigDialog({
 
                       {/* Line Categories */}
                       <fieldset className="space-y-3">
-                        <legend className="text-sm font-medium">Categories</legend>
+                        <legend className="text-sm font-medium">
+                          Categories
+                        </legend>
                         <p className="text-xs text-gray-500">
                           Select which categories to display as lines
                         </p>
@@ -310,7 +357,8 @@ export function ChartConfigDialog({
                             onClick={toggleAllCategories}
                             className="mb-2"
                           >
-                            {selectedCategories.length === availableCategories.length
+                            {selectedCategories.length ===
+                              availableCategories.length
                               ? "Deselect All"
                               : "Select All"}
                           </Button>
@@ -324,7 +372,9 @@ export function ChartConfigDialog({
                                   type="checkbox"
                                   name="lineCategories"
                                   value={category}
-                                  checked={selectedCategories.includes(category)}
+                                  checked={selectedCategories.includes(
+                                    category,
+                                  )}
                                   onChange={() => toggleCategory(category)}
                                   className="rounded border-input"
                                 />
@@ -342,11 +392,15 @@ export function ChartConfigDialog({
                   {/* Measurement Column */}
                   <div className="space-y-3">
                     <div>
-                      <label htmlFor="measurementColumn" className="text-sm font-medium">
+                      <label
+                        htmlFor="measurementColumn"
+                        className="text-sm font-medium"
+                      >
                         Measurement Column
                       </label>
                       <p className="text-xs text-gray-500">
-                        The numeric column to measure (e.g., num_unicorns, revenue)
+                        The numeric column to measure (e.g., num_unicorns,
+                        revenue)
                       </p>
                     </div>
                     <select
@@ -444,7 +498,7 @@ export function ChartConfigDialog({
               id="lineSize"
               name="lineSize"
               type="number"
-              defaultValue="1"
+              defaultValue={config?.lineSize ?? 2}
               min="1"
               max="10"
             />
@@ -454,19 +508,18 @@ export function ChartConfigDialog({
 
           {/* Hide Legend */}
           <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Hide Legend</legend>
-            <p className="text-xs text-card-foreground">Hide/Show legend.</p>
+            <legend className="text-sm font-medium">Legend</legend>
             <div className="flex gap-2">
               <label className="cursor-pointer">
                 <input
                   type="radio"
                   name="legend"
                   value="yes"
-                  defaultChecked={!config?.legend}
+                  defaultChecked={config?.legend}
                   className="sr-only peer"
                 />
                 <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Yes
+                  Show
                 </div>
               </label>
               <label className="cursor-pointer">
@@ -474,11 +527,11 @@ export function ChartConfigDialog({
                   type="radio"
                   name="legend"
                   value="no"
-                  defaultChecked={config?.legend}
+                  defaultChecked={!config?.legend}
                   className="sr-only peer"
                 />
-                <div className="px-4 py-2 border rounded-lg hover:bg-gray-50 peer-checked:bg-blue-50 peer-checked:border-blue-200">
-                  No
+                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
+                  Hide
                 </div>
               </label>
             </div>
@@ -488,32 +541,30 @@ export function ChartConfigDialog({
 
           {/* Hide Grid */}
           <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Hide Grid</legend>
-            <p className="text-xs text-gray-500">
-              Hide/Show Grid for minimal graph
-            </p>
+            <legend className="text-sm font-medium">Grid</legend>
             <div className="flex gap-2">
               <label className="cursor-pointer">
                 <input
                   type="radio"
-                  name="hideGrid"
-                  value="yes"
+                  name="showGrid"
+                  value="true"
+                  defaultChecked={config?.showGrid ?? true}
                   className="sr-only peer"
                 />
                 <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Yes
+                  Show
                 </div>
               </label>
               <label className="cursor-pointer">
                 <input
                   type="radio"
-                  name="hideGrid"
-                  value="no"
-                  defaultChecked
+                  name="showGrid"
+                  value="false"
+                  defaultChecked={config?.showGrid === false}
                   className="sr-only peer"
                 />
                 <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  No
+                  Hide
                 </div>
               </label>
             </div>
@@ -523,32 +574,30 @@ export function ChartConfigDialog({
 
           {/* Hide X Axis */}
           <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Hide X Axis</legend>
-            <p className="text-xs text-gray-500">
-              Hide/Show X Axis for minimal graph
-            </p>
+            <legend className="text-sm font-medium">X Axis</legend>
             <div className="flex gap-2">
               <label className="cursor-pointer">
                 <input
                   type="radio"
-                  name="hideXAxis"
-                  value="yes"
-                  defaultChecked
+                  name="showXAxis"
+                  value="true"
+                  defaultChecked={config?.showXAxis ?? true}
                   className="sr-only peer"
                 />
                 <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Yes
+                  Show
                 </div>
               </label>
               <label className="cursor-pointer">
                 <input
                   type="radio"
-                  name="hideXAxis"
-                  value="no"
+                  name="showXAxis"
+                  value="false"
+                  defaultChecked={config?.showXAxis === false}
                   className="sr-only peer"
                 />
                 <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  No
+                  Hide
                 </div>
               </label>
             </div>
@@ -558,30 +607,30 @@ export function ChartConfigDialog({
 
           {/* Hide Dots */}
           <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Hide Dots</legend>
-            <p className="text-xs text-gray-500">Hide/Show Dots</p>
+            <legend className="text-sm font-medium">Dots</legend>
             <div className="flex gap-2">
               <label className="cursor-pointer">
                 <input
                   type="radio"
-                  name="hideDots"
-                  value="yes"
+                  name="showDots"
+                  value="true"
+                  defaultChecked={config?.showDots ?? true}
                   className="sr-only peer"
                 />
                 <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Yes
+                  Show
                 </div>
               </label>
               <label className="cursor-pointer">
                 <input
                   type="radio"
-                  name="hideDots"
-                  value="no"
-                  defaultChecked
+                  name="showDots"
+                  value="false"
+                  defaultChecked={config?.showDots === false}
                   className="sr-only peer"
                 />
                 <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  No
+                  Hide
                 </div>
               </label>
             </div>
@@ -591,32 +640,30 @@ export function ChartConfigDialog({
 
           {/* Hide Y Axis */}
           <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Hide Y Axis</legend>
-            <p className="text-xs text-gray-500">
-              Hide/Show Y Axis for minimal graph
-            </p>
+            <legend className="text-sm font-medium">Y Axis</legend>
             <div className="flex gap-2">
               <label className="cursor-pointer">
                 <input
                   type="radio"
-                  name="hideYAxis"
-                  value="yes"
+                  name="showYAxis"
+                  value="true"
+                  defaultChecked={config?.showYAxis ?? true}
                   className="sr-only peer"
                 />
                 <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Yes
+                  Show
                 </div>
               </label>
               <label className="cursor-pointer">
                 <input
                   type="radio"
-                  name="hideYAxis"
-                  value="no"
-                  defaultChecked
+                  name="showYAxis"
+                  value="false"
+                  defaultChecked={config?.showYAxis === false}
                   className="sr-only peer"
                 />
                 <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  No
+                  Hide
                 </div>
               </label>
             </div>
@@ -634,7 +681,12 @@ export function ChartConfigDialog({
                 Suffix for label Y for display something like unit
               </p>
             </div>
-            <Input id="suffixLabelY" name="suffixLabelY" placeholder="" />
+            <Input
+              id="suffixLabelY"
+              name="suffixLabelY"
+              placeholder=""
+              defaultValue={config?.suffixLabelY ?? ""}
+            />
           </div>
 
           <Separator />
@@ -651,7 +703,7 @@ export function ChartConfigDialog({
               id="labelYAngle"
               name="labelYAngle"
               type="number"
-              defaultValue="0"
+              defaultValue={config?.labelYAngle ?? -90}
               min="-90"
               max="90"
             />
@@ -661,32 +713,33 @@ export function ChartConfigDialog({
 
           {/* Hide Tooltip */}
           <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Hide Tooltip</legend>
+            <legend className="text-sm font-medium">Tooltip</legend>
             <p className="text-xs text-gray-500">
-              Enable or disable tooltip when hover on graph
+              Show/Hide tooltip when hover on graph
             </p>
             <div className="flex gap-2">
               <label className="cursor-pointer">
                 <input
                   type="radio"
-                  name="hideTooltip"
-                  value="yes"
+                  name="showTooltip"
+                  value="true"
+                  defaultChecked={config?.showTooltip ?? true}
                   className="sr-only peer"
                 />
                 <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Yes
+                  Show
                 </div>
               </label>
               <label className="cursor-pointer">
                 <input
                   type="radio"
-                  name="hideTooltip"
-                  value="no"
-                  defaultChecked
+                  name="showTooltip"
+                  value="false"
+                  defaultChecked={config?.showTooltip === false}
                   className="sr-only peer"
                 />
                 <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  No
+                  Hide
                 </div>
               </label>
             </div>
@@ -711,6 +764,7 @@ export function ChartConfigDialog({
               id="referenceLineLabel"
               name="referenceLineLabel"
               placeholder=""
+              defaultValue={config?.referenceLineLabel ?? ""}
             />
           </div>
 

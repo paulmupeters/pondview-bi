@@ -265,7 +265,7 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
           </div>
 
           {/* Settings Section */}
-          <div className="border-t border-border p-3">
+          <div className="border-t border-border p-3 mb-28 md:mb-0">
             <Link href="/dashboards">
               <button
                 type="button"

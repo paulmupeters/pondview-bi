@@ -6,7 +6,6 @@ import {
   LayoutGrid,
   PanelLeft,
   Plus,
-  PlusIcon,
   Settings,
 } from "lucide-react";
 import Link from "next/link";
@@ -94,7 +93,7 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
         {/* Toggle button when sidebar is closed */}
         {!isSidebarOpen && (
           <>
-            <div className="absolute top-4 left-4 z-50 flex flex-col items-center gap-2">
+            <div className="absolute top-4 left-2 z-50 flex flex-col items-center gap-2">
               <Button
                 variant="ghost"
                 size="icon"
@@ -134,7 +133,7 @@ export function SidebarLayout({ children }: SidebarLayoutProps) {
               </Popover>
               <ThemeToggle />
             </div>
-            <div className="absolute bottom-4 z-50 left-4 flex flex-col gap-2">
+            <div className="absolute bottom-36 lg:bottom-4 z-50 left-2 flex flex-col gap-2">
               <Link href="/dashboards">
                 <Button
                   variant="ghost"

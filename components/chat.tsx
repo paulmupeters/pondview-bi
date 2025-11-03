@@ -244,6 +244,11 @@ export default function Chat({
                     <Message from={message.role} key={message.id}>
                       <MessageContent className="w-full">
                         {message.parts?.map((part, partIndex) => {
+                          if (status === "submitted") {
+                            return (
+                              <span key="assistant-submitted-div">{animationFrame}</span>
+                            );
+                          }
                           if (part.type === "text") {
                             return (
                               <Response key={`${message.id}-part-${partIndex}`}>
@@ -339,9 +344,6 @@ export default function Chat({
                       </MessageContent>
                     </Message>
                   ))}
-                  {status === "submitted" && (
-                    <span key="assistant-submitted-div">{animationFrame}</span>
-                  )}
                   {status === "streaming" && (
                     <span key="assistant-streaming-div">
                       {animationFrame} {verbAiIsThinking}

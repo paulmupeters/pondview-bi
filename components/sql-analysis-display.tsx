@@ -229,6 +229,7 @@ export function SqlAnalysisDisplay({
     }
   }, [data?.query, data?.visualType]);
 
+
   useEffect(() => {
     const q = data?.query ?? null;
     const vt = data?.visualType ?? "table";
@@ -261,16 +262,16 @@ export function SqlAnalysisDisplay({
     cardConfig,
   ]);
 
-  useEffect(() => {
-    if (
-      data?.visualType === "table" &&
-      !chartConfig &&
-      !cardConfig &&
-      activeView !== "table"
-    ) {
-      setActiveView("table");
-    }
-  }, [data?.visualType, chartConfig, cardConfig, activeView]);
+  // useEffect(() => {
+  //   if (
+  //     data?.visualType === "table" &&
+  //     !chartConfig &&
+  //     !cardConfig &&
+  //     activeView !== "table"
+  //   ) {
+  //     setActiveView("table");
+  //   }
+  // }, [data?.visualType, chartConfig, cardConfig, activeView]);
 
   const columnsForDialog = useMemo(
     () => (executedColumns ?? data?.columns ?? []).map((c) => ({ name: c.name })),
@@ -339,7 +340,6 @@ export function SqlAnalysisDisplay({
   const shouldShowStageIndicator =
     showStageIndicator && effectiveStage !== "complete";
 
-  const canShowChart = Boolean(selectedForCard || selectedForChart);
   const canShowTable = Boolean(selectedForTable);
 
   if (!data && !shouldShowStageIndicator) {
@@ -397,7 +397,6 @@ export function SqlAnalysisDisplay({
               size="sm"
               onClick={() => setActiveView("chart")}
               className="flex items-center gap-2 hover:text-gray-500"
-              disabled={!canShowChart}
             >
               <ChartBar className="w-4 h-4" />
               Visual
@@ -470,7 +469,7 @@ export function SqlAnalysisDisplay({
         </Collapsible>
       )}
 
-      {data && activeView === "chart" && canShowChart && (
+      {data && activeView === "chart" && (
         <div className="relative">
           {selectedForCard ? (
             <>
