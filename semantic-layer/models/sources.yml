@@ -1,0 +1,7 @@
+# models/sources.yaml
+version: 1
+sources:
+  - name: orders
+    table: public.orders
+  - name: customers
+    table: public.customers

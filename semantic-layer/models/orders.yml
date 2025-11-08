@@ -1,0 +1,35 @@
+# models/orders.yaml
+version: 1
+explore: orders
+base: orders
+joins:
+  - name: customers
+    to: customers
+    type: many_to_one
+    on: orders.customer_id = customers.id
+dimensions:
+  - name: id
+    sql: orders.id
+    type: number
+    primaryKey: true
+    conformKey: order_id
+  - name: customer_id
+    sql: orders.customer_id
+    type: number
+    conformKey: customer_id
+  - name: region
+    sql: customers.region
+    type: string
+    conformKey: region
+  - name: created_at
+    sql: orders.created_at
+    type: time
+measures:
+  - name: revenue
+    agg: sum
+    sql: orders.amount
+  - name: order_count
+    agg: count
+segments:
+  - name: paid
+    sql: orders.status = 'paid'
