@@ -50,6 +50,8 @@ export const dashboardCharts = sqliteTable("dashboard_charts", {
   sql: text("sql").notNull(),
   dbIdentifier: text("db_identifier"),
   chartConfigJson: text("chart_config_json").notNull(),
+  semanticQueryJson: text("semantic_query_json"),
+  exploreName: text("explore_name"),
   position: integer("position").notNull(),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),

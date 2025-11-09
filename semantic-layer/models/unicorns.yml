@@ -1,0 +1,11 @@
+version: 1
+explore: unicorns
+base: unicorns
+dimensions:
+  - name: Country
+    sql: unicorns.Country
+    type: string
+measures:
+  - name: num_unicorns
+    agg: count
+    sql: '*'

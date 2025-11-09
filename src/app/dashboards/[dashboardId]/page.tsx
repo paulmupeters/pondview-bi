@@ -21,11 +21,21 @@ import {
 import { GripVertical, Settings, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
+import { FilterProvider, useFilters } from "./filter-context";
+import { DashboardFilterPane } from "@/components/dashboard-filter-pane";
 import { CardConfigDialog } from "@/components/card-config-dialog";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { DynamicChart } from "@/components/dynamic-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
@@ -35,7 +45,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+
 import {
   Select,
   SelectContent,
@@ -43,13 +53,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+
 import type { CardConfig, Config, Result } from "@/lib/types";
 
 type Dashboard = {
@@ -68,10 +72,11 @@ type DashboardChart = {
   position: number;
   createdAt: number;
   updatedAt: number;
+  filtersApplied?: boolean;
 };
 
 type SortableChartCardProps = {
-  chart: DashboardChart;
+  chart: DashboardChart & { filtersApplied?: boolean };
   config: Config | CardConfig | null;
   rows: Result[];
   onConfigChange: (newChartJson: string) => Promise<void>;
@@ -93,6 +98,7 @@ function SortableChartCard({
   onConfigChange,
   onDelete,
 }: SortableChartCardProps) {
+  const { filters } = useFilters();
   const {
     attributes,
     listeners,
@@ -136,6 +142,13 @@ function SortableChartCard({
           <ArrowTopRightOnSquareIcon className="h-4 w-4" />
         </button>
       </div>
+      {chart.filtersApplied && filters.length > 0 && (
+        <div className="absolute left-1/2 top-2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100">
+          <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+            {filters.length} filter{filters.length !== 1 ? "s" : ""} applied
+          </span>
+        </div>
+      )}
       {config && rows.length > 0 && !isCardConfig(config) ? (
         <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <ChartConfigDialog
@@ -252,6 +265,14 @@ function SortableChartCard({
 export default function DashboardDetailPage() {
   const params = useParams<{ dashboardId: string }>();
   const dashboardId = params.dashboardId;
+  return (
+    <FilterProvider dashboardId={dashboardId}>
+      <DashboardDetailPageContent dashboardId={dashboardId} />
+    </FilterProvider>
+  );
+}
+
+function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [charts, setCharts] = useState<DashboardChart[]>([]);
   const [loading, setLoading] = useState(true);
@@ -259,6 +280,7 @@ export default function DashboardDetailPage() {
   const [columns, setColumns] = useState<number>(3);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isFiltersPaneOpen, setIsFiltersPaneOpen] = useState(false);
+  const { filters } = useFilters();
 
   useEffect(() => {
     const savedColumns = localStorage.getItem(
@@ -295,12 +317,16 @@ export default function DashboardDetailPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const res = await fetch(`/api/dashboard/${dashboardId}/data`, {
+      const filtersParam =
+        filters.length > 0
+          ? `?filters=${encodeURIComponent(JSON.stringify(filters))}`
+          : "";
+      const res = await fetch(`/api/dashboard/${dashboardId}/data${filtersParam}`, {
         cache: "no-store",
       });
       if (!res.ok) return;
       const data = (await res.json()) as {
-        charts: (DashboardChart & { rows: Result[] })[];
+        charts: (DashboardChart & { rows: Result[]; filtersApplied?: boolean })[];
       };
       if (cancelled) return;
       const sortedCharts = [...data.charts].sort(
@@ -314,7 +340,7 @@ export default function DashboardDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [dashboardId]);
+  }, [dashboardId, filters]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -440,6 +466,25 @@ export default function DashboardDetailPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{dashboard.title}</h1>
         <div className="flex items-center gap-2">
+          <Sheet open={isFiltersPaneOpen} onOpenChange={setIsFiltersPaneOpen}>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="default">
+                <FunnelIcon className="h-4 w-4" />
+                Filters
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto p-4">
+              <SheetHeader>
+                <SheetTitle>Filters</SheetTitle>
+                <SheetDescription>
+                  Apply filters to all charts on this dashboard
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-6">
+                <DashboardFilterPane />
+              </div>
+            </SheetContent>
+          </Sheet>
           <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" size="default">
@@ -490,121 +535,9 @@ export default function DashboardDetailPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          <Button
-            variant="outline"
-            size="default"
-            onClick={() => setIsFiltersPaneOpen(true)}
-          >
-            <FunnelIcon className="h-4 w-4" />
-            Filters
-          </Button>
         </div>
       </div>
 
-      <Sheet open={isFiltersPaneOpen} onOpenChange={setIsFiltersPaneOpen}>
-        <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto p-4">
-          <SheetHeader>
-            <SheetTitle>Filters</SheetTitle>
-            <SheetDescription>
-              Apply filters to all charts on this dashboard
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="mt-6 space-y-6">
-            {/* Date Range Filter */}
-            <div className="space-y-2">
-              <label htmlFor="date-range-start" className="text-sm font-medium">
-                Date Range
-              </label>
-              <div className="flex gap-2">
-                <Input
-                  id="date-range-start"
-                  type="date"
-                  placeholder="Start date"
-                />
-                <Input id="date-range-end" type="date" placeholder="End date" />
-              </div>
-            </div>
-
-            {/* Category Filter */}
-            <div className="space-y-2">
-              <label htmlFor="category-filter" className="text-sm font-medium">
-                Category
-              </label>
-              <Select>
-                <SelectTrigger id="category-filter">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="sales">Sales</SelectItem>
-                  <SelectItem value="marketing">Marketing</SelectItem>
-                  <SelectItem value="operations">Operations</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Region Filter */}
-            <div className="space-y-2">
-              <label htmlFor="region-filter" className="text-sm font-medium">
-                Region
-              </label>
-              <Select>
-                <SelectTrigger id="region-filter">
-                  <SelectValue placeholder="Select region" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Regions</SelectItem>
-                  <SelectItem value="north">North</SelectItem>
-                  <SelectItem value="south">South</SelectItem>
-                  <SelectItem value="east">East</SelectItem>
-                  <SelectItem value="west">West</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Status Filter */}
-            <div className="space-y-2">
-              <label htmlFor="status-filter" className="text-sm font-medium">
-                Status
-              </label>
-              <Select>
-                <SelectTrigger id="status-filter">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Search Filter */}
-            <div className="space-y-2">
-              <label htmlFor="search-filter" className="text-sm font-medium">
-                Search
-              </label>
-              <Input
-                id="search-filter"
-                type="text"
-                placeholder="Search by keyword..."
-              />
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-2 pt-4">
-              <Button variant="default" className="flex-1">
-                Apply Filters
-              </Button>
-              <Button variant="outline" className="flex-1">
-                Clear All
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <SortableContext

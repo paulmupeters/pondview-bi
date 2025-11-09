@@ -1,6 +1,6 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import * as schema from "./schema";
-import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 
 let cachedDb: BunSQLiteDatabase<typeof schema> | undefined;
 
@@ -15,8 +15,6 @@ export function getDb(): BunSQLiteDatabase<typeof schema> {
 
   const filePath = process.env.DATABASE_PATH || "./sqlite.db";
   const sqlite = new Database(filePath);
-
-  
 
   // Ensure foreign key constraints are enforced (for ON DELETE CASCADE)
   sqlite.run(`PRAGMA foreign_keys = ON;`);
@@ -56,6 +54,9 @@ CREATE TABLE IF NOT EXISTS dashboard_charts (
   sql TEXT NOT NULL,
   db_identifier TEXT,
   chart_config_json TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  semantic_query_json TEXT,
+  explore_name TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   FOREIGN KEY (dashboard_id) REFERENCES dashboards(id) ON DELETE CASCADE
@@ -67,8 +68,25 @@ CREATE INDEX IF NOT EXISTS dashboards_updated_idx ON dashboards(updated_at);
 CREATE INDEX IF NOT EXISTS dashboard_charts_dashboard_idx ON dashboard_charts(dashboard_id, updated_at);
 `);
 
+  // Attempt to backfill missing columns in existing databases (ignore if already present)
+  try {
+    sqlite.run(
+      `ALTER TABLE dashboard_charts ADD COLUMN position INTEGER NOT NULL DEFAULT 0`
+    );
+  } catch {}
+  try {
+    sqlite.run(
+      `ALTER TABLE dashboard_charts ADD COLUMN semantic_query_json TEXT`
+    );
+  } catch {}
+  try {
+    sqlite.run(`ALTER TABLE dashboard_charts ADD COLUMN explore_name TEXT`);
+  } catch {}
+
   cachedDb = drizzle(sqlite, { schema });
-  migrate(cachedDb as BunSQLiteDatabase<typeof schema>, { migrationsFolder: './drizzle' });
+  migrate(cachedDb as BunSQLiteDatabase<typeof schema>, {
+    migrationsFolder: "./drizzle",
+  });
 
   return cachedDb as BunSQLiteDatabase<typeof schema>;
 }

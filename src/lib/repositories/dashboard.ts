@@ -63,6 +63,8 @@ export async function addChartToDashboard(input: {
   sql: string;
   dbIdentifier?: string | null;
   chartConfigJson: string;
+  semanticQueryJson?: string | null;
+  exploreName?: string | null;
   now?: number;
 }) {
   const db = getDb();
@@ -81,6 +83,8 @@ export async function addChartToDashboard(input: {
     sql: input.sql,
     dbIdentifier: input.dbIdentifier ?? null,
     chartConfigJson: input.chartConfigJson,
+    semanticQueryJson: input.semanticQueryJson ?? null,
+    exploreName: input.exploreName ?? null,
     position,
     createdAt: now,
     updatedAt: now,

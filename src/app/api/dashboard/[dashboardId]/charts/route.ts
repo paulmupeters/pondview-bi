@@ -6,7 +6,8 @@ import {
   removeChartFromDashboard,
   reorderDashboardCharts,
 } from "@/lib/repositories/dashboard";
-import { updateModelFromSQL } from "@/../semantic-layer";
+import { updateModelFromSQL, extractSemanticLayerFromSQL } from "@/../semantic-layer";
+import type { QueryAST } from "@/../semantic-layer/types";
 import { join } from "node:path";
 
 export const runtime = "nodejs";
@@ -37,14 +38,9 @@ export async function POST(
       status: 400,
     });
   }
-  const { id } = await addChartToDashboard({
-    dashboardId,
-    title: body.title ?? null,
-    description: body.description ?? null,
-    sql: body.sql,
-    dbIdentifier: body.dbIdentifier ?? null,
-    chartConfigJson: body.chartConfigJson,
-  });
+
+  let semanticQueryJson: string | null = null;
+  let exploreName: string | null = null;
 
   // Update semantic layer models based on SQL
   try {
@@ -64,9 +60,46 @@ export async function POST(
         updateResult.error
       );
     }
+
+    // Build QueryAST based on extracted metadata (independent of model update)
+    try {
+      const metadata = extractSemanticLayerFromSQL(body.sql);
+      const queryAST: QueryAST = {
+        explore: metadata.exploreName,
+        fields: [
+          ...metadata.dimensions.map((d) => `${metadata.exploreName}.${d.name}`),
+          ...metadata.measures.map((m) => `${metadata.exploreName}.${m.name}`),
+        ],
+        filters: [],
+        orderBy: [],
+        limit: undefined,
+      };
+      semanticQueryJson = JSON.stringify(queryAST);
+      exploreName = metadata.exploreName;
+    } catch (error) {
+      console.error("[Semantic Layer] Failed to extract semantic metadata:", error);
+      // Leave semanticQueryJson/exploreName as null; proceed to create chart
+    }
   } catch (error) {
     // Log error but don't fail the chart creation
     console.error("[Semantic Layer] Error updating model:", error);
+  }
+
+  const { id } = await addChartToDashboard({
+    dashboardId,
+    title: body.title ?? null,
+    description: body.description ?? null,
+    sql: body.sql,
+    dbIdentifier: body.dbIdentifier ?? null,
+    chartConfigJson: body.chartConfigJson,
+    semanticQueryJson,
+    exploreName,
+  });
+
+  if (exploreName && semanticQueryJson) {
+    console.log(
+      `[Semantic Layer] Stored semantic query for chart ${id}, explore: ${exploreName}`
+    );
   }
 
   return Response.json({ id });
