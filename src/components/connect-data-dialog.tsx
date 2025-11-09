@@ -238,7 +238,7 @@ export function ConnectDataDialog({
         description: tableDescription.trim(),
       };
 
-      appendConnectedTable(newEntry);
+      await appendConnectedTable(newEntry);
       onOpenChange(false);
     } catch (error) {
       console.error("Failed to write to localStorage", error);

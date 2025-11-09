@@ -1,4 +1,4 @@
-export type DimType = 'string' | 'number' | 'boolean' | 'time';
+export type DimType = "string" | "number" | "boolean" | "time";
 
 export type DimensionDef = {
   name: string;
@@ -11,10 +11,10 @@ export type DimensionDef = {
 export type MeasureDef = {
   name: string;
   sql: string; // expression over columns
-  agg: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct';
+  agg: "sum" | "avg" | "min" | "max" | "count" | "count_distinct";
 };
 
-export type JoinRel = 'many_to_one' | 'one_to_one';
+export type JoinRel = "many_to_one" | "one_to_one";
 
 export type JoinDef = {
   name: string;
@@ -36,19 +36,19 @@ export type ExploreDef = {
 };
 
 export type Op =
-  | 'eq'
-  | 'neq'
-  | 'in'
-  | 'not_in'
-  | 'gt'
-  | 'gte'
-  | 'lt'
-  | 'lte'
-  | 'between'
-  | 'contains'
-  | 'starts_with'
-  | 'is_null'
-  | 'is_not_null';
+  | "eq"
+  | "neq"
+  | "in"
+  | "not_in"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "between"
+  | "contains"
+  | "starts_with"
+  | "is_null"
+  | "is_not_null";
 
 export type Filter = {
   field: string; // e.g., "orders.region" or "orders.created_at"
@@ -58,7 +58,7 @@ export type Filter = {
 
 export type TimeDim = {
   field: string; // "orders.created_at"
-  grain?: 'day' | 'week' | 'month' | 'quarter' | 'year';
+  grain?: "day" | "week" | "month" | "quarter" | "year";
   range?: [string, string]; // ISO dates
   timezone?: string; // "UTC", "Europe/Paris"
 };
@@ -68,7 +68,22 @@ export type QueryAST = {
   fields: string[]; // dims and measures; e.g., ["orders.region", "orders.revenue"]
   filters?: Filter[];
   timeDimensions?: TimeDim[];
-  orderBy?: { field: string; dir: 'asc' | 'desc' }[];
+  orderBy?: { field: string; dir: "asc" | "desc" }[];
   limit?: number;
   offset?: number;
+};
+
+// Data Model type - collection of explores
+export type DataModel = {
+  explores: ExploreDef[];
+};
+
+// Resolved field definition used during query compilation
+export type FieldDef = {
+  kind: "dimension" | "measure";
+  alias: string;
+  sqlExpr: string;
+  dimension?: DimensionDef;
+  measure?: MeasureDef;
+  exploreName: string;
 };

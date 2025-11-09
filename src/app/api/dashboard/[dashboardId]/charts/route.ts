@@ -6,6 +6,8 @@ import {
   removeChartFromDashboard,
   reorderDashboardCharts,
 } from "@/lib/repositories/dashboard";
+import { updateModelFromSQL } from "@/../semantic-layer";
+import { join } from "node:path";
 
 export const runtime = "nodejs";
 
@@ -43,6 +45,30 @@ export async function POST(
     dbIdentifier: body.dbIdentifier ?? null,
     chartConfigJson: body.chartConfigJson,
   });
+
+  // Update semantic layer models based on SQL
+  try {
+    const modelsDir = join(process.cwd(), "semantic-layer", "models");
+    const updateResult = updateModelFromSQL(body.sql, modelsDir);
+
+    if (updateResult.success) {
+      console.log(
+        `[Semantic Layer] Updated model ${updateResult.exploreName}:`,
+        `created=${updateResult.created},`,
+        `dimensions=${updateResult.addedDimensions},`,
+        `measures=${updateResult.addedMeasures}`
+      );
+    } else {
+      console.error(
+        `[Semantic Layer] Failed to update model:`,
+        updateResult.error
+      );
+    }
+  } catch (error) {
+    // Log error but don't fail the chart creation
+    console.error("[Semantic Layer] Error updating model:", error);
+  }
+
   return Response.json({ id });
 }
 

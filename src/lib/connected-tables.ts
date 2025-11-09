@@ -68,14 +68,49 @@ export function writeConnectedTablesToStorage(tables: ConnectedTable[]) {
   }
 }
 
-export function appendConnectedTable(entry: ConnectedTable) {
+export async function appendConnectedTable(
+  entry: ConnectedTable
+): Promise<void> {
   if (!isClient) {
     return;
   }
 
   const existing = readConnectedTablesFromStorage();
   writeConnectedTablesToStorage([...existing, entry]);
-}
+
+  // Update semantic layer sources.yml
+  try {
+    const response = await fetch("/api/semantic-layer/sources", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        table: entry.table,
+        schema: entry.schema,
+        tables: entry.tables,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error(
+        "[Semantic Layer] Failed to update sources:",
+        errorData.error || response.statusText
+      );
+    } else {
+      const result = await response.json();
+      if (result.success && result.addedSources > 0) {
+        console.log(
+          `[Semantic Layer] Added ${result.addedSources} source(s) to sources.yml`
+        );
+      }
+    }
+  } catch (error) {
+    // Don't fail the connection if semantic layer update fails
+    console.error("[Semantic Layer] Error updating sources:", error);
+  }
+ }
 
 export async function removeConnectedTable(
   entry: ConnectedTable
