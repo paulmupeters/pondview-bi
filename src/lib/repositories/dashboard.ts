@@ -1,15 +1,20 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getDb } from "@/lib/db/client";
-import { dashboardCharts, dashboards } from "@/lib/db/schema";
+import { dashboardCharts, dashboardSlicers, dashboards } from "@/lib/db/schema";
 
 export type DbDashboard = typeof dashboards.$inferSelect;
 export type DbDashboardChart = typeof dashboardCharts.$inferSelect;
+export type DbDashboardSlicer = typeof dashboardSlicers.$inferSelect;
 
 export async function listDashboards() {
   const db = getDb();
   return db
-    .select({ id: dashboards.id, title: dashboards.title, updatedAt: dashboards.updatedAt })
+    .select({
+      id: dashboards.id,
+      title: dashboards.title,
+      updatedAt: dashboards.updatedAt,
+    })
     .from(dashboards)
     .orderBy(desc(dashboards.updatedAt));
 }
@@ -71,7 +76,9 @@ export async function addChartToDashboard(input: {
   const now = input.now ?? Date.now();
   const id = nanoid();
   const [{ value: maxPosition } = { value: -1 }] = await db
-    .select({ value: sql<number>`coalesce(max(${dashboardCharts.position}), -1)` })
+    .select({
+      value: sql<number>`coalesce(max(${dashboardCharts.position}), -1)`,
+    })
     .from(dashboardCharts)
     .where(eq(dashboardCharts.dashboardId, input.dashboardId));
   const position = (maxPosition ?? -1) + 1;
@@ -96,11 +103,10 @@ export async function addChartToDashboard(input: {
   return { id };
 }
 
-
 export async function updateChartConfig(
   chartId: string,
   chartConfigJson: string,
-  now = Date.now(),
+  now = Date.now()
 ) {
   const db = getDb();
   // Fetch chart first to get parent dashboard id
@@ -121,7 +127,7 @@ export async function updateChartConfig(
 export async function reorderDashboardCharts(
   dashboardId: string,
   orderedChartIds: string[],
-  now = Date.now(),
+  now = Date.now()
 ) {
   const db = getDb();
   await db.transaction(async (trx) => {
@@ -132,7 +138,10 @@ export async function reorderDashboardCharts(
     const existingIds = new Set(existing.map((row) => row.id));
     const filteredIds = orderedChartIds.filter((id) => existingIds.has(id));
     const uniqueFilteredSize = new Set(filteredIds).size;
-    if (filteredIds.length !== existing.length || uniqueFilteredSize !== filteredIds.length) {
+    if (
+      filteredIds.length !== existing.length ||
+      uniqueFilteredSize !== filteredIds.length
+    ) {
       throw new Error("Ordered chart ids do not match dashboard charts");
     }
     for (const [index, chartId] of filteredIds.entries()) {
@@ -142,8 +151,8 @@ export async function reorderDashboardCharts(
         .where(
           and(
             eq(dashboardCharts.id, chartId),
-            eq(dashboardCharts.dashboardId, dashboardId),
-          ),
+            eq(dashboardCharts.dashboardId, dashboardId)
+          )
         );
     }
     await trx
@@ -155,15 +164,13 @@ export async function reorderDashboardCharts(
 
 export async function removeChartFromDashboard(
   chartId: string,
-  now = Date.now(),
+  now = Date.now()
 ) {
   const db = getDb();
   // Fetch chart first to get parent dashboard id
   const chart = await getChartById(chartId);
   if (!chart) return { removed: false };
-  await db
-    .delete(dashboardCharts)
-    .where(eq(dashboardCharts.id, chartId));
+  await db.delete(dashboardCharts).where(eq(dashboardCharts.id, chartId));
   // bump dashboard updatedAt
   await db
     .update(dashboards)
@@ -185,4 +192,134 @@ export async function deleteDashboard(dashboardId: string) {
   return { deleted: true };
 }
 
+// Dashboard Slicers CRUD
+export async function listSlicersByDashboard(dashboardId: string) {
+  const db = getDb();
+  return db
+    .select()
+    .from(dashboardSlicers)
+    .where(eq(dashboardSlicers.dashboardId, dashboardId))
+    .orderBy(asc(dashboardSlicers.position));
+}
 
+export async function addSlicerToDashboard(input: {
+  dashboardId: string;
+  field: string;
+  title?: string | null;
+  limit?: number;
+  now?: number;
+}) {
+  const db = getDb();
+  const now = input.now ?? Date.now();
+  const id = nanoid();
+  const [{ value: maxPosition } = { value: -1 }] = await db
+    .select({
+      value: sql<number>`coalesce(max(${dashboardSlicers.position}), -1)`,
+    })
+    .from(dashboardSlicers)
+    .where(eq(dashboardSlicers.dashboardId, input.dashboardId));
+  const position = (maxPosition ?? -1) + 1;
+  await db.insert(dashboardSlicers).values({
+    id,
+    dashboardId: input.dashboardId,
+    field: input.field,
+    title: input.title ?? null,
+    limit: input.limit ?? 50,
+    position,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db
+    .update(dashboards)
+    .set({ updatedAt: now })
+    .where(eq(dashboards.id, input.dashboardId));
+  return { id };
+}
+
+export async function updateSlicer(input: {
+  slicerId: string;
+  title?: string | null;
+  limit?: number;
+  now?: number;
+}) {
+  const db = getDb();
+  const now = input.now ?? Date.now();
+  const slicer = await db
+    .select()
+    .from(dashboardSlicers)
+    .where(eq(dashboardSlicers.id, input.slicerId))
+    .limit(1);
+  if (!slicer[0]) return { updated: false };
+  const updates: Partial<typeof dashboardSlicers.$inferInsert> = {
+    updatedAt: now,
+  };
+  if (input.title !== undefined) updates.title = input.title;
+  if (input.limit !== undefined) updates.limit = input.limit;
+  await db
+    .update(dashboardSlicers)
+    .set(updates)
+    .where(eq(dashboardSlicers.id, input.slicerId));
+  await db
+    .update(dashboards)
+    .set({ updatedAt: now })
+    .where(eq(dashboards.id, slicer[0].dashboardId));
+  return { updated: true };
+}
+
+export async function reorderDashboardSlicers(
+  dashboardId: string,
+  orderedSlicerIds: string[],
+  now = Date.now()
+) {
+  const db = getDb();
+  await db.transaction(async (trx) => {
+    const existing = await trx
+      .select({ id: dashboardSlicers.id })
+      .from(dashboardSlicers)
+      .where(eq(dashboardSlicers.dashboardId, dashboardId));
+    const existingIds = new Set(existing.map((row) => row.id));
+    const filteredIds = orderedSlicerIds.filter((id) => existingIds.has(id));
+    const uniqueFilteredSize = new Set(filteredIds).size;
+    if (
+      filteredIds.length !== existing.length ||
+      uniqueFilteredSize !== filteredIds.length
+    ) {
+      throw new Error("Ordered slicer ids do not match dashboard slicers");
+    }
+    for (const [index, slicerId] of filteredIds.entries()) {
+      await trx
+        .update(dashboardSlicers)
+        .set({ position: index, updatedAt: now })
+        .where(
+          and(
+            eq(dashboardSlicers.id, slicerId),
+            eq(dashboardSlicers.dashboardId, dashboardId)
+          )
+        );
+    }
+    await trx
+      .update(dashboards)
+      .set({ updatedAt: now })
+      .where(eq(dashboards.id, dashboardId));
+  });
+}
+
+export async function removeSlicerFromDashboard(
+  slicerId: string,
+  now = Date.now()
+) {
+  const db = getDb();
+  const slicer = await db
+    .select()
+    .from(dashboardSlicers)
+    .where(eq(dashboardSlicers.id, slicerId))
+    .limit(1);
+  if (!slicer[0]) return { removed: false };
+  const dashboardId = slicer[0].dashboardId;
+  await db.delete(dashboardSlicers).where(eq(dashboardSlicers.id, slicerId));
+  await db
+    .update(dashboards)
+    .set({ updatedAt: now })
+    .where(eq(dashboards.id, dashboardId));
+  return { removed: true };
+}

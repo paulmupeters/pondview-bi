@@ -21,21 +21,13 @@ import {
 import { GripVertical, Settings, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
-import { FilterProvider, useFilters } from "./filter-context";
-import { DashboardFilterPane } from "@/components/dashboard-filter-pane";
 import { CardConfigDialog } from "@/components/card-config-dialog";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
+import { DashboardFilterPane } from "@/components/dashboard-filter-pane";
+import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
 import { DynamicChart } from "@/components/dynamic-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
@@ -45,7 +37,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-
 import {
   Select,
   SelectContent,
@@ -53,8 +44,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import type { CardConfig, Config, Result } from "@/lib/types";
+import { FilterProvider, useFilters } from "./filter-context";
 
 type Dashboard = {
   id: string;
@@ -321,12 +320,18 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
         filters.length > 0
           ? `?filters=${encodeURIComponent(JSON.stringify(filters))}`
           : "";
-      const res = await fetch(`/api/dashboard/${dashboardId}/data${filtersParam}`, {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/dashboard/${dashboardId}/data${filtersParam}`,
+        {
+          cache: "no-store",
+        },
+      );
       if (!res.ok) return;
       const data = (await res.json()) as {
-        charts: (DashboardChart & { rows: Result[]; filtersApplied?: boolean })[];
+        charts: (DashboardChart & {
+          rows: Result[];
+          filtersApplied?: boolean;
+        })[];
       };
       if (cancelled) return;
       const sortedCharts = [...data.charts].sort(
@@ -537,7 +542,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
           </Dialog>
         </div>
       </div>
-
+      <DashboardSlicersBar dashboardId={dashboardId} />
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <SortableContext

@@ -9,6 +9,7 @@ export async function runSqlNormalized(
   const dbPath = resolveDbPath(dbIdentifier);
   const rawRows = await runRaw(dbPath, sql);
 
+
   const normalizeValue = (value: unknown): string | number | boolean | Date => {
     if (value instanceof Date) return value;
     if (

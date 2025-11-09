@@ -21,13 +21,19 @@ export function compileToDuckdb(
   const { explore } = resolveExplore(dataModel, q.explore);
   const aliasMap = new Map<string, string>(); // source -> alias
   const params: unknown[] = [];
+  const baseAlias = aliasFor(explore.base, aliasMap);
+  aliasMap.set(explore.name, baseAlias);
 
   // 1) Determine needed fields
   const fields = q.fields.map((f) => resolveField(dataModel, q.explore, f));
+
+  // 2) Assign smart aliases (use simple names unless there are conflicts)
+  assignFieldAliases(fields);
+
   const filters = [...(q.filters || []), ...(ctx.rls || [])];
 
   // 2) Plan joins
-  const joinPlan = planJoins(explore, fields, filters);
+  const joinPlan = planJoins(dataModel, explore, fields, filters, aliasMap);
 
   // 3) Build SELECT
   const selectExprs: string[] = [];
@@ -36,22 +42,21 @@ export function compileToDuckdb(
 
   for (const f of fields) {
     if (f.kind === "dimension") {
-      const expr = applyTimeGrainIfNeeded(f, q.timeDimensions);
+      const exprWithGrain = applyTimeGrainIfNeeded(f, q.timeDimensions);
+      const expr = applyTableAliases(exprWithGrain, aliasMap);
       selectExprs.push(`${expr} AS "${f.alias}"`);
       groupByExprs.push(expr);
       selectAliases.push(f.alias);
     } else {
-      const agg = aggSql(f.measure?.agg || "count", f.sqlExpr);
+      const sqlExpr = applyTableAliases(f.sqlExpr, aliasMap);
+      const agg = aggSql(f.measure?.agg || "count", sqlExpr);
       selectExprs.push(`${agg} AS "${f.alias}"`);
       selectAliases.push(f.alias);
     }
   }
 
   // 4) FROM + JOINs
-  const fromSql = `FROM ${quoteIdent(explore.base)} AS ${aliasFor(
-    explore.base,
-    aliasMap
-  )}`;
+  const fromSql = `FROM ${quoteIdent(explore.base)} AS ${baseAlias}`;
   const joinSql = joinPlan
     .map((j) => {
       const joinType = j.required ? "INNER JOIN" : "LEFT JOIN";
@@ -63,11 +68,11 @@ export function compileToDuckdb(
   const whereClauses: string[] = [];
   for (const flt of filters) {
     const resolved = resolveField(dataModel, q.explore, flt.field) as FieldDef;
-    const { clause, values } = renderFilter(
+    const filterExpr = applyTableAliases(
       applyTimeGrainIfNeeded(resolved, q.timeDimensions),
-      flt,
-      params.length + 1
+      aliasMap
     );
+    const { clause, values } = renderFilter(filterExpr, flt, params.length + 1);
     whereClauses.push(clause);
     params.push(...values);
   }
@@ -77,15 +82,12 @@ export function compileToDuckdb(
     groupByExprs.length > 0 ? `GROUP BY ${groupByExprs.join(", ")}` : "";
 
   // 7) ORDER BY
-  const orderBy =
-    q.orderBy && q.orderBy.length
-      ? "ORDER BY " +
-        q.orderBy
-          .map(
-            (o) => `"${resolveAlias(fields, o.field)}" ${o.dir.toUpperCase()}`
-          )
-          .join(", ")
-      : "";
+  const orderBy = q.orderBy?.length
+    ? "ORDER BY " +
+      q.orderBy
+        .map((o) => `"${resolveAlias(fields, o.field)}" ${o.dir.toUpperCase()}`)
+        .join(", ")
+    : "";
 
   // 8) LIMIT/OFFSET
   const limit = Number.isFinite(q.limit) ? `LIMIT ${q.limit}` : "LIMIT 5000";
@@ -154,12 +156,21 @@ function renderFilter(expr: string, f: Filter, paramIndex: number) {
       return { clause: `${expr} <= $${paramIndex}`, values: [f.values?.[0]] };
     case "between": {
       const [a, b] = f.values as [unknown, unknown];
-      return { clause: `${expr} BETWEEN $${paramIndex} AND $${paramIndex + 1}`, values: [a, b] };
+      return {
+        clause: `${expr} BETWEEN $${paramIndex} AND $${paramIndex + 1}`,
+        values: [a, b],
+      };
     }
     case "contains":
-      return { clause: `${expr} LIKE $${paramIndex}`, values: [`%${f.values?.[0]}%`] };
+      return {
+        clause: `${expr} LIKE $${paramIndex}`,
+        values: [`%${f.values?.[0]}%`],
+      };
     case "starts_with":
-      return { clause: `${expr} LIKE $${paramIndex}`, values: [`${f.values?.[0]}%`] };
+      return {
+        clause: `${expr} LIKE $${paramIndex}`,
+        values: [`${f.values?.[0]}%`],
+      };
     case "is_null":
       return { clause: `${expr} IS NULL`, values: [] };
     case "is_not_null":
@@ -198,7 +209,7 @@ function resolveField(
   if (dimension) {
     return {
       kind: "dimension",
-      alias: fieldRef.replace(".", "_"),
+      alias: fieldName, // Start with simple name, will be disambiguated later if needed
       sqlExpr: dimension.sql,
       dimension,
       exploreName: explore.name,
@@ -210,7 +221,7 @@ function resolveField(
   if (measure) {
     return {
       kind: "measure",
-      alias: fieldRef.replace(".", "_"),
+      alias: fieldName, // Start with simple name, will be disambiguated later if needed
       sqlExpr: measure.sql,
       measure,
       exploreName: explore.name,
@@ -222,6 +233,32 @@ function resolveField(
   );
 }
 
+// Assign aliases to fields, using simple names unless there are conflicts
+function assignFieldAliases(fields: FieldDef[]): void {
+  const aliasCount = new Map<string, number>();
+
+  // Count how many times each simple name appears
+  for (const field of fields) {
+    const simpleName =
+      field.dimension?.name || field.measure?.name || field.alias;
+    aliasCount.set(simpleName, (aliasCount.get(simpleName) || 0) + 1);
+  }
+
+  // Assign final aliases
+  for (const field of fields) {
+    const simpleName =
+      field.dimension?.name || field.measure?.name || field.alias;
+    const count = aliasCount.get(simpleName) || 0;
+
+    // If there's a conflict (same field name from different explores), use qualified name
+    if (count > 1) {
+      field.alias = `${field.exploreName}_${simpleName}`;
+    } else {
+      field.alias = simpleName;
+    }
+  }
+}
+
 // Plan which joins are needed based on fields and filters
 type JoinPlanItem = {
   toTable: string;
@@ -231,20 +268,31 @@ type JoinPlanItem = {
 };
 
 function planJoins(
+  dataModel: DataModel,
   explore: ExploreDef,
-  fields: FieldDef[],
-  filters: Filter[]
+  _fields: FieldDef[],
+  _filters: Filter[],
+  aliasMap: Map<string, string>
 ): JoinPlanItem[] {
   // For now, simple implementation - include all joins defined in the explore
   // In a real implementation, this would analyze which joins are actually needed
   const joins = explore.joins || [];
 
-  return joins.map((join, index) => ({
-    toTable: join.to,
-    toAlias: `j${index}`,
-    on: join.on,
-    required: join.required || false,
-  }));
+  return joins.map((join) => {
+    const targetExplore = dataModel.explores.find((e) => e.name === join.to);
+    const targetTable = targetExplore ? targetExplore.base : join.to;
+    const toAlias = aliasFor(targetTable, aliasMap);
+    aliasMap.set(join.name, toAlias);
+    aliasMap.set(join.to, toAlias);
+    const onExpr = applyTableAliases(join.on, aliasMap);
+
+    return {
+      toTable: targetTable,
+      toAlias,
+      on: onExpr,
+      required: join.required || false,
+    };
+  });
 }
 
 // Apply time grain to a dimension field if it's a time dimension
@@ -290,19 +338,53 @@ function applyTimeGrainIfNeeded(
 
 // Generate or retrieve alias for a table
 function aliasFor(tableName: string, aliasMap: Map<string, string>): string {
-  if (aliasMap.has(tableName)) {
-    return aliasMap.get(tableName)!;
+  const existing = aliasMap.get(tableName);
+  if (existing) {
+    return existing;
   }
-  const alias = `t${aliasMap.size}`;
+  const aliasIndex = new Set(aliasMap.values()).size;
+  const alias = `t${aliasIndex}`;
   aliasMap.set(tableName, alias);
   return alias;
+}
+
+function applyTableAliases(
+  expr: string,
+  aliasMap: Map<string, string>
+): string {
+  if (!expr) {
+    return expr;
+  }
+
+  let result = expr;
+  // Sort by length descending to replace longer names first (prevents partial matches)
+  const entries = Array.from(aliasMap.entries()).sort(
+    (a, b) => b[0].length - a[0].length
+  );
+
+  for (const [table, alias] of entries) {
+    if (!alias || table === alias) {
+      continue;
+    }
+
+    // Simple approach: replace "table." with "alias."
+    // Using replaceAll for all occurrences
+    const searchStr = `${table}.`;
+    const replaceStr = `${alias}.`;
+    result = result.replaceAll(searchStr, replaceStr);
+  }
+
+  return result;
 }
 
 // Resolve field reference to its alias in the SELECT clause
 function resolveAlias(fields: FieldDef[], fieldRef: string): string {
   const field = fields.find((f) => {
     const fullName = `${f.exploreName}.${f.dimension?.name || f.measure?.name}`;
-    return fullName === fieldRef || f.alias === fieldRef.replace(".", "_");
+    const simpleName = f.dimension?.name || f.measure?.name;
+    return (
+      fullName === fieldRef || simpleName === fieldRef || f.alias === fieldRef
+    );
   });
 
   if (!field) {

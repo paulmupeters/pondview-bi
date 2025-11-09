@@ -15,6 +15,13 @@
       "when": 1762693780467,
       "tag": "0001_past_groot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1762698864747,
+      "tag": "0002_sticky_stick",
+      "breakpoints": true
     }
   ]
 }
