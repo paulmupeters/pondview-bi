@@ -1,5 +1,14 @@
 "use client";
 
+import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  getPaginationRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function SqlResultsTable({
   dataOverride,
@@ -18,11 +27,46 @@ export function SqlResultsTable({
 }) {
   const payload = dataOverride; // parent supplies data; avoid extra subscription
 
+  // Create column definitions for TanStack Table
+  // Use empty arrays as defaults to ensure hooks are always called
+  const columns = payload?.columns ?? [];
+  const rows = payload?.rows ?? [];
+  const summary = payload?.summary;
+
+  const tableColumns: ColumnDef<Record<string, unknown>>[] = columns.map(
+    (column) => ({
+      accessorKey: column.name,
+      header: column.name,
+      cell: ({ getValue }) => {
+        const value = getValue();
+        const stringValue = String(value ?? "");
+        return (
+          <div className="truncate" title={stringValue}>
+            {stringValue}
+          </div>
+        );
+      },
+    }),
+  );
+
+  const PAGE_SIZE = 42;
+  const shouldPaginate = rows.length > PAGE_SIZE;
+
+  const table = useReactTable({
+    data: rows,
+    columns: tableColumns,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: shouldPaginate ? PAGE_SIZE : rows.length || 1,
+      },
+    },
+  });
+
   if (!payload || payload.stage !== "complete") {
     return null;
   }
-
-  const { columns, rows, summary } = payload;
 
   if (!rows.length) {
     return (
@@ -33,7 +77,7 @@ export function SqlResultsTable({
   }
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 w-full min-w-0">
       {/* Summary */}
       {summary && (
         <div className="space-y-2">
@@ -49,47 +93,102 @@ export function SqlResultsTable({
       )}
 
       {/* Table */}
-      <div className="border rounded-lg overflow-hidden">
-        <div className="overflow-x-auto max-h-96">
-          <table className="w-full border-collapse">
-            <thead className="bg-muted/50 sticky top-0">
-              <tr>
-                {columns.map((column) => (
-                  <th
-                    key={column.name}
-                    className="text-left p-3 font-medium text-sm border-b border-border"
-                  >
-                    {column.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const rowKey = columns
-                  .map((c) => String(row[c.name] ?? ""))
-                  .join("|");
-                return (
-                  <tr
-                    key={rowKey}
-                  className="hover:bg-muted/30 border-b border-border last:border-b-0"
-                >
-                    {columns.map((column) => (
-                    <td
-                      key={column.name}
-                      className="p-3 text-sm max-w-xs truncate"
-                      title={String(row[column.name] || "")}
+      <div className="overflow-x-auto overflow-y-auto rounded-md border max-h-74 w-full">
+        <table className="w-full table-fixed caption-bottom text-sm">
+          <thead className="bg-muted/50 sticky top-0">
+            {table.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id} className="border-b">
+                {headerGroup.headers.map((header) => {
+                  return (
+                    <th
+                      key={header.id}
+                      className="h-10 max-w-0 px-2 text-left align-middle font-medium text-foreground"
                     >
-                      {String(row[column.name] || "")}
+                      <div className="truncate">
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            ))}
+          </thead>
+          <tbody>
+            {table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map((row) => (
+                <tr
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                  className="border-b hover:bg-muted/50 data-[state=selected]:bg-muted"
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className="max-w-0 p-2 align-middle">
+                      <div className="truncate whitespace-nowrap">
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </div>
                     </td>
                   ))}
                 </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+              ))
+            ) : (
+              <tr>
+                <td
+                    colSpan={tableColumns.length}
+                    className="h-24 text-center p-2"
+                  >
+                    No results.
+                  </td>
+                </tr>
+            )}
+          </tbody>
+        </table>
       </div>
+
+      {/* Pagination */}
+      {shouldPaginate && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Showing {table.getState().pagination.pageIndex * PAGE_SIZE + 1} to{" "}
+            {Math.min(
+              (table.getState().pagination.pageIndex + 1) * PAGE_SIZE,
+              rows.length,
+            )}{" "}
+            of {rows.length} results
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <div className="text-sm text-muted-foreground">
+              Page {table.getState().pagination.pageIndex + 1} of{" "}
+              {table.getPageCount()}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Insights */}
       {summary?.insights && summary.insights.length > 0 && (

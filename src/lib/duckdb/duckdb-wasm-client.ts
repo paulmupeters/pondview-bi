@@ -1,6 +1,7 @@
 import type { AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
 
 import { DuckdbWasmProvider } from "@/lib/duckdb/duckdb-wasm";
+import { RequestQueue } from "@/lib/duckdb/request-queue";
 
 interface ExecuteOptions {
   sql: string;
@@ -9,36 +10,13 @@ interface ExecuteOptions {
 
 type QueryResult = Awaited<ReturnType<AsyncDuckDBConnection["query"]>>;
 
-class AsyncTaskQueue {
-  private tail: Promise<unknown> = Promise.resolve();
-
-  add<T>(task: () => Promise<T>): Promise<T> {
-    const run = this.tail
-      .catch(() => {
-        // Ignore previous error so queue keeps flowing.
-        return undefined;
-      })
-      .then(task);
-
-    this.tail = run
-      .then(() => undefined)
-      .catch(() => undefined);
-
-    return run;
-  }
-
-  async onIdle(): Promise<void> {
-    await this.tail.catch(() => undefined);
-  }
-}
-
 export class DuckdbWasmClient {
   private readonly provider: DuckdbWasmProvider;
-  private readonly queue: AsyncTaskQueue;
+  private readonly queue: RequestQueue;
 
   constructor(provider: DuckdbWasmProvider = DuckdbWasmProvider.getInstance()) {
     this.provider = provider;
-    this.queue = new AsyncTaskQueue();
+    this.queue = new RequestQueue(1);
   }
 
   isConnected(): boolean {

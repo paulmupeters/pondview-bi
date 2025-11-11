@@ -12,7 +12,7 @@ type DuckdbShellDialogProps = {
 export function DuckdbShellDialog({ open, onOpenChange }: DuckdbShellDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl gap-6 p-0">
+      <DialogContent className="max-w-7xl gap-6 p-0">
         <DialogHeader className="px-6 pt-6">
           <DialogTitle>DuckDB Shell</DialogTitle>
         </DialogHeader>

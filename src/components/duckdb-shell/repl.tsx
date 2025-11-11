@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
-import { DuckdbWasmClient } from "@/lib/duckdb/duckdb-wasm-client";
+import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
 import { cn } from "@/lib/utils";
 
 type DuckdbReplProps = {
   className?: string;
+  httpConfig?: HttpDuckDbConfig;
 };
 
 type ResultsPayload = {
@@ -25,8 +26,7 @@ type ResultsPayload = {
 const HISTORY_KEY = "bi.repl.history";
 const HISTORY_LIMIT = 100;
 
-export function DuckdbRepl({ className }: DuckdbReplProps) {
-  const clientRef = useRef<DuckdbWasmClient | null>(null);
+export function DuckdbRepl({ className, httpConfig }: DuckdbReplProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -40,7 +40,6 @@ export function DuckdbRepl({ className }: DuckdbReplProps) {
   const [historyIdx, setHistoryIdx] = useState<number>(-1);
 
   useEffect(() => {
-    clientRef.current = new DuckdbWasmClient();
     try {
       const stored = JSON.parse(
         localStorage.getItem(HISTORY_KEY) || "[]",
@@ -145,14 +144,27 @@ export function DuckdbRepl({ className }: DuckdbReplProps) {
     const startedAt = performance.now();
 
     try {
-      const client = clientRef.current ?? new DuckdbWasmClient();
-      const result = await client.execute({
-        sql: currentSql,
+      const response = await fetch("/api/duckdb/query", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sql: currentSql,
+          config: httpConfig,
+        }),
         signal: controller.signal,
       });
-      const rows = (
-        result as unknown as { toArray: () => Record<string, unknown>[] }
-      ).toArray();
+
+      if (!response.ok) {
+        const errorData = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = (await response.json()) as { rows: Record<string, unknown>[] };
+      const rows = data.rows;
       const columns = Object.keys(rows[0] ?? {}).map((name) => ({ name }));
       const duration = Math.max(0, Math.round(performance.now() - startedAt));
       setRanMs(duration);
@@ -240,7 +252,7 @@ export function DuckdbRepl({ className }: DuckdbReplProps) {
       </div>
 
       {results && (
-        <div className="rounded-lg border border-border/60 bg-card">
+        <div className="rounded-lg border border-border/60 bg-card p-6">
           <SqlResultsTable dataOverride={results} />
         </div>
       )}
