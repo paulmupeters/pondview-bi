@@ -68,6 +68,38 @@ export function writeConnectedTablesToStorage(tables: ConnectedTable[]) {
   }
 }
 
+export async function updateSemanticLayerSources(
+  entry: ConnectedTable
+): Promise<void> {
+  if (!isClient) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/semantic-layer/sources", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        table: entry.table,
+        schema: entry.schema,
+        tables: entry.tables,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error(
+        "[Semantic Layer] Failed to update sources:",
+        errorData.error || response.statusText
+      );
+    }
+  } catch (error) {
+    console.error("[Semantic Layer] Failed to update sources:", error);
+  }
+}
+
 export async function appendConnectedTable(
   entry: ConnectedTable
 ): Promise<void> {

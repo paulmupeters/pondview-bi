@@ -1,5 +1,5 @@
-import { extractSemanticLayerFromSQL } from "./sql-extractor";
 import { updateModel } from "./model-updater";
+import { extractSemanticLayerFromSQL } from "./sql-extractor";
 
 export interface UpdateResult {
   success: boolean;
@@ -29,7 +29,10 @@ export interface UpdateResult {
  * // { success: true, exploreName: "unicorns", created: true, addedDimensions: 1, addedMeasures: 1 }
  * ```
  */
-export function updateModelFromSQL(sql: string, modelsDir: string): UpdateResult {
+export function updateModelFromSQL(
+  sql: string,
+  modelsDir: string,
+): UpdateResult {
   try {
     // Extract metadata from SQL
     const metadata = extractSemanticLayerFromSQL(sql);
@@ -56,14 +59,25 @@ export function updateModelFromSQL(sql: string, modelsDir: string): UpdateResult
   }
 }
 
-// Re-export for convenience
-export { extractSemanticLayerFromSQL } from "./sql-extractor";
-export { updateModel } from "./model-updater";
+export type { UpdateModelOptions } from "./model-updater";
 export {
+  addDimension,
+  addJoin,
+  addMeasure,
+  addSegment,
+  loadModel,
+  removeDimension,
+  removeJoin,
+  removeMeasure,
+  removeSegment,
+  updateModel,
+} from "./model-updater";
+export type { ConnectedTableInput, SourceEntry } from "./source-updater";
+export {
+  connectedTableToSources,
   updateSources,
   updateSourcesFromConnectedTable,
-  connectedTableToSources,
 } from "./source-updater";
 export type { ExtractedMetadata } from "./sql-extractor";
-export type { UpdateModelOptions } from "./model-updater";
-export type { SourceEntry, ConnectedTableInput } from "./source-updater";
+// Re-export for convenience
+export { extractSemanticLayerFromSQL } from "./sql-extractor";

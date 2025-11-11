@@ -62,6 +62,7 @@ export function ConnectDataDialog({
   const { theme } = useTheme();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [selectedDatabase, setSelectedDatabase] = useState<DatabaseType>(null);
+  const [chacheInDuckdbWasm, setChacheInDuckdbWasm] = useState(false);
   const [databasePath, setDatabasePath] = useState("");
   const [motherduckToken, setMotherduckToken] = useState("");
   const [schemas, setSchemas] = useState<string[]>([]);
@@ -211,8 +212,9 @@ export function ConnectDataDialog({
         dbPath = `${dbPath}${separator}motherduck_token=${encodedToken}`;
       }
       // Ingest selected tables into local DuckDB-Wasm database (row-major JSON)
-      if (selectedTables.size > 0) {
+      if (selectedTables.size > 0 && chacheInDuckdbWasm) {
         const client = new DuckdbWasmClient();
+        setChacheInDuckdbWasm(true)
         for (const t of selectedTables) {
           console.log("handleAddTable: fetching rows for ", selectedSchema, t);
           const url = new URL("/api/tables", window.location.origin);
@@ -252,6 +254,7 @@ export function ConnectDataDialog({
     selectedSchema,
     selectedTables,
     tableDescription,
+    chacheInDuckdbWasm,
   ]);
 
   const isAddDisabled = useMemo(() => {
