@@ -4,6 +4,7 @@ import {
   CircleStackIcon,
   GlobeEuropeAfricaIcon,
   PaperClipIcon,
+  PresentationChartBarIcon,
   Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 import type { ChatStatus } from "ai";
@@ -49,6 +50,7 @@ interface PromptInputWrapperProps {
   className?: string;
   status?: ChatStatus;
   onCreateDashboard?: () => void;
+  onAddVisual?: () => void;
 }
 
 // Inner component that uses the attachments hook within PromptInput context
@@ -257,6 +259,7 @@ export function PromptInputWrapper({
   className,
   status,
   onCreateDashboard,
+  onAddVisual,
 }: PromptInputWrapperProps) {
   const connectedTables = useConnectedTables();
 
@@ -355,6 +358,23 @@ export function PromptInputWrapper({
           </TooltipTrigger>
           <TooltipContent>
             <p>generate dashboard from chat visuals</p>
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PromptInputButton
+              size="sm"
+              variant="outline"
+              className="group"
+              onClick={() => onAddVisual?.()}
+              disabled={!onAddVisual}
+            >
+              <PresentationChartBarIcon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
+              <span>Add visual</span>
+            </PromptInputButton>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>manually add a chart or table</p>
           </TooltipContent>
         </Tooltip>
       </PromptInputHeader>

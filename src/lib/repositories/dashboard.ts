@@ -28,6 +28,25 @@ export async function createDashboard(title: string, now = Date.now()) {
   return { id };
 }
 
+export async function updateDashboardTitle(
+  dashboardId: string,
+  title: string,
+  now = Date.now()
+) {
+  const db = getDb();
+  const [existing] = await db
+    .select({ id: dashboards.id })
+    .from(dashboards)
+    .where(eq(dashboards.id, dashboardId))
+    .limit(1);
+  if (!existing) return { updated: false };
+  await db
+    .update(dashboards)
+    .set({ title, updatedAt: now })
+    .where(eq(dashboards.id, dashboardId));
+  return { updated: true };
+}
+
 export async function getDashboardWithCharts(dashboardId: string) {
   const db = getDb();
   const [d] = await db
@@ -115,6 +134,27 @@ export async function updateChartConfig(
   await db
     .update(dashboardCharts)
     .set({ chartConfigJson, updatedAt: now })
+    .where(eq(dashboardCharts.id, chartId));
+  // bump dashboard updatedAt
+  await db
+    .update(dashboards)
+    .set({ updatedAt: now })
+    .where(eq(dashboards.id, chart.dashboardId));
+  return { updated: true };
+}
+
+export async function updateChartSql(
+  chartId: string,
+  sql: string,
+  now = Date.now()
+) {
+  const db = getDb();
+  // Fetch chart first to get parent dashboard id
+  const chart = await getChartById(chartId);
+  if (!chart) return { updated: false };
+  await db
+    .update(dashboardCharts)
+    .set({ sql, updatedAt: now })
     .where(eq(dashboardCharts.id, chartId));
   // bump dashboard updatedAt
   await db

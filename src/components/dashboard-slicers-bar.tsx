@@ -83,7 +83,7 @@ export function DashboardSlicersBar({ dashboardId }: DashboardSlicersBarProps) {
         body: JSON.stringify({ field }),
       });
       if (!res.ok) {
-        throw new Error(`Failed to add slicer: ${res.statusText}`);
+        throw new Error(`Failed to add selection: ${res.statusText}`);
       }
       await res.json();
 
@@ -99,7 +99,7 @@ export function DashboardSlicersBar({ dashboardId }: DashboardSlicersBarProps) {
       setAddSlicerOpen(false);
       setAddSlicerSearch("");
     } catch (error) {
-      console.error("[DashboardSlicersBar] Failed to add slicer:", error);
+      console.error("[DashboardSlicersBar] Failed to add selection:", error);
     }
   };
 
@@ -168,11 +168,11 @@ export function DashboardSlicersBar({ dashboardId }: DashboardSlicersBarProps) {
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className="h-8">
               <Plus className="mr-2 h-4 w-4" />
-              Add Slicer
+              Add selection
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-[300px] p-0" align="start">
-            <Command>
+            <Command shouldFilter={false}>
               <CommandInput
                 placeholder="Search dimensions..."
                 value={addSlicerSearch}

@@ -5,6 +5,10 @@ import { compileToDuckdb } from "@/../semantic-layer/query-builder";
 import type { DataModel, Filter, QueryAST } from "@/../semantic-layer/types";
 import { runSqlNormalized } from "@/lib/db/router";
 import { listChartsByDashboard } from "@/lib/repositories/dashboard";
+import {
+  applyMaterializationsToDataModel,
+  listMaterializations,
+} from "@/lib/materialization/semantic-layer";
 
 export const runtime = "nodejs";
 
@@ -45,6 +49,20 @@ export async function GET(
   let dataModel: DataModel | null = null;
   try {
     dataModel = loadModelsFromDirectory(modelsDir);
+    try {
+      const materializations = await listMaterializations();
+      if (materializations.length > 0) {
+        dataModel = applyMaterializationsToDataModel(
+          dataModel,
+          materializations
+        );
+      }
+    } catch (materializationError) {
+      console.warn(
+        "[Dimension Values] Materialization metadata unavailable:",
+        materializationError
+      );
+    }
   } catch (error) {
     console.error("[Dimension Values] Failed to load models:", error);
     return Response.json(

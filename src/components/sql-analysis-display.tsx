@@ -5,19 +5,20 @@ import {
   Cog6ToothIcon,
   PlayCircleIcon,
   PlusIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 import {
   ChartBar,
   CheckCircle2,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Code2,
   Database,
   Loader2,
   Search,
   Table,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { runSqlAndGetRowObjectsJson } from "@/actions/queries";
 import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
 import { CardConfigDialog } from "@/components/card-config-dialog";
@@ -26,11 +27,6 @@ import { SqlChart } from "@/components/sql-chart";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -57,6 +53,7 @@ export type SqlAnalysisData = {
   columns?: { name: string; type?: string }[];
   rows?: Result[];
   visualType?: "table" | "chart" | "card";
+  isSqlExpandedInitial?: boolean;
   chartConfig?: Config;
   cardConfig?: CardConfig;
   summary?: {
@@ -79,6 +76,7 @@ interface SqlAnalysisDisplayProps {
     onNext: () => void;
   };
   className?: string;
+  onDelete?: () => void;
 }
 
 function StageIndicator({
@@ -197,6 +195,7 @@ export function SqlAnalysisDisplay({
   showStageIndicator = true,
   history,
   className,
+  onDelete,
 }: SqlAnalysisDisplayProps) {
   const [activeView, setActiveView] = useState<"table" | "chart">(() =>
     data?.visualType === "chart" || data?.visualType === "card"
@@ -212,6 +211,68 @@ export function SqlAnalysisDisplay({
   const lastQueryRef = useRef<string | null>(null);
   const lastAutoSwitchQueryRef = useRef<string | null>(null);
   const [query, setQuery] = useState<string | null>(null);
+  const [isSqlExpanded, setIsSqlExpanded] = useState(data?.isSqlExpandedInitial ?? false);
+
+  const toggleSqlExpanded = () => {
+    setIsSqlExpanded((prev) => !prev);
+  };
+
+  const renderSqlControls = (
+    extraControls?: ReactNode,
+    editorId = "sql-editor-analysis",
+  ) => (
+    <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <button
+        type="button"
+        onClick={toggleSqlExpanded}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        aria-label="View SQL"
+        aria-controls={editorId}
+        aria-expanded={isSqlExpanded}
+        title="View SQL"
+      >
+        <Code2 className="h-4 w-4" />
+      </button>
+      {extraControls}
+    </div>
+  );
+
+  const renderSqlEditor = (editorId = "sql-editor-analysis") =>
+    isSqlExpanded ? (
+      <div className="mt-4 border-t pt-4 transition-all duration-200">
+        <div className="flex flex-col gap-3">
+          <label htmlFor={editorId} className="text-sm font-medium">
+            SQL Query
+          </label>
+          <Textarea
+            id={editorId}
+            value={query ?? data?.query ?? ""}
+            onChange={(e) => setQuery(e.target.value)}
+            className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            placeholder="SELECT * FROM ..."
+          />
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsSqlExpanded(false)}
+            >
+              Close
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleExecute}
+              className="flex items-center gap-2"
+            >
+              <PlayCircleIcon className="w-4 h-4" />
+              Execute
+            </Button>
+          </div>
+        </div>
+      </div>
+    ) : null;
   useEffect(() => {
     const currentQuery = data?.query ?? null;
     if (currentQuery !== lastQueryRef.current) {
@@ -219,6 +280,7 @@ export function SqlAnalysisDisplay({
       setCardConfig(null);
       setExecutedRows(null);
       setExecutedColumns(null);
+      setQuery(null); // Reset local query override when data query changes
       setActiveView(
         data?.visualType === "chart" || data?.visualType === "card"
           ? "chart"
@@ -228,7 +290,6 @@ export function SqlAnalysisDisplay({
       lastQueryRef.current = currentQuery;
     }
   }, [data?.query, data?.visualType]);
-
 
   useEffect(() => {
     const q = data?.query ?? null;
@@ -274,7 +335,8 @@ export function SqlAnalysisDisplay({
   // }, [data?.visualType, chartConfig, cardConfig, activeView]);
 
   const columnsForDialog = useMemo(
-    () => (executedColumns ?? data?.columns ?? []).map((c) => ({ name: c.name })),
+    () =>
+      (executedColumns ?? data?.columns ?? []).map((c) => ({ name: c.name })),
     [executedColumns, data?.columns],
   );
 
@@ -288,7 +350,7 @@ export function SqlAnalysisDisplay({
         summary: data?.summary,
       };
     }
-    
+
     return data?.stage === "complete"
       ? {
           stage: data.stage,
@@ -309,7 +371,7 @@ export function SqlAnalysisDisplay({
         summary: data?.summary,
       };
     }
-    
+
     return data?.stage === "complete"
       ? {
           stage: data.stage,
@@ -320,16 +382,22 @@ export function SqlAnalysisDisplay({
       : undefined;
   }, [executedRows, executedColumns, data]);
 
+  const cardSourceRows =
+    executedRows ??
+    (data?.stage === "complete" ? (data.rows ?? null) : null);
+  const cardSourceColumns =
+    executedColumns ??
+    (data?.stage === "complete" ? (data.columns ?? null) : null);
+
   const selectedForCard =
-    data?.stage === "complete" &&
-    data.rows &&
-    data.rows.length === 1 &&
-    data.columns &&
-    data.columns.length === 1
+    cardSourceRows &&
+      cardSourceRows.length === 1 &&
+      cardSourceColumns &&
+      cardSourceColumns.length === 1
       ? {
-          stage: data.stage,
-          columnName: data.columns[0].name,
-          value: data.rows[0][data.columns[0].name],
+        stage: "complete" as const,
+        columnName: cardSourceColumns[0].name,
+        value: cardSourceRows[0][cardSourceColumns[0].name],
         }
       : undefined;
 
@@ -353,7 +421,7 @@ export function SqlAnalysisDisplay({
       queryToExecute,
     ).then((rows) => {
       console.log("Rows:", rows);
-      
+
       // Extract columns from the first row
       if (rows.length > 0) {
         const columns = Object.keys(rows[0]).map((key) => ({
@@ -415,6 +483,23 @@ export function SqlAnalysisDisplay({
                 <p>Edit with AI</p>
               </TooltipContent>
             </Tooltip>
+            {onDelete && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2 text-destructive hover:text-destructive"
+                    onClick={onDelete}
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Delete visual</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
           {history && history.total > 0 && (
             <div className="flex items-center gap-2">
@@ -444,67 +529,47 @@ export function SqlAnalysisDisplay({
         </div>
       )}
 
-      {data && (
-        <Collapsible className="w-full mt-2">
-          <CollapsibleTrigger className="flex items-center justify-between w-full p-4 border hover:bg-muted/50 cursor-pointer mx-auto">
-            <span className="text-sm font-medium">SQL Query</span>
-            <ChevronDown className="w-4 h-4" />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="p-4 border-t flex items-center justify-between gap-2">
-            <Textarea
-              value={query || data.query || "No query available"}
-              className="text-xs bg-muted p-2 rounded overflow-x-auto"
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-              onClick={handleExecute}
-            >
-              <PlayCircleIcon className="w-4 h-4" />
-              Execute
-            </Button>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
-
       {data && activeView === "chart" && (
-        <div className="relative">
+        <div className="group relative flex flex-col rounded-xl bg-card p-4 md:p-2">
           {selectedForCard ? (
             <>
-              <div className="absolute top-0 right-0 z-10 flex gap-2">
-                <CardConfigDialog
-                  trigger={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2"
-                    >
-                      <Cog6ToothIcon className="w-4 h-4" />
-                    </Button>
-                  }
-                  config={cardConfig}
-                  onConfigChange={setCardConfig}
-                  tooltip="Configure card"
-                />
-                <AddToDashboardDialog
-                  trigger={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2"
-                    >
-                      <PlusIcon className="w-4 h-4" />
-                    </Button>
-                  }
-                  sql={data.query ?? ""}
-                  cardConfig={cardConfig ?? data.cardConfig ?? undefined}
-                  defaultTitle={cardConfig?.title ?? data.cardConfig?.title}
-                  tooltip="Add to dashboard"
-                />
-              </div>
-              <Card className="mx-auto w-fit">
+              {renderSqlControls(
+                <>
+                  <CardConfigDialog
+                    trigger={
+                      <button
+                        type="button"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        aria-label="Configure card"
+                        title="Configure card"
+                      >
+                        <Cog6ToothIcon className="h-4 w-4" />
+                      </button>
+                    }
+                    config={cardConfig}
+                    onConfigChange={setCardConfig}
+                    tooltip="Configure card"
+                  />
+                  <AddToDashboardDialog
+                    trigger={
+                      <button
+                        type="button"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        aria-label="Add to dashboard"
+                        title="Add to dashboard"
+                      >
+                        <PlusIcon className="h-4 w-4" />
+                      </button>
+                    }
+                    sql={data.query ?? ""}
+                    cardConfig={cardConfig ?? data.cardConfig ?? undefined}
+                    defaultTitle={cardConfig?.title ?? data.cardConfig?.title}
+                    tooltip="Add to dashboard"
+                  />
+                </>,
+                "sql-editor-analysis-card",
+              )}
+              <Card className="mx-auto w-fit border-0 shadow-none">
                 <CardHeader>
                   <CardTitle className="text-base font-medium text-muted-foreground">
                     {cardConfig?.title ??
@@ -535,54 +600,60 @@ export function SqlAnalysisDisplay({
                   )}
                 </CardContent>
               </Card>
+              {renderSqlEditor("sql-editor-analysis-card")}
             </>
           ) : (
             <>
-              <div className="absolute top-0 right-0 z-10 flex gap-2">
-                <ChartConfigDialog
-                  trigger={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2"
-                    >
-                      <Cog6ToothIcon className="w-4 h-4" />
-                    </Button>
-                  }
-                  config={chartConfig}
-                  columns={columnsForDialog}
-                  rows={selectedForChart?.rows ?? []}
-                  onConfigChange={setChartConfig}
-                  tooltip="Configure chart"
-                />
-                <AddToDashboardDialog
-                  trigger={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2"
-                    >
-                      <PlusIcon className="w-4 h-4" />
-                    </Button>
-                  }
-                  sql={data.query ?? ""}
-                  chartConfig={
-                    chartConfig ??
-                    data.chartConfig ?? {
-                      description: "",
-                      type: "bar",
-                      title: "",
-                      xKey: "",
-                      yKeys: [],
-                      multipleLines: false,
-                      legend: false,
-                      countMode: false,
-                    }
-                  }
-                  defaultTitle={chartConfig?.title ?? data.chartConfig?.title}
-                  tooltip="Add to dashboard"
-                />
-              </div>
+                {renderSqlControls(
+                  <>
+                    <ChartConfigDialog
+                      trigger={
+                        <button
+                          type="button"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          aria-label="Configure chart"
+                          title="Configure chart"
+                        >
+                          <Cog6ToothIcon className="h-4 w-4" />
+                        </button>
+                      }
+                      config={chartConfig}
+                      columns={columnsForDialog}
+                      rows={selectedForChart?.rows ?? []}
+                      onConfigChange={setChartConfig}
+                      tooltip="Configure chart"
+                    />
+                    <AddToDashboardDialog
+                      trigger={
+                        <button
+                          type="button"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          aria-label="Add to dashboard"
+                          title="Add to dashboard"
+                        >
+                          <PlusIcon className="h-4 w-4" />
+                        </button>
+                      }
+                      sql={data.query ?? ""}
+                      chartConfig={
+                        chartConfig ??
+                        data.chartConfig ?? {
+                          description: "",
+                          type: "bar",
+                          title: "",
+                          xKey: "",
+                          yKeys: [],
+                          multipleLines: false,
+                          legend: false,
+                          countMode: false,
+                        }
+                      }
+                      defaultTitle={chartConfig?.title ?? data.chartConfig?.title}
+                      tooltip="Add to dashboard"
+                    />
+                  </>,
+                  "sql-editor-analysis-chart",
+                )}
 
               {selectedForChart && (
                 <SqlChart
@@ -590,13 +661,18 @@ export function SqlAnalysisDisplay({
                   dataOverride={selectedForChart}
                 />
               )}
+                {renderSqlEditor("sql-editor-analysis-chart")}
             </>
           )}
         </div>
       )}
 
       {data && activeView === "table" && (
-        <SqlResultsTable dataOverride={selectedForTable} />
+        <div className="group relative">
+          {renderSqlControls(undefined, "sql-editor-analysis-table")}
+          <SqlResultsTable dataOverride={selectedForTable} />
+          {renderSqlEditor("sql-editor-analysis-table")}
+        </div>
       )}
 
       {!data && shouldShowStageIndicator && (

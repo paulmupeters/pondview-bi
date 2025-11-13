@@ -17,7 +17,22 @@ import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 
 
-type DatabaseType = "duckdb" | "postgres" | "mysql" | null;
+type DatabaseType =
+  | "duckdb"
+  | "motherduck"
+  | "postgres"
+  | "mysql"
+  | "snowflake"
+  | "databricks"
+  | "supabase"
+  | "ducklake"
+  | "iceberg"
+  | "delta_lake"
+  | "google_sheets"
+  | "sharepoint"
+  | "aws"
+  | "web"
+  | null;
 
 const DATABASE_OPTIONS: Array<{
   label: string;
@@ -31,9 +46,63 @@ const DATABASE_OPTIONS: Array<{
       description: "Connect with a Postgres database",
     },
     {
-      label: "DuckDB",
-      value: "duckdb",
-      description: "Connect with a local DuckDB file or motherduck",
+      label: "MotherDuck",
+      value: "motherduck",
+      description: "Connect with a MotherDuck database",
+    },
+    {
+      label: "Snowflake",
+      value: "snowflake",
+      disabled: true,
+      description: "Coming soon",
+    },
+    {
+      label: "Databricks",
+      value: "databricks",
+      disabled: true,
+      description: "Coming soon",
+    },
+    {
+      label: "Supabase",
+      value: "supabase",
+      disabled: true,
+      description: "Coming soon",
+    },
+    {
+      label: "DuckLake",
+      value: "ducklake",
+      disabled: true,
+      description: "Coming soon",
+    },
+    {
+      label: "Apache Iceberg",
+      value: "iceberg",
+      disabled: true,
+      description: "Coming soon",
+    },
+    {
+      label: "Delta Lake",
+      value: "delta_lake",
+      disabled: true,
+      description: "Coming soon",
+    },
+    {
+      label: "Google Sheets",
+      value: "google_sheets",
+      disabled: true,
+      description: "Coming soon",
+    },
+    {
+      label: "SharePoint",
+      value: "sharepoint",
+      disabled: true,
+      description: "Coming soon",
+    },
+    {
+      label: "AWS",
+      value: "aws",
+      disabled: true,
+      description: "Coming soon",
   },
   {
     label: "MySQL",
@@ -41,7 +110,26 @@ const DATABASE_OPTIONS: Array<{
     disabled: true,
     description: "Coming soon",
     },
+    {
+      label: "Web",
+      value: "web",
+      disabled: true,
+      description: "Coming soon",
+    },
 ];
+
+const resolveDuckdbExtension = (dbType: DatabaseType): string | undefined => {
+  switch (dbType) {
+    case "motherduck":
+      return "motherduck";
+    case "postgres":
+      return "postgres";
+    case "mysql":
+      return "mysql";
+    default:
+      return undefined;
+  }
+};
 
 // Removed unused DuckDB preview constants
 
@@ -97,7 +185,9 @@ export function ConnectDataDialog({
   useEffect(() => {
     if (open) {
       if (initialSelectedDatabase) {
-        setSelectedDatabase(initialSelectedDatabase);
+        // Convert "duckdb" to "motherduck" for backward compatibility
+        const dbType = initialSelectedDatabase === "duckdb" ? "motherduck" : initialSelectedDatabase;
+        setSelectedDatabase(dbType);
       }
       if (initialDatabasePath) {
         setDatabasePath(initialDatabasePath);
@@ -131,15 +221,36 @@ export function ConnectDataDialog({
   }, [theme]);
 
   const getDatabaseLogo = (dbType: string): string | null => {
-    if (dbType === "duckdb") {
-      return isDarkMode
-        ? "/DuckDB_icon-darkmode.svg"
-        : "/DuckDB_icon-lightmode.svg";
+    switch (dbType) {
+      case "motherduck":
+        return "/sources/motherduck.png";
+      case "postgres":
+        return "/Postgresql_elephant.png";
+      case "snowflake":
+        return "/sources/snowflake.svg";
+      case "databricks":
+        return "/sources/Databricks.svg";
+      case "supabase":
+        return "/sources/supabase.svg";
+      case "ducklake":
+        return "/sources/DuckLake_Logo-horizontal.svg";
+      case "iceberg":
+        return "/sources/Apache_Iceberg_Logo.svg";
+      case "delta_lake":
+        return "/sources/delta_lake.png";
+      case "google_sheets":
+        return "/sources/Google_Sheets.svg";
+      case "sharepoint":
+        return "/sources/sharepoint.svg";
+      case "aws":
+        return isDarkMode ? "/aws_dark.svg" : "/aws_light.svg";
+      case "mysql":
+        return isDarkMode ? "/mysql-icon-dark.svg" : "/mysql-icon-light.svg";
+      case "web":
+        return "/globe.svg";
+      default:
+        return null;
     }
-    if (dbType === "postgres") {
-      return "/Postgresql_elephant.png";
-    }
-    return null;
   };
 
   const handleConnectClick = useCallback(async () => {
@@ -152,12 +263,14 @@ export function ConnectDataDialog({
       setIsLoadingSchemas(true);
       setErrorMessage(null);
 
-      // Build database path with token if it's a MotherDuck connection
+      // Build database path - prepend "md:" for MotherDuck and add token if provided
       let dbPath = databasePath.trim();
-      if (dbPath.startsWith("md:") && motherduckToken.trim()) {
-        const separator = dbPath.includes("?") ? "&" : "?";
-        const encodedToken = encodeURIComponent(motherduckToken.trim());
-        dbPath = `${dbPath}${separator}motherduck_token=${encodedToken}`;
+      if (selectedDatabase === "motherduck") {
+        dbPath = `md:${dbPath}`;
+        if (motherduckToken.trim()) {
+          const encodedToken = encodeURIComponent(motherduckToken.trim());
+          dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
+        }
       }
 
       const fetchedSchemas = await getSchemas(dbPath);
@@ -170,19 +283,21 @@ export function ConnectDataDialog({
     } finally {
       setIsLoadingSchemas(false);
     }
-  }, [databasePath, motherduckToken]);
+  }, [databasePath, motherduckToken, selectedDatabase]);
 
   const handleSchemaSelect = useCallback(async (schema: string) => {
     setSelectedSchema(schema);
     setSelectedTables(new Set());
     try {
       setIsLoadingTables(true);
-      // Build database path with token if it's a MotherDuck connection
+      // Build database path - prepend "md:" for MotherDuck and add token if provided
       let dbPath = databasePath.trim();
-      if (dbPath.startsWith("md:") && motherduckToken.trim()) {
-        const separator = dbPath.includes("?") ? "&" : "?";
-        const encodedToken = encodeURIComponent(motherduckToken.trim());
-        dbPath = `${dbPath}${separator}motherduck_token=${encodedToken}`;
+      if (selectedDatabase === "motherduck") {
+        dbPath = `md:${dbPath}`;
+        if (motherduckToken.trim()) {
+          const encodedToken = encodeURIComponent(motherduckToken.trim());
+          dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
+        }
       }
       console.log("Calling getTablesForSchema with:", { dbPath, schema });
       const tables = await getTablesForSchema(dbPath, schema, 20);
@@ -196,7 +311,7 @@ export function ConnectDataDialog({
     } finally {
       setIsLoadingTables(false);
     }
-  }, [databasePath, motherduckToken]);
+  }, [databasePath, motherduckToken, selectedDatabase]);
 
   const handleAddTable = useCallback(async () => {
     if (!selectedDatabase || !selectedSchema.trim() || !databasePath.trim()) {
@@ -204,12 +319,14 @@ export function ConnectDataDialog({
       return;
     }
     try {
-      // Build database path with token if it's a MotherDuck connection
+      // Build database path - prepend "md:" for MotherDuck and add token if provided
       let dbPath = databasePath.trim();
-      if (dbPath.startsWith("md:") && motherduckToken.trim()) {
-        const separator = dbPath.includes("?") ? "&" : "?";
-        const encodedToken = encodeURIComponent(motherduckToken.trim());
-        dbPath = `${dbPath}${separator}motherduck_token=${encodedToken}`;
+      if (selectedDatabase === "motherduck") {
+        dbPath = `md:${dbPath}`;
+        if (motherduckToken.trim()) {
+          const encodedToken = encodeURIComponent(motherduckToken.trim());
+          dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
+        }
       }
       // Ingest selected tables into local DuckDB-Wasm database (row-major JSON)
       if (selectedTables.size > 0 && chacheInDuckdbWasm) {
@@ -232,14 +349,34 @@ export function ConnectDataDialog({
         }
       }
       console.log("handleAddTable: appending new entry");
+      const aliasBase =
+        tableDescription.trim() ||
+        selectedSchema.trim() ||
+        selectedDatabase ||
+        "source";
+      const attachAs = aliasBase
+        .trim()
+        .replace(/[^A-Za-z0-9_]/g, "_")
+        .replace(/^_+/g, "")
+        .replace(/_+/g, "_");
+      const sanitizedAlias =
+        attachAs && !/^[0-9]/.test(attachAs)
+          ? attachAs
+          : attachAs
+            ? `_${attachAs}`
+            : "source";
+      const connectionType = selectedDatabase ?? "motherduck";
+      const duckdbExtension = resolveDuckdbExtension(connectionType);
       const newEntry = {
-        type: selectedDatabase,
+        type: connectionType,
         databasePath: dbPath,
         schema: selectedSchema,
         tables: Array.from(selectedTables),
         description: tableDescription.trim(),
+        attachAs: sanitizedAlias || "source",
+        readOnly: connectionType !== "motherduck",
+        duckdbExtension,
       };
-
       await appendConnectedTable(newEntry);
       onOpenChange(false);
     } catch (error) {
@@ -300,10 +437,10 @@ export function ConnectDataDialog({
                     Database Type
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    MySQL is not available yet.
+                    Select a data source to connect. Some options are coming soon.
                   </p>
                 </header>
-                <div className="grid gap-2 sm:grid-cols-3">
+                <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4">
                   {DATABASE_OPTIONS.map((option) => {
                     const isActive = selectedDatabase === option.value;
                     return (
@@ -314,11 +451,9 @@ export function ConnectDataDialog({
                           if (option.disabled) return;
                           setSelectedDatabase(option.value);
                           setErrorMessage(null);
-                          if (option.value !== "duckdb") {
-                            setSchemas([]);
-                            setSchemaTablesPreview([]);
-                            setHasConnected(false);
-                          }
+                          setSchemas([]);
+                          setSchemaTablesPreview([]);
+                          setHasConnected(false);
                         }}
                         disabled={option.disabled}
                         className={cn(
@@ -365,15 +500,15 @@ export function ConnectDataDialog({
               <section className="space-y-3">
                 <header className="space-y-1">
                   <p className="text-sm font-medium text-foreground">
-                    {selectedDatabase === "duckdb"
-                      ? "DuckDB Database Path"
+                    {selectedDatabase === "motherduck"
+                      ? "MotherDuck Database"
                       : selectedDatabase === "postgres"
                         ? "Postgres Connection URL"
                         : "Connection"}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {selectedDatabase === "duckdb"
-                      ? "Provide the path to your `.duckdb` file."
+                    {selectedDatabase === "motherduck"
+                      ? "Provide the name of your MotherDuck database (e.g., my_db)."
                       : selectedDatabase === "postgres"
                         ? "Provide a Postgres connection URL (postgres://...) or pg:ALIAS."
                         : null}
@@ -383,8 +518,8 @@ export function ConnectDataDialog({
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <Input
                       placeholder={
-                        selectedDatabase === "duckdb"
-                          ? "md:my_db or /path/to/database.duckdb"
+                        selectedDatabase === "motherduck"
+                          ? "my_db"
                           : selectedDatabase === "postgres"
                             ? "postgres://user:pass@host:5432/db?sslmode=require or pg:DEFAULT"
                             : ""
@@ -411,7 +546,7 @@ export function ConnectDataDialog({
                       )}
                     </Button>
                   </div>
-                  {selectedDatabase === "duckdb" && databasePath.trim().startsWith("md:") && (
+                  {selectedDatabase === "motherduck" && (
                     <div>
                       <Input
                         type="password"

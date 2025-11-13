@@ -147,12 +147,6 @@ export function Slicer({
     }
   };
 
-  const handleClear = () => {
-    if (existingFilterIndex >= 0) {
-      removeFilter(existingFilterIndex);
-    }
-  };
-
   const displayTitle = title || field.split(".")[1] || field;
 
   return (
@@ -174,7 +168,7 @@ export function Slicer({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[300px] p-0" align="start">
-          <Command>
+          <Command shouldFilter={false}>
             <CommandInput
               placeholder={`Search ${displayTitle.toLowerCase()}...`}
               value={search}
@@ -224,27 +218,21 @@ export function Slicer({
       {selectedValues.length > 0 && (
         <div className="flex items-center gap-1 flex-wrap">
           {selectedValues.slice(0, 3).map((value) => (
-            <span
+            <button
               key={value}
-              className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs"
+              type="button"
+              onClick={() => handleToggleValue(value)}
+              className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs hover:bg-primary/20 transition-colors cursor-pointer"
+              title="Click to remove"
             >
               {value}
-            </span>
+            </button>
           ))}
           {selectedValues.length > 3 && (
             <span className="text-xs text-muted-foreground">
               +{selectedValues.length - 3} more
             </span>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0"
-            onClick={handleClear}
-            title="Clear selection"
-          >
-            <X className="h-3 w-3" />
-          </Button>
         </div>
       )}
 

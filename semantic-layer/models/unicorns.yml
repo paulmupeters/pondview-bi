@@ -5,7 +5,25 @@ dimensions:
   - name: Country
     sql: unicorns.Country
     type: string
+  - name: year
+    sql: EXTRACT(YEAR FROM unicorns."Date Joined")
+    type: number
+  - name: Company
+    sql: unicorns.Company
+    type: string
+  - name: Valuation_numeric
+    sql: CAST([object Object]([object Object](unicorns.Valuation, $, ), B, ) AS undefined) * 1000
+    type: string
+  - name: Industry
+    sql: unicorns.Industry
+    type: string
 measures:
   - name: num_unicorns
+    agg: count
+    sql: '*'
+  - name: unicorn_count
+    agg: count
+    sql: '*'
+  - name: total_unicorns
     agg: count
     sql: '*'

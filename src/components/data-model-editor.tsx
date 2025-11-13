@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { XMarkIcon } from "@heroicons/react/24/outline";
+import { useEffect, useMemo, useState } from "react";
 import type {
   DimensionDef,
   DimType,
@@ -47,6 +48,44 @@ export function DataModelEditor() {
   }, [selectedExplore]);
 
   const semanticModel = useSemanticModel(selectedExplore);
+  const { materializing, lastMaterialization, clearMaterialization } =
+    semanticModel;
+
+  const materializationMessage = useMemo(() => {
+    if (!lastMaterialization) {
+      return null;
+    }
+
+    const { status, explore, targetTable, rowCount, reason } =
+      lastMaterialization;
+
+    if (status === "materialized") {
+      const tableLabel = targetTable ?? `semantic_materialized.${explore}`;
+      const rowText =
+        typeof rowCount === "number"
+          ? `${rowCount.toLocaleString()} row${rowCount === 1 ? "" : "s"}`
+          : null;
+      return {
+        title: `Materialized ${explore}`,
+        detail: rowText
+          ? `Created ${tableLabel} with ${rowText}.`
+          : `Created ${tableLabel}.`,
+      };
+    }
+
+    if (status === "skipped") {
+      const tableLabel = targetTable ?? `semantic_materialized.${explore}`;
+      return {
+        title: `No changes detected for ${explore}`,
+        detail: `Reusing existing materialized table ${tableLabel}.`,
+      };
+    }
+
+    return {
+      title: `Materialization failed for ${explore}`,
+      detail: reason || "Check server logs for more details.",
+    };
+  }, [lastMaterialization]);
 
   // Dimension form state
   const [dimName, setDimName] = useState("");
@@ -89,7 +128,10 @@ export function DataModelEditor() {
       primaryKey: dimPrimaryKey || undefined,
       conformKey: dimConformKey.trim() || undefined,
     };
-    await semanticModel.addDimension(dimension);
+    const success = await semanticModel.addDimension(dimension);
+    if (!success) {
+      return;
+    }
     setDimName("");
     setDimSql("");
     setDimType("string");
@@ -104,7 +146,10 @@ export function DataModelEditor() {
       sql: measureSql.trim() || "*",
       agg: measureAgg,
     };
-    await semanticModel.addMeasure(measure);
+    const success = await semanticModel.addMeasure(measure);
+    if (!success) {
+      return;
+    }
     setMeasureName("");
     setMeasureSql("");
     setMeasureAgg("sum");
@@ -119,7 +164,10 @@ export function DataModelEditor() {
       on: joinOn,
       required: joinRequired || undefined,
     };
-    await semanticModel.addJoin(join);
+    const success = await semanticModel.addJoin(join);
+    if (!success) {
+      return;
+    }
     setJoinName("");
     setJoinTo("");
     setJoinOn("");
@@ -133,7 +181,10 @@ export function DataModelEditor() {
       name: segmentName,
       sql: segmentSql,
     };
-    await semanticModel.addSegment(segment);
+    const success = await semanticModel.addSegment(segment);
+    if (!success) {
+      return;
+    }
     setSegmentName("");
     setSegmentSql("");
   }
@@ -170,6 +221,38 @@ export function DataModelEditor() {
                 </SelectContent>
               </Select>
           </div>
+
+            {materializing && (
+              <div className="rounded-xl border border-dashed border-border/70 bg-card/50 px-4 py-3 text-xs text-muted-foreground">
+                Materializing {selectedExplore ? `"${selectedExplore}"` : "model"}
+                …
+              </div>
+            )}
+
+            {!materializing && materializationMessage && (
+              <div className="rounded-xl border border-border bg-card/80 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">
+                      {materializationMessage.title}
+                    </p>
+                    {materializationMessage.detail && (
+                      <p className="text-xs text-muted-foreground">
+                        {materializationMessage.detail}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={clearMaterialization}
+                    aria-label="Dismiss materialization status"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
 
             <Tabs defaultValue="dimensions" className="space-y-4">
               <TabsList>
@@ -254,7 +337,7 @@ export function DataModelEditor() {
                       <Button
                         type="button"
                         onClick={handleAddDimension}
-                        disabled={!canAddDimension}
+                        disabled={!canAddDimension || materializing}
                       >
                         Add dimension
                       </Button>
@@ -376,7 +459,7 @@ export function DataModelEditor() {
                       <Button
                         type="button"
                         onClick={handleAddMeasure}
-                        disabled={!canAddMeasure}
+                        disabled={!canAddMeasure || materializing}
                       >
                         Add measure
                       </Button>
@@ -500,7 +583,7 @@ export function DataModelEditor() {
                       <Button
                         type="button"
                         onClick={handleAddJoin}
-                        disabled={!canAddJoin}
+                        disabled={!canAddJoin || materializing}
                       >
                         Add join
                       </Button>
@@ -581,7 +664,7 @@ export function DataModelEditor() {
                       <Button
                         type="button"
                         onClick={handleAddSegment}
-                        disabled={!canAddSegment}
+                        disabled={!canAddSegment || materializing}
                       >
                         Add segment
                       </Button>

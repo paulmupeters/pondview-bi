@@ -39,6 +39,11 @@ export async function POST(req: NextRequest) {
     table?: string;
     schema?: string;
     tables?: string[];
+    type?: string;
+    databasePath?: string;
+    attachAs?: string;
+    readOnly?: boolean;
+    duckdbExtension?: string;
   };
 
   if (!body || (!body.table && !body.schema)) {

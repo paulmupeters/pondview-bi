@@ -12,6 +12,9 @@ export type ConnectedTable = {
   // Optional list of selected tables within a schema
   tables?: string[];
   description?: string;
+  attachAs?: string;
+  readOnly?: boolean;
+  duckdbExtension?: string;
 };
 
 const isClient = typeof window !== "undefined";
@@ -44,7 +47,22 @@ export function readConnectedTablesFromStorage(): ConnectedTable[] {
         maybeTables === undefined ||
         (Array.isArray(maybeTables) &&
           maybeTables.every((t) => typeof t === "string"));
-      return tablesValid && (hasTable || hasSchema);
+      const attachAs = (entry as any).attachAs;
+      const readOnly = (entry as any).readOnly;
+      const duckdbExtension = (entry as any).duckdbExtension;
+      const attachValid =
+        attachAs === undefined || typeof attachAs === "string";
+      const readOnlyValid =
+        readOnly === undefined || typeof readOnly === "boolean";
+      const duckdbExtensionValid =
+        duckdbExtension === undefined || typeof duckdbExtension === "string";
+      return (
+        tablesValid &&
+        (hasTable || hasSchema) &&
+        attachValid &&
+        readOnlyValid &&
+        duckdbExtensionValid
+      );
     });
   } catch (error) {
     console.error("Failed to read connected tables from storage", error);
@@ -60,7 +78,7 @@ export function writeConnectedTablesToStorage(tables: ConnectedTable[]) {
   try {
     window.localStorage.setItem(
       CONNECTED_TABLES_STORAGE_KEY,
-      JSON.stringify(tables),
+      JSON.stringify(tables)
     );
     window.dispatchEvent(new Event(CONNECTED_TABLES_UPDATED_EVENT));
   } catch (error) {
@@ -85,6 +103,11 @@ export async function updateSemanticLayerSources(
         table: entry.table,
         schema: entry.schema,
         tables: entry.tables,
+        type: entry.type,
+        databasePath: entry.databasePath,
+        attachAs: entry.attachAs,
+        readOnly: entry.readOnly,
+        duckdbExtension: entry.duckdbExtension,
       }),
     });
 
@@ -121,6 +144,11 @@ export async function appendConnectedTable(
         table: entry.table,
         schema: entry.schema,
         tables: entry.tables,
+        type: entry.type,
+        databasePath: entry.databasePath,
+        attachAs: entry.attachAs,
+        readOnly: entry.readOnly,
+        duckdbExtension: entry.duckdbExtension,
       }),
     });
 
@@ -142,7 +170,7 @@ export async function appendConnectedTable(
     // Don't fail the connection if semantic layer update fails
     console.error("[Semantic Layer] Error updating sources:", error);
   }
- }
+}
 
 export async function removeConnectedTable(
   entry: ConnectedTable

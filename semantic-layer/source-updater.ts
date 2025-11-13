@@ -2,17 +2,29 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import yaml from "js-yaml";
 
+export interface SourceConnectionConfig {
+  type: string;
+  identifier: string;
+  alias?: string;
+  readOnly?: boolean;
+  duckdbExtension?: string;
+}
+
+interface YAMLSourceRecord {
+  name: string;
+  table: string;
+  connection?: SourceConnectionConfig;
+}
+
 interface YAMLSourcesDef {
   version: number;
-  sources: Array<{
-    name: string;
-    table: string;
-  }>;
+  sources: YAMLSourceRecord[];
 }
 
 export interface SourceEntry {
   name: string;
   table: string;
+  connection?: SourceConnectionConfig;
 }
 
 /**
@@ -53,18 +65,38 @@ export function updateSources(
   let addedSources = 0;
 
   // Get existing source names (case-insensitive)
-  const existingSourceNames = new Set(
-    yamlData.sources.map((s) => s.name.toLowerCase())
+  const existingSourceNames = new Map(
+    yamlData.sources.map((s) => [s.name.toLowerCase(), s] as const)
   );
 
-  // Add new sources (skip duplicates by name)
+  // Add new sources (skip duplicates by name, but update metadata)
   for (const source of sources) {
-    if (!existingSourceNames.has(source.name.toLowerCase())) {
+    const key = source.name.toLowerCase();
+    const connection =
+      source.connection && source.connection.identifier
+        ? {
+            type: source.connection.type,
+            identifier: source.connection.identifier,
+            alias: source.connection.alias,
+            readOnly: source.connection.readOnly,
+            duckdbExtension: source.connection.duckdbExtension,
+          }
+        : undefined;
+
+    if (!existingSourceNames.has(key)) {
       yamlData.sources.push({
         name: source.name,
         table: source.table,
+        connection,
       });
+      existingSourceNames.set(key, yamlData.sources[yamlData.sources.length - 1]);
       addedSources++;
+    } else {
+      const record = existingSourceNames.get(key);
+      if (record) {
+        record.table = source.table;
+        record.connection = connection;
+      }
     }
   }
 
@@ -91,6 +123,11 @@ export interface ConnectedTableInput {
   table?: string;
   schema?: string;
   tables?: string[];
+  type?: string;
+  databasePath?: string;
+  attachAs?: string;
+  readOnly?: boolean;
+  duckdbExtension?: string;
 }
 
 export function connectedTableToSources(
@@ -102,24 +139,45 @@ export function connectedTableToSources(
   if (input.table) {
     const schema = input.schema || "main";
     const tableName = input.table;
+    const connection = buildConnectionConfig(input, schema);
 
     // Use just the table name as the source name for readability
     sources.push({
       name: tableName,
       table: `${schema}.${tableName}`,
+      connection,
     });
   }
   // Case 2: Schema with multiple tables
   else if (input.schema && input.tables && input.tables.length > 0) {
     for (const tableName of input.tables) {
+      const connection = buildConnectionConfig(input, input.schema);
       sources.push({
         name: tableName,
         table: `${input.schema}.${tableName}`,
+        connection,
       });
     }
   }
 
   return sources;
+}
+
+function buildConnectionConfig(
+  input: ConnectedTableInput,
+  defaultAlias: string
+): SourceConnectionConfig | undefined {
+  if (!input.type || !input.databasePath) {
+    return undefined;
+  }
+
+  return {
+    type: input.type,
+    identifier: input.databasePath,
+    alias: input.attachAs || defaultAlias,
+    readOnly: input.readOnly,
+    duckdbExtension: input.duckdbExtension,
+  };
 }
 
 /**

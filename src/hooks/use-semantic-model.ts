@@ -3,17 +3,21 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   DataModel,
-  ExploreDef,
   DimensionDef,
-  MeasureDef,
+  ExploreDef,
   JoinDef,
+  MeasureDef,
   SegmentDef,
 } from "@/../semantic-layer/types";
+import type { MaterializationResult } from "@/lib/materialization/semantic-layer";
 
 export function useSemanticModel(exploreName: string | undefined) {
   const [model, setModel] = useState<ExploreDef | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [materializing, setMaterializing] = useState(false);
+  const [lastMaterialization, setLastMaterialization] =
+    useState<MaterializationResult | null>(null);
 
   const loadModel = useCallback(async () => {
     if (!exploreName) {
@@ -43,205 +47,187 @@ export function useSemanticModel(exploreName: string | undefined) {
     loadModel();
   }, [loadModel]);
 
+  useEffect(() => {
+    setLastMaterialization(null);
+    setMaterializing(false);
+  }, []);
+
+  const performMutation = useCallback(
+    async (
+      url: string,
+      options: RequestInit,
+      errorContext: string
+    ): Promise<boolean> => {
+      setMaterializing(true);
+      try {
+        const response = await fetch(url, options);
+        let data: any = null;
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
+
+        if (!response.ok || (data && data.success === false)) {
+          const message =
+            data && data.error ? String(data.error) : errorContext;
+          throw new Error(message);
+        }
+
+        await loadModel();
+
+        if (data && Object.hasOwn(data, "materialization")) {
+          const materialization = data.materialization as
+            | MaterializationResult
+            | null
+            | undefined;
+          setLastMaterialization(materialization ?? null);
+        }
+
+        return true;
+      } catch (err) {
+        console.error(`[Semantic Model] ${errorContext}:`, err);
+        return false;
+      } finally {
+        setMaterializing(false);
+      }
+    },
+    [loadModel]
+  );
+
   const addDimension = useCallback(
     async (dimension: DimensionDef) => {
       if (!exploreName) return false;
-      try {
-        const response = await fetch(
-          `/api/semantic-layer/models/${encodeURIComponent(exploreName)}/dimensions`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(dimension),
-          }
-        );
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to add dimension");
-        }
-        await loadModel();
-        return true;
-      } catch (err) {
-        console.error("Failed to add dimension:", err);
-        return false;
-      }
+      return performMutation(
+        `/api/semantic-layer/models/${encodeURIComponent(
+          exploreName
+        )}/dimensions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(dimension),
+        },
+        "Failed to add dimension"
+      );
     },
-    [exploreName, loadModel]
+    [exploreName, performMutation]
   );
 
   const removeDimension = useCallback(
     async (dimensionName: string) => {
       if (!exploreName) return false;
-      try {
-        const response = await fetch(
-          `/api/semantic-layer/models/${encodeURIComponent(exploreName)}/dimensions?name=${encodeURIComponent(dimensionName)}`,
-          {
-            method: "DELETE",
-          }
-        );
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to remove dimension");
-        }
-        await loadModel();
-        return true;
-      } catch (err) {
-        console.error("Failed to remove dimension:", err);
-        return false;
-      }
+      const url = `/api/semantic-layer/models/${encodeURIComponent(
+        exploreName
+      )}/dimensions?name=${encodeURIComponent(dimensionName)}`;
+      return performMutation(
+        url,
+        { method: "DELETE" },
+        "Failed to remove dimension"
+      );
     },
-    [exploreName, loadModel]
+    [exploreName, performMutation]
   );
 
   const addMeasure = useCallback(
     async (measure: MeasureDef) => {
       if (!exploreName) return false;
-      try {
-        const response = await fetch(
-          `/api/semantic-layer/models/${encodeURIComponent(exploreName)}/measures`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(measure),
-          }
-        );
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to add measure");
-        }
-        await loadModel();
-        return true;
-      } catch (err) {
-        console.error("Failed to add measure:", err);
-        return false;
-      }
+      return performMutation(
+        `/api/semantic-layer/models/${encodeURIComponent(
+          exploreName
+        )}/measures`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(measure),
+        },
+        "Failed to add measure"
+      );
     },
-    [exploreName, loadModel]
+    [exploreName, performMutation]
   );
 
   const removeMeasure = useCallback(
     async (measureName: string) => {
       if (!exploreName) return false;
-      try {
-        const response = await fetch(
-          `/api/semantic-layer/models/${encodeURIComponent(exploreName)}/measures?name=${encodeURIComponent(measureName)}`,
-          {
-            method: "DELETE",
-          }
-        );
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to remove measure");
-        }
-        await loadModel();
-        return true;
-      } catch (err) {
-        console.error("Failed to remove measure:", err);
-        return false;
-      }
+      const url = `/api/semantic-layer/models/${encodeURIComponent(
+        exploreName
+      )}/measures?name=${encodeURIComponent(measureName)}`;
+      return performMutation(
+        url,
+        { method: "DELETE" },
+        "Failed to remove measure"
+      );
     },
-    [exploreName, loadModel]
+    [exploreName, performMutation]
   );
 
   const addJoin = useCallback(
     async (join: JoinDef) => {
       if (!exploreName) return false;
-      try {
-        const response = await fetch(
-          `/api/semantic-layer/models/${encodeURIComponent(exploreName)}/joins`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(join),
-          }
-        );
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to add join");
-        }
-        await loadModel();
-        return true;
-      } catch (err) {
-        console.error("Failed to add join:", err);
-        return false;
-      }
+      return performMutation(
+        `/api/semantic-layer/models/${encodeURIComponent(exploreName)}/joins`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(join),
+        },
+        "Failed to add join"
+      );
     },
-    [exploreName, loadModel]
+    [exploreName, performMutation]
   );
 
   const removeJoin = useCallback(
     async (joinName: string) => {
       if (!exploreName) return false;
-      try {
-        const response = await fetch(
-          `/api/semantic-layer/models/${encodeURIComponent(exploreName)}/joins?name=${encodeURIComponent(joinName)}`,
-          {
-            method: "DELETE",
-          }
-        );
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to remove join");
-        }
-        await loadModel();
-        return true;
-      } catch (err) {
-        console.error("Failed to remove join:", err);
-        return false;
-      }
+      const url = `/api/semantic-layer/models/${encodeURIComponent(
+        exploreName
+      )}/joins?name=${encodeURIComponent(joinName)}`;
+      return performMutation(
+        url,
+        { method: "DELETE" },
+        "Failed to remove join"
+      );
     },
-    [exploreName, loadModel]
+    [exploreName, performMutation]
   );
 
   const addSegment = useCallback(
     async (segment: SegmentDef) => {
       if (!exploreName) return false;
-      try {
-        const response = await fetch(
-          `/api/semantic-layer/models/${encodeURIComponent(exploreName)}/segments`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(segment),
-          }
-        );
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to add segment");
-        }
-        await loadModel();
-        return true;
-      } catch (err) {
-        console.error("Failed to add segment:", err);
-        return false;
-      }
+      return performMutation(
+        `/api/semantic-layer/models/${encodeURIComponent(
+          exploreName
+        )}/segments`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(segment),
+        },
+        "Failed to add segment"
+      );
     },
-    [exploreName, loadModel]
+    [exploreName, performMutation]
   );
 
   const removeSegment = useCallback(
     async (segmentName: string) => {
       if (!exploreName) return false;
-      try {
-        const response = await fetch(
-          `/api/semantic-layer/models/${encodeURIComponent(exploreName)}/segments?name=${encodeURIComponent(segmentName)}`,
-          {
-            method: "DELETE",
-          }
-        );
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to remove segment");
-        }
-        await loadModel();
-        return true;
-      } catch (err) {
-        console.error("Failed to remove segment:", err);
-        return false;
-      }
+      const url = `/api/semantic-layer/models/${encodeURIComponent(
+        exploreName
+      )}/segments?name=${encodeURIComponent(segmentName)}`;
+      return performMutation(
+        url,
+        { method: "DELETE" },
+        "Failed to remove segment"
+      );
     },
-    [exploreName, loadModel]
+    [exploreName, performMutation]
   );
+
+  const clearMaterialization = useCallback(() => {
+    setLastMaterialization(null);
+  }, []);
 
   return {
     model,
@@ -260,6 +246,8 @@ export function useSemanticModel(exploreName: string | undefined) {
     addSegment,
     removeSegment,
     refresh: loadModel,
+    materializing,
+    lastMaterialization,
+    clearMaterialization,
   };
 }
-

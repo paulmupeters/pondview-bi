@@ -34,7 +34,7 @@ export default function ViewDataPage() {
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [isShellDialogOpen, setIsShellDialogOpen] = useState(false);
   const [prefillDbType, setPrefillDbType] = useState<
-    "duckdb" | "postgres" | "mysql" | null
+    "motherduck" | "postgres" | "mysql" | null
   >(null);
   const [prefillDbPath, setPrefillDbPath] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -123,7 +123,11 @@ export default function ViewDataPage() {
     return `${table.type}-${table.databasePath}-${table.schema ?? table.table ?? "unknown"}`;
   };
 
-  const getDatabaseLogo = (dbType: string): string | null => {
+  const getDatabaseLogo = (dbType: string, dbPath?: string): string | null => {
+    // Check if it's a MotherDuck connection
+    if (dbPath?.startsWith("md:")) {
+      return "/sources/motherduck.png";
+    }
     if (dbType === "duckdb") {
       return isDarkMode
         ? "/DuckDB_icon-darkmode.svg"
@@ -132,7 +136,33 @@ export default function ViewDataPage() {
     if (dbType === "postgres") {
       return "/Postgresql_elephant.png";
     }
-    return null;
+    // Handle other source types
+    switch (dbType) {
+      case "snowflake":
+        return "/sources/snowflake.svg";
+      case "databricks":
+        return "/sources/Databricks.svg";
+      case "supabase":
+        return "/sources/supabase.svg";
+      case "ducklake":
+        return "/sources/DuckLake_Logo-horizontal.svg";
+      case "iceberg":
+        return "/sources/Apache_Iceberg_Logo.svg";
+      case "delta_lake":
+        return "/sources/delta_lake.png";
+      case "google_sheets":
+        return "/sources/Google_Sheets.svg";
+      case "sharepoint":
+        return "/sources/sharepoint.svg";
+      case "aws":
+        return isDarkMode ? "/aws_dark.svg" : "/aws_light.svg";
+      case "mysql":
+        return isDarkMode ? "/mysql-icon-dark.svg" : "/mysql-icon-light.svg";
+      case "web":
+        return "/globe.svg";
+      default:
+        return null;
+    }
   };
 
   return (
@@ -252,7 +282,7 @@ export default function ViewDataPage() {
                           <div className="flex flex-col gap-2">
                             <div className="flex items-center gap-3">
                               {(() => {
-                                const logoPath = getDatabaseLogo(database.type);
+                                const logoPath = getDatabaseLogo(database.type, database.dbPath);
                                 return logoPath ? (
                                   <Image
                                     src={logoPath}
@@ -364,12 +394,12 @@ export default function ViewDataPage() {
                             size="sm"
                             onClick={(event) => {
                               event.stopPropagation();
-                              const type =
-                                database.type === "duckdb" ||
-                                  database.type === "postgres" ||
-                                  database.type === "mysql"
-                                  ? database.type
-                                  : null;
+                              let type: "motherduck" | "postgres" | "mysql" | null = null;
+                              if (database.type === "duckdb" || database.type === "motherduck") {
+                                type = "motherduck";
+                              } else if (database.type === "postgres" || database.type === "mysql") {
+                                type = database.type;
+                              }
                               setPrefillDbType(type);
                               setPrefillDbPath(database.dbPath);
                               setIsConnectDialogOpen(true);
@@ -474,7 +504,7 @@ export default function ViewDataPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              setPrefillDbType("duckdb");
+                              setPrefillDbType("motherduck");
                               setPrefillDbPath(file.filePath);
                               setIsConnectDialogOpen(true);
                             }}

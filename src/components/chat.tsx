@@ -64,8 +64,13 @@ export default function Chat({
             return fetch(url, options);
           }) as typeof fetch;
           // Preserve Next.js augmented fetch.preconnect to satisfy typeof fetch
-          (customFetch as any).preconnect =
-            (fetch as any).preconnect?.bind(fetch) ?? (() => { });
+          type FetchWithPreconnect = typeof fetch & {
+            preconnect?: (...args: unknown[]) => unknown;
+          };
+          const fetchWithPreconnect = fetch as FetchWithPreconnect;
+          const customFetchWithPreconnect = customFetch as FetchWithPreconnect;
+          customFetchWithPreconnect.preconnect =
+            fetchWithPreconnect.preconnect?.bind(fetch) ?? (() => { });
           return customFetch;
         })(),
       }),
@@ -73,7 +78,7 @@ export default function Chat({
   );
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, setMessages } = useChat({
     id: chatId,
     storeId: chatId,
     messages: initialMessages.length > 0 ? initialMessages : undefined,
@@ -98,6 +103,63 @@ export default function Chat({
 
   const handleOpenDashboardBuilder = () => {
     setIsDashboardBuilderOpen(true);
+  };
+
+  const handleAddVisual = () => {
+    const now = Date.now();
+    const messageId = `manual-visual-${now}`;
+    const artifactId = `manual-artifact-${now}`;
+    const defaultDatabase =
+      connectedTables[0]?.databasePath ?? "md:my_db";
+
+    const defaultPayload: SqlAnalysisData = {
+      stage: "complete",
+      progress: 1,
+      query: "",
+      dbIdentifier: defaultDatabase,
+      isSqlExpandedInitial: true,
+      rowCount: 0,
+      columns: [],
+      rows: [],
+      visualType: "table",
+      chartConfig: {
+        title: "New visual",
+        description: "",
+        type: "bar",
+        xKey: "",
+        yKeys: [],
+        multipleLines: false,
+        legend: false,
+        countMode: false,
+      },
+      summary: {
+        totalRows: 0,
+        insights: [],
+      },
+    };
+
+    const newArtifactPart = {
+      type: executeSqlArtifactType as `data-${string}`,
+      data: {
+        id: artifactId,
+        version: 1,
+        status: "complete",
+        progress: 1,
+        payload: defaultPayload,
+        createdAt: now,
+      },
+    } as unknown as UIMessage["parts"][number];
+
+    const newMessage: UIMessage = {
+      id: messageId,
+      role: "assistant",
+      parts: [newArtifactPart],
+    };
+
+    setMessages((prevMessages) => [
+      ...prevMessages,
+      newMessage,
+    ]);
   };
 
   // Cleanup any stale auto-send markers that may be leftover from previous sessions
@@ -316,6 +378,17 @@ export default function Chat({
                                   progress={progressValue}
                                   showStageIndicator={shouldShowStageIndicator}
                                   className="max-w-3xl w-full"
+                                  onDelete={
+                                    message.id.startsWith("manual-visual-")
+                                      ? () => {
+                                        setMessages((prevMessages) =>
+                                          prevMessages.filter(
+                                            (msg) => msg.id !== message.id,
+                                          ),
+                                        );
+                                      }
+                                      : undefined
+                                  }
                                 />
                               </div>
                             );
@@ -366,6 +439,7 @@ export default function Chat({
               className=""
               status={status}
               onCreateDashboard={handleOpenDashboardBuilder}
+              onAddVisual={handleAddVisual}
             />
           </div>
         </div>

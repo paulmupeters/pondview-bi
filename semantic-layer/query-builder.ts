@@ -163,12 +163,12 @@ function renderFilter(expr: string, f: Filter, paramIndex: number) {
     }
     case "contains":
       return {
-        clause: `${expr} LIKE $${paramIndex}`,
+        clause: `${expr} ILIKE $${paramIndex}`,
         values: [`%${f.values?.[0]}%`],
       };
     case "starts_with":
       return {
-        clause: `${expr} LIKE $${paramIndex}`,
+        clause: `${expr} ILIKE $${paramIndex}`,
         values: [`${f.values?.[0]}%`],
       };
     case "is_null":

@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { getChartById, updateChartConfig } from "@/lib/repositories/dashboard";
+import { getChartById, updateChartConfig, updateChartSql } from "@/lib/repositories/dashboard";
 
 export const runtime = "nodejs";
 
@@ -12,11 +12,16 @@ export async function PUT(
   if (!chart) {
     return new Response("Chart not found", { status: 404 });
   }
-  const body = (await req.json()) as { chartConfigJson?: string };
-  if (!body?.chartConfigJson) {
-    return new Response("chartConfigJson is required", { status: 400 });
+  const body = (await req.json()) as { chartConfigJson?: string; sql?: string };
+  if (body?.chartConfigJson) {
+    await updateChartConfig(chartId, body.chartConfigJson);
   }
-  await updateChartConfig(chartId, body.chartConfigJson);
+  if (body?.sql) {
+    await updateChartSql(chartId, body.sql);
+  }
+  if (!body?.chartConfigJson && !body?.sql) {
+    return new Response("chartConfigJson or sql is required", { status: 400 });
+  }
   return Response.json({ ok: true });
 }
 

@@ -16,11 +16,17 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowTopRightOnSquareIcon,
-  FunnelIcon,
 } from "@heroicons/react/24/outline";
-import { GripVertical, Settings, Trash2 } from "lucide-react";
+import { Code2, GripVertical, Pencil, Settings, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
-import { type CSSProperties, useCallback, useEffect, useState } from "react";
+import {
+  type CSSProperties,
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { CardConfigDialog } from "@/components/card-config-dialog";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { DashboardFilterPane } from "@/components/dashboard-filter-pane";
@@ -28,6 +34,7 @@ import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
 import { DynamicChart } from "@/components/dynamic-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -44,14 +51,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { FilterProvider, useFilters } from "./filter-context";
 
@@ -80,6 +79,9 @@ type SortableChartCardProps = {
   rows: Result[];
   onConfigChange: (newChartJson: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  expandedSqlChartId: string | null;
+  onToggleSql: (chartId: string) => void;
+  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
 };
 
 // Helper function to check if config is a card config
@@ -96,8 +98,14 @@ function SortableChartCard({
   rows,
   onConfigChange,
   onDelete,
+  expandedSqlChartId,
+  onToggleSql,
+  onSqlUpdate,
 }: SortableChartCardProps) {
   const { filters } = useFilters();
+  const [editedSql, setEditedSql] = useState(chart.sql);
+  const [isSaving, setIsSaving] = useState(false);
+  const isExpanded = expandedSqlChartId === chart.id;
   const {
     attributes,
     listeners,
@@ -110,6 +118,29 @@ function SortableChartCard({
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 50 : undefined,
+  };
+
+  useEffect(() => {
+    if (isExpanded) {
+      setEditedSql(chart.sql);
+    }
+  }, [isExpanded, chart.sql]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSqlUpdate(chart.id, editedSql);
+      onToggleSql(chart.id);
+    } catch (error) {
+      console.error("Failed to save SQL:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditedSql(chart.sql);
+    onToggleSql(chart.id);
   };
 
   return (
@@ -150,6 +181,15 @@ function SortableChartCard({
       )}
       {config && rows.length > 0 && !isCardConfig(config) ? (
         <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            type="button"
+            onClick={() => onToggleSql(chart.id)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="View SQL"
+            title="View SQL"
+          >
+            <Code2 className="h-4 w-4" />
+          </button>
           <ChartConfigDialog
             trigger={
               <button
@@ -183,6 +223,15 @@ function SortableChartCard({
         </div>
       ) : config && rows.length > 0 && isCardConfig(config) ? (
         <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={() => onToggleSql(chart.id)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="View SQL"
+              title="View SQL"
+            >
+              <Code2 className="h-4 w-4" />
+            </button>
           <CardConfigDialog
             trigger={
               <button
@@ -211,9 +260,22 @@ function SortableChartCard({
           </button>
         </div>
       ) : null}
+      {!config || rows.length === 0 ? (
+        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            type="button"
+            onClick={() => onToggleSql(chart.id)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="View SQL"
+            title="View SQL"
+          >
+            <Code2 className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
       {config && rows.length > 0 ? (
         isCardConfig(config) ? (
-          <Card className="w-full h-full flex flex-col">
+          <Card className="w-full h-full flex flex-col border-0 shadow-none">
             <CardHeader>
               <CardTitle className="text-base font-medium text-muted-foreground">
                 {config.title}
@@ -257,6 +319,44 @@ function SortableChartCard({
       ) : (
         <div className="text-xs text-muted-foreground">No data</div>
       )}
+      {isExpanded && (
+        <div className="mt-4 border-t pt-4 transition-all duration-200">
+          <div className="flex flex-col gap-3">
+            <label
+              htmlFor={`sql-editor-${chart.id}`}
+              className="text-sm font-medium"
+            >
+              SQL Query
+            </label>
+            <textarea
+              id={`sql-editor-${chart.id}`}
+              value={editedSql}
+              onChange={(e) => setEditedSql(e.target.value)}
+              className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="SELECT * FROM ..."
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCancel}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleSave}
+                disabled={isSaving || editedSql === chart.sql}
+              >
+                {isSaving ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -278,8 +378,26 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   const [chartData, setChartData] = useState<Record<string, Result[]>>({});
   const [columns, setColumns] = useState<number>(3);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isFiltersPaneOpen, setIsFiltersPaneOpen] = useState(false);
+  const [expandedSqlChartId, setExpandedSqlChartId] = useState<string | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState("");
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const { filters } = useFilters();
+
+  useEffect(() => {
+    if (!isEditingTitle && dashboard?.title) {
+      setEditedTitle(dashboard.title);
+    }
+  }, [dashboard?.title, isEditingTitle]);
+
+  useEffect(() => {
+    if (isEditingTitle) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }
+  }, [isEditingTitle]);
 
   useEffect(() => {
     const savedColumns = localStorage.getItem(
@@ -346,6 +464,56 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
       cancelled = true;
     };
   }, [dashboardId, filters]);
+
+  const startEditingTitle = useCallback(() => {
+    if (!dashboard) return;
+    setEditedTitle(dashboard.title);
+    setTitleError(null);
+    setIsEditingTitle(true);
+  }, [dashboard]);
+
+  const cancelTitleEdit = useCallback(() => {
+    setEditedTitle(dashboard?.title ?? "");
+    setTitleError(null);
+    setIsEditingTitle(false);
+  }, [dashboard]);
+
+  const saveTitle = useCallback(async () => {
+    if (!dashboard) return;
+    const trimmedTitle = editedTitle.trim();
+    if (!trimmedTitle) {
+      setTitleError("Title cannot be empty");
+      return;
+    }
+    try {
+      setIsSavingTitle(true);
+      const res = await fetch(`/api/dashboards/${dashboardId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmedTitle }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to update dashboard title");
+      }
+      setDashboard((prev) =>
+        prev ? { ...prev, title: trimmedTitle, updatedAt: Date.now() } : prev,
+      );
+      setTitleError(null);
+      setIsEditingTitle(false);
+    } catch (error) {
+      console.error("Failed to update dashboard title:", error);
+    } finally {
+      setIsSavingTitle(false);
+    }
+  }, [dashboard, dashboardId, editedTitle]);
+
+  const handleTitleFormSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      void saveTitle();
+    },
+    [saveTitle],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -445,6 +613,62 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     [dashboardId],
   );
 
+  const handleToggleSql = useCallback((chartId: string) => {
+    setExpandedSqlChartId((prev) => (prev === chartId ? null : chartId));
+  }, []);
+
+  const handleSqlUpdate = useCallback(
+    async (chartId: string, newSql: string) => {
+      try {
+        // Update the SQL via API
+        const res = await fetch(`/api/charts/${chartId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sql: newSql }),
+        });
+        if (!res.ok) throw new Error("Failed to update SQL");
+
+        // Update local chart state
+        setCharts((prev) =>
+          prev.map((chart) =>
+            chart.id === chartId ? { ...chart, sql: newSql } : chart,
+          ),
+        );
+
+        // Re-fetch chart data to update the chart with new SQL
+        const filtersParam =
+          filters.length > 0
+            ? `?filters=${encodeURIComponent(JSON.stringify(filters))}`
+            : "";
+        const dataRes = await fetch(
+          `/api/dashboard/${dashboardId}/data${filtersParam}`,
+          {
+            cache: "no-store",
+          },
+        );
+        if (dataRes.ok) {
+          const data = (await dataRes.json()) as {
+            charts: (DashboardChart & {
+              rows: Result[];
+              filtersApplied?: boolean;
+            })[];
+          };
+          const updatedChart = data.charts.find((c) => c.id === chartId);
+          if (updatedChart) {
+            setChartData((prev) => ({
+              ...prev,
+              [chartId]: updatedChart.rows,
+            }));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to update SQL:", error);
+        throw error;
+      }
+    },
+    [dashboardId, filters],
+  );
+
   const getGridColsClass = (cols: number) => {
     const colMap: Record<number, string> = {
       1: "grid-cols-1",
@@ -466,30 +690,77 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
       </div>
     );
 
+  const trimmedEditedTitle = editedTitle.trim();
+  const trimmedCurrentTitle = dashboard.title.trim();
+  const isTitleSaveDisabled =
+    isSavingTitle ||
+    trimmedEditedTitle.length === 0 ||
+    trimmedEditedTitle === trimmedCurrentTitle;
+
   return (
     <div className="mx-auto flex h-full w-full flex-col gap-1 overflow-y-auto px-6 md:px-12 lg:px-18 pt-2 pb-6 md:pb-10">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{dashboard.title}</h1>
-        <div className="flex items-center gap-2">
-          <Sheet open={isFiltersPaneOpen} onOpenChange={setIsFiltersPaneOpen}>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="default">
-                <FunnelIcon className="h-4 w-4" />
-                Filters
-              </Button>
-            </SheetTrigger>
-            <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto p-4">
-              <SheetHeader>
-                <SheetTitle>Filters</SheetTitle>
-                <SheetDescription>
-                  Apply filters to all charts on this dashboard
-                </SheetDescription>
-              </SheetHeader>
-              <div className="mt-6">
-                <DashboardFilterPane />
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          {isEditingTitle ? (
+            <form
+              className="flex flex-col gap-2 sm:flex-row sm:items-center"
+              onSubmit={handleTitleFormSubmit}
+            >
+              <div className="flex flex-col gap-1">
+                <Input
+                  ref={titleInputRef}
+                  value={editedTitle}
+                  onChange={(event) => {
+                    setEditedTitle(event.target.value);
+                    if (titleError) setTitleError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      cancelTitleEdit();
+                    }
+                  }}
+                  disabled={isSavingTitle}
+                  placeholder="Dashboard title"
+                  className="h-10 min-w-[200px] sm:min-w-[260px]"
+                />
+                {titleError ? (
+                  <span className="text-xs text-destructive">{titleError}</span>
+                ) : null}
               </div>
-            </SheetContent>
-          </Sheet>
+              <div className="flex items-center gap-2">
+                <Button type="submit" size="sm" disabled={isTitleSaveDisabled}>
+                  {isSavingTitle ? "Saving…" : "Save"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={cancelTitleEdit}
+                  disabled={isSavingTitle}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="group flex items-center gap-2">
+              <h1 className="text-2xl font-semibold">{dashboard.title}</h1>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={startEditingTitle}
+                aria-label="Edit dashboard title"
+                title="Edit title"
+                className="opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
           <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" size="default">
@@ -497,14 +768,14 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
                 Settings
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Dashboard Settings</DialogTitle>
                 <DialogDescription>
-                  Configure your dashboard layout preferences.
+                  Configure your dashboard layout preferences and filters.
                 </DialogDescription>
               </DialogHeader>
-              <div className="flex flex-col gap-4 py-4">
+              <div className="flex flex-col gap-6 py-4">
                 <div className="flex flex-col gap-2">
                   <label
                     htmlFor="columns-select"
@@ -528,6 +799,12 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
                       <SelectItem value="6">6 Columns</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <h3 className="text-sm font-medium">Filters</h3>
+                  <div className="rounded-md border p-4">
+                    <DashboardFilterPane />
+                  </div>
                 </div>
               </div>
               <DialogFooter>
@@ -569,6 +846,9 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
                     handleChartConfigChange(c.id, newJson)
                   }
                   onDelete={() => handleChartDelete(c.id)}
+                  expandedSqlChartId={expandedSqlChartId}
+                  onToggleSql={handleToggleSql}
+                  onSqlUpdate={handleSqlUpdate}
                 />
               );
             })}
