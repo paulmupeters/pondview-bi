@@ -2,8 +2,8 @@
 
 import {
   ArrowTrendingUpIcon,
-  BanknotesIcon,
   ChartBarIcon,
+  HandRaisedIcon,
 } from "@heroicons/react/24/outline";
 import { nanoid } from "nanoid";
 import { useRouter } from "next/navigation";
@@ -30,11 +30,17 @@ export default function Home() {
     router.push(`/${id}?q=${encodeURIComponent(prompt)}`);
   };
 
+  const handleAddManualVisual = () => {
+    if (submitting) return;
+    const id = nanoid();
+    router.push(`/${id}?manual=1`);
+  };
+
   return (
     <div className="h-screen w-full flex items-center justify-center bg-background">
       <div className="w-full max-w-4xl px-6">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-semibold text-foreground mb-2">
+          <h1 className="text-6xl font-semibold text-foreground mb-2">
             Data Assistant AI
           </h1>
           <p className="text-lg text-muted-foreground">
@@ -46,8 +52,9 @@ export default function Home() {
         <div className="mb-8">
           <PromptInputWrapper
             onSubmit={handleSubmit}
-            placeholder="Ask a question about your data..."
-            className="relative flex gap-3 rounded-2xl border-2 border-primary/20 bg-card p-2 shadow-2xl shadow-primary/40 transition-all duration-300 hover:shadow-primary dark:shadow-primary/40"
+            onAddVisual={handleAddManualVisual}
+            placeholder="Ask a question about your data or add it manually..."
+            className="relative flex gap-3 rounded-3xl  bg-card transition-all duration-300 hover:shadow-primary dark:shadow-primary/40"
             status={submitting ? "submitted" : undefined}
           />
         </div>
@@ -56,74 +63,56 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <button
             type="button"
-            className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
-            onClick={() =>
-              handlePromptClick("Show me top 10 contires with most unicorns")
-            }
+            className="group text-left cursor-pointer p-4 bg-card rounded-full border-2 border-border hover:shadow-lg dark:hover:border-primary transition-all duration-200"
+            onClick={handleAddManualVisual}
           >
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 bg-chart-2 rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground text-sm font-bold">
-                  <BanknotesIcon className="h-4 w-4" />
-                </span>
+            <div className="flex items-center gap-3">
+              <HandRaisedIcon className="h-6 w-6 text-primary group-hover:scale-110 transition-transform duration-200" />
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Start a chat with a blank visual you can configure yourself.
+                </p>
               </div>
-              <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
-                Top 10 countries with most unicorns
-              </h3>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Visualize top 10 countries with most unicorns.
-            </p>
           </button>
 
           <button
             type="button"
-            className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
+            className="group text-left cursor-pointer p-4 bg-card rounded-full border-2 border-border hover:shadow-lg dark:hover:border-primary transition-all duration-200"
             onClick={() =>
               handlePromptClick(
                 "Show me trends of unicorns over the year in China",
               )
             }
           >
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground text-sm font-bold">
-                  <ArrowTrendingUpIcon className="h-4 w-4" />
-                </span>
+            <div className="flex items-center gap-3">
+              <ArrowTrendingUpIcon className="h-6 w-6 text-primary group-hover:scale-110 transition-transform duration-200" />
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Discover trends and patterns in financial health and growth
+                  metrics.
+                </p>
               </div>
-              <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
-                Trend Analysis
-              </h3>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Discover trends and patterns in financial health and growth
-              metrics.
-            </p>
           </button>
 
           <button
             type="button"
-            className="group text-left cursor-pointer p-6 bg-card rounded-xl border border-border hover:shadow-lg hover:border-primary/50 transition-all duration-200"
+            className="group text-left cursor-pointer p-4 bg-card rounded-full border-2 border-border hover:shadow-lg dark:hover:border-primary transition-all duration-200"
             onClick={() =>
               handlePromptClick(
                 "Execute SQL: SELECT Company, Valuation, Industry FROM unicorns WHERE Country = 'United States' ORDER BY Valuation DESC LIMIT 10",
               )
             }
           >
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 bg-secondary rounded-lg flex items-center justify-center">
-                <span className="text-secondary-foreground text-sm font-bold">
-                  <ChartBarIcon className="h-4 w-4" />
-                </span>
+            <div className="flex items-center gap-3">
+              <ChartBarIcon className="h-6 w-6 text-primary group-hover:scale-110 transition-transform duration-200" />
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Execute SQL query and display results in an interactive table.
+                </p>
               </div>
-              <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">
-                SQL Query
-              </h3>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Execute custom SQL queries and display results in an interactive
-              table.
-            </p>
           </button>
         </div>
       </div>

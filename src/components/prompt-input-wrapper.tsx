@@ -158,7 +158,7 @@ function FileAttachmentHoverCard() {
         <PromptInputButton
           size="icon-sm"
           variant="outline"
-          className="!h-8 group"
+          className="!h-8 group dark:hover:bg-accent"
         >
           <PaperClipIcon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
         </PromptInputButton>
@@ -308,11 +308,11 @@ export function PromptInputWrapper({
           />
         </div>
       </PromptInputBody>
-      <PromptInputHeader>
+      <PromptInputHeader className="border-b p-2 border-border">
         <FileAttachmentHoverCard />
         <PromptInputHoverCard>
           <PromptInputHoverCardTrigger>
-            <PromptInputButton size="sm" variant="outline" className="group">
+            <PromptInputButton size="sm" variant="outline" className="group dark:hover:bg-accent">
               <CircleStackIcon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
               <span className="group-hover:text-primary-foreground">
                 Connected data
@@ -333,7 +333,7 @@ export function PromptInputWrapper({
                     </PromptInputTabItem>
                   ))
                 ) : (
-                  <div className="px-3 py-1 text-xs text-muted-foreground">
+                    <div className="px-3 py-1 text-xs text-muted-foreground">
                     No connected data.
                   </div>
                 )}
@@ -349,7 +349,7 @@ export function PromptInputWrapper({
             <PromptInputButton
               size="sm"
               variant="outline"
-              className="group"
+              className="group dark:hover:bg-accent"
               onClick={() => onCreateDashboard?.()}
             >
               <Squares2X2Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
@@ -365,7 +365,7 @@ export function PromptInputWrapper({
             <PromptInputButton
               size="sm"
               variant="outline"
-              className="group"
+              className="group dark:hover:bg-accent"
               onClick={() => onAddVisual?.()}
               disabled={!onAddVisual}
             >

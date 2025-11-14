@@ -4,7 +4,7 @@ import { useChat } from "@ai-sdk-tools/store";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import {
   Conversation,
@@ -85,6 +85,7 @@ export default function Chat({
     transport,
   });
   const [autoSentFromQuery, setAutoSentFromQuery] = useState(false);
+  const [manualVisualHandled, setManualVisualHandled] = useState(false);
   const [animationFrame, setAnimationFrame] = useState("");
   const [verbAiIsThinking, setVerbAiIsThinking] = useState("is thinking");
   const [isDashboardBuilderOpen, setIsDashboardBuilderOpen] = useState(false);
@@ -105,7 +106,7 @@ export default function Chat({
     setIsDashboardBuilderOpen(true);
   };
 
-  const handleAddVisual = () => {
+  const handleAddVisual = useCallback(() => {
     const now = Date.now();
     const messageId = `manual-visual-${now}`;
     const artifactId = `manual-artifact-${now}`;
@@ -160,7 +161,7 @@ export default function Chat({
       ...prevMessages,
       newMessage,
     ]);
-  };
+  }, [connectedTables, executeSqlArtifactType, setMessages]);
 
   // Cleanup any stale auto-send markers that may be leftover from previous sessions
   useEffect(() => {
@@ -244,6 +245,15 @@ export default function Chat({
       sendMessage({ text: sanitizedQuery });
     }
   }, [chatId, searchParams, autoSentFromQuery, router, sendMessage]);
+
+  useEffect(() => {
+    const manual = searchParams?.get("manual");
+    if (manual === "1" && !manualVisualHandled) {
+      handleAddVisual();
+      setManualVisualHandled(true);
+      router.replace(`/${chatId}`);
+    }
+  }, [searchParams, manualVisualHandled, handleAddVisual, router, chatId]);
 
   // Remove the auto-send marker after it served its purpose to avoid storage build-up
   useEffect(() => {
