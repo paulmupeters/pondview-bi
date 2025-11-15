@@ -43,22 +43,22 @@
   --font-sans: Geist Mono, monospace;
   --font-serif: Geist Mono, monospace;
   --font-mono: Geist Mono, monospace;
-  --radius: 0.675rem;
+  --radius: 0rem;
   --shadow-x: 0px;
-  --shadow-y: 1px;
-  --shadow-blur: 10px;
-  --shadow-spread: 10px;
-  --shadow-opacity: 0.8;
-  --shadow-color: #4e4c4c;
-  --shadow-2xs: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00);
-  --shadow-xs: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00);
-  --shadow-sm: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.00);
-  --shadow: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.00);
-  --shadow-md: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00), 0px 2px 4px -1px hsl(0 0% 10.1961% / 0.00);
-  --shadow-lg: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00), 0px 4px 6px -1px hsl(0 0% 10.1961% / 0.00);
-  --shadow-xl: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00), 0px 8px 10px -1px hsl(0 0% 10.1961% / 0.00);
-  --shadow-2xl: 0px 25px 50px -12px hsl(0 0% 10.1961% / 0.25);
-  --tracking-normal: 0em;
+  --shadow-y: 0px;
+    --shadow-blur: 0px;
+    --shadow-spread: 0px;
+    --shadow-opacity: 0;
+    --shadow-color: transparent;
+    --shadow-2xs: none;
+    --shadow-xs: none;
+    --shadow-sm: none;
+    --shadow: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+    --shadow-xl: none;
+    --shadow-2xl: none;
+    --tracking-normal: 0.02em;
   --spacing: 0.25rem;
 }
 
@@ -101,21 +101,21 @@
   --font-sans: Geist Mono, monospace;
   --font-serif: Geist Mono, monospace;
   --font-mono: Geist Mono, monospace;
-  --radius: 0.675rem;
+  --radius: 0rem;
   --shadow-x: 0px;
-  --shadow-y: 1px;
-  --shadow-blur: 10px;
-  --shadow-spread: 10px;
-  --shadow-opacity: 0.8;
-  --shadow-color: #e7cf9a;
-  --shadow-2xs: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00);
-  --shadow-xs: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00);
-  --shadow-sm: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.00);
-  --shadow: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00), 0px 1px 2px -1px hsl(0 0% 10.1961% / 0.00);
-  --shadow-md: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00), 0px 2px 4px -1px hsl(0 0% 10.1961% / 0.00);
-  --shadow-lg: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00), 0px 4px 6px -1px hsl(0 0% 10.1961% / 0.00);
-  --shadow-xl: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00), 0px 8px 10px -1px hsl(0 0% 10.1961% / 0.00);
-  --shadow-2xl: 0px 1px 0px 0px hsl(0 0% 10.1961% / 0.00);
+  --shadow-y: 0px;
+    --shadow-blur: 0px;
+    --shadow-spread: 0px;
+    --shadow-opacity: 0;
+    --shadow-color: transparent;
+    --shadow-2xs: none;
+    --shadow-xs: none;
+    --shadow-sm: none;
+    --shadow: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+    --shadow-xl: none;
+    --shadow-2xl: none;
 }
 
 @theme inline {
@@ -159,6 +159,7 @@
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
 
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -197,3 +198,112 @@
 .wave-bg {
   animation: wave-flow 20s ease-in-out infinite;
 }
+
+/* Terminal/CRT Effects */
+@keyframes scanline {
+  0% {
+    transform: translateY(0);
+  }
+
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+@keyframes blink-cursor {
+
+  0%,
+  50% {
+    opacity: 1;
+  }
+
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* @keyframes flicker {
+  0% {
+    opacity: 0.97;
+  }
+
+  5% {
+    opacity: 0.98;
+  }
+
+  10% {
+    opacity: 0.96;
+  }
+
+  15% {
+    opacity: 0.99;
+  }
+
+  20% {
+    opacity: 0.97;
+  }
+
+  100% {
+    opacity: 0.97;
+  }
+} */
+
+@keyframes terminal-glow {
+
+  0%,
+  100% {
+    text-shadow: 0 0 4px var(--primary), 0 0 8px var(--primary);
+  }
+
+  50% {
+    text-shadow: 0 0 6px var(--primary), 0 0 12px var(--primary);
+  }
+}
+
+/* 
+.terminal-container {
+  position: relative;
+  background: var(--background);
+  border: 2px solid var(--primary);
+  box-shadow:
+    0 0 20px var(--primary),
+    inset 0 0 80px rgba(0, 0, 0, 0.5);
+}
+
+.terminal-scanlines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  background: repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, 0.15),
+      rgba(0, 0, 0, 0.15) 1px,
+      transparent 1px,
+      transparent 2px);
+} */
+
+/* 
+.terminal-text {
+  color: var(--primary);
+  text-shadow: 0 0 5px var(--primary);
+  font-family: var(--font-mono);
+}
+
+
+.cursor-blink::after {
+  content: "▋";
+  animation: blink-cursor 1s step-end infinite;
+  color: var(--primary);
+  margin-left: 2px;
+}
+
+.terminal-prompt {
+  color: var(--primary);
+  text-shadow: 0 0 5px var(--primary);
+  font-family: var(--font-mono);
+  font-weight: bold;
+} */

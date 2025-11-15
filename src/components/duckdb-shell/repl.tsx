@@ -207,52 +207,59 @@ export function DuckdbRepl({ className, httpConfig }: DuckdbReplProps) {
 
   return (
     <div className={cn("flex w-full flex-col gap-3", className)}>
-      <div className="rounded-lg border border-border/60 bg-background">
-        <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
-          <div className="text-xs text-muted-foreground">
-            {isRunning ? "Running…" : ranMs != null ? `${ranMs} ms` : "Ready"}
+      <div className="shadow-sm border-border border-1 bg-card/50 rounded-sm">
+        <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <div className="text-xs terminal-text">
+            {isRunning ? "RUNNING…" : ranMs != null ? `${ranMs} ms` : "READY"}
           </div>
           <div className="flex items-center gap-2">
             <Button
               size="sm"
-              variant="default"
+              variant="outline"
               onClick={() => void runQuery()}
               disabled={isRunning}
+              className="text-xs font-mono border-border hover:bg-primary/20 hover:terminal-glow hover:border-primary"
             >
-              Run
+              [RUN]
             </Button>
             <Button
               size="sm"
-              variant="secondary"
+              variant="outline"
               onClick={cancelRun}
               disabled={!isRunning}
+              className="text-xs font-mono border-border hover:bg-primary/20 hover:terminal-glow hover:border-primary"
             >
-              Stop
+              [STOP]
             </Button>
-            <Button size="sm" variant="ghost" onClick={clearInput}>
-              Clear
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearInput}
+              className="text-xs font-mono hover:text-primary hover:bg-primary/10"
+            >
+              [CLR]
             </Button>
           </div>
         </div>
-        <div className="p-3">
+        <div className="p-0">
           <textarea
             ref={textareaRef}
             value={sql}
             onChange={(e) => setSql(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Write SQL here… (Enter to run, Shift+Enter for newline)"
-            className="min-h-32 w-full resize-y rounded-md border border-border/60 bg-sidebar p-3 font-mono text-sm text-foreground outline-none focus:ring-1 focus:ring-ring/50"
+            placeholder="ENTER SQL QUERY... (ENTER to execute, SHIFT+ENTER for newline)"
+            className="min-h-32 w-full resize-y p-4 font-mono text-sm outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary bg-card"
           />
           {error && (
-            <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {error}
+            <div className="mt-2 border border-destructive/60 bg-destructive/20 px-3 py-2 text-xs text-destructive font-mono rounded-sm">
+              ERROR: {error}
             </div>
           )}
         </div>
       </div>
 
       {results && (
-        <div className="rounded-lg border border-border/60 bg-card p-6">
+        <div className="border border-border bg-background p-6 rounded-sm">
           <SqlResultsTable dataOverride={results} />
         </div>
       )}
