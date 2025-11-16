@@ -2,32 +2,13 @@
 
 import {
   ChatBubbleBottomCenterTextIcon,
-  Cog6ToothIcon,
-  PlayCircleIcon,
-  PlusIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
-import {
-  ChartBar,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Code2,
-  Database,
-  Loader2,
-  Search,
-  Table,
-} from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { ChartBar, ChevronLeft, ChevronRight, Table } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { runSqlAndGetRowObjectsJson } from "@/actions/queries";
-import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
-import { CardConfigDialog } from "@/components/card-config-dialog";
-import { ChartConfigDialog } from "@/components/chart-config-dialog";
-import { SqlChart } from "@/components/sql-chart";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -35,158 +16,18 @@ import {
 } from "@/components/ui/tooltip";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-export type SqlAnalysisStage =
-  | "loading"
-  | "processing"
-  | "analyzing"
-  | "visualizing"
-  | "complete";
-
-export type SqlAnalysisData = {
-  stage?: SqlAnalysisStage;
-  progress?: number;
-  query?: string;
-  dbIdentifier?: string;
-  executionTime?: number;
-  rowCount?: number;
-  columns?: { name: string; type?: string }[];
-  rows?: Result[];
-  visualType?: "table" | "chart" | "card";
-  isSqlExpandedInitial?: boolean;
-  chartConfig?: Config;
-  cardConfig?: CardConfig;
-  summary?: {
-    totalRows: number;
-    executionTimeMs?: number;
-    insights: string[];
-    queryType?: string;
-  };
-};
-
-interface SqlAnalysisDisplayProps {
-  data: SqlAnalysisData | null;
-  stage?: SqlAnalysisStage;
-  progress?: number;
-  showStageIndicator?: boolean;
-  history?: {
-    currentIndex: number;
-    total: number;
-    onPrev: () => void;
-    onNext: () => void;
-  };
-  className?: string;
-  onDelete?: () => void;
-}
-
-function StageIndicator({
-  currentStage,
-  progress = 0,
-}: {
-  currentStage: SqlAnalysisStage;
-  progress?: number;
-}) {
-  const stages = [
-    {
-      id: "loading" as const,
-      label: "Preparing",
-      icon: Loader2,
-      description: "Initializing query execution",
-    },
-    {
-      id: "processing" as const,
-      label: "Processing",
-      icon: Database,
-      description: "Executing SQL query",
-    },
-    {
-      id: "analyzing" as const,
-      label: "Analyzing",
-      icon: Search,
-      description: "Processing results and generating insights",
-    },
-    {
-      id: "visualizing" as const,
-      label: "Visualizing",
-      icon: ChartBar,
-      description: "Generating chart visualization",
-    },
-    {
-      id: "complete" as const,
-      label: "Complete",
-      icon: CheckCircle2,
-      description: "Ready to view",
-    },
-  ];
-
-  const currentStageIndex = stages.findIndex((s) => s.id === currentStage);
-
-  return (
-    <div className="bg-muted/30 border rounded-lg p-4 space-y-3">
-      <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-        <div
-          className="bg-primary h-full transition-all duration-500 ease-out"
-          style={{ width: `${Math.min(1, Math.max(0, progress)) * 100}%` }}
-        />
-      </div>
-
-      <div className="flex items-center justify-between gap-2">
-        {stages.map((stage, index) => {
-          const Icon = stage.icon;
-          const isActive = stage.id === currentStage;
-          const isCompleted = index < currentStageIndex;
-          const isPending = index > currentStageIndex;
-
-          return (
-            <div
-              key={stage.id}
-              className={cn(
-                "flex flex-col items-center gap-2 flex-1",
-                "transition-opacity duration-300",
-                isPending && "opacity-40",
-              )}
-            >
-              <div
-                className={cn(
-                  "flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300",
-                  isActive && "border-primary bg-primary/10 scale-110",
-                  isCompleted && "border-green-500 bg-green-500/10",
-                  isPending && "border-muted-foreground/30 bg-muted",
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "w-5 h-5 transition-all duration-300",
-                    isActive && "text-primary animate-pulse",
-                    isCompleted && "text-green-500",
-                    isPending && "text-muted-foreground",
-                  )}
-                />
-              </div>
-              <div className="text-center">
-                <div
-                  className={cn(
-                    "text-xs font-medium transition-colors duration-300",
-                    isActive && "text-primary",
-                    isCompleted && "text-green-500",
-                    isPending && "text-muted-foreground",
-                  )}
-                >
-                  {stage.label}
-                </div>
-                {isActive && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {stage.description}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+import { ChartView } from "./sql-analysis-display/chart-view";
+import { SqlControls } from "./sql-analysis-display/sql-controls";
+import { SqlEditor } from "./sql-analysis-display/sql-editor";
+import { StageIndicator } from "./sql-analysis-display/stage-indicator";
+import type {
+  ActiveView,
+  SelectedForCard,
+  SelectedForChart,
+  SelectedForTable,
+  SqlAnalysisDisplayProps,
+  SqlAnalysisStage,
+} from "./sql-analysis-display.types";
 
 export function SqlAnalysisDisplay({
   data,
@@ -196,8 +37,9 @@ export function SqlAnalysisDisplay({
   history,
   className,
   onDelete,
+  selectedDbLabel,
 }: SqlAnalysisDisplayProps) {
-  const [activeView, setActiveView] = useState<"table" | "chart">(() =>
+  const [activeView, setActiveView] = useState<ActiveView>(() =>
     data?.visualType === "chart" || data?.visualType === "card"
       ? "chart"
       : "table",
@@ -211,68 +53,53 @@ export function SqlAnalysisDisplay({
   const lastQueryRef = useRef<string | null>(null);
   const lastAutoSwitchQueryRef = useRef<string | null>(null);
   const [query, setQuery] = useState<string | null>(null);
-  const [isSqlExpanded, setIsSqlExpanded] = useState(data?.isSqlExpandedInitial ?? false);
+  const [isSqlExpanded, setIsSqlExpanded] = useState(
+    data?.isSqlExpandedInitial ?? false,
+  );
 
   const toggleSqlExpanded = () => {
     setIsSqlExpanded((prev) => !prev);
   };
 
-  const renderSqlControls = (
-    extraControls?: ReactNode,
-    editorId = "sql-editor-analysis",
-  ) => (
-    <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-      <button
-        type="button"
-        onClick={toggleSqlExpanded}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        aria-label="View SQL"
-        aria-controls={editorId}
-        aria-expanded={isSqlExpanded}
-        title="View SQL"
-      >
-        <Code2 className="h-4 w-4" />
-      </button>
-      {extraControls}
-    </div>
-  );
+  const handleExecute = () => {
+    const queryToExecute = query || data?.query || "";
+    const dbIdentifier = data?.dbIdentifier || "md:my_db";
 
-  const renderSqlEditor = (editorId = "sql-editor-analysis") =>
-    isSqlExpanded ? (
-      <div className="mt-4 border-t pt-4 transition-all duration-200">
-        <div className="flex flex-col gap-3">
-          <label htmlFor={editorId} className="text-sm font-medium">
-            SQL Query
-          </label>
-          <Textarea
-            id={editorId}
-            value={query ?? data?.query ?? ""}
-            onChange={(e) => setQuery(e.target.value)}
-            className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            placeholder="SELECT * FROM ..."
-          />
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsSqlExpanded(false)}
-            >
-              Close
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleExecute}
-              className="flex items-center gap-2"
-            >
-              <PlayCircleIcon className="w-4 h-4" />
-              Execute
-            </Button>
-          </div>
-        </div>
-      </div>
-    ) : null;
+    runSqlAndGetRowObjectsJson(dbIdentifier, queryToExecute).then((rows) => {
+      console.log("Rows:", rows);
+
+      if (rows.length > 0) {
+        const columns = Object.keys(rows[0]).map((key) => ({
+          name: key,
+        }));
+        setExecutedColumns(columns);
+        setExecutedRows(rows);
+      } else {
+        setExecutedColumns([]);
+        setExecutedRows([]);
+      }
+    });
+  };
+
+  const handleSqlEditorSuccess = (
+    query: string,
+    results: Result[],
+    columns: { name: string; type?: string }[],
+  ) => {
+    setQuery(query);
+    setExecutedRows(results);
+    setExecutedColumns(columns);
+    setActiveView("chart");
+  };
+
+  const { renderControls, renderEditor } = SqlControls({
+    query: query ?? data?.query ?? "",
+    onQueryChange: (newQuery) => setQuery(newQuery),
+    onExecute: handleExecute,
+    isExpanded: isSqlExpanded,
+    onToggleExpanded: toggleSqlExpanded,
+  });
+
   useEffect(() => {
     const currentQuery = data?.query ?? null;
     if (currentQuery !== lastQueryRef.current) {
@@ -280,7 +107,7 @@ export function SqlAnalysisDisplay({
       setCardConfig(null);
       setExecutedRows(null);
       setExecutedColumns(null);
-      setQuery(null); // Reset local query override when data query changes
+      setQuery(null);
       setActiveView(
         data?.visualType === "chart" || data?.visualType === "card"
           ? "chart"
@@ -323,28 +150,16 @@ export function SqlAnalysisDisplay({
     cardConfig,
   ]);
 
-  // useEffect(() => {
-  //   if (
-  //     data?.visualType === "table" &&
-  //     !chartConfig &&
-  //     !cardConfig &&
-  //     activeView !== "table"
-  //   ) {
-  //     setActiveView("table");
-  //   }
-  // }, [data?.visualType, chartConfig, cardConfig, activeView]);
-
   const columnsForDialog = useMemo(
     () =>
       (executedColumns ?? data?.columns ?? []).map((c) => ({ name: c.name })),
     [executedColumns, data?.columns],
   );
 
-  const selectedForChart = useMemo(() => {
-    // Use executed data if available, otherwise fall back to data prop
+  const selectedForChart = useMemo((): SelectedForChart | undefined => {
     if (executedRows !== null) {
       return {
-        stage: "complete" as const,
+        stage: "complete",
         rows: executedRows,
         chartConfig: chartConfig ?? data?.chartConfig,
         summary: data?.summary,
@@ -361,11 +176,10 @@ export function SqlAnalysisDisplay({
       : undefined;
   }, [executedRows, chartConfig, data]);
 
-  const selectedForTable = useMemo(() => {
-    // Use executed data if available, otherwise fall back to data prop
+  const selectedForTable = useMemo((): SelectedForTable | undefined => {
     if (executedRows !== null && executedColumns !== null) {
       return {
-        stage: "complete" as const,
+        stage: "complete",
         columns: executedColumns,
         rows: executedRows as Record<string, unknown>[],
         summary: data?.summary,
@@ -383,19 +197,18 @@ export function SqlAnalysisDisplay({
   }, [executedRows, executedColumns, data]);
 
   const cardSourceRows =
-    executedRows ??
-    (data?.stage === "complete" ? (data.rows ?? null) : null);
+    executedRows ?? (data?.stage === "complete" ? (data.rows ?? null) : null);
   const cardSourceColumns =
     executedColumns ??
     (data?.stage === "complete" ? (data.columns ?? null) : null);
 
-  const selectedForCard =
+  const selectedForCard: SelectedForCard | undefined =
     cardSourceRows &&
       cardSourceRows.length === 1 &&
       cardSourceColumns &&
       cardSourceColumns.length === 1
       ? {
-        stage: "complete" as const,
+        stage: "complete",
         columnName: cardSourceColumns[0].name,
         value: cardSourceRows[0][cardSourceColumns[0].name],
         }
@@ -414,27 +227,61 @@ export function SqlAnalysisDisplay({
     return null;
   }
 
-  const handleExecute = () => {
-    const queryToExecute = query || data?.query || "";
-    runSqlAndGetRowObjectsJson(
-      data?.dbIdentifier ?? "md:my_db",
-      queryToExecute,
-    ).then((rows) => {
-      console.log("Rows:", rows);
+  // Show SQL editor in chart mode when there's no query and no dbIdentifier
+  if (effectiveStage === "initial" && !data?.dbIdentifier) {
+    return (
+      <div className={cn("space-y-6 w-full", className)}>
+        {selectedDbLabel && (
+          <div className="text-sm text-muted-foreground px-2">
+            Database: {selectedDbLabel}
+          </div>
+        )}
+        <SqlEditor
+          dbIdentifier={data?.dbIdentifier || "md:my_db"}
+          onQuerySuccess={handleSqlEditorSuccess}
+        />
+      </div>
+    );
+  }
 
-      // Extract columns from the first row
-      if (rows.length > 0) {
-        const columns = Object.keys(rows[0]).map((key) => ({
-          name: key,
-        }));
-        setExecutedColumns(columns);
-        setExecutedRows(rows);
-      } else {
-        setExecutedColumns([]);
-        setExecutedRows([]);
-      }
-    });
-  };
+  // Show SQL editor in chart mode when there's no query
+  if (!data?.query && !query) {
+    return (
+      <div className={cn("space-y-6 w-full", className)}>
+        {selectedDbLabel && (
+          <div className="text-sm text-muted-foreground px-2">
+            Database: {selectedDbLabel}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2 p-2 lg:w-[300px] xl:w-[500px] w-full">
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActiveView("table")}
+              className="flex items-center gap-2 hover:text-gray-500"
+              disabled
+            >
+              <Table className="w-4 h-4" />
+              Data
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <ChartBar className="w-4 h-4" />
+              Visual
+            </Button>
+          </div>
+        </div>
+        <SqlEditor
+          dbIdentifier={data?.dbIdentifier || "md:my_db"}
+          onQuerySuccess={handleSqlEditorSuccess}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={cn("space-y-6 w-full", className)}>
@@ -530,148 +377,25 @@ export function SqlAnalysisDisplay({
       )}
 
       {data && activeView === "chart" && (
-        <div className="group relative flex flex-col rounded-xl bg-card p-4 md:p-2">
-          {selectedForCard ? (
-            <>
-              {renderSqlControls(
-                <>
-                  <CardConfigDialog
-                    trigger={
-                      <button
-                        type="button"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                        aria-label="Configure card"
-                        title="Configure card"
-                      >
-                        <Cog6ToothIcon className="h-4 w-4" />
-                      </button>
-                    }
-                    config={cardConfig}
-                    onConfigChange={setCardConfig}
-                    tooltip="Configure card"
-                  />
-                  <AddToDashboardDialog
-                    trigger={
-                      <button
-                        type="button"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                        aria-label="Add to dashboard"
-                        title="Add to dashboard"
-                      >
-                        <PlusIcon className="h-4 w-4" />
-                      </button>
-                    }
-                    sql={data.query ?? ""}
-                    cardConfig={cardConfig ?? data.cardConfig ?? undefined}
-                    defaultTitle={cardConfig?.title ?? data.cardConfig?.title}
-                    tooltip="Add to dashboard"
-                  />
-                </>,
-                "sql-editor-analysis-card",
-              )}
-              <Card className="mx-auto w-fit border-0 shadow-none">
-                <CardHeader>
-                  <CardTitle className="text-base font-medium text-muted-foreground">
-                    {cardConfig?.title ??
-                      data.cardConfig?.title ??
-                      selectedForCard.columnName}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-4xl font-bold text-foreground">
-                    {typeof selectedForCard.value === "number"
-                      ? selectedForCard.value.toLocaleString()
-                      : typeof selectedForCard.value === "boolean"
-                        ? selectedForCard.value.toString()
-                        : selectedForCard.value instanceof Date
-                          ? selectedForCard.value.toLocaleString()
-                          : String(selectedForCard.value)}
-                  </div>
-                  {(cardConfig?.description ??
-                    data.cardConfig?.description) && (
-                    <div className="text-sm text-muted-foreground mt-2">
-                      {cardConfig?.description ?? data.cardConfig?.description}
-                    </div>
-                  )}
-                  {(cardConfig?.takeaway ?? data.cardConfig?.takeaway) && (
-                    <div className="text-xs text-muted-foreground mt-2 italic">
-                      {cardConfig?.takeaway ?? data.cardConfig?.takeaway}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-              {renderSqlEditor("sql-editor-analysis-card")}
-            </>
-          ) : (
-            <>
-                {renderSqlControls(
-                  <>
-                    <ChartConfigDialog
-                      trigger={
-                        <button
-                          type="button"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                          aria-label="Configure chart"
-                          title="Configure chart"
-                        >
-                          <Cog6ToothIcon className="h-4 w-4" />
-                        </button>
-                      }
-                      config={chartConfig}
-                      columns={columnsForDialog}
-                      rows={selectedForChart?.rows ?? []}
-                      onConfigChange={setChartConfig}
-                      tooltip="Configure chart"
-                    />
-                    <AddToDashboardDialog
-                      trigger={
-                        <button
-                          type="button"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                          aria-label="Add to dashboard"
-                          title="Add to dashboard"
-                        >
-                          <PlusIcon className="h-4 w-4" />
-                        </button>
-                      }
-                      sql={data.query ?? ""}
-                      chartConfig={
-                        chartConfig ??
-                        data.chartConfig ?? {
-                          description: "",
-                          type: "bar",
-                          title: "",
-                          xKey: "",
-                          yKeys: [],
-                          multipleLines: false,
-                          legend: false,
-                          countMode: false,
-                        }
-                      }
-                      defaultTitle={chartConfig?.title ?? data.chartConfig?.title}
-                      tooltip="Add to dashboard"
-                    />
-                  </>,
-                  "sql-editor-analysis-chart",
-                )}
-
-              {selectedForChart && (
-                <SqlChart
-                  customChartConfig={chartConfig ?? undefined}
-                  dataOverride={selectedForChart}
-                />
-              )}
-                {renderSqlEditor("sql-editor-analysis-chart")}
-            </>
-          )}
-        </div>
+        <ChartView
+          data={data}
+          selectedForChart={selectedForChart}
+          selectedForCard={selectedForCard}
+          chartConfig={chartConfig}
+          cardConfig={cardConfig}
+          columnsForDialog={columnsForDialog}
+          onChartConfigChange={setChartConfig}
+          onCardConfigChange={setCardConfig}
+          renderSqlControls={renderControls}
+          renderSqlEditor={renderEditor}
+        />
       )}
 
       {data && activeView === "table" && (
         <div className="group relative">
-          {renderSqlControls(undefined, "sql-editor-analysis-table")}
+          {renderControls(undefined, "sql-editor-analysis-table")}
           <SqlResultsTable dataOverride={selectedForTable} />
-          {renderSqlEditor("sql-editor-analysis-table")}
+          {renderEditor("sql-editor-analysis-table")}
         </div>
       )}
 

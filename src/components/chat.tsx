@@ -16,21 +16,23 @@ import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Response } from "@/components/ai-elements/response";
 import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
 import { PromptInputWrapper } from "@/components/prompt-input-wrapper";
-import {
-  type SqlAnalysisData,
-  SqlAnalysisDisplay,
-  type SqlAnalysisStage,
-} from "@/components/sql-analysis-display";
+import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
+import type {
+  SqlAnalysisData,
+  SqlAnalysisStage,
+} from "@/components/sql-analysis-display.types";
 import type { ArtifactStatus } from "@/hooks/types";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
+import { runQuery } from "@/lib/sql/run-query";
 
 const AUTO_SENT_FLAG_PREFIX = "autoSent:";
 const AUTO_SENT_STALE_MS = 5 * 60 * 1000;
 const AUTO_SENT_CLEANUP_DELAY_MS = 3_000;
+type PromptMode = "ai" | "sql" | "chart";
 
 export default function Chat({
   chatId,
@@ -40,6 +42,21 @@ export default function Chat({
   initialMessages?: UIMessage[];
 }) {
   const connectedTables = useConnectedTables();
+  const [promptMode, setPromptMode] = useState<PromptMode>("ai");
+  const [promptPendingMode, setPromptPendingMode] = useState<PromptMode | null>(
+    null,
+  );
+  const [autoSqlHandled, setAutoSqlHandled] = useState(false);
+  const defaultDbIdentifier = useMemo(() => {
+    const entry = connectedTables[0];
+    if (!entry) {
+      return undefined;
+    }
+    if (entry.attachAs) {
+      return entry.attachAs;
+    }
+    return `${entry.type}:${entry.databasePath}`;
+  }, [connectedTables]);
 
   const transport = useMemo(
     () =>
@@ -70,7 +87,7 @@ export default function Chat({
           const fetchWithPreconnect = fetch as FetchWithPreconnect;
           const customFetchWithPreconnect = customFetch as FetchWithPreconnect;
           customFetchWithPreconnect.preconnect =
-            fetchWithPreconnect.preconnect?.bind(fetch) ?? (() => { });
+            fetchWithPreconnect.preconnect?.bind(fetch) ?? (() => {});
           return customFetch;
         })(),
       }),
@@ -107,11 +124,11 @@ export default function Chat({
   };
 
   const handleAddVisual = useCallback(() => {
+    setPromptPendingMode("chart");
     const now = Date.now();
     const messageId = `manual-visual-${now}`;
     const artifactId = `manual-artifact-${now}`;
-    const defaultDatabase =
-      connectedTables[0]?.databasePath ?? "md:my_db";
+    const defaultDatabase = connectedTables[0]?.databasePath ?? "md:my_db";
 
     const defaultPayload: SqlAnalysisData = {
       stage: "complete",
@@ -157,11 +174,88 @@ export default function Chat({
       parts: [newArtifactPart],
     };
 
-    setMessages((prevMessages) => [
-      ...prevMessages,
-      newMessage,
-    ]);
+    setMessages((prevMessages) => [...prevMessages, newMessage]);
+    setPromptPendingMode((current) => (current === "chart" ? null : current));
   }, [connectedTables, executeSqlArtifactType, setMessages]);
+
+  const handleRunSql = useCallback(
+    async ({
+      sql,
+      dbIdentifier,
+      signal,
+    }: {
+      sql: string;
+      dbIdentifier?: string;
+      signal: AbortSignal;
+    }) => {
+      setPromptPendingMode("sql");
+      try {
+        const result = await runQuery({ sql, signal });
+        const now = Date.now();
+        const messageId = `sql-${now}`;
+        const artifactId = `sql-artifact-${now}`;
+        const payload: SqlAnalysisData = {
+          stage: "complete",
+          progress: 1,
+          query: sql,
+          dbIdentifier,
+          executionTime: result.durationMs,
+          rowCount: result.rows.length,
+          columns: result.columns,
+          rows: result.rows,
+          visualType: "table",
+          summary: {
+            totalRows: result.rows.length,
+            executionTimeMs: result.durationMs,
+            insights: [],
+          },
+        };
+
+        const artifactPart = {
+          type: executeSqlArtifactType as `data-${string}`,
+          data: {
+            id: artifactId,
+            version: 1,
+            status: "complete",
+            progress: 1,
+            payload,
+            createdAt: now,
+          },
+        } as unknown as UIMessage["parts"][number];
+
+        const newMessage: UIMessage = {
+          id: messageId,
+          role: "assistant",
+          parts: [artifactPart],
+        };
+
+        setMessages((prev) => [...prev, newMessage]);
+        return {
+          rows: result.rows,
+          columns: result.columns,
+        };
+      } catch (error) {
+        const now = Date.now();
+        const messageText =
+          error instanceof Error ? error.message : "SQL execution failed.";
+        const errorMessage: UIMessage = {
+          id: `sql-error-${now}`,
+          role: "assistant",
+          parts: [
+            {
+              type: "text",
+              text: `SQL error: ${messageText}`,
+            } as UIMessage["parts"][number],
+          ],
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+        throw error;
+      } finally {
+        setPromptPendingMode((current) => (current === "sql" ? null : current));
+      }
+    },
+    [executeSqlArtifactType, setMessages],
+  );
 
   // Cleanup any stale auto-send markers that may be leftover from previous sessions
   useEffect(() => {
@@ -255,6 +349,40 @@ export default function Chat({
     }
   }, [searchParams, manualVisualHandled, handleAddVisual, router, chatId]);
 
+  useEffect(() => {
+    const sqlParam = searchParams?.get("sql");
+    if (!sqlParam || autoSqlHandled) {
+      return;
+    }
+
+    setAutoSqlHandled(true);
+    setPromptMode("sql");
+    const controller = new AbortController();
+
+    void handleRunSql({
+      sql: sqlParam,
+      dbIdentifier: defaultDbIdentifier,
+      signal: controller.signal,
+    })
+      .catch((error) => {
+        console.error("Failed to auto-run SQL query from URL", error);
+      })
+      .finally(() => {
+        router.replace(`/${chatId}`);
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [
+    searchParams,
+    autoSqlHandled,
+    handleRunSql,
+    router,
+    chatId,
+    defaultDbIdentifier,
+  ]);
+
   // Remove the auto-send marker after it served its purpose to avoid storage build-up
   useEffect(() => {
     if (!autoSentFromQuery || typeof window === "undefined") {
@@ -297,10 +425,11 @@ export default function Chat({
   return (
     <>
       <div
-        className={`chat-container flex h-screen transition-all duration-300 ${isConversationEmpty
-          ? "flex-col items-center justify-center"
-          : "flex-col"
-          } ${isDashboardBuilderOpen ? "mr-[50vw]" : ""}`}
+        className={`chat-container flex h-screen transition-all duration-300 ${
+          isConversationEmpty
+            ? "flex-col items-center justify-center"
+            : "flex-col"
+        } ${isDashboardBuilderOpen ? "mr-[50vw]" : ""}`}
       >
         <div className="flex h-full w-full flex-col">
           <div className="flex-1 overflow-y-auto bg-background">
@@ -322,7 +451,9 @@ export default function Chat({
                         {message.parts?.map((part, partIndex) => {
                           if (status === "submitted") {
                             return (
-                              <span key={`${message.id}-part-${partIndex}-submitted`}>
+                              <span
+                                key={`${message.id}-part-${partIndex}-submitted`}
+                              >
                                 {animationFrame}
                               </span>
                             );
@@ -391,12 +522,12 @@ export default function Chat({
                                   onDelete={
                                     message.id.startsWith("manual-visual-")
                                       ? () => {
-                                        setMessages((prevMessages) =>
-                                          prevMessages.filter(
-                                            (msg) => msg.id !== message.id,
-                                          ),
-                                        );
-                                      }
+                                          setMessages((prevMessages) =>
+                                            prevMessages.filter(
+                                              (msg) => msg.id !== message.id,
+                                            ),
+                                          );
+                                        }
                                       : undefined
                                   }
                                 />
@@ -446,10 +577,14 @@ export default function Chat({
           <div className="p-1 max-w-6xl w-full mx-auto">
             <PromptInputWrapper
               onSubmit={handleSubmit}
-              className=""
+              onRunSql={handleRunSql}
+              className="transition delay-150 duration-300 ease-in-out"
               status={status}
               onCreateDashboard={handleOpenDashboardBuilder}
               onAddVisual={handleAddVisual}
+              mode={promptMode}
+              onModeChange={setPromptMode}
+              pendingMode={promptPendingMode}
             />
           </div>
         </div>

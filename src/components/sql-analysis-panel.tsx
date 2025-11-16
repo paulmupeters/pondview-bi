@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import {
   SqlAnalysisDisplay,
-  type SqlAnalysisData,
-  type SqlAnalysisStage,
 } from "@/components/sql-analysis-display";
+import type { SqlAnalysisData, SqlAnalysisStage } from "@/components/sql-analysis-display.types";
 import { useArtifact } from "@/hooks/use-artifacts";
 import type { Result } from "@/lib/types";
 

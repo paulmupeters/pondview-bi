@@ -1,14 +1,15 @@
 "use client";
 
 import {
-  CircleStackIcon,
+  ChatBubbleLeftRightIcon,
+  CodeBracketIcon,
   GlobeEuropeAfricaIcon,
   PaperClipIcon,
   PresentationChartBarIcon,
   Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 import type { ChatStatus } from "ai";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import {
   PromptInput,
@@ -27,30 +28,44 @@ import {
   PromptInputHoverCard,
   PromptInputHoverCardContent,
   PromptInputHoverCardTrigger,
-  PromptInputSubmit,
-  PromptInputTab,
-  PromptInputTabBody,
-  PromptInputTabItem,
-  PromptInputTabLabel,
   PromptInputTextarea,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
+import { ConnectedDataPanel } from "@/components/connected-data-panel";
+import { DuckdbRepl } from "@/components/duckdb-shell/repl";
+import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
+import type { SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
+import { cn } from "@/lib/utils";
+
+type PromptMode = "ai" | "sql" | "chart";
 
 interface PromptInputWrapperProps {
   onSubmit: (message: PromptInputMessage) => void;
+  onRunSql?: (params: {
+    sql: string;
+    dbIdentifier?: string;
+    signal: AbortSignal;
+  }) => Promise<{
+    rows: Record<string, unknown>[];
+    columns?: { name: string; type?: string }[];
+  }>;
   placeholder?: string;
   className?: string;
   status?: ChatStatus;
+  onHomePage?: boolean;
   onCreateDashboard?: () => void;
   onAddVisual?: () => void;
+  mode?: PromptMode;
+  onModeChange?: (mode: PromptMode) => void;
+  pendingMode?: PromptMode | null;
 }
 
 // Inner component that uses the attachments hook within PromptInput context
@@ -62,7 +77,6 @@ function FileAttachmentHoverCard() {
     new Set(),
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   // Filter uploaded files based on search query
   const filteredFiles = uploadedFiles.filter((file) =>
     file.originalName.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -185,9 +199,7 @@ function FileAttachmentHoverCard() {
                     <PromptInputCommandItem key={file.id}>
                       <GlobeEuropeAfricaIcon className="h-4 w-4" />
                       <span>{file.filename}</span>
-                      <span className="ml-auto text-muted-foreground">
-                        ✓
-                      </span>
+                      <span className="ml-auto text-muted-foreground">✓</span>
                     </PromptInputCommandItem>
                   ))}
                 </PromptInputCommandGroup>
@@ -217,9 +229,7 @@ function FileAttachmentHoverCard() {
                         {file.originalName}
                       </span>
                       {isSelected && (
-                        <span className="ml-auto text-muted-foreground">
-                          ✓
-                        </span>
+                        <span className="ml-auto text-muted-foreground">✓</span>
                       )}
                     </PromptInputCommandItem>
                   );
@@ -255,129 +265,225 @@ function FileAttachmentHoverCard() {
 
 export function PromptInputWrapper({
   onSubmit,
+  onRunSql,
   placeholder = "Ask a question about your data...",
   className,
   status,
+  onHomePage = false,
   onCreateDashboard,
   onAddVisual,
+  mode,
+  onModeChange,
+  pendingMode = null,
 }: PromptInputWrapperProps) {
-  const connectedTables = useConnectedTables();
+  const [internalMode, setInternalMode] = useState<PromptMode>(mode ?? "ai");
+  const [selectedDb, setSelectedDb] = useState<string | undefined>();
+  const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(
+    null,
+  );
 
-  // Flatten the entries to show each table separately
-  const getEntriesForDisplay = () => {
-    const entries: Array<{ label: string; key: string }> = [];
+  const promptMode = mode ?? internalMode;
 
-    connectedTables.forEach((entry, idx) => {
-      if (Array.isArray(entry.tables) && entry.tables.length > 0) {
-        // Show each table separately
-        entry.tables.forEach((tableName) => {
-          entries.push({
-            label: `${entry.databasePath} - ${entry.schema}.${tableName}`,
-            key: `${entry.type}-${entry.databasePath}-${entry.schema}-${tableName}`,
-          });
-        });
-      } else if (entry.table) {
-        entries.push({
-          label: `${entry.databasePath} - ${entry.table}`,
-          key: `${entry.type}-${entry.databasePath}-${entry.table}-${idx}`,
-        });
-      } else if (entry.schema) {
-        entries.push({
-          label: `${entry.databasePath} - ${entry.schema}`,
-          key: `${entry.type}-${entry.databasePath}-${entry.schema}-${idx}`,
-        });
-      }
-    });
+  useEffect(() => {
+    if (mode) {
+      setInternalMode(mode);
+    }
+  }, [mode]);
 
-    return entries;
+  const handlePromptModeChange = (value: PromptMode) => {
+    if (!value || value === promptMode) {
+      return;
+    }
+    if (!mode) {
+      setInternalMode(value);
+    }
+    onModeChange?.(value);
   };
 
-  const displayEntries = getEntriesForDisplay();
+  const handlePromptSubmit = (message: PromptInputMessage) => {
+    if (promptMode !== "ai") {
+      return;
+    }
+    return onSubmit(message);
+  };
+
+  const handleInsertTableIntoSql = (tableName: string) => {
+    if (!sqlConsoleApi) return;
+    const current = sqlConsoleApi.getQuery() ?? "";
+    const lastChar = current.length > 0 ? current[current.length - 1] : "";
+    const needsSpace = current.length > 0 && !/\s/.test(lastChar);
+    sqlConsoleApi.insertText(`${needsSpace ? " " : ""}${tableName}`);
+    sqlConsoleApi.focus();
+  };
+
+  const handleChartSubmit = () => {
+    if (!onAddVisual || pendingMode === "chart") {
+      return;
+    }
+    onAddVisual();
+  };
+
+  const aiButtonLabel = useMemo(() => {
+    if (pendingMode === "ai" && (!status || status === "idle" as ChatStatus)) {
+      return "[SENDING …]";
+    }
+    switch (status) {
+      case "submitted":
+        return "[STOP X]";
+      case "streaming":
+        return "[STREAMING …]";
+      case "error":
+        return "[ERROR]";
+      default:
+        return "[Send |>]";
+    }
+  }, [pendingMode, status]);
+
+  const chartButtonLabel =
+    pendingMode === "chart" ? "[ADDING …]" : "[Add visual]";
+
+  const content = aiButtonLabel;
+
+  // Get display name for selected database
+  const getSelectedDbLabel = (): string | undefined => {
+    if (!selectedDb) return undefined;
+    // Try to extract a readable name from the identifier
+    // Format is usually "type:path" or "attachAs"
+    if (selectedDb.includes(":")) {
+      const [type, ...pathParts] = selectedDb.split(":");
+      const path = pathParts.join(":");
+      const fileName = path.split("/").pop() || path.split("\\").pop() || path;
+      return `${fileName} (${type})`;
+    }
+    return selectedDb;
+  };
 
   return (
-    <PromptInput onSubmit={onSubmit} className={className} globalDrop multiple>
-      <PromptInputBody>
-        <PromptInputAttachments>
-          {(attachment) => <PromptInputAttachment data={attachment} />}
-        </PromptInputAttachments>
-        <div className="flex items-start gap-2 justify-between w-full p-2">
-          <PromptInputTextarea placeholder={placeholder} className="flex-1" />
-          <PromptInputSubmit
-            className="h-12 w-12 hover:bg-primary/70 shrink-0"
-            status={status}
-          />
-        </div>
-      </PromptInputBody>
-      <PromptInputHeader className="border-b p-2 border-border">
-        <FileAttachmentHoverCard />
-        <PromptInputHoverCard>
-          <PromptInputHoverCardTrigger>
-            <PromptInputButton size="sm" variant="outline" className="group dark:hover:bg-accent">
-              <CircleStackIcon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
-              <span className="group-hover:text-primary-foreground">
-                Connected data
-              </span>
-            </PromptInputButton>
-          </PromptInputHoverCardTrigger>
-          <PromptInputHoverCardContent className="w-[300px] space-y-4 px-0 py-4 transform translate-y-[-10px]">
-            <PromptInputTab>
-              <PromptInputTabLabel>Connected data</PromptInputTabLabel>
-              <PromptInputTabBody>
-                {displayEntries.length > 0 ? (
-                  displayEntries.map((entry) => (
-                    <PromptInputTabItem key={entry.key}>
-                      <GlobeEuropeAfricaIcon className="h-4 w-4 text-primary" />
-                      <span className="truncate" dir="rtl">
-                        {entry.label}
-                      </span>
-                    </PromptInputTabItem>
-                  ))
-                ) : (
-                    <div className="px-3 py-1 text-xs text-muted-foreground">
-                    No connected data.
-                  </div>
-                )}
-              </PromptInputTabBody>
-            </PromptInputTab>
-            <div className="border-t px-3 pt-2 text-muted-foreground text-xs">
-              Only data sources are included
+    <div className="flex">
+      <PromptInput
+        onSubmit={handlePromptSubmit}
+        className={cn("flex-1 flex flex-row", className)}
+        globalDrop
+        multiple
+      >
+        <PromptInputBody>
+          <PromptInputAttachments>
+            {(attachment) => <PromptInputAttachment data={attachment} />}
+          </PromptInputAttachments>
+          {promptMode === "ai" && (
+            <div className="flex items-center gap-2 justify-between w-full">
+              <PromptInputTextarea
+                placeholder={placeholder}
+                className="flex-1 min-h-32"
+              />
+              <div className="flex flex-col items-center gap-2 h-full justify-center">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  type="submit"
+                  className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary mx-2 dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                  disabled={pendingMode === "ai"}
+                >
+                  {content}
+                </Button>
+              </div>
             </div>
-          </PromptInputHoverCardContent>
-        </PromptInputHoverCard>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PromptInputButton
-              size="sm"
-              variant="outline"
-              className="group dark:hover:bg-accent"
-              onClick={() => onCreateDashboard?.()}
+          )}
+          {promptMode === "sql" && (
+            <div className="flex flex-col gap-3 w-full">
+              <DuckdbRepl
+                selectedDbLabel={getSelectedDbLabel()}
+                selectedDbIdentifier={selectedDb}
+                onRunSql={onRunSql}
+                onConsoleApiChange={setSqlConsoleApi}
+              />
+            </div>
+          )}
+          {promptMode === "chart" && (
+            <div className="flex flex-col gap-3">
+              <SqlAnalysisDisplay
+                data={{
+                  stage: "initial",
+                  progress: 0,
+                  executionTime: 0,
+                  rowCount: 0,
+                  columns: [],
+                  rows: [],
+                  dbIdentifier: selectedDb,
+                }}
+                stage="initial"
+                progress={1}
+                showStageIndicator={false}
+                className="max-w-3xl w-full"
+                selectedDbLabel={getSelectedDbLabel()}
+              />
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleChartSubmit}
+                  disabled={!onAddVisual || pendingMode === "chart"}
+                  className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary mx-2 dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                >
+                  {chartButtonLabel}
+                </Button>
+              </div>
+            </div>
+          )}
+        </PromptInputBody>
+        <PromptInputHeader className="border-b p-2 border-border">
+          <div className="flex items-center gap-2 justify-between w-full">
+            <div className="flex items-center gap-2">
+              <ConnectedDataPanel
+                selectedDb={selectedDb}
+                onSelect={setSelectedDb}
+                className="h-full"
+                onInsertTable={handleInsertTableIntoSql}
+              />
+              <FileAttachmentHoverCard />
+              {!onHomePage && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <PromptInputButton
+                      size="sm"
+                      variant="outline"
+                      className="group dark:hover:bg-accent"
+                      onClick={() => onCreateDashboard?.()}
+                    >
+                      <Squares2X2Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
+                      <span>Create dashboard</span>
+                    </PromptInputButton>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>generate dashboard from chat visuals</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+            <ToggleGroup
+              type="single"
+              value={promptMode}
+              onValueChange={(value) =>
+                handlePromptModeChange(value as PromptMode)
+              }
+              disabled={Boolean(pendingMode)}
             >
-              <Squares2X2Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
-              <span>Create dashboard</span>
-            </PromptInputButton>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>generate dashboard from chat visuals</p>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PromptInputButton
-              size="sm"
-              variant="outline"
-              className="group dark:hover:bg-accent"
-              onClick={() => onAddVisual?.()}
-              disabled={!onAddVisual}
-            >
-              <PresentationChartBarIcon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
-              <span>Add visual</span>
-            </PromptInputButton>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>manually add a chart or table</p>
-          </TooltipContent>
-        </Tooltip>
-      </PromptInputHeader>
-    </PromptInput>
+              <ToggleGroupItem value="ai">
+                <ChatBubbleLeftRightIcon className="h-4 w-4 group-hover:text-primary-foreground" />
+                <span>AI mode</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem value="sql">
+                <CodeBracketIcon className="h-4 w-4 group-hover:text-primary-foreground" />
+                <span>SQL mode</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem value="chart">
+                <PresentationChartBarIcon className="h-4 w-4 group-hover:text-primary-foreground" />
+                <span>Chart mode</span>
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+        </PromptInputHeader>
+      </PromptInput>
+    </div>
   );
 }

@@ -3,14 +3,11 @@
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { useCallback, useState } from "react";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
-import {
-  type SqlAnalysisData,
-  SqlAnalysisDisplay,
-} from "@/components/sql-analysis-display";
-import { TerminalInput } from "@/components/terminal-input";
+import { PromptInputWrapper } from "@/components/prompt-input-wrapper";
+import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
+import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import { Button } from "@/components/ui/button";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
-
 export default function Home() {
   const [activePanel, setActivePanel] = useState<"ai" | "sql" | "manual">("ai");
   const [manualVisual, setManualVisual] = useState<SqlAnalysisData | null>(
@@ -56,75 +53,47 @@ export default function Home() {
 
   return (
     <div className="h-screen w-full flex items-center justify-center bg-background p-4 overflow-hidden ml-6">
-
       <div className="w-full max-w-7xl h-[90vh] flex flex-col font-mono justify-between">
-        <div className="border-b-2 border-primary/60 p-4 bg-background/50">
+
           <div className="flex items-center justify-center">
             <h1 className="text-5xl font-bold tracking-wider">
               Data Assistant
             </h1>
-          </div>
         </div>
 
-        <div className="border-b border-border p-2 bg-background/30 flex gap-2 py-4 justify-center">
-          <button
-            type="button"
-            onClick={() => setActivePanel("ai")}
-            className={`px-4 py-1 text-background-foreground text-sm font-mono transition-all rounded-sm ${activePanel === "ai"
-              ? "border border-primary bg-primary/20"
-              : "border border-border bg-transparent hover:shadow-xl"
-              }`}
-          >
-            AI ASSISTANT
-          </button>
-          <button
-            type="button"
-            onClick={() => setActivePanel("sql")}
-            className={`px-4 py-1 text-background-foreground text-sm font-mono transition-all rounded-sm ${activePanel === "sql"
-              ? "border border-primary bg-primary/20"
-              : "border border-border bg-transparent hover:shadow-xl"
-              }`}
-          >
-            SQL SHELL
-          </button>
-          <button
-            type="button"
-            onClick={() => setActivePanel("manual")}
-            className={`px-4 py-1 text-background-foreground text-sm font-mono transition-all rounded-sm ${activePanel === "manual"
-              ? "border border-primary bg-primary/20"
-              : "border border-border bg-transparent hover:shadow-xl"
-              }`}
-          >
-            MANUAL VISUALS
-          </button>
+        <div className="p-2 flex gap-2 py-2 justify-center">
+          <div className="flex flex-col items-center justify-center gap-2">
+            <p className="text-sm opacity-70">
+              ═══════════════════════════════════════════════════════════════
+            </p>
+            <p className="text-sm opacity-70">
+              QUERY DATA AND GENERATE CHARTS WITH NATURAL LANGUAGE QUERIES.
+            </p>
+            <p className="text-sm opacity-70">
+              ═══════════════════════════════════════════════════════════════
+            </p>
+          </div>
         </div>
 
         {/* Content Area */}
         <div className="flex-1 overflow-hidden flex flex-col p-4">
           {activePanel === "ai" ? (
             <div className="flex-1 overflow-hidden flex flex-col items-center justify-evenly h-full">
-              <div className="flex flex-col items-center justify-center gap-2">
-                <p className="text-sm opacity-70">
-                  ═══════════════════════════════════════════════════════════════
-                </p>
-                <p className="text-sm opacity-70">
-                  QUERY DATA AND GENERATE CHARTS WITH NATURAL LANGUAGE QUERIES.
-                </p>
-                <p className="text-sm opacity-70">
-                  ═══════════════════════════════════════════════════════════════
-                </p>
-              </div>
               {/* Terminal Input */}
               <div className="w-full max-w-3xl">
-                <TerminalInput />
+                {/* <TerminalInput /> */}
+                <PromptInputWrapper
+                  onSubmit={() => { }}
+                  className="transition delay-150 duration-300 ease-in-out max-h-56"
+                  status="submitted"
+                  onHomePage={true}
+                />
                 {/* Example Commands */}
-                <div className="flex flex-col items-center justify-center gap-0 mt-8">
+                <div className="flex flex-col items-center justify-start gap-0 mt-12">
                   <div className="text-sm opacity-70">
                     ═══════════════════════════════════════════════════════════════
                   </div>
-                  <div className="text-sm opacity-70">
-                    AVAILABLE COMMANDS:
-                  </div>
+                  <div className="text-sm opacity-70">AVAILABLE COMMANDS:</div>
                   <div className="text-sm opacity-70">
                     ═══════════════════════════════════════════════════════════════
                   </div>
@@ -144,8 +113,6 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-
-
             </div>
           ) : activePanel === "sql" ? (
             <div className="flex-1 overflow-hidden flex flex-col items-center justify-evenly h-full gap-8 w-full">
@@ -154,7 +121,8 @@ export default function Home() {
                   ═══════════════════════════════════════════════════════════════
                 </p>
                 <p className="text-sm opacity-70">
-                  RUN SQL QUERIES AND GENERATE CHARTS WITH NATURAL LANGUAGE QUERIES.
+                    RUN SQL QUERIES AND GENERATE CHARTS WITH NATURAL LANGUAGE
+                    QUERIES.
                 </p>
                 <p className="text-sm opacity-70">
                   ═══════════════════════════════════════════════════════════════
@@ -173,12 +141,12 @@ export default function Home() {
                     ═══════════════════════════════════════════════════════════════
                   </div>
                   <div className="text-sm opacity-70">
-                    Manual Visual Builder active. Create and configure
-                    custom visualizations.
-                  </div>
-                  <div className="text-sm opacity-70">
-                    ═══════════════════════════════════════════════════════════════
-                  </div>
+                      Manual Visual Builder active. Create and configure custom
+                      visualizations.
+                    </div>
+                    <div className="text-sm opacity-70">
+                      ═══════════════════════════════════════════════════════════════
+                    </div>
                   </div>
 
                   {/* Manual Visual Content */}
@@ -211,7 +179,7 @@ export default function Home() {
         </div>
 
         {/* Terminal Footer */}
-        <div className="border-t-2 border-primary/60 p-2 bg-background/50">
+        <div className="">
           <div className="text-xs flex items-center justify-between">
             <div className="flex gap-4">
               <span>CMD+K: Command Palette</span>
