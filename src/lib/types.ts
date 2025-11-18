@@ -111,6 +111,7 @@ export type Config = z.infer<typeof configSchema>;
 
 export const cardConfigSchema = z
   .object({
+    configType: z.literal("card").describe("Discriminator field for card config").default("card"),
     title: z
       .string()
       .describe("Title for the card displaying the single value"),
@@ -127,6 +128,32 @@ export const cardConfigSchema = z
   .describe("Card configuration object for single-value results");
 
 export type CardConfig = z.infer<typeof cardConfigSchema>;
+
+export const tableConfigSchema = z
+  .object({
+    configType: z.literal("table").describe("Discriminator field for table config").default("table"),
+    title: z
+      .string()
+      .describe("Title for the table"),
+    description: z
+      .string()
+      .describe("Description of what the table shows and its purpose"),
+    takeaway: z
+      .string()
+      .describe("Main insight or takeaway from the data in the table")
+      .optional(),
+    sortColumn: z
+      .string()
+      .describe("Column to sort by default")
+      .optional(),
+    sortDirection: z
+      .enum(["asc", "desc"])
+      .describe("Default sort direction")
+      .optional(),
+  })
+  .describe("Table configuration object for tabular data display");
+
+export type TableConfig = z.infer<typeof tableConfigSchema>;
 
 // Data model types
 export type RelationshipType =

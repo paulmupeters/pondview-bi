@@ -38,6 +38,7 @@ export function CardConfigDialog({
     const formData = new FormData(e.target as HTMLFormElement);
 
     const newConfig: CardConfig = {
+      configType: "card",
       title: (formData.get("title") as string) || "",
       description: (formData.get("description") as string) || "",
       takeaway: (formData.get("takeaway") as string) || undefined,

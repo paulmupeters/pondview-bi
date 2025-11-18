@@ -133,6 +133,8 @@ export function useArtifacts(options: UseArtifactsOptions = {}): UseArtifactsRet
   return useMemo(() => {
     const allArtifacts = extractAllArtifactsFromMessages(messages);
 
+    console.log("allArtifacts-----------s>> ", allArtifacts);
+
     // Filter artifacts based on include/exclude options
     const filteredArtifacts = allArtifacts.filter((artifact) => {
       if (include?.length) return include.includes(artifact.type);

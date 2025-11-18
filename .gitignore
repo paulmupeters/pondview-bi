@@ -48,3 +48,7 @@ next-env.d.ts
 # duckdb
 *.duckdb
 *db.wal
+
+# semantic-layer
+semantic-layer/data
+semantic-layer/models

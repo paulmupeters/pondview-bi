@@ -7,8 +7,8 @@ import type { ReactNode } from "react";
 import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
 import { CardConfigDialog } from "@/components/card-config-dialog";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
+import { MetricCard } from "@/components/metric-card";
 import { SqlChart } from "@/components/sql-chart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CardConfig, Config } from "@/lib/types";
 import type {
   SelectedForCard,
@@ -83,36 +83,17 @@ export function ChartView({
             </>,
             "sql-editor-analysis-card",
           )}
-          <Card className="mx-auto w-fit border-0 shadow-none">
-            <CardHeader>
-              <CardTitle className="text-base font-medium text-muted-foreground">
-                {cardConfig?.title ??
-                  data.cardConfig?.title ??
-                  selectedForCard.columnName}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold text-foreground">
-                {typeof selectedForCard.value === "number"
-                  ? selectedForCard.value.toLocaleString()
-                  : typeof selectedForCard.value === "boolean"
-                    ? selectedForCard.value.toString()
-                    : selectedForCard.value instanceof Date
-                      ? selectedForCard.value.toLocaleString()
-                      : String(selectedForCard.value)}
-              </div>
-              {(cardConfig?.description ?? data.cardConfig?.description) && (
-                <div className="text-sm text-muted-foreground mt-2">
-                  {cardConfig?.description ?? data.cardConfig?.description}
-                </div>
-              )}
-              {(cardConfig?.takeaway ?? data.cardConfig?.takeaway) && (
-                <div className="text-xs text-muted-foreground mt-2 italic">
-                  {cardConfig?.takeaway ?? data.cardConfig?.takeaway}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <MetricCard
+            value={selectedForCard.value as string | number | boolean | Date}
+            title={
+              cardConfig?.title ??
+              data.cardConfig?.title ??
+              selectedForCard.columnName
+            }
+            description={cardConfig?.description ?? data.cardConfig?.description}
+            takeaway={cardConfig?.takeaway ?? data.cardConfig?.takeaway}
+            className="mx-auto w-fit border-0 shadow-none"
+          />
           {renderSqlEditor("sql-editor-analysis-card")}
         </>
       ) : (

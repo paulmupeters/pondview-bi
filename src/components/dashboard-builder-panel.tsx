@@ -3,7 +3,7 @@
 import { MinusCircleIcon, PlusCircleIcon, XIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { SqlAnalysisData } from "@/components/sql-analysis-display";
+import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import { SqlChart } from "@/components/sql-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +25,7 @@ type VisualSnapshot = {
   artifact: ArtifactData<SqlAnalysisData>;
   payload: SqlAnalysisData;
   rows: Result[];
-  type: "chart" | "card";
+  type: "chart" | "card" | "table";
 };
 
 function normalizeVisualArtifact(
@@ -35,13 +35,13 @@ function normalizeVisualArtifact(
 
   if (!payload) return null;
   if ((payload.stage ?? "") !== "complete") return null;
-  
+
   const visualType = payload.visualType;
-  
+
   // Handle chart artifacts
   if (visualType === "chart") {
     if (!payload.chartConfig) return null;
-    
+
     const rows = Array.isArray(payload.rows)
       ? (payload.rows as Result[]).map((row) => ({ ...row }))
       : [];
@@ -52,18 +52,18 @@ function normalizeVisualArtifact(
       artifact,
       payload: {
         ...payload,
-        columns: (payload.columns ?? []).map((column) => ({ ...column })),
+        columns: (payload.columns ?? []).map((column: { name: string; type?: string }) => ({ ...column })),
         rows,
       },
       rows,
       type: "chart",
     };
   }
-  
+
   // Handle card artifacts
   if (visualType === "card") {
     if (!payload.cardConfig) return null;
-    
+
     const rows = Array.isArray(payload.rows)
       ? (payload.rows as Result[]).map((row) => ({ ...row }))
       : [];
@@ -74,14 +74,44 @@ function normalizeVisualArtifact(
       artifact,
       payload: {
         ...payload,
-        columns: (payload.columns ?? []).map((column) => ({ ...column })),
+        columns: (payload.columns ?? []).map((column: { name: string; type?: string }) => ({ ...column })),
         rows,
       },
       rows,
       type: "card",
     };
   }
-  
+
+  // Handle table artifacts - generate default tableConfig if missing
+  if (visualType === "table") {
+    const rows = Array.isArray(payload.rows)
+      ? (payload.rows as Result[]).map((row) => ({ ...row }))
+      : [];
+
+    // Generate a minimal default tableConfig for tables
+    const defaultTableConfig = payload.tableConfig ?? {
+      configType: "table" as const,
+      title: payload.query
+        ? `Table: ${payload.query.substring(0, 50)}${payload.query.length > 50 ? '...' : ''}`
+        : "Data Table",
+      description: payload.summary?.insights?.[0] ?? "",
+    };
+
+    return {
+      id: artifact.id,
+      createdAt: artifact.createdAt,
+      artifact,
+      payload: {
+        ...payload,
+        columns: (payload.columns ?? []).map((column: { name: string; type?: string }) => ({ ...column })),
+        rows,
+        tableConfig: defaultTableConfig,
+      },
+      rows,
+      type: "table",
+    };
+  }
+
   return null;
 }
 
@@ -103,6 +133,7 @@ export function DashboardBuilderPanel({
     include: includeExecuteSql,
     storeId,
   } as UseArtifactsOptions & { storeId?: string });
+  console.log("artifacts-----------s>> ", artifacts); 
 
   const visualSnapshots = useMemo<VisualSnapshot[]>(() => {
     return artifacts
@@ -206,12 +237,24 @@ export function DashboardBuilderPanel({
 
       for (const snapshot of selectedCharts) {
         const { payload, type } = snapshot;
-        
+
         // Determine the config based on visual type
-        const config = type === "card" ? payload.cardConfig : payload.chartConfig;
-        const title = config?.title ?? (type === "card" ? "Untitled card" : "Untitled chart");
+        let config;
+        let title;
+
+        if (type === "card") {
+          config = payload.cardConfig;
+          title = config?.title ?? "Untitled card";
+        } else if (type === "table") {
+          config = payload.tableConfig;
+          title = config?.title ?? "Untitled table";
+        } else {
+          config = payload.chartConfig;
+          title = config?.title ?? "Untitled chart";
+        }
+
         const description = config?.description ?? null;
-        
+
         const response = await fetch(`/api/dashboard/${dashboardId}/charts`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -307,7 +350,9 @@ export function DashboardBuilderPanel({
                         <span className="text-sm font-medium">
                           {snapshot.type === "card"
                             ? snapshot.payload.cardConfig?.title || "Untitled card"
-                            : snapshot.payload.chartConfig?.title || "Untitled chart"}
+                            : snapshot.type === "table"
+                              ? snapshot.payload.tableConfig?.title || "Untitled table"
+                              : snapshot.payload.chartConfig?.title || "Untitled visual"}
                         </span>
                         {snapshot.payload.query && (
                           <span className="text-xs text-muted-foreground truncate max-w-[280px]">
@@ -396,7 +441,9 @@ export function DashboardBuilderPanel({
                     <PlusCircleIcon className="h-4 w-4" />
                     {snapshot.type === "card"
                       ? snapshot.payload.cardConfig?.title || "Untitled card"
-                      : snapshot.payload.chartConfig?.title || "Untitled chart"}
+                      : snapshot.type === "table"
+                        ? snapshot.payload.tableConfig?.title || "Untitled table"
+                        : snapshot.payload.chartConfig?.title || "Untitled visual"}
                   </Button>
                 ))}
               </div>

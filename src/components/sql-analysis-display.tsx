@@ -36,7 +36,6 @@ export function SqlAnalysisDisplay({
   showStageIndicator = true,
   history,
   className,
-  onDelete,
   selectedDbLabel,
   onAddToChat,
   canAddToChat,

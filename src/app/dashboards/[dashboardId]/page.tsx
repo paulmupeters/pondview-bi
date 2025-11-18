@@ -14,10 +14,8 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  ArrowTopRightOnSquareIcon,
-} from "@heroicons/react/24/outline";
-import { Code2, GripVertical, Pencil, Settings, Trash2 } from "lucide-react";
+import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
+import { GripVertical, Pencil, Settings, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import {
   type CSSProperties,
@@ -32,9 +30,10 @@ import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { DashboardFilterPane } from "@/components/dashboard-filter-pane";
 import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
 import { DynamicChart } from "@/components/dynamic-chart";
+import { MetricCard } from "@/components/metric-card";
+import { SqlResultsTable } from "@/components/sql-results-table";
+import { TableConfigDialog } from "@/components/table-config-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +43,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -51,7 +51,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { CardConfig, Config, Result } from "@/lib/types";
+import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
 import { FilterProvider, useFilters } from "./filter-context";
 
 type Dashboard = {
@@ -75,7 +75,7 @@ type DashboardChart = {
 
 type SortableChartCardProps = {
   chart: DashboardChart & { filtersApplied?: boolean };
-  config: Config | CardConfig | null;
+  config: Config | CardConfig | TableConfig | null;
   rows: Result[];
   onConfigChange: (newChartJson: string) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -86,10 +86,36 @@ type SortableChartCardProps = {
 
 // Helper function to check if config is a card config
 function isCardConfig(
-  config: Config | CardConfig | null,
+  config: Config | CardConfig | TableConfig | null,
 ): config is CardConfig {
   if (!config) return false;
-  return !("yKeys" in config) && !("type" in config) && !("xKey" in config);
+  // Check if it has the configType discriminator
+  if ("configType" in config) {
+    return config.configType === "card";
+  }
+  // Backwards compatibility: check if it looks like a card config
+  // Cards have title and description but no chart-specific fields
+  return (
+    !("yKeys" in config) &&
+    !("type" in config) &&
+    !("xKey" in config) &&
+    "title" in config &&
+    "description" in config
+  );
+}
+
+// Helper function to check if config is a table config
+function isTableConfig(
+  config: Config | CardConfig | TableConfig | null,
+): config is TableConfig {
+  if (!config) return false;
+  // Check if it has the configType discriminator
+  if ("configType" in config) {
+    return config.configType === "table";
+  }
+  // New table configs will always have configType, so if it doesn't have it,
+  // it's not a table (it's either a card or chart)
+  return false;
 }
 
 function SortableChartCard({
@@ -149,7 +175,7 @@ function SortableChartCard({
       style={style}
       className="group relative flex flex-col rounded-xl bg-card p-4 md:p-2"
     >
-      <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
         <button
           type="button"
           aria-label="Reorder chart"
@@ -179,17 +205,11 @@ function SortableChartCard({
           </span>
         </div>
       )}
-      {config && rows.length > 0 && !isCardConfig(config) ? (
+      {config &&
+        rows.length > 0 &&
+        !isCardConfig(config) &&
+        !isTableConfig(config) ? (
         <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            type="button"
-            onClick={() => onToggleSql(chart.id)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="View SQL"
-            title="View SQL"
-          >
-            <Code2 className="h-4 w-4" />
-          </button>
           <ChartConfigDialog
             trigger={
               <button
@@ -221,17 +241,40 @@ function SortableChartCard({
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
+      ) : config && rows.length > 0 && isTableConfig(config) ? (
+        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
+          <TableConfigDialog
+            trigger={
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Configure table"
+                title="Configure table"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            }
+            config={config as TableConfig}
+            columns={Object.keys(rows[0] || {}).map((name) => ({
+              name,
+            }))}
+            onConfigChange={async (newConfig) => {
+              const newJson = JSON.stringify(newConfig);
+              await onConfigChange(newJson);
+            }}
+          />
+          <button
+            type="button"
+            onClick={onDelete}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Delete table"
+            title="Delete table"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       ) : config && rows.length > 0 && isCardConfig(config) ? (
         <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <button
-              type="button"
-              onClick={() => onToggleSql(chart.id)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="View SQL"
-              title="View SQL"
-            >
-              <Code2 className="h-4 w-4" />
-            </button>
           <CardConfigDialog
             trigger={
               <button
@@ -260,62 +303,32 @@ function SortableChartCard({
           </button>
         </div>
       ) : null}
-      {!config || rows.length === 0 ? (
-        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            type="button"
-            onClick={() => onToggleSql(chart.id)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="View SQL"
-            title="View SQL"
-          >
-            <Code2 className="h-4 w-4" />
-          </button>
-        </div>
-      ) : null}
       {config && rows.length > 0 ? (
         isCardConfig(config) ? (
-          <Card className="w-full h-full flex flex-col border-0 shadow-none">
-            <CardHeader>
-              <CardTitle className="text-base font-medium text-muted-foreground">
-                {config.title}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col justify-center">
-              <div className="text-4xl font-bold text-foreground">
-                {(() => {
-                  const value = rows[0]?.[Object.keys(rows[0] || {})[0]];
-                  if (typeof value === "number") {
-                    return value.toLocaleString();
-                  }
-                  if (typeof value === "boolean") {
-                    return value.toString();
-                  }
-                  if (value instanceof Date) {
-                    return value.toLocaleString();
-                  }
-                  return String(value ?? "");
-                })()}
-              </div>
-              {config.description && (
-                <div className="text-sm text-muted-foreground mt-2">
-                  {config.description}
-                </div>
-              )}
-              {config.takeaway && (
-                <div className="text-xs text-muted-foreground mt-2 italic">
-                  {config.takeaway}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-            <DynamicChart
-              chartData={rows}
-              chartConfig={config as Config}
-              className="w-full"
+          <MetricCard
+            value={rows[0]?.[Object.keys(rows[0] || {})[0]]}
+            title={config.title}
+            description={config.description}
+            takeaway={config.takeaway}
+            className="w-full h-full flex flex-col border-0 shadow-none"
+          />
+        ) : isTableConfig(config) ? (
+          <div className="w-full">
+            <SqlResultsTable
+              dataOverride={{
+                stage: "complete",
+                columns: Object.keys(rows[0] || {}).map((name) => ({ name })),
+                rows: rows as Record<string, unknown>[],
+              }}
             />
-          )
+          </div>
+        ) : (
+              <DynamicChart
+                chartData={rows}
+                chartConfig={config as Config}
+                className="w-full"
+              />
+            )
       ) : (
         <div className="text-xs text-muted-foreground">No data</div>
       )}
@@ -378,7 +391,9 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   const [chartData, setChartData] = useState<Record<string, Result[]>>({});
   const [columns, setColumns] = useState<number>(3);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [expandedSqlChartId, setExpandedSqlChartId] = useState<string | null>(null);
+  const [expandedSqlChartId, setExpandedSqlChartId] = useState<string | null>(
+    null,
+  );
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const [isSavingTitle, setIsSavingTitle] = useState(false);
@@ -828,10 +843,10 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
         >
           <div className={`grid gap-6 ${getGridColsClass(columns)}`}>
             {charts.map((c) => {
-              let config: Config | CardConfig | null = null;
+              let config: Config | CardConfig | TableConfig | null = null;
               try {
                 const parsed = JSON.parse(c.chartConfigJson);
-                config = parsed as Config | CardConfig;
+                config = parsed as Config | CardConfig | TableConfig;
               } catch {
                 config = null;
               }

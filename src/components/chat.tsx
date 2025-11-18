@@ -112,7 +112,7 @@ export default function Chat({
     setIsDashboardBuilderOpen(true);
   };
 
-  const handleAddVisual = useCallback(() => {
+  const handleAddVisual = useCallback(async () => {
     setPromptPendingMode("chart");
     const now = Date.now();
     const messageId = `manual-visual-${now}`;
@@ -149,11 +149,13 @@ export default function Chat({
       type: executeSqlArtifactType as `data-${string}`,
       data: {
         id: artifactId,
+        type: ExecuteSqlArtifact.id,
         version: 1,
         status: "complete",
         progress: 1,
         payload: defaultPayload,
         createdAt: now,
+        updatedAt: now,
       },
     } as unknown as UIMessage["parts"][number];
 
@@ -163,12 +165,29 @@ export default function Chat({
       parts: [newArtifactPart],
     };
 
+    // Update local state immediately for responsive UI
     setMessages((prevMessages) => [...prevMessages, newMessage]);
     setPromptPendingMode((current) => (current === "chart" ? null : current));
-  }, [connectedTables, executeSqlArtifactType, setMessages]);
+
+    // Persist to database
+    try {
+      await fetch(`/api/chat/${chatId}/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageId,
+          content: "",
+          parts: [newArtifactPart],
+          createdAt: now,
+        }),
+      });
+    } catch (error) {
+      console.error("Failed to persist message:", error);
+    }
+  }, [chatId, connectedTables, executeSqlArtifactType, setMessages]);
 
   const handleAddSqlResultToChat = useCallback(
-    (payload: SqlAnalysisData) => {
+    async (payload: SqlAnalysisData) => {
       const now = Date.now();
       const normalizedPayload: SqlAnalysisData = {
         stage: payload.stage ?? "complete",
@@ -199,11 +218,13 @@ export default function Chat({
         type: executeSqlArtifactType as `data-${string}`,
         data: {
           id: artifactId,
+          type: ExecuteSqlArtifact.id,
           version: 1,
           status: "complete",
           progress: 1,
           payload: normalizedPayload,
           createdAt: now,
+          updatedAt: now,
         },
       } as unknown as UIMessage["parts"][number];
 
@@ -213,9 +234,26 @@ export default function Chat({
         parts: [artifactPart],
       };
 
+      // Update local state immediately for responsive UI
       setMessages((prev) => [...prev, newMessage]);
+
+      // Persist to database
+      try {
+        await fetch(`/api/chat/${chatId}/message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messageId,
+            content: "",
+            parts: [artifactPart],
+            createdAt: now,
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to persist message:", error);
+      }
     },
-    [executeSqlArtifactType, setMessages],
+    [chatId, executeSqlArtifactType, setMessages],
   );
 
   const handleRemoveMessage = useCallback(

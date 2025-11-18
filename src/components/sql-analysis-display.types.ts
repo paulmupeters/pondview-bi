@@ -1,4 +1,4 @@
-import type { CardConfig, Config, Result } from "@/lib/types";
+import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
 
 export type SqlAnalysisStage =
   | "initial"
@@ -21,6 +21,7 @@ export type SqlAnalysisData = {
   isSqlExpandedInitial?: boolean;
   chartConfig?: Config;
   cardConfig?: CardConfig;
+  tableConfig?: TableConfig;
   summary?: {
     totalRows: number;
     executionTimeMs?: number;
