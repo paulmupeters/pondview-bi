@@ -20,7 +20,7 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon"
       onClick={toggleTheme}
-      className="h-8 w-8"
+      className="h-8 w-8 bg-background/80 backdrop-blur-sm border shadow-sm"
       aria-label="Toggle theme"
     >
       {theme === "dark" ? (

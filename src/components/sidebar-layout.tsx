@@ -9,7 +9,8 @@ import {
   Settings,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import type { MouseEvent } from "react";
 import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -31,11 +32,41 @@ interface ChatHistoryPopoverProps {
 
 function ChatHistoryPopover({ onNavigate }: ChatHistoryPopoverProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const activeChatId = pathname?.split("/")[1] ?? null;
   const { chats, isLoading, loadChats } = useChatHistory();
 
   useEffect(() => {
     loadChats();
   }, [loadChats]);
+
+  const handleDeleteChat = async (chatId: string, e: MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Check if we're deleting the currently active chat
+    const isDeletingActiveChat = chatId === activeChatId;
+
+    // If deleting the active chat, navigate home immediately
+    if (isDeletingActiveChat) {
+      router.push("/");
+      onNavigate?.();
+    }
+
+    try {
+      const res = await fetch(`/api/chat/${chatId}`, { method: "DELETE" });
+      if (!res.ok) {
+        // Reload list on failure to restore
+        await loadChats();
+      } else {
+        // Reload to get updated list
+        await loadChats();
+      }
+    } catch {
+      // Reload on error to restore
+      await loadChats();
+    }
+  };
 
   if (isLoading)
     return <p className="text-sm text-muted-foreground">Loading...</p>;
@@ -51,19 +82,45 @@ function ChatHistoryPopover({ onNavigate }: ChatHistoryPopoverProps) {
       <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
         {chats.length > 0 ? (
           chats.map((chat) => (
-            <button
-              type="button"
+            <div
               key={chat.id}
-              onClick={() => handleChatClick(chat.id)}
-              className="flex justify-between items-start gap-2 rounded-md p-2 text-left hover:bg-accent transition-colors cursor-pointer"
+              className="group relative flex items-center gap-2 rounded-md p-2 hover:bg-accent transition-colors pr-8"
             >
-              <p className="text-sm truncate hover:text-accent-foreground">
-                {chat.title || chat.id}
-              </p>
-              <p className="text-xs text-muted-foreground whitespace-nowrap">
-                {new Date(chat.updatedAt).toLocaleDateString()}
-              </p>
-            </button>
+              <button
+                type="button"
+                onClick={() => handleChatClick(chat.id)}
+                className="flex-1 flex justify-between items-start gap-2 text-left cursor-pointer min-w-0"
+              >
+                <p className="text-sm truncate hover:text-accent-foreground min-w-0 flex-1">
+                  {chat.title || chat.id}
+                </p>
+                <p className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
+                  {new Date(chat.updatedAt).toLocaleDateString()}
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleDeleteChat(chat.id, e)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md z-10 text-muted-foreground hover:text-destructive hover:bg-accent/80 transition-all duration-200 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 backdrop-blur-sm bg-background/80 flex-shrink-0"
+                aria-label="Delete chat"
+                title="Delete chat"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <title>Delete chat</title>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </button>
+            </div>
           ))
         ) : (
           <p className="text-sm text-muted-foreground">No chats</p>
