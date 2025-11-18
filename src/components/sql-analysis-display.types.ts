@@ -43,6 +43,8 @@ export interface SqlAnalysisDisplayProps {
   className?: string;
   onDelete?: () => void;
   selectedDbLabel?: string;
+  onAddToChat?: (payload: SqlAnalysisData) => void;
+  canAddToChat?: boolean;
 }
 
 export interface StageIndicatorProps {

@@ -1,9 +1,14 @@
 "use client";
 
+import { PlusCircleIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
+import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
 import { cn } from "@/lib/utils";
+import { runQuery } from "@/lib/sql/run-query";
+import { PromptInputTextarea } from "./ai-elements/prompt-input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type ResultsPayload = {
   stage: "complete";
@@ -24,6 +29,26 @@ export type ExecuteQueryFn = (params: {
   rows: Record<string, unknown>[];
   columns?: { name: string; type?: string }[];
 }>;
+
+/**
+ * Creates an ExecuteQueryFn that fetches from /api/duckdb/query.
+ * Supports both dbIdentifier (for local/MotherDuck) and config (for HTTP DuckDB).
+ */
+export function createDuckDbExecuteQuery(options: {
+  dbIdentifier?: string;
+  config?: HttpDuckDbConfig;
+}): ExecuteQueryFn {
+  return async ({ sql, signal }) => {
+    const { rows, columns } = await runQuery({
+      sql,
+      config: options.config,
+      dbIdentifier: options.dbIdentifier,
+      signal,
+    });
+
+    return { rows, columns };
+  };
+}
 
 export type SqlConsoleApi = {
   /**
@@ -278,63 +303,52 @@ export function SqlConsole({
 
   return (
     <div className={cn("flex w-full flex-col gap-3", className)}>
-      <div className="text-sm text-muted-foreground px-2">
-        {selectedDbLabel ? (
-          <span>Database: {selectedDbLabel}</span>
-        ) : (
-          <span>
-            {" "}
-            <span className="text-lg">&nbsp;&nbsp;^--</span> No database
-            selected
-          </span>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between gap-2">
-        <div className="w-full">
-          <textarea
-            ref={textareaRef}
-            value={sql}
-            onChange={(e) => setSql(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            className="min-h-32 w-full resize-y p-4 border-0 font-mono text-sm outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary bg-card"
-          />
-          {error && (
-            <div className="mt-2 border border-destructive/60 bg-destructive/20 px-3 py-2 text-xs text-destructive font-mono rounded-sm dark:border-destructive/60 dark:bg-destructive/20 dark:text-destructive">
-              ERROR: {error}
-            </div>
-          )}
-        </div>
-        <div className="flex flex-col items-center gap-2">
-          {!isRunning && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void runQuery()}
-              disabled={isRunning}
-              className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary mx-2 dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-            >
-              {runButtonLabel}
-            </Button>
-          )}
-          {isRunning && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={cancelRun}
-              disabled={!isRunning}
-              className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary mx-2 dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-            >
-              {stopButtonLabel}
-            </Button>
-          )}
-        </div>
-      </div>
-
       {results && (
         <div className="border border-border bg-background p-6 rounded-sm">
           <SqlResultsTable dataOverride={results} />
+        </div>
+      )}
+      <div className="rounded-sm border border-border bg-card transition-colors">
+        <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex-1">
+            <PromptInputTextarea
+              ref={textareaRef}
+              value={sql}
+              onChange={(e) => setSql(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              className="flex-1 min-h-32"
+            />
+          </div>
+          <div className="flex flex-row justify-end gap-2 sm:flex-col sm:items-center sm:px-1">
+            {!isRunning && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void runQuery()}
+                disabled={isRunning}
+                className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+              >
+                {runButtonLabel}
+              </Button>
+            )}
+            {isRunning && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={cancelRun}
+                disabled={!isRunning}
+                className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+              >
+                {stopButtonLabel}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+      {error && (
+        <div className="border border-destructive/60 bg-destructive/20 px-3 py-2 text-xs text-destructive font-mono rounded-sm dark:border-destructive/60 dark:bg-destructive/20 dark:text-destructive">
+          ERROR: {error}
         </div>
       )}
     </div>

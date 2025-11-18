@@ -1,5 +1,9 @@
-import { Cog6ToothIcon, PlusIcon } from "@heroicons/react/24/outline";
-import { type ReactNode } from "react";
+import {
+  Cog6ToothIcon,
+  PlusIcon,
+  Squares2X2Icon,
+} from "@heroicons/react/24/outline";
+import type { ReactNode } from "react";
 import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
 import { CardConfigDialog } from "@/components/card-config-dialog";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
@@ -68,7 +72,7 @@ export function ChartView({
                     aria-label="Add to dashboard"
                     title="Add to dashboard"
                   >
-                    <PlusIcon className="h-4 w-4" />
+                    <Squares2X2Icon className="h-4 w-4" />
                   </button>
                 }
                 sql={data.query ?? ""}
@@ -140,7 +144,7 @@ export function ChartView({
                     aria-label="Add to dashboard"
                     title="Add to dashboard"
                   >
-                    <PlusIcon className="h-4 w-4" />
+                    <Squares2X2Icon className="h-4 w-4" />
                   </button>
                 }
                 sql={data.query ?? ""}

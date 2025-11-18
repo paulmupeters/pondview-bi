@@ -34,6 +34,7 @@ import {
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
+import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -57,6 +58,7 @@ interface PromptInputWrapperProps {
     rows: Record<string, unknown>[];
     columns?: { name: string; type?: string }[];
   }>;
+  onAddSqlResultToChat?: (payload: SqlAnalysisData) => void;
   placeholder?: string;
   className?: string;
   status?: ChatStatus;
@@ -266,6 +268,7 @@ function FileAttachmentHoverCard() {
 export function PromptInputWrapper({
   onSubmit,
   onRunSql,
+  onAddSqlResultToChat,
   placeholder = "Ask a question about your data...",
   className,
   status,
@@ -316,13 +319,6 @@ export function PromptInputWrapper({
     sqlConsoleApi.focus();
   };
 
-  const handleChartSubmit = () => {
-    if (!onAddVisual || pendingMode === "chart") {
-      return;
-    }
-    onAddVisual();
-  };
-
   const aiButtonLabel = useMemo(() => {
     if (pendingMode === "ai" && (!status || status === "idle" as ChatStatus)) {
       return "[SENDING …]";
@@ -338,9 +334,6 @@ export function PromptInputWrapper({
         return "[Send |>]";
     }
   }, [pendingMode, status]);
-
-  const chartButtonLabel =
-    pendingMode === "chart" ? "[ADDING …]" : "[Add visual]";
 
   const content = aiButtonLabel;
 
@@ -396,11 +389,12 @@ export function PromptInputWrapper({
                 selectedDbIdentifier={selectedDb}
                 onRunSql={onRunSql}
                 onConsoleApiChange={setSqlConsoleApi}
+                onAddToChat={onAddSqlResultToChat}
               />
             </div>
           )}
           {promptMode === "chart" && (
-            <div className="flex flex-col gap-3">
+            <div className="flex w-full flex-col gap-3">
               <SqlAnalysisDisplay
                 data={{
                   stage: "initial",
@@ -414,20 +408,10 @@ export function PromptInputWrapper({
                 stage="initial"
                 progress={1}
                 showStageIndicator={false}
-                className="max-w-3xl w-full"
+                className="w-full"
                 selectedDbLabel={getSelectedDbLabel()}
+                onAddToChat={onAddSqlResultToChat}
               />
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleChartSubmit}
-                  disabled={!onAddVisual || pendingMode === "chart"}
-                  className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary mx-2 dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-                >
-                  {chartButtonLabel}
-                </Button>
-              </div>
             </div>
           )}
         </PromptInputBody>

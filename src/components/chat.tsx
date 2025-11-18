@@ -1,6 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk-tools/store";
+import { TrashIcon } from "@heroicons/react/24/outline";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -21,13 +22,13 @@ import type {
   SqlAnalysisData,
   SqlAnalysisStage,
 } from "@/components/sql-analysis-display.types";
+import { Button } from "@/components/ui/button";
 import type { ArtifactStatus } from "@/hooks/types";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
-import { runQuery } from "@/lib/sql/run-query";
 
 const AUTO_SENT_FLAG_PREFIX = "autoSent:";
 const AUTO_SENT_STALE_MS = 5 * 60 * 1000;
@@ -46,18 +47,6 @@ export default function Chat({
   const [promptPendingMode, setPromptPendingMode] = useState<PromptMode | null>(
     null,
   );
-  const [autoSqlHandled, setAutoSqlHandled] = useState(false);
-  const defaultDbIdentifier = useMemo(() => {
-    const entry = connectedTables[0];
-    if (!entry) {
-      return undefined;
-    }
-    if (entry.attachAs) {
-      return entry.attachAs;
-    }
-    return `${entry.type}:${entry.databasePath}`;
-  }, [connectedTables]);
-
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -178,83 +167,62 @@ export default function Chat({
     setPromptPendingMode((current) => (current === "chart" ? null : current));
   }, [connectedTables, executeSqlArtifactType, setMessages]);
 
-  const handleRunSql = useCallback(
-    async ({
-      sql,
-      dbIdentifier,
-      signal,
-    }: {
-      sql: string;
-      dbIdentifier?: string;
-      signal: AbortSignal;
-    }) => {
-      setPromptPendingMode("sql");
-      try {
-        const result = await runQuery({ sql, signal });
-        const now = Date.now();
-        const messageId = `sql-${now}`;
-        const artifactId = `sql-artifact-${now}`;
-        const payload: SqlAnalysisData = {
-          stage: "complete",
+  const handleAddSqlResultToChat = useCallback(
+    (payload: SqlAnalysisData) => {
+      const now = Date.now();
+      const normalizedPayload: SqlAnalysisData = {
+        stage: payload.stage ?? "complete",
+        progress: payload.progress ?? 1,
+        query: payload.query ?? "",
+        dbIdentifier: payload.dbIdentifier,
+        executionTime: payload.executionTime,
+        rowCount:
+          payload.rowCount ??
+          payload.rows?.length ??
+          payload.summary?.totalRows ??
+          0,
+        columns: payload.columns ?? [],
+        rows: payload.rows ?? [],
+        visualType: payload.visualType ?? "table",
+        chartConfig: payload.chartConfig,
+        cardConfig: payload.cardConfig,
+        summary: payload.summary ?? {
+          totalRows: payload.rows?.length ?? 0,
+          executionTimeMs: payload.executionTime,
+          insights: [],
+        },
+      };
+
+      const messageId = `sql-${now}`;
+      const artifactId = `sql-artifact-${now}`;
+      const artifactPart = {
+        type: executeSqlArtifactType as `data-${string}`,
+        data: {
+          id: artifactId,
+          version: 1,
+          status: "complete",
           progress: 1,
-          query: sql,
-          dbIdentifier,
-          executionTime: result.durationMs,
-          rowCount: result.rows.length,
-          columns: result.columns,
-          rows: result.rows,
-          visualType: "table",
-          summary: {
-            totalRows: result.rows.length,
-            executionTimeMs: result.durationMs,
-            insights: [],
-          },
-        };
+          payload: normalizedPayload,
+          createdAt: now,
+        },
+      } as unknown as UIMessage["parts"][number];
 
-        const artifactPart = {
-          type: executeSqlArtifactType as `data-${string}`,
-          data: {
-            id: artifactId,
-            version: 1,
-            status: "complete",
-            progress: 1,
-            payload,
-            createdAt: now,
-          },
-        } as unknown as UIMessage["parts"][number];
+      const newMessage: UIMessage = {
+        id: messageId,
+        role: "assistant",
+        parts: [artifactPart],
+      };
 
-        const newMessage: UIMessage = {
-          id: messageId,
-          role: "assistant",
-          parts: [artifactPart],
-        };
-
-        setMessages((prev) => [...prev, newMessage]);
-        return {
-          rows: result.rows,
-          columns: result.columns,
-        };
-      } catch (error) {
-        const now = Date.now();
-        const messageText =
-          error instanceof Error ? error.message : "SQL execution failed.";
-        const errorMessage: UIMessage = {
-          id: `sql-error-${now}`,
-          role: "assistant",
-          parts: [
-            {
-              type: "text",
-              text: `SQL error: ${messageText}`,
-            } as UIMessage["parts"][number],
-          ],
-        };
-        setMessages((prev) => [...prev, errorMessage]);
-        throw error;
-      } finally {
-        setPromptPendingMode((current) => (current === "sql" ? null : current));
-      }
+      setMessages((prev) => [...prev, newMessage]);
     },
     [executeSqlArtifactType, setMessages],
+  );
+
+  const handleRemoveMessage = useCallback(
+    (messageId: string) => {
+      setMessages((prev) => prev.filter((message) => message.id !== messageId));
+    },
+    [setMessages],
   );
 
   // Cleanup any stale auto-send markers that may be leftover from previous sessions
@@ -349,40 +317,6 @@ export default function Chat({
     }
   }, [searchParams, manualVisualHandled, handleAddVisual, router, chatId]);
 
-  useEffect(() => {
-    const sqlParam = searchParams?.get("sql");
-    if (!sqlParam || autoSqlHandled) {
-      return;
-    }
-
-    setAutoSqlHandled(true);
-    setPromptMode("sql");
-    const controller = new AbortController();
-
-    void handleRunSql({
-      sql: sqlParam,
-      dbIdentifier: defaultDbIdentifier,
-      signal: controller.signal,
-    })
-      .catch((error) => {
-        console.error("Failed to auto-run SQL query from URL", error);
-      })
-      .finally(() => {
-        router.replace(`/${chatId}`);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [
-    searchParams,
-    autoSqlHandled,
-    handleRunSql,
-    router,
-    chatId,
-    defaultDbIdentifier,
-  ]);
-
   // Remove the auto-send marker after it served its purpose to avoid storage build-up
   useEffect(() => {
     if (!autoSentFromQuery || typeof window === "undefined") {
@@ -447,7 +381,17 @@ export default function Chat({
                   )}
                   {messages.map((message) => (
                     <Message from={message.role} key={message.id}>
-                      <MessageContent className="w-full">
+                      <MessageContent className="relative w-full">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute -top-2 -right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
+                          onClick={() => handleRemoveMessage(message.id)}
+                          aria-label="Remove message"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </Button>
                         {message.parts?.map((part, partIndex) => {
                           if (status === "submitted") {
                             return (
@@ -521,13 +465,7 @@ export default function Chat({
                                   className="max-w-3xl w-full"
                                   onDelete={
                                     message.id.startsWith("manual-visual-")
-                                      ? () => {
-                                          setMessages((prevMessages) =>
-                                            prevMessages.filter(
-                                              (msg) => msg.id !== message.id,
-                                            ),
-                                          );
-                                        }
+                                      ? () => handleRemoveMessage(message.id)
                                       : undefined
                                   }
                                 />
@@ -577,7 +515,7 @@ export default function Chat({
           <div className="p-1 max-w-6xl w-full mx-auto">
             <PromptInputWrapper
               onSubmit={handleSubmit}
-              onRunSql={handleRunSql}
+              onAddSqlResultToChat={handleAddSqlResultToChat}
               className="transition delay-150 duration-300 ease-in-out"
               status={status}
               onCreateDashboard={handleOpenDashboardBuilder}

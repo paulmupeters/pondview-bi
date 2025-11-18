@@ -3,6 +3,7 @@ import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
 export type RunQueryOptions = {
   sql: string;
   config?: HttpDuckDbConfig;
+  dbIdentifier?: string;
   signal?: AbortSignal;
 };
 
@@ -15,6 +16,7 @@ export type RunQueryResult = {
 export async function runQuery({
   sql,
   config,
+  dbIdentifier,
   signal,
 }: RunQueryOptions): Promise<RunQueryResult> {
   const trimmedSql = sql.trim();
@@ -27,15 +29,28 @@ export async function runQuery({
       ? performance.now()
       : Date.now();
 
+  const requestBody: {
+    sql: string;
+    config?: HttpDuckDbConfig;
+    dbIdentifier?: string;
+  } = {
+    sql: trimmedSql,
+  };
+
+  if (config) {
+    requestBody.config = config;
+  }
+
+  if (dbIdentifier) {
+    requestBody.dbIdentifier = dbIdentifier;
+  }
+
   const response = await fetch("/api/duckdb/query", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      sql: trimmedSql,
-      config,
-    }),
+    body: JSON.stringify(requestBody),
     signal,
   });
 

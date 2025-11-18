@@ -2,7 +2,7 @@
 
 import {
   ChatBubbleBottomCenterTextIcon,
-  TrashIcon,
+  PlusCircleIcon,
 } from "@heroicons/react/24/outline";
 import { ChartBar, ChevronLeft, ChevronRight, Table } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -38,6 +38,8 @@ export function SqlAnalysisDisplay({
   className,
   onDelete,
   selectedDbLabel,
+  onAddToChat,
+  canAddToChat,
 }: SqlAnalysisDisplayProps) {
   const [activeView, setActiveView] = useState<ActiveView>(() =>
     data?.visualType === "chart" || data?.visualType === "card"
@@ -223,60 +225,87 @@ export function SqlAnalysisDisplay({
 
   const canShowTable = Boolean(selectedForTable);
 
+  const payloadForAddToChat = useMemo(() => {
+    if (!data && executedRows === null && executedColumns === null) {
+      return null;
+    }
+
+    const finalRows =
+      (executedRows as Result[] | null) ??
+      (data?.rows as Result[] | undefined) ??
+      null;
+    const finalColumns =
+      executedColumns ??
+      (data?.columns as { name: string; type?: string }[] | undefined) ??
+      null;
+
+    if (!data && !finalRows && !finalColumns) {
+      return null;
+    }
+
+    const resolvedRows = finalRows ?? [];
+    const resolvedColumns = finalColumns ?? [];
+    const totalRows =
+      resolvedRows.length > 0
+        ? resolvedRows.length
+        : data?.rowCount ?? resolvedRows.length;
+
+    return {
+      stage: "complete" as const,
+      progress: 1,
+      query: query ?? data?.query ?? "",
+      dbIdentifier: data?.dbIdentifier,
+      executionTime: data?.executionTime,
+      rowCount: totalRows,
+      columns: resolvedColumns,
+      rows: resolvedRows,
+      visualType: "chart" as const,
+      chartConfig: chartConfig ?? data?.chartConfig,
+      cardConfig: cardConfig ?? data?.cardConfig,
+      summary:
+        data?.summary ??
+        (typeof totalRows === "number"
+          ? {
+            totalRows,
+            executionTimeMs:
+              data?.summary?.executionTimeMs ?? data?.executionTime,
+            insights: data?.summary?.insights ?? [],
+            queryType: data?.summary?.queryType,
+          }
+          : undefined),
+    };
+  }, [
+    data,
+    executedRows,
+    executedColumns,
+    chartConfig,
+    cardConfig,
+    query,
+  ]);
+
+  const showAddToChatButton =
+    Boolean(onAddToChat) &&
+    Boolean(payloadForAddToChat) &&
+    (canAddToChat ?? true);
+
+  const handleAddToChatClick = () => {
+    if (!onAddToChat || !payloadForAddToChat) {
+      return;
+    }
+    onAddToChat(payloadForAddToChat);
+  };
+
   if (!data && !shouldShowStageIndicator) {
     return null;
   }
 
   // Show SQL editor in chart mode when there's no query and no dbIdentifier
-  if (effectiveStage === "initial" && !data?.dbIdentifier) {
+  if (effectiveStage === "initial" && !data?.query && !query) {
     return (
       <div className={cn("space-y-6 w-full", className)}>
-        {selectedDbLabel && (
-          <div className="text-sm text-muted-foreground px-2">
-            Database: {selectedDbLabel}
-          </div>
-        )}
         <SqlEditor
-          dbIdentifier={data?.dbIdentifier || "md:my_db"}
-          onQuerySuccess={handleSqlEditorSuccess}
-        />
-      </div>
-    );
-  }
-
-  // Show SQL editor in chart mode when there's no query
-  if (!data?.query && !query) {
-    return (
-      <div className={cn("space-y-6 w-full", className)}>
-        {selectedDbLabel && (
-          <div className="text-sm text-muted-foreground px-2">
-            Database: {selectedDbLabel}
-          </div>
-        )}
-        <div className="flex items-center justify-between gap-2 p-2 lg:w-[300px] xl:w-[500px] w-full">
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setActiveView("table")}
-              className="flex items-center gap-2 hover:text-gray-500"
-              disabled
-            >
-              <Table className="w-4 h-4" />
-              Data
-            </Button>
-            <Button
-              variant="default"
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              <ChartBar className="w-4 h-4" />
-              Visual
-            </Button>
-          </div>
-        </div>
-        <SqlEditor
-          dbIdentifier={data?.dbIdentifier || "md:my_db"}
+          selectedDbLabel={selectedDbLabel}
+          dbIdentifier={data?.dbIdentifier ?? ""}
           onQuerySuccess={handleSqlEditorSuccess}
         />
       </div>
@@ -316,6 +345,24 @@ export function SqlAnalysisDisplay({
               <ChartBar className="w-4 h-4" />
               Visual
             </Button>
+            {showAddToChatButton && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                    onClick={handleAddToChatClick}
+                  >
+                    <PlusCircleIcon className="w-4 h-4" />
+                    Add to chat
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Share this result</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -330,23 +377,6 @@ export function SqlAnalysisDisplay({
                 <p>Edit with AI</p>
               </TooltipContent>
             </Tooltip>
-            {onDelete && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-2 text-destructive hover:text-destructive"
-                    onClick={onDelete}
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Delete visual</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
           </div>
           {history && history.total > 0 && (
             <div className="flex items-center gap-2">
