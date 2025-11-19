@@ -128,4 +128,17 @@ export async function deleteChat(chatId: string) {
   await db.delete(chats).where(eq(chats.id, chatId));
 }
 
+export async function deleteMessage(chatId: string, messageId: string, now = Date.now()) {
+  const db = getDb();
+  await db
+    .delete(messages)
+    .where(eq(messages.id, messageId));
+  
+  // Update chat's updatedAt timestamp
+  await db
+    .update(chats)
+    .set({ updatedAt: now })
+    .where(eq(chats.id, chatId));
+}
+
 

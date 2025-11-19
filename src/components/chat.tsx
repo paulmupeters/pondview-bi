@@ -257,10 +257,30 @@ export default function Chat({
   );
 
   const handleRemoveMessage = useCallback(
-    (messageId: string) => {
+    async (messageId: string) => {
+    // Optimistically remove from UI
       setMessages((prev) => prev.filter((message) => message.id !== messageId));
+
+      // Attempt to delete, then always reload from server to avoid rehydration
+      try {
+        await fetch(`/api/chat/${chatId}/message/${messageId}`, {
+          method: "DELETE",
+        });
+      } catch (error) {
+        console.error("Failed to delete message:", error);
+      } finally {
+        try {
+          const reload = await fetch(`/api/chat/${chatId}`, { cache: "no-store" });
+          if (reload.ok) {
+            const data = (await reload.json()) as { messages: UIMessage[] };
+            setMessages(data.messages ?? []);
+          }
+        } catch {
+          // Ignore reload errors
+        }
+      }
     },
-    [setMessages],
+    [chatId, setMessages],
   );
 
   // Cleanup any stale auto-send markers that may be leftover from previous sessions
