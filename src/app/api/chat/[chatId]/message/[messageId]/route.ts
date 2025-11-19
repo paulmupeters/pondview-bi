@@ -1,4 +1,4 @@
-import { deleteMessage } from "@/lib/repositories/chat";
+import { deleteMessageFromChat } from "@/lib/repositories/chat";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ export async function DELETE(
     }
 
     // Delete the message from the database
-    await deleteMessage(chatId, messageId);
+    await deleteMessageFromChat(chatId, messageId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

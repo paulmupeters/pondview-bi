@@ -46,7 +46,7 @@ import {
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
 import { cn } from "@/lib/utils";
 
-type PromptMode = "ai" | "sql" | "chart";
+export type PromptMode = "ai" | "sql" | "chart";
 
 interface PromptInputWrapperProps {
   onSubmit: (message: PromptInputMessage) => void;

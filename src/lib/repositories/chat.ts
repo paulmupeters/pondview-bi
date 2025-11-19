@@ -128,7 +128,8 @@ export async function deleteChat(chatId: string) {
   await db.delete(chats).where(eq(chats.id, chatId));
 }
 
-export async function deleteMessage(chatId: string, messageId: string, now = Date.now()) {
+// Function to delete a single message and update chat timestamp
+export async function deleteMessageFromChat(chatId: string, messageId: string, now = Date.now()) {
   const db = getDb();
   await db
     .delete(messages)

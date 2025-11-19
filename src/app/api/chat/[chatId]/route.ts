@@ -12,15 +12,16 @@ import { setContext } from "@/ai/context";
 import { analysisPrompt } from "@/ai/prompts";
 import { tools } from "@/ai/tools";
 import type { ConnectedTable } from "@/lib/connected-tables";
-import { messages } from "@/lib/db/schema";
+import type { messages } from "@/lib/db/schema";
 import {
   appendAssistantMessage,
   appendUserMessageTx,
-  listMessagesByChatId,
   deleteChat,
+  listMessagesByChatId,
 } from "@/lib/repositories/chat";
 
 export const runtime = "nodejs";
+// export const dynamic = "force-dynamic";
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
@@ -98,7 +99,7 @@ export async function POST(
         chatId,
         responseMessage.id || nanoid(),
         text,
-        JSON.stringify(responseMessage.parts ?? [{ type: "text", text }]),
+        JSON.stringify(responseMessage.parts ?? [{ type: "text", text }])
       );
     },
     execute: ({ writer }) => {

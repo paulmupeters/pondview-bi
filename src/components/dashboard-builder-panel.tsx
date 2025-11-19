@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ArtifactData } from "@/hooks/types";
 import { type UseArtifactsOptions, useArtifacts } from "@/hooks/use-artifacts";
-import type { Result } from "@/lib/types";
+import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
+import type { ChartConfig } from "./ui/chart";
 
 type DashboardBuilderPanelProps = {
   open: boolean;
@@ -52,7 +53,9 @@ function normalizeVisualArtifact(
       artifact,
       payload: {
         ...payload,
-        columns: (payload.columns ?? []).map((column: { name: string; type?: string }) => ({ ...column })),
+        columns: (payload.columns ?? []).map(
+          (column: { name: string; type?: string }) => ({ ...column }),
+        ),
         rows,
       },
       rows,
@@ -74,7 +77,9 @@ function normalizeVisualArtifact(
       artifact,
       payload: {
         ...payload,
-        columns: (payload.columns ?? []).map((column: { name: string; type?: string }) => ({ ...column })),
+        columns: (payload.columns ?? []).map(
+          (column: { name: string; type?: string }) => ({ ...column }),
+        ),
         rows,
       },
       rows,
@@ -92,7 +97,7 @@ function normalizeVisualArtifact(
     const defaultTableConfig = payload.tableConfig ?? {
       configType: "table" as const,
       title: payload.query
-        ? `Table: ${payload.query.substring(0, 50)}${payload.query.length > 50 ? '...' : ''}`
+        ? `Table: ${payload.query.substring(0, 50)}${payload.query.length > 50 ? "..." : ""}`
         : "Data Table",
       description: payload.summary?.insights?.[0] ?? "",
     };
@@ -103,7 +108,9 @@ function normalizeVisualArtifact(
       artifact,
       payload: {
         ...payload,
-        columns: (payload.columns ?? []).map((column: { name: string; type?: string }) => ({ ...column })),
+        columns: (payload.columns ?? []).map(
+          (column: { name: string; type?: string }) => ({ ...column }),
+        ),
         rows,
         tableConfig: defaultTableConfig,
       },
@@ -133,7 +140,6 @@ export function DashboardBuilderPanel({
     include: includeExecuteSql,
     storeId,
   } as UseArtifactsOptions & { storeId?: string });
-  console.log("artifacts-----------s>> ", artifacts); 
 
   const visualSnapshots = useMemo<VisualSnapshot[]>(() => {
     return artifacts
@@ -239,8 +245,8 @@ export function DashboardBuilderPanel({
         const { payload, type } = snapshot;
 
         // Determine the config based on visual type
-        let config;
-        let title;
+        let config: CardConfig | TableConfig | Config | undefined;
+        let title: string | undefined;
 
         if (type === "card") {
           config = payload.cardConfig;
@@ -349,10 +355,13 @@ export function DashboardBuilderPanel({
                       <div className="flex flex-col">
                         <span className="text-sm font-medium">
                           {snapshot.type === "card"
-                            ? snapshot.payload.cardConfig?.title || "Untitled card"
+                            ? snapshot.payload.cardConfig?.title ||
+                            "Untitled card"
                             : snapshot.type === "table"
-                              ? snapshot.payload.tableConfig?.title || "Untitled table"
-                              : snapshot.payload.chartConfig?.title || "Untitled visual"}
+                              ? snapshot.payload.tableConfig?.title ||
+                              "Untitled table"
+                              : snapshot.payload.chartConfig?.title ||
+                              "Untitled visual"}
                         </span>
                         {snapshot.payload.query && (
                           <span className="text-xs text-muted-foreground truncate max-w-[280px]">
@@ -377,13 +386,17 @@ export function DashboardBuilderPanel({
                           <CardHeader>
                             <CardTitle className="text-base font-medium text-muted-foreground">
                               {snapshot.payload.cardConfig?.title ||
-                                (snapshot.payload.columns?.[0]?.name ?? "Value")}
+                                (snapshot.payload.columns?.[0]?.name ??
+                                  "Value")}
                             </CardTitle>
                           </CardHeader>
                           <CardContent>
                             <div className="text-4xl font-bold text-foreground">
                               {(() => {
-                                const value = snapshot.rows[0]?.[snapshot.payload.columns?.[0]?.name ?? ""];
+                                const value =
+                                  snapshot.rows[0]?.[
+                                  snapshot.payload.columns?.[0]?.name ?? ""
+                                  ];
                                 if (typeof value === "number") {
                                   return value.toLocaleString();
                                 }
@@ -442,8 +455,10 @@ export function DashboardBuilderPanel({
                     {snapshot.type === "card"
                       ? snapshot.payload.cardConfig?.title || "Untitled card"
                       : snapshot.type === "table"
-                        ? snapshot.payload.tableConfig?.title || "Untitled table"
-                        : snapshot.payload.chartConfig?.title || "Untitled visual"}
+                        ? snapshot.payload.tableConfig?.title ||
+                        "Untitled table"
+                        : snapshot.payload.chartConfig?.title ||
+                        "Untitled visual"}
                   </Button>
                 ))}
               </div>
