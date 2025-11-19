@@ -1,20 +1,20 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { PlusCircleIcon } from "@heroicons/react/24/outline";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { PlusCircleIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useState } from "react";
+import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import {
   createDuckDbExecuteQuery,
   type ExecuteQueryFn,
   SqlConsole,
   type SqlConsoleApi,
 } from "@/components/sql-console";
-import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
 import type { Result } from "@/lib/types";
 
@@ -23,13 +23,13 @@ type DuckdbReplProps = {
   httpConfig?: HttpDuckDbConfig;
   selectedDbLabel?: string;
   selectedDbIdentifier?: string;
-  onRunSql?: (params: {
+  onRunSqlAction?: (params: {
     sql: string;
     dbIdentifier?: string;
     signal: AbortSignal;
   }) => ReturnType<ExecuteQueryFn>;
-  onConsoleApiChange?: (api: SqlConsoleApi | null) => void;
-  onAddToChat?: (payload: SqlAnalysisData) => void;
+  onConsoleApiChangeAction?: (api: SqlConsoleApi | null) => void;
+  onAddToChatAction?: (payload: SqlAnalysisData) => void;
 };
 
 const HISTORY_KEY = "bi.repl.history";
@@ -39,9 +39,9 @@ export function DuckdbRepl({
   httpConfig,
   selectedDbLabel,
   selectedDbIdentifier,
-  onRunSql,
-  onConsoleApiChange,
-  onAddToChat,
+  onRunSqlAction,
+  onConsoleApiChangeAction,
+  onAddToChatAction,
 }: DuckdbReplProps) {
   const [lastResult, setLastResult] = useState<{
     sql: string;
@@ -50,10 +50,11 @@ export function DuckdbRepl({
     durationMs: number;
   } | null>(null);
   const [hasShared, setHasShared] = useState(false);
+  const [internalApi, setInternalApi] = useState<SqlConsoleApi | null>(null);
 
   const executeQuery: ExecuteQueryFn = async ({ sql, signal }) => {
-    if (onRunSql) {
-      return onRunSql({ sql, dbIdentifier: selectedDbIdentifier, signal });
+    if (onRunSqlAction) {
+      return onRunSqlAction({ sql, dbIdentifier: selectedDbIdentifier, signal });
     }
 
     return createDuckDbExecuteQuery({
@@ -63,7 +64,7 @@ export function DuckdbRepl({
   };
 
   const handleShareResult = useCallback(() => {
-    if (!onAddToChat || !lastResult) {
+    if (!onAddToChatAction || !lastResult) {
       return;
     }
     const payload: SqlAnalysisData = {
@@ -83,11 +84,21 @@ export function DuckdbRepl({
       },
     };
 
-    onAddToChat(payload);
+    onAddToChatAction(payload);
     setHasShared(true);
-  }, [lastResult, onAddToChat, selectedDbIdentifier]);
+  }, [lastResult, onAddToChatAction, selectedDbIdentifier]);
 
-  const canShare = Boolean(onAddToChat && lastResult && !hasShared);
+  const canShare = Boolean(onAddToChatAction && lastResult && !hasShared);
+
+  useEffect(() => {
+    if (internalApi && onConsoleApiChangeAction) {
+      onConsoleApiChangeAction(internalApi);
+    }
+    return () => {
+      // Only clear if we're unmounting to avoid null flickering during re-renders
+      // Note: This might need adjustment if repl.tsx is conditionally rendered often
+    };
+  }, [internalApi, onConsoleApiChangeAction]);
 
   return (
     <div className="space-y-3 w-full">
@@ -111,6 +122,25 @@ export function DuckdbRepl({
               </TooltipContent>
             </Tooltip>
           )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+                onClick={() => {
+                  setLastResult(null);
+                  internalApi?.clearResults();
+                }}
+              >
+                <TrashIcon className="h-4 w-4" />
+                Clear
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Clear results</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
       )}
       <SqlConsole
@@ -118,7 +148,7 @@ export function DuckdbRepl({
         historyKey={HISTORY_KEY}
         selectedDbLabel={selectedDbLabel}
         executeQuery={executeQuery}
-        onApiChange={onConsoleApiChange}
+        onApiChange={setInternalApi}
         onSuccess={({ sql, rows, columns, durationMs }) => {
           setLastResult({ sql, rows, columns, durationMs });
           setHasShared(false);

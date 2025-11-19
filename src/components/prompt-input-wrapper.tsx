@@ -387,9 +387,9 @@ export function PromptInputWrapper({
               <DuckdbRepl
                 selectedDbLabel={getSelectedDbLabel()}
                 selectedDbIdentifier={selectedDb}
-                onRunSql={onRunSql}
-                onConsoleApiChange={setSqlConsoleApi}
-                onAddToChat={onAddSqlResultToChat}
+                onRunSqlAction={onRunSql}
+                onConsoleApiChangeAction={setSqlConsoleApi}
+                onAddToChatAction={onAddSqlResultToChat}
               />
             </div>
           )}

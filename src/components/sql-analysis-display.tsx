@@ -3,6 +3,7 @@
 import {
   ChatBubbleBottomCenterTextIcon,
   PlusCircleIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 import { ChartBar, ChevronLeft, ChevronRight, Table } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -91,6 +92,15 @@ export function SqlAnalysisDisplay({
     setExecutedRows(results);
     setExecutedColumns(columns);
     setActiveView("chart");
+  };
+
+  const handleClear = () => {
+    setQuery(null);
+    setExecutedRows(null);
+    setExecutedColumns(null);
+    setChartConfig(null);
+    setCardConfig(null);
+    lastAutoSwitchQueryRef.current = null;
   };
 
   const { renderControls, renderEditor } = SqlControls({
@@ -249,6 +259,20 @@ export function SqlAnalysisDisplay({
         ? resolvedRows.length
         : data?.rowCount ?? resolvedRows.length;
 
+    // Determine visual type based on active view and configuration/data shape
+    let visualType: "table" | "chart" | "card" = "table";
+    if (activeView === "chart") {
+      if (cardConfig || data?.cardConfig) {
+        visualType = "card";
+      } else if (chartConfig || data?.chartConfig) {
+        visualType = "chart";
+      } else if (resolvedRows.length === 1 && resolvedColumns.length === 1) {
+        visualType = "card";
+      } else {
+        visualType = "chart";
+      }
+    }
+
     return {
       stage: "complete" as const,
       progress: 1,
@@ -258,7 +282,7 @@ export function SqlAnalysisDisplay({
       rowCount: totalRows,
       columns: resolvedColumns,
       rows: resolvedRows,
-      visualType: "chart" as const,
+      visualType,
       chartConfig: chartConfig ?? data?.chartConfig,
       cardConfig: cardConfig ?? data?.cardConfig,
       summary:
@@ -280,6 +304,7 @@ export function SqlAnalysisDisplay({
     chartConfig,
     cardConfig,
     query,
+    activeView,
   ]);
 
   const showAddToChatButton =
@@ -310,6 +335,18 @@ export function SqlAnalysisDisplay({
       </div>
     );
   }
+
+  // Logic to determine if we should show the clear button.
+  // We generally want to show it if we are in "interactive" mode (e.g. in the prompt input area),
+  // but NOT if we are just displaying a static result (e.g. in the chat history).
+  //
+  // - If `data` comes from props and has stage="complete", it's likely a static chat artifact -> NO Clear button.
+  // - If `data` is initial (e.g. from prompt input wrapper), we are interactive -> YES Clear button (once we have results).
+  //
+  // The `executedRows` state being non-null implies the user has run a query interactively in this session.
+  const isInteractive = executedRows !== null || (data?.stage === "initial");
+
+  const showClearButton = isInteractive && (executedRows !== null || (data && data.stage !== "complete"));
 
   return (
     <div className={cn("space-y-6 w-full", className)}>
@@ -376,6 +413,24 @@ export function SqlAnalysisDisplay({
                 <p>Edit with AI</p>
               </TooltipContent>
             </Tooltip>
+            {showClearButton && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                    onClick={handleClear}
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                    Clear
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Clear analysis</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
           {history && history.total > 0 && (
             <div className="flex items-center gap-2">

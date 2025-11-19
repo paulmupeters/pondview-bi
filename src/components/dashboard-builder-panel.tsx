@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import { SqlChart } from "@/components/sql-chart";
+import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -65,11 +66,15 @@ function normalizeVisualArtifact(
 
   // Handle card artifacts
   if (visualType === "card") {
-    if (!payload.cardConfig) return null;
-
     const rows = Array.isArray(payload.rows)
       ? (payload.rows as Result[]).map((row) => ({ ...row }))
       : [];
+
+    const defaultCardConfig = payload.cardConfig ?? {
+      title: payload.columns?.[0]?.name ?? "Untitled Card",
+      description: "",
+      takeaway: "",
+    };
 
     return {
       id: artifact.id,
@@ -81,6 +86,7 @@ function normalizeVisualArtifact(
           (column: { name: string; type?: string }) => ({ ...column }),
         ),
         rows,
+        cardConfig: { configType: "card", ...defaultCardConfig },
       },
       rows,
       type: "card",
@@ -421,6 +427,17 @@ export function DashboardBuilderPanel({
                             )}
                           </CardContent>
                         </Card>
+                      </div>
+                    ) : snapshot.type === "table" ? (
+                      <div className="p-4 max-h-[400px] overflow-auto">
+                        <SqlResultsTable
+                          dataOverride={{
+                            stage: "complete",
+                            columns: snapshot.payload.columns || [],
+                            rows: snapshot.rows,
+                            summary: snapshot.payload.summary,
+                          }}
+                        />
                       </div>
                     ) : (
                       <SqlChart

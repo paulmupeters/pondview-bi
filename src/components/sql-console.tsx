@@ -1,14 +1,12 @@
 "use client";
 
-import { PlusCircleIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
-import { cn } from "@/lib/utils";
 import { runQuery } from "@/lib/sql/run-query";
+import { cn } from "@/lib/utils";
 import { PromptInputTextarea } from "./ai-elements/prompt-input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type ResultsPayload = {
   stage: "complete";
@@ -67,6 +65,10 @@ export type SqlConsoleApi = {
    * Focuses the textarea without modifying content.
    */
   focus: () => void;
+  /**
+   * Clears the executed results and error messages.
+   */
+  clearResults: () => void;
 };
 
 export type SqlConsoleProps = {
@@ -154,11 +156,24 @@ export function SqlConsole({
       focus: () => {
         textareaRef.current?.focus();
       },
+      clearResults: () => {
+        setResults(null);
+        setError(null);
+      },
     };
 
+    // Only update API if it has actually changed (which shouldn't happen often)
+    // or rely on a stable ref if we want to avoid this effect re-running.
+    // For now, let's just call onApiChange.
     onApiChange(api);
+
     return () => {
-      onApiChange(null);
+      // We intentionally don't clean up with null here to avoid the parent
+      // component seeing a flickering "null" API state during re-renders.
+      // Only clear if we're truly unmounting (which this effect cleanup
+      // can't distinguish from re-render, but the parent state update loop
+      // is likely caused by onApiChange triggering a re-render in parent
+      // which re-renders this component, triggering this effect again).
     };
   }, [onApiChange]);
 
