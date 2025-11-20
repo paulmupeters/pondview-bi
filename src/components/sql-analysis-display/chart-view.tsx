@@ -5,8 +5,8 @@ import {
 } from "@heroicons/react/24/outline";
 import type { ReactNode } from "react";
 import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
-import { CardConfigDialog } from "@/components/card-config-dialog";
-import { ChartConfigDialog } from "@/components/chart-config-dialog";
+import { CardConfigDialog, CardConfigForm } from "@/components/card-config-dialog";
+import { ChartConfigDialog, ChartConfigForm } from "@/components/chart-config-dialog";
 import { MetricCard } from "@/components/metric-card";
 import { SqlChart } from "@/components/sql-chart";
 import type { CardConfig, Config } from "@/lib/types";
@@ -83,17 +83,35 @@ export function ChartView({
             </>,
             "sql-editor-analysis-card",
           )}
-          <MetricCard
-            value={selectedForCard.value as string | number | boolean | Date}
-            title={
-              cardConfig?.title ??
-              data.cardConfig?.title ??
-              selectedForCard.columnName
-            }
-            description={cardConfig?.description ?? data.cardConfig?.description}
-            takeaway={cardConfig?.takeaway ?? data.cardConfig?.takeaway}
-            className="mx-auto w-fit border-0 shadow-none"
-          />
+          {cardConfig ? (
+            <MetricCard
+              value={selectedForCard.value as string | number | boolean | Date}
+              title={
+                cardConfig?.title ??
+                data.cardConfig?.title ??
+                selectedForCard.columnName
+              }
+              description={cardConfig?.description ?? data.cardConfig?.description}
+              takeaway={cardConfig?.takeaway ?? data.cardConfig?.takeaway}
+              className="mx-auto w-fit border-0 shadow-none"
+            />
+          ) : (
+            <div className="mb-4">
+              <div className="p-6 max-h-[400px] overflow-y-auto border rounded-lg">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold mb-2">Card Configuration</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Configure your card to display the value
+                  </p>
+                </div>
+                <CardConfigForm
+                  config={cardConfig}
+                  onConfigChange={onCardConfigChange}
+                  inline={true}
+                />
+              </div>
+            </div>
+          )}
           {renderSqlEditor("sql-editor-analysis-card")}
         </>
       ) : (
@@ -149,12 +167,33 @@ export function ChartView({
             "sql-editor-analysis-chart",
           )}
 
-          {selectedForChart && (
-            <SqlChart
-              customChartConfig={chartConfig ?? undefined}
-              dataOverride={selectedForChart}
-            />
-          )}
+            {selectedForChart && selectedForChart.rows.length > 0 ? (
+              chartConfig ? (
+                <SqlChart
+                  customChartConfig={chartConfig ?? undefined}
+                  dataOverride={selectedForChart}
+                />
+              ) : (
+                <div className="mb-4">
+                  <div className="p-6 max-h-[400px] overflow-y-auto border rounded-lg">
+                    <div className="mb-4">
+                      <h3 className="text-lg font-semibold mb-2">Chart Configuration</h3>
+                    </div>
+                    <ChartConfigForm
+                      config={chartConfig}
+                      columns={columnsForDialog}
+                      rows={selectedForChart.rows}
+                      onConfigChange={onChartConfigChange}
+                      inline={true}
+                    />
+                  </div>
+                </div>
+              )
+            ) : !selectedForChart && !selectedForCard ? (
+              // When there's no data, the SQL editor will be shown via renderSqlEditor
+              // This empty div ensures the layout is maintained
+              <div className="min-h-[200px]" />
+            ) : null}
           {renderSqlEditor("sql-editor-analysis-chart")}
         </>
       )}

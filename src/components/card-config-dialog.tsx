@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +18,142 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import type { CardConfig } from "@/lib/types";
 
+interface CardConfigFormProps {
+  config: CardConfig | null;
+  onConfigChange: (config: CardConfig) => void;
+  onCancel?: () => void;
+  inline?: boolean;
+}
+
+export function CardConfigForm({
+  config,
+  onConfigChange,
+  onCancel,
+  inline = false,
+}: CardConfigFormProps) {
+  const titleRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLInputElement>(null);
+  const takeawayRef = useRef<HTMLInputElement>(null);
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const newConfig: CardConfig = {
+      configType: "card",
+      title: titleRef.current?.value || "",
+      description: descriptionRef.current?.value || "",
+      takeaway: takeawayRef.current?.value || undefined,
+    };
+
+    onConfigChange(newConfig);
+  };
+
+  const handleButtonClick = () => {
+    const newConfig: CardConfig = {
+      configType: "card",
+      title: titleRef.current?.value || "",
+      description: descriptionRef.current?.value || "",
+      takeaway: takeawayRef.current?.value || undefined,
+    };
+    onConfigChange(newConfig);
+  };
+
+  const formContent = (
+    <div className="space-y-6">
+      {/* Card Title */}
+      <div className="space-y-3">
+        <div>
+          <label htmlFor="card-title" className="text-sm font-medium">
+            Card Title
+          </label>
+          <p className="text-xs text-gray-500">
+            Title to display above the value
+          </p>
+        </div>
+        <Input
+          ref={titleRef}
+          id="card-title"
+          name="title"
+          defaultValue={config?.title || ""}
+          placeholder="Enter card title"
+          required
+        />
+      </div>
+
+      <Separator />
+
+      {/* Card Description */}
+      <div className="space-y-3">
+        <div>
+          <label htmlFor="card-description" className="text-sm font-medium">
+            Description
+          </label>
+          <p className="text-xs text-gray-500">
+            Brief description of what the value represents
+          </p>
+        </div>
+        <Input
+          ref={descriptionRef}
+          id="card-description"
+          name="description"
+          defaultValue={config?.description || ""}
+          placeholder="Enter card description"
+          required
+        />
+      </div>
+
+      <Separator />
+
+      {/* Card Takeaway */}
+      <div className="space-y-3">
+        <div>
+          <label htmlFor="card-takeaway" className="text-sm font-medium">
+            Key Takeaway (Optional)
+          </label>
+          <p className="text-xs text-gray-500">
+            Main insight or conclusion from this value
+          </p>
+        </div>
+        <Input
+          ref={takeawayRef}
+          id="card-takeaway"
+          name="takeaway"
+          defaultValue={config?.takeaway || ""}
+          placeholder="Enter key takeaway"
+        />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-4">
+        {onCancel && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+        )}
+        {inline ? (
+          <Button type="button" onClick={handleButtonClick}>Apply</Button>
+        ) : (
+          <Button type="submit">Apply</Button>
+        )}
+      </div>
+    </div>
+  );
+
+  if (inline) {
+    return formContent;
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {formContent}
+    </form>
+  );
+}
+
 interface CardConfigDialogProps {
   trigger: React.ReactNode;
   config: CardConfig | null;
@@ -33,17 +169,7 @@ export function CardConfigDialog({
 }: CardConfigDialogProps) {
   const [open, setOpen] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.target as HTMLFormElement);
-
-    const newConfig: CardConfig = {
-      configType: "card",
-      title: (formData.get("title") as string) || "",
-      description: (formData.get("description") as string) || "",
-      takeaway: (formData.get("takeaway") as string) || undefined,
-    };
-
+  const handleConfigChange = (newConfig: CardConfig) => {
     onConfigChange(newConfig);
     setOpen(false);
   };
@@ -69,81 +195,12 @@ export function CardConfigDialog({
             Card Configuration
           </DialogTitle>
         </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Card Title */}
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="title" className="text-sm font-medium">
-                Card Title
-              </label>
-              <p className="text-xs text-gray-500">
-                Title to display above the value
-              </p>
-            </div>
-            <Input
-              id="title"
-              name="title"
-              defaultValue={config?.title || ""}
-              placeholder="Enter card title"
-              required
-            />
-          </div>
-
-          <Separator />
-
-          {/* Card Description */}
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="description" className="text-sm font-medium">
-                Description
-              </label>
-              <p className="text-xs text-gray-500">
-                Brief description of what the value represents
-              </p>
-            </div>
-            <Input
-              id="description"
-              name="description"
-              defaultValue={config?.description || ""}
-              placeholder="Enter card description"
-              required
-            />
-          </div>
-
-          <Separator />
-
-          {/* Card Takeaway */}
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="takeaway" className="text-sm font-medium">
-                Key Takeaway (Optional)
-              </label>
-              <p className="text-xs text-gray-500">
-                Main insight or conclusion from this value
-              </p>
-            </div>
-            <Input
-              id="takeaway"
-              name="takeaway"
-              defaultValue={config?.takeaway || ""}
-              placeholder="Enter key takeaway"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit">Apply</Button>
-          </div>
-        </form>
+        <CardConfigForm
+          config={config}
+          onConfigChange={handleConfigChange}
+          onCancel={() => setOpen(false)}
+        />
       </DialogContent>
     </Dialog>
   );
 }
-

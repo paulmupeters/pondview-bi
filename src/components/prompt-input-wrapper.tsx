@@ -36,6 +36,7 @@ import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
+import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
@@ -284,6 +285,12 @@ export function PromptInputWrapper({
   const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(
     null,
   );
+  const [sqlResult, setSqlResult] = useState<{
+    sql: string;
+    rows: Record<string, unknown>[];
+    columns: { name: string; type?: string }[];
+    durationMs: number;
+  } | null>(null);
 
   const promptMode = mode ?? internalMode;
 
@@ -383,26 +390,51 @@ export function PromptInputWrapper({
             </div>
           )}
           {promptMode === "sql" && (
-            <div className="flex flex-row gap-0 w-full h-[600px] max-h-[calc(100vh-200px)]">
-              <ConnectedDataPanel
-                selectedDb={selectedDb}
-                onSelect={setSelectedDb}
-                mode="sidebar"
-                onInsertTable={handleInsertTableIntoSql}
-              />
-              <div className="flex-1 flex flex-col gap-3 p-3 overflow-y-auto min-w-0 min-h-0">
-                <DuckdbRepl
-                  selectedDbLabel={getSelectedDbLabel()}
-                  selectedDbIdentifier={selectedDb}
-                  onRunSqlAction={onRunSql}
-                  onConsoleApiChangeAction={setSqlConsoleApi}
-                  onAddToChatAction={onAddSqlResultToChat}
+            <div className="flex flex-col gap-0 w-full h-[600px] max-h-[calc(100vh-200px)]">
+              <div className="flex flex-row gap-0 basis-3/8 min-h-[200px] shrink-0">
+                <ConnectedDataPanel
+                  selectedDb={selectedDb}
+                  onSelect={setSelectedDb}
+                  mode="sidebar"
+                  onInsertTable={handleInsertTableIntoSql}
                 />
+                <div className="flex-1 flex flex-col gap-3 p-3 overflow-y-auto min-w-0 min-h-0">
+                  <DuckdbRepl
+                    selectedDbLabel={getSelectedDbLabel()}
+                    selectedDbIdentifier={selectedDb}
+                    onRunSqlAction={onRunSql}
+                    onConsoleApiChangeAction={setSqlConsoleApi}
+                    onAddToChatAction={onAddSqlResultToChat}
+                    inlineResults={false}
+                    onResultChangeAction={setSqlResult}
+                  />
+                </div>
+              </div>
+              <div className="border-t border-border p-3 min-h-0 flex-1 flex flex-col">
+                {sqlResult ? (
+                  <SqlResultsTable
+                    className="flex-1 w-full h-full"
+                    dataOverride={{
+                      stage: "complete",
+                      columns: sqlResult.columns,
+                      rows: sqlResult.rows,
+                      summary: {
+                        totalRows: sqlResult.rows.length,
+                        executionTimeMs: sqlResult.durationMs,
+                        insights: [],
+                      },
+                    }}
+                  />
+                ) : (
+                  <div className="p-6 text-center text-muted-foreground text-sm">
+                    No results yet. Run a SQL query to see results here.
+                  </div>
+                )}
               </div>
             </div>
           )}
           {promptMode === "chart" && (
-            <div className="flex w-full flex-col gap-3">
+            <div className="flex w-full flex-col gap-3 h-[600px] max-h-[calc(100vh-200px)] overflow-y-auto">
               <SqlAnalysisDisplay
                 data={{
                   stage: "initial",
@@ -412,6 +444,8 @@ export function PromptInputWrapper({
                   columns: [],
                   rows: [],
                   dbIdentifier: selectedDb,
+                  visualType: "chart",
+                  isSqlExpandedInitial: true,
                 }}
                 stage="initial"
                 progress={1}

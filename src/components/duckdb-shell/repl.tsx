@@ -30,6 +30,13 @@ type DuckdbReplProps = {
   }) => ReturnType<ExecuteQueryFn>;
   onConsoleApiChangeAction?: (api: SqlConsoleApi | null) => void;
   onAddToChatAction?: (payload: SqlAnalysisData) => void;
+  inlineResults?: boolean;
+  onResultChangeAction?: (result: {
+    sql: string;
+    rows: Record<string, unknown>[];
+    columns: { name: string; type?: string }[];
+    durationMs: number;
+  } | null) => void;
 };
 
 const HISTORY_KEY = "bi.repl.history";
@@ -42,6 +49,8 @@ export function DuckdbRepl({
   onRunSqlAction,
   onConsoleApiChangeAction,
   onAddToChatAction,
+  inlineResults = true,
+  onResultChangeAction,
 }: DuckdbReplProps) {
   const [lastResult, setLastResult] = useState<{
     sql: string;
@@ -90,6 +99,13 @@ export function DuckdbRepl({
 
   const canShare = Boolean(onAddToChatAction && lastResult && !hasShared);
 
+  // Propagate result changes to parent when inlineResults is false
+  useEffect(() => {
+    if (!inlineResults && onResultChangeAction) {
+      onResultChangeAction(lastResult);
+    }
+  }, [lastResult, inlineResults, onResultChangeAction]);
+
   useEffect(() => {
     if (internalApi && onConsoleApiChangeAction) {
       onConsoleApiChangeAction(internalApi);
@@ -131,6 +147,9 @@ export function DuckdbRepl({
                 onClick={() => {
                   setLastResult(null);
                   internalApi?.clearResults();
+                  if (!inlineResults && onResultChangeAction) {
+                    onResultChangeAction(null);
+                  }
                 }}
               >
                 <TrashIcon className="h-4 w-4" />
@@ -149,7 +168,8 @@ export function DuckdbRepl({
         selectedDbLabel={selectedDbLabel}
         executeQuery={executeQuery}
         onApiChange={setInternalApi}
-        onSuccess={({ sql, rows, columns, durationMs }) => {
+        showInlineResults={inlineResults}
+        onSuccessAction={({ sql, rows, columns, durationMs }) => {
           setLastResult({ sql, rows, columns, durationMs });
           setHasShared(false);
         }}

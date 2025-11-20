@@ -444,7 +444,7 @@ export default function Chat({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="absolute -top-2 -right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
+                          className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
                           onClick={() => handleRemoveMessage(message.id)}
                           aria-label="Remove message"
                         >

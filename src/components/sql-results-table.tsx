@@ -9,9 +9,11 @@ import {
 } from "@tanstack/react-table";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function SqlResultsTable({
   dataOverride,
+  className,
 }: {
   dataOverride?: {
     stage?: "loading" | "processing" | "analyzing" | "visualizing" | "complete";
@@ -24,6 +26,7 @@ export function SqlResultsTable({
       queryType?: string;
     };
   };
+    className?: string;
 }) {
   const payload = dataOverride; // parent supplies data; avoid extra subscription
 
@@ -49,7 +52,7 @@ export function SqlResultsTable({
     }),
   );
 
-  const PAGE_SIZE = 42;
+  const PAGE_SIZE = 10;
   const shouldPaginate = rows.length > PAGE_SIZE;
 
   const table = useReactTable({
@@ -77,11 +80,10 @@ export function SqlResultsTable({
   }
 
   return (
-    <div className="space-y-4 w-full min-w-0">
+    <div className="flex flex-col h-full w-full min-w-0 gap-4">
       {/* Summary */}
       {summary && (
-        <div className="space-y-2">
-          <h3 className="font-semibold text-lg">Query Results</h3>
+        <div className="shrink-0 space-y-2">
           <div className="flex gap-4 text-sm text-muted-foreground">
             <span>{summary.totalRows} rows</span>
             {summary.executionTimeMs && (
@@ -93,7 +95,7 @@ export function SqlResultsTable({
       )}
 
       {/* Table */}
-      <div className="overflow-x-auto overflow-y-auto rounded-md border max-h-74 w-full">
+      <div className={cn("flex-1 overflow-auto rounded-md border w-full", className)}>
         <table className="w-full table-fixed caption-bottom text-sm">
           <thead className="bg-muted/50 sticky top-0">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -154,7 +156,7 @@ export function SqlResultsTable({
 
       {/* Pagination */}
       {shouldPaginate && (
-        <div className="flex items-center justify-between">
+        <div className="shrink-0 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
             Showing {table.getState().pagination.pageIndex * PAGE_SIZE + 1} to{" "}
             {Math.min(

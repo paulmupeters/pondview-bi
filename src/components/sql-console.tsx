@@ -80,13 +80,14 @@ export type SqlConsoleProps = {
   runButtonLabel?: string;
   stopButtonLabel?: string;
   executeQuery: ExecuteQueryFn;
-  onSuccess?: (payload: {
+  onSuccessAction?: (payload: {
     sql: string;
     rows: Record<string, unknown>[];
     columns: { name: string; type?: string }[];
     durationMs: number;
   }) => void;
   onApiChange?: (api: SqlConsoleApi | null) => void;
+  showInlineResults?: boolean;
 };
 
 const DEFAULT_PLACEHOLDER =
@@ -104,8 +105,9 @@ export function SqlConsole({
   runButtonLabel = DEFAULT_RUN_LABEL,
   stopButtonLabel = DEFAULT_STOP_LABEL,
   executeQuery,
-  onSuccess,
+  onSuccessAction,
   onApiChange,
+  showInlineResults = true,
 }: SqlConsoleProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -297,7 +299,7 @@ export function SqlConsole({
           insights: [],
         },
       });
-      onSuccess?.({ sql: currentSql, rows, columns, durationMs: duration });
+      onSuccessAction?.({ sql: currentSql, rows, columns, durationMs: duration });
     } catch (err) {
       if ((err as Error).name === "AbortError") {
         setError("Query cancelled");
@@ -356,7 +358,7 @@ export function SqlConsole({
           </div>
         </div>
       </div>
-      {results && (
+      {showInlineResults && results && (
         <div className="border border-border bg-background p-6 rounded-sm">
           <SqlResultsTable dataOverride={results} />
         </div>

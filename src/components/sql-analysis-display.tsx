@@ -19,7 +19,6 @@ import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ChartView } from "./sql-analysis-display/chart-view";
 import { SqlControls } from "./sql-analysis-display/sql-controls";
-import { SqlEditor } from "./sql-analysis-display/sql-editor";
 import { StageIndicator } from "./sql-analysis-display/stage-indicator";
 import type {
   ActiveView,
@@ -83,16 +82,6 @@ export function SqlAnalysisDisplay({
     });
   };
 
-  const handleSqlEditorSuccess = (
-    query: string,
-    results: Result[],
-    columns: { name: string; type?: string }[],
-  ) => {
-    setQuery(query);
-    setExecutedRows(results);
-    setExecutedColumns(columns);
-    setActiveView("chart");
-  };
 
   const handleClear = () => {
     setQuery(null);
@@ -323,19 +312,6 @@ export function SqlAnalysisDisplay({
     return null;
   }
 
-  // Show SQL editor in chart mode when there's no query and no dbIdentifier
-  if (effectiveStage === "initial" && !data?.query && !query) {
-    return (
-      <div className={cn("space-y-6 w-full", className)}>
-        <SqlEditor
-          selectedDbLabel={selectedDbLabel}
-          dbIdentifier={data?.dbIdentifier ?? ""}
-          onQuerySuccess={handleSqlEditorSuccess}
-        />
-      </div>
-    );
-  }
-
   // Logic to determine if we should show the clear button.
   // We generally want to show it if we are in "interactive" mode (e.g. in the prompt input area),
   // but NOT if we are just displaying a static result (e.g. in the chat history).
@@ -360,7 +336,7 @@ export function SqlAnalysisDisplay({
       )}
 
       {data && (
-        <div className="flex items-center justify-between gap-2 p-2 lg:w-[300px] xl:w-[500px] w-full">
+        <div className="flex items-center justify-between gap-2 p-2 lg:w-[300px] xl:w-[500px] w-full overflow-y-auto">
           <div className="flex gap-2">
             <Button
               variant={activeView === "table" ? "default" : "outline"}
@@ -460,9 +436,22 @@ export function SqlAnalysisDisplay({
         </div>
       )}
 
-      {data && activeView === "chart" && (
-        <ChartView
-          data={data}
+      {(data || (effectiveStage === "initial" && activeView === "chart")) && activeView === "chart" && (() => {
+        const dbIdentifier = data?.dbIdentifier;
+        const isSqlExpandedInitial = data?.isSqlExpandedInitial;
+        return (
+          <ChartView
+            data={data ?? {
+              stage: "initial",
+              progress: 0,
+              executionTime: 0,
+              rowCount: 0,
+              columns: [],
+              rows: [],
+              dbIdentifier,
+              visualType: "chart",
+              isSqlExpandedInitial: isSqlExpandedInitial ?? false,
+            }}
           selectedForChart={selectedForChart}
           selectedForCard={selectedForCard}
           chartConfig={chartConfig}
@@ -472,8 +461,9 @@ export function SqlAnalysisDisplay({
           onCardConfigChange={setCardConfig}
           renderSqlControls={renderControls}
           renderSqlEditor={renderEditor}
-        />
-      )}
+          />
+        );
+      })()}
 
       {data && activeView === "table" && (
         <div className="group relative">
