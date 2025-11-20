@@ -9,6 +9,13 @@ import {
   type PromptMode,
 } from "@/components/prompt-input-wrapper";
 
+const EXAMPLE_COMMANDS = [
+  "Show me trends of unicorns over the year in China",
+  "Compare revenue across different industries",
+  "Create a dashboard for financial metrics",
+  "Analyze customer demographics by region",
+];
+
 export default function Home() {
   const [mode, setMode] = useState<PromptMode>("ai");
   const router = useRouter();
@@ -24,13 +31,6 @@ export default function Home() {
     [router],
   );
 
-  const exampleCommands = [
-    "Show me trends of unicorns over the year in China",
-    "Compare revenue across different industries",
-    "Create a dashboard for financial metrics",
-    "Analyze customer demographics by region",
-  ];
-
   const handleExampleClick = useCallback(
     (command: string) => {
       handleSubmit({ text: command });
@@ -39,21 +39,21 @@ export default function Home() {
   );
 
   return (
-    <div className="h-screen w-full flex items-center justify-center bg-background p-4 overflow-hidden ml-6">
-      <div className="w-full max-w-7xl h-[90vh] flex flex-col font-mono justify-between">
+    <div className="h-full w-full flex items-center justify-center bg-background p-4 overflow-hidden">
+      <div className="w-full max-w-7xl h-full flex flex-col font-mono justify-between py-4">
         <div className="flex items-center justify-center">
           <h1 className="text-5xl font-bold tracking-wider">Data Assistant</h1>
         </div>
 
         <div className="p-2 flex gap-2 py-2 justify-center">
           <div className="flex flex-col items-center justify-center gap-2">
-            <p className="text-sm opacity-70">
+            <p className="text-sm opacity-70" aria-hidden="true">
               ═══════════════════════════════════════════════════════════════
             </p>
             <p className="text-sm opacity-70">
               QUERY DATA AND GENERATE CHARTS WITH NATURAL LANGUAGE QUERIES.
             </p>
-            <p className="text-sm opacity-70">
+            <p className="text-sm opacity-70" aria-hidden="true">
               ═══════════════════════════════════════════════════════════════
             </p>
           </div>
@@ -72,23 +72,24 @@ export default function Home() {
               />
               {/* Example Commands - Only show in AI mode */}
               {mode === "ai" && (
-                <div className="flex flex-col items-center justify-start gap-0 mt-12">
-                  <div className="text-sm opacity-70">
+                <div className="flex flex-col items-center justify-start gap-0 mt-12 animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both">
+                  <div className="text-sm opacity-70" aria-hidden="true">
                     ═══════════════════════════════════════════════════════════════
                   </div>
                   <div className="text-sm opacity-70">AVAILABLE COMMANDS:</div>
-                  <div className="text-sm opacity-70">
+                  <div className="text-sm opacity-70" aria-hidden="true">
                     ═══════════════════════════════════════════════════════════════
                   </div>
-                  <div className="pl-4 space-y-1 font-mono">
-                    {exampleCommands.map((command) => (
+                  <div className="pl-4 space-y-1 font-mono mt-2">
+                    {EXAMPLE_COMMANDS.map((command) => (
                       <button
                         key={command}
                         type="button"
                         onClick={() => handleExampleClick(command)}
-                        className="hover:text-primary cursor-pointer transition-colors text-left w-full"
+                        className="hover:text-primary cursor-pointer transition-colors text-left w-full block group"
                       >
-                        {">"} {command}
+                        <span className="opacity-50 group-hover:opacity-100 transition-opacity mr-2">{">"}</span>
+                        {command}
                       </button>
                     ))}
                   </div>
@@ -100,7 +101,7 @@ export default function Home() {
 
         {/* Terminal Footer */}
         <div className="">
-          <div className="text-xs flex items-center justify-between">
+          <div className="text-xs flex items-center justify-between opacity-50 hover:opacity-100 transition-opacity">
             <div className="flex gap-4">
               <span>CMD+K: Command Palette</span>
             </div>
