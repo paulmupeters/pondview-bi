@@ -240,7 +240,7 @@ export default function ViewDataPage() {
               </p>
             </div>
             {!hasTables ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-border/60 bg-muted/30 p-10 text-center">
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl bg-muted/30 p-10 text-center">
                 <div className="space-y-2">
                   <h3 className="text-lg font-medium text-foreground">
                     No connected data yet
@@ -427,7 +427,7 @@ export default function ViewDataPage() {
 
           <Separator />
 
-          <section className="space-y-4">
+          <section className="space-y-4 mt-20">
             <div className="space-y-1">
               <h2 className="text-base font-semibold text-foreground">
                 Uploaded Files
@@ -438,7 +438,7 @@ export default function ViewDataPage() {
               </p>
             </div>
             {!hasUploadedFiles ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-border/60 bg-muted/30 p-10 text-center">
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl bg-muted/30 p-10 text-center">
                 <div className="space-y-2">
                   <h3 className="text-lg font-medium text-foreground">
                     No uploaded files yet
@@ -464,7 +464,7 @@ export default function ViewDataPage() {
                     return (
                       <Card
                         key={file.fileId}
-                        className="gap-0 rounded-2xl border border-border/60 bg-card/60 py-0 shadow-sm"
+                        className="gap-0 rounded-2xl bg-card/60 py-0 shadow-sm"
                       >
                         <CardContent className="space-y-4 p-6">
                           <div className="flex items-start justify-between gap-4">

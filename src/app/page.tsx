@@ -60,12 +60,12 @@ export default function Home() {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-hidden flex flex-col p-4">
-          <div className="flex-1 overflow-hidden flex flex-col items-center justify-evenly h-full">
-            <div className="w-full max-w-3xl">
+        <div className="overflow-hidden px-4 py-4 h-full z-30">
+          <div className="overflow-hidden flex flex-col items-center justify-start h-full">
+            <div className="w-full max-w-5xl">
               <PromptInputWrapper
                 onSubmit={handleSubmit}
-                className="transition delay-150 duration-300 ease-in-out max-h-56"
+                className="transition delay-150 duration-300 ease-in-out"
                 onHomePage={true}
                 mode={mode}
                 onModeChange={setMode}
@@ -100,7 +100,7 @@ export default function Home() {
         </div>
 
         {/* Terminal Footer */}
-        <div className="">
+        <div className="hidden">
           <div className="text-xs flex items-center justify-between opacity-50 hover:opacity-100 transition-opacity">
             <div className="flex gap-4">
               <span>CMD+K: Command Palette</span>

@@ -2,3 +2,9 @@ version: 1
 sources:
   - name: unicorns
     table: main.unicorns
+    connection:
+      type: motherduck
+      identifier: md:my_db
+      alias: unicorns_data
+      readOnly: false
+      duckdbExtension: motherduck

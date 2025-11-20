@@ -22,6 +22,7 @@ interface ConnectedDataPanelProps {
   onSelect: (dbIdentifier: string) => void;
   className?: string;
   onInsertTable?: (tableName: string) => void;
+  mode?: "popover" | "sidebar";
 }
 
 export function ConnectedDataPanel({
@@ -29,6 +30,7 @@ export function ConnectedDataPanel({
   onSelect,
   className,
   onInsertTable,
+  mode = "popover",
 }: ConnectedDataPanelProps) {
   const connectedTables = useConnectedTables();
   const [isOpen, setIsOpen] = useState(false);
@@ -76,9 +78,125 @@ export function ConnectedDataPanel({
       ? `${schemaPrefix}.${tableName}`
       : tableName;
     onInsertTable?.(qualifiedName);
-    setIsOpen(false);
+    if (mode === "popover") {
+      setIsOpen(false);
+    }
   };
 
+  const handleSelect = (dbIdentifier: string) => {
+    onSelect(dbIdentifier);
+    if (mode === "popover") {
+      setIsOpen(false);
+    }
+  };
+
+  const renderDatabaseList = () => {
+    if (connectedTables.length === 0) {
+      return (
+        <div className="p-4 text-sm text-muted-foreground">
+          No connected databases. Connect a database to get started.
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col">
+        {connectedTables.map((entry) => {
+          const dbKey = getDbKey(entry);
+          const dbIdentifier = getDbIdentifier(entry);
+          const dbDisplayName = getDbDisplayName(entry);
+          const isSelected = selectedDb === dbIdentifier;
+          const isExpanded = expandedDbs.has(dbKey);
+          const hasTables =
+            (entry.tables && entry.tables.length > 0) || entry.table;
+
+          return (
+            <div
+              key={dbKey}
+              className="border-b border-border last:border-b-0"
+            >
+              <div className="flex items-center">
+                {hasTables ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={() => toggleDb(dbKey)}
+                  >
+                    {isExpanded ? (
+                      <ChevronDownIcon className="h-4 w-4" />
+                    ) : (
+                      <ChevronRightIcon className="h-4 w-4" />
+                    )}
+                  </Button>
+                ) : (
+                  <div className="w-8" />
+                )}
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    "flex-1 justify-start gap-2 h-8 rounded-none",
+                    isSelected && "bg-accent",
+                  )}
+                  onClick={() => handleSelect(dbIdentifier)}
+                >
+                  <Database className="h-4 w-4 shrink-0" />
+                  <span className="text-xs truncate">{dbDisplayName}</span>
+                </Button>
+              </div>
+              {hasTables && isExpanded && (
+                <div className="pl-8 pb-1">
+                  {entry.tables && entry.tables.length > 0
+                    ? entry.tables.map((tableName) => (
+                        <button
+                          key={tableName}
+                          type="button"
+                          className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-accent/50 cursor-pointer"
+                          onClick={() => handleInsertTable(entry, tableName)}
+                        >
+                          <Table className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{tableName}</span>
+                        </button>
+                      ))
+                    : entry.table && (
+                        <button
+                          type="button"
+                          className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-accent/50 cursor-pointer"
+                          onClick={() =>
+                            handleInsertTable(entry, entry.table as string)
+                          }
+                        >
+                          <Table className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{entry.table}</span>
+                        </button>
+                      )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Sidebar mode: render directly without hover card
+  if (mode === "sidebar") {
+    return (
+      <div
+        className={cn(
+          "w-72 border-r border-border bg-card flex flex-col h-full",
+          className,
+        )}
+      >
+        <div className="p-3 border-b border-border shrink-0">
+          <h3 className="text-sm font-medium">Connected Databases</h3>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0">{renderDatabaseList()}</div>
+      </div>
+    );
+  }
+
+  // Popover mode: existing hover card behavior
   if (connectedTables.length === 0) {
     return (
       <PromptInputHoverCard open={isOpen} onOpenChange={setIsOpen}>
@@ -95,9 +213,7 @@ export function ConnectedDataPanel({
           </TooltipContent>
         </Tooltip>
         <PromptInputHoverCardContent className="w-72">
-          <div className="p-4 text-sm text-muted-foreground">
-            No connected databases. Connect a database to get started.
-          </div>
+          {renderDatabaseList()}
         </PromptInputHoverCardContent>
       </PromptInputHoverCard>
     );
@@ -118,85 +234,7 @@ export function ConnectedDataPanel({
         </TooltipContent>
       </Tooltip>
       <PromptInputHoverCardContent className="w-72 max-h-[400px] overflow-y-auto">
-        <div className="flex flex-col">
-          {connectedTables.map((entry) => {
-            const dbKey = getDbKey(entry);
-            const dbIdentifier = getDbIdentifier(entry);
-            const dbDisplayName = getDbDisplayName(entry);
-            const isSelected = selectedDb === dbIdentifier;
-            const isExpanded = expandedDbs.has(dbKey);
-            const hasTables =
-              (entry.tables && entry.tables.length > 0) || entry.table;
-
-            return (
-              <div
-                key={dbKey}
-                className="border-b border-border last:border-b-0"
-              >
-                <div className="flex items-center">
-                  {hasTables ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0"
-                      onClick={() => toggleDb(dbKey)}
-                    >
-                      {isExpanded ? (
-                        <ChevronDownIcon className="h-4 w-4" />
-                      ) : (
-                        <ChevronRightIcon className="h-4 w-4" />
-                      )}
-                    </Button>
-                  ) : (
-                    <div className="w-8" />
-                  )}
-                  <Button
-                    variant="ghost"
-                    className={cn(
-                      "flex-1 justify-start gap-2 h-8 rounded-none",
-                      isSelected && "bg-accent",
-                    )}
-                    onClick={() => {
-                      onSelect(dbIdentifier);
-                      setIsOpen(false);
-                    }}
-                  >
-                    <Database className="h-4 w-4 shrink-0" />
-                    <span className="text-xs truncate">{dbDisplayName}</span>
-                  </Button>
-                </div>
-                {hasTables && isExpanded && (
-                  <div className="pl-8 pb-1">
-                    {entry.tables && entry.tables.length > 0
-                      ? entry.tables.map((tableName) => (
-                          <button
-                            key={tableName}
-                            type="button"
-                            className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-accent/50 cursor-pointer"
-                            onClick={() => handleInsertTable(entry, tableName)}
-                          >
-                            <Table className="h-3 w-3 shrink-0" />
-                            <span className="truncate">{tableName}</span>
-                          </button>
-                        ))
-                      : entry.table && (
-                          <button
-                            type="button"
-                            className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-accent/50 cursor-pointer"
-                            onClick={() =>
-                              handleInsertTable(entry, entry.table as string)
-                            }
-                          >
-                            <Table className="h-3 w-3 shrink-0" />
-                            <span className="truncate">{entry.table}</span>
-                          </button>
-                        )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        {renderDatabaseList()}
       </PromptInputHoverCardContent>
     </PromptInputHoverCard>
   );

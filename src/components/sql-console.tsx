@@ -318,11 +318,6 @@ export function SqlConsole({
 
   return (
     <div className={cn("flex w-full flex-col gap-3", className)}>
-      {results && (
-        <div className="border border-border bg-background p-6 rounded-sm">
-          <SqlResultsTable dataOverride={results} />
-        </div>
-      )}
       <div className="rounded-sm border border-border bg-card transition-colors">
         <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4">
           <div className="flex-1">
@@ -361,6 +356,11 @@ export function SqlConsole({
           </div>
         </div>
       </div>
+      {results && (
+        <div className="border border-border bg-background p-6 rounded-sm">
+          <SqlResultsTable dataOverride={results} />
+        </div>
+      )}
       {error && (
         <div className="border border-destructive/60 bg-destructive/20 px-3 py-2 text-xs text-destructive font-mono rounded-sm dark:border-destructive/60 dark:bg-destructive/20 dark:text-destructive">
           ERROR: {error}

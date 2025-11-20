@@ -383,14 +383,22 @@ export function PromptInputWrapper({
             </div>
           )}
           {promptMode === "sql" && (
-            <div className="flex flex-col gap-3 w-full">
-              <DuckdbRepl
-                selectedDbLabel={getSelectedDbLabel()}
-                selectedDbIdentifier={selectedDb}
-                onRunSqlAction={onRunSql}
-                onConsoleApiChangeAction={setSqlConsoleApi}
-                onAddToChatAction={onAddSqlResultToChat}
+            <div className="flex flex-row gap-0 w-full h-[600px] max-h-[calc(100vh-200px)]">
+              <ConnectedDataPanel
+                selectedDb={selectedDb}
+                onSelect={setSelectedDb}
+                mode="sidebar"
+                onInsertTable={handleInsertTableIntoSql}
               />
+              <div className="flex-1 flex flex-col gap-3 p-3 overflow-y-auto min-w-0 min-h-0">
+                <DuckdbRepl
+                  selectedDbLabel={getSelectedDbLabel()}
+                  selectedDbIdentifier={selectedDb}
+                  onRunSqlAction={onRunSql}
+                  onConsoleApiChangeAction={setSqlConsoleApi}
+                  onAddToChatAction={onAddSqlResultToChat}
+                />
+              </div>
             </div>
           )}
           {promptMode === "chart" && (
@@ -418,12 +426,14 @@ export function PromptInputWrapper({
         <PromptInputHeader className="border-b p-2 border-border">
           <div className="flex items-center gap-2 justify-between w-full">
             <div className="flex items-center gap-2">
-              <ConnectedDataPanel
-                selectedDb={selectedDb}
-                onSelect={setSelectedDb}
-                className="h-full"
-                onInsertTable={handleInsertTableIntoSql}
-              />
+              {promptMode !== "sql" && (
+                <ConnectedDataPanel
+                  selectedDb={selectedDb}
+                  onSelect={setSelectedDb}
+                  className="h-full"
+                  onInsertTable={handleInsertTableIntoSql}
+                />
+              )}
               <FileAttachmentHoverCard />
               {!onHomePage && (
                 <Tooltip>
