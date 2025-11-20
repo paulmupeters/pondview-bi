@@ -15,7 +15,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
-import { GripVertical, Pencil, Settings, Trash2 } from "lucide-react";
+import { GripVertical, MoveDiagonal2, Pencil, Settings, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import {
   type CSSProperties,
@@ -82,6 +82,7 @@ type SortableChartCardProps = {
   expandedSqlChartId: string | null;
   onToggleSql: (chartId: string) => void;
   onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
+  totalColumns: number;
 };
 
 // Helper function to check if config is a card config
@@ -127,11 +128,28 @@ function SortableChartCard({
   expandedSqlChartId,
   onToggleSql,
   onSqlUpdate,
+  totalColumns,
 }: SortableChartCardProps) {
   const { filters } = useFilters();
   const [editedSql, setEditedSql] = useState(chart.sql);
   const [isSaving, setIsSaving] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [tempColSpan, setTempColSpan] = useState<number | null>(null);
+  const [resizeStartX, setResizeStartX] = useState(0);
+  const [resizeStartWidth, setResizeStartWidth] = useState(0);
+  const [pointerId, setPointerId] = useState<number | null>(null);
+  const resizeRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const isExpanded = expandedSqlChartId === chart.id;
+
+  // Get colSpan from config, default to 1
+  const currentColSpan = (config && !isCardConfig(config) && !isTableConfig(config) && "colSpan" in config)
+    ? (config as Config).colSpan ?? 1
+    : 1;
+
+  const displayColSpan = tempColSpan ?? currentColSpan;
+
+  const isChart = config && !isCardConfig(config) && !isTableConfig(config);
   const {
     attributes,
     listeners,
@@ -152,6 +170,73 @@ function SortableChartCard({
     }
   }, [isExpanded, chart.sql]);
 
+  // Resize handlers
+  const handleResizeStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    setResizeStartX(e.clientX);
+    setPointerId(e.pointerId);
+    if (cardRef.current) {
+      setResizeStartWidth(cardRef.current.getBoundingClientRect().width);
+    }
+    setTempColSpan(currentColSpan);
+    if (resizeRef.current) {
+      resizeRef.current.setPointerCapture(e.pointerId);
+    }
+  }, [currentColSpan]);
+
+  const handleResizeMove = useCallback((e: PointerEvent) => {
+    if (!isResizing || !cardRef.current) return;
+
+    const cardElement = cardRef.current;
+    const gridContainer = cardElement.closest('.grid') as HTMLElement;
+    if (!gridContainer) return;
+
+    const gridRect = gridContainer.getBoundingClientRect();
+    const gridGap = 24; // gap-6 = 24px
+    const gridColumnWidth = (gridRect.width - (gridGap * (totalColumns - 1))) / totalColumns;
+
+    // Calculate new width based on mouse movement
+    const deltaX = e.clientX - resizeStartX;
+    const newWidth = Math.max(gridColumnWidth, resizeStartWidth + deltaX);
+
+    // Convert width to column span
+    // For S columns: width = S * columnWidth + (S-1) * gap
+    // Solving for S: S = (width + gap) / (columnWidth + gap)
+    const newColSpan = Math.max(1, Math.min(totalColumns, Math.round((newWidth + gridGap) / (gridColumnWidth + gridGap))));
+
+    setTempColSpan(newColSpan);
+  }, [isResizing, resizeStartX, resizeStartWidth, totalColumns]);
+
+  const handleResizeEnd = useCallback(async () => {
+    if (tempColSpan !== null && tempColSpan !== currentColSpan && isChart && config) {
+      const updatedConfig = { ...config as Config, colSpan: tempColSpan };
+      await onConfigChange(JSON.stringify(updatedConfig));
+    }
+    setIsResizing(false);
+    setTempColSpan(null);
+    if (resizeRef.current && pointerId !== null) {
+      resizeRef.current.releasePointerCapture(pointerId);
+    }
+    setPointerId(null);
+  }, [tempColSpan, currentColSpan, isChart, config, onConfigChange, pointerId]);
+
+  useEffect(() => {
+    if (isResizing) {
+      const handleMove = (e: PointerEvent) => handleResizeMove(e);
+      const handleEnd = () => void handleResizeEnd();
+
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleEnd);
+
+      return () => {
+        window.removeEventListener('pointermove', handleMove);
+        window.removeEventListener('pointerup', handleEnd);
+      };
+    }
+  }, [isResizing, handleResizeMove, handleResizeEnd]);
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -169,11 +254,49 @@ function SortableChartCard({
     onToggleSql(chart.id);
   };
 
+  // Get col-span class based on displayColSpan
+  const getColSpanClass = (span: number) => {
+    if (totalColumns <= 1 || span === 1) return "";
+    const colSpanMap: Record<number, Record<number, string>> = {
+      2: {
+        2: "md:col-span-2",
+      },
+      3: {
+        2: "lg:col-span-2",
+        3: "lg:col-span-3",
+      },
+      4: {
+        2: "lg:col-span-2",
+        3: "lg:col-span-3",
+        4: "lg:col-span-4",
+      },
+      5: {
+        2: "lg:col-span-2",
+        3: "lg:col-span-3",
+        4: "lg:col-span-4",
+        5: "lg:col-span-5",
+      },
+      6: {
+        2: "lg:col-span-2",
+        3: "lg:col-span-3",
+        4: "lg:col-span-4",
+        5: "lg:col-span-5",
+        6: "lg:col-span-6",
+      },
+    };
+    return colSpanMap[totalColumns]?.[span] || "";
+  };
+
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node);
+        if (node) {
+          cardRef.current = node;
+        }
+      }}
       style={style}
-      className="group relative flex flex-col rounded-xl bg-card p-4 md:p-2"
+      className={`group relative flex flex-col rounded-xl bg-card p-4 md:p-2 ${isChart ? getColSpanClass(displayColSpan) : ""}`}
     >
       <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
         <button
@@ -331,6 +454,20 @@ function SortableChartCard({
             )
       ) : (
         <div className="text-xs text-muted-foreground">No data</div>
+      )}
+      {isChart && (
+        <div
+          ref={resizeRef}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            handleResizeStart(e);
+          }}
+          className="absolute bottom-0 right-0 cursor-nwse-resize opacity-0 transition-opacity group-hover:opacity-100 z-40 p-2 bg-background/80 rounded-tl-md"
+          style={{ cursor: isResizing ? "nwse-resize" : "nwse-resize" }}
+          title="Drag to resize chart width"
+        >
+          <MoveDiagonal2 className="h-4 w-4 text-muted-foreground" />
+        </div>
       )}
       {isExpanded && (
         <div className="mt-4 border-t pt-4 transition-all duration-200">
@@ -864,6 +1001,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
                   expandedSqlChartId={expandedSqlChartId}
                   onToggleSql={handleToggleSql}
                   onSqlUpdate={handleSqlUpdate}
+                  totalColumns={columns}
                 />
               );
             })}

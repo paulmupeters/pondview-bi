@@ -104,6 +104,13 @@ export const configSchema = z
       .string()
       .describe("Label to display alongside a reference line if rendered")
       .optional(),
+    colSpan: z
+      .number()
+      .int()
+      .min(1)
+      .max(6)
+      .describe("Number of grid columns this chart should span")
+      .optional(),
   })
   .describe("Chart configuration object");
 
