@@ -20,6 +20,7 @@ export async function runQuery({
   signal,
 }: RunQueryOptions): Promise<RunQueryResult> {
   const trimmedSql = sql.trim();
+
   if (!trimmedSql) {
     throw new Error("SQL query is required");
   }

@@ -16,6 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
+import { runQuery } from "@/lib/sql/run-query";
 import type { Result } from "@/lib/types";
 
 type DuckdbReplProps = {
@@ -31,12 +32,14 @@ type DuckdbReplProps = {
   onConsoleApiChangeAction?: (api: SqlConsoleApi | null) => void;
   onAddToChatAction?: (payload: SqlAnalysisData) => void;
   inlineResults?: boolean;
-  onResultChangeAction?: (result: {
-    sql: string;
-    rows: Record<string, unknown>[];
-    columns: { name: string; type?: string }[];
-    durationMs: number;
-  } | null) => void;
+  onResultChangeAction?: (
+    result: {
+      sql: string;
+      rows: Record<string, unknown>[];
+      columns: { name: string; type?: string }[];
+      durationMs: number;
+    } | null,
+  ) => void;
 };
 
 const HISTORY_KEY = "bi.repl.history";
@@ -63,13 +66,18 @@ export function DuckdbRepl({
 
   const executeQuery: ExecuteQueryFn = async ({ sql, signal }) => {
     if (onRunSqlAction) {
-      return onRunSqlAction({ sql, dbIdentifier: selectedDbIdentifier, signal });
+      return onRunSqlAction({
+        sql,
+        dbIdentifier: selectedDbIdentifier,
+        signal,
+      });
     }
-
-    return createDuckDbExecuteQuery({
+    return runQuery({
+      sql,
       dbIdentifier: selectedDbIdentifier,
       config: httpConfig,
-    })({ sql, signal });
+      signal,
+    });
   };
 
   const handleShareResult = useCallback(() => {

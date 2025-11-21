@@ -49,7 +49,9 @@ export function ConnectedDataPanel({
   };
 
   const getDbIdentifier = (entry: (typeof connectedTables)[0]): string => {
-    return entry.attachAs || `${entry.type}:${entry.databasePath}`;
+    // Use databasePath as the identifier for queries, not attachAs
+    // attachAs is only for display and SQL table references
+    return entry.databasePath;
   };
 
   const getDbKey = (entry: (typeof connectedTables)[0]): string => {
@@ -57,9 +59,7 @@ export function ConnectedDataPanel({
   };
 
   const getDbDisplayName = (entry: (typeof connectedTables)[0]): string => {
-    if (entry.attachAs) {
-      return entry.attachAs;
-    }
+
     const parts: string[] = [];
     if (entry.schema) parts.push(entry.schema);
     if (entry.table) parts.push(entry.table);
@@ -73,7 +73,7 @@ export function ConnectedDataPanel({
     entry: (typeof connectedTables)[0],
     tableName: string,
   ) => {
-    const schemaPrefix = entry.attachAs || entry.schema;
+    const schemaPrefix = entry.schema;
     const qualifiedName = schemaPrefix
       ? `${schemaPrefix}.${tableName}`
       : tableName;
@@ -105,7 +105,8 @@ export function ConnectedDataPanel({
           const dbKey = getDbKey(entry);
           const dbIdentifier = getDbIdentifier(entry);
           const dbDisplayName = getDbDisplayName(entry);
-          const isSelected = selectedDb === dbIdentifier;
+          // Check both databasePath and attachAs for backward compatibility
+          const isSelected = selectedDb === dbIdentifier || selectedDb === entry.attachAs;
           const isExpanded = expandedDbs.has(dbKey);
           const hasTables =
             (entry.tables && entry.tables.length > 0) || entry.table;

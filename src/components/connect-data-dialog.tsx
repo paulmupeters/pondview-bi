@@ -348,9 +348,8 @@ export function ConnectDataDialog({
           await client.insertJSONRows(selectedSchema, t, rows);
         }
       }
-      console.log("handleAddTable: appending new entry");
+
       const aliasBase =
-        tableDescription.trim() ||
         selectedSchema.trim() ||
         selectedDatabase ||
         "source";

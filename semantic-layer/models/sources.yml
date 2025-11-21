@@ -5,6 +5,6 @@ sources:
     connection:
       type: motherduck
       identifier: md:my_db
-      alias: unicorns_data
+      alias: just_a_dataset_with_unicorns
       readOnly: false
       duckdbExtension: motherduck

@@ -7,7 +7,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { ChartBar, ChevronLeft, ChevronRight, Table } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { runSqlAndGetRowObjectsJson } from "@/actions/queries";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { runQuery } from "@/lib/sql/run-query";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ChartView } from "./sql-analysis-display/chart-view";
@@ -62,26 +62,26 @@ export function SqlAnalysisDisplay({
     setIsSqlExpanded((prev) => !prev);
   };
 
-  const handleExecute = () => {
+  const handleExecute = async () => {
     const queryToExecute = query || data?.query || "";
-    const dbIdentifier = data?.dbIdentifier || "md:my_db";
 
-    runSqlAndGetRowObjectsJson(dbIdentifier, queryToExecute).then((rows) => {
-      console.log("Rows:", rows);
 
-      if (rows.length > 0) {
-        const columns = Object.keys(rows[0]).map((key) => ({
-          name: key,
-        }));
-        setExecutedColumns(columns);
-        setExecutedRows(rows);
-      } else {
-        setExecutedColumns([]);
-        setExecutedRows([]);
-      }
-    });
+    try {
+      const result = await runQuery({
+        sql: queryToExecute,
+        dbIdentifier: data?.dbIdentifier,
+      });
+
+      setExecutedColumns(result.columns);
+      // Cast to Result[] since the API returns compatible data
+      setExecutedRows(result.rows as Result[]);
+    } catch (error) {
+      console.error("Query execution failed:", error);
+      // Reset to empty state on error
+      setExecutedColumns([]);
+      setExecutedRows([]);
+    }
   };
-
 
   const handleClear = () => {
     setQuery(null);
@@ -246,7 +246,7 @@ export function SqlAnalysisDisplay({
     const totalRows =
       resolvedRows.length > 0
         ? resolvedRows.length
-        : data?.rowCount ?? resolvedRows.length;
+        : (data?.rowCount ?? resolvedRows.length);
 
     // Determine visual type based on active view and configuration/data shape
     let visualType: "table" | "chart" | "card" = "table";
@@ -320,9 +320,11 @@ export function SqlAnalysisDisplay({
   // - If `data` is initial (e.g. from prompt input wrapper), we are interactive -> YES Clear button (once we have results).
   //
   // The `executedRows` state being non-null implies the user has run a query interactively in this session.
-  const isInteractive = executedRows !== null || (data?.stage === "initial");
+  const isInteractive = executedRows !== null || data?.stage === "initial";
 
-  const showClearButton = isInteractive && (executedRows !== null || (data && data.stage !== "complete"));
+  const showClearButton =
+    isInteractive &&
+    (executedRows !== null || (data && data.stage !== "complete"));
 
   return (
     <div className={cn("space-y-6 w-full", className)}>
@@ -436,34 +438,38 @@ export function SqlAnalysisDisplay({
         </div>
       )}
 
-      {(data || (effectiveStage === "initial" && activeView === "chart")) && activeView === "chart" && (() => {
-        const dbIdentifier = data?.dbIdentifier;
-        const isSqlExpandedInitial = data?.isSqlExpandedInitial;
-        return (
-          <ChartView
-            data={data ?? {
-              stage: "initial",
-              progress: 0,
-              executionTime: 0,
-              rowCount: 0,
-              columns: [],
-              rows: [],
-              dbIdentifier,
-              visualType: "chart",
-              isSqlExpandedInitial: isSqlExpandedInitial ?? false,
-            }}
-          selectedForChart={selectedForChart}
-          selectedForCard={selectedForCard}
-          chartConfig={chartConfig}
-          cardConfig={cardConfig}
-          columnsForDialog={columnsForDialog}
-          onChartConfigChange={setChartConfig}
-          onCardConfigChange={setCardConfig}
-          renderSqlControls={renderControls}
-          renderSqlEditor={renderEditor}
-          />
-        );
-      })()}
+      {(data || (effectiveStage === "initial" && activeView === "chart")) &&
+        activeView === "chart" &&
+        (() => {
+          const dbIdentifier = data?.dbIdentifier;
+          const isSqlExpandedInitial = data?.isSqlExpandedInitial;
+          return (
+            <ChartView
+              data={
+                data ?? {
+                  stage: "initial",
+                  progress: 0,
+                  executionTime: 0,
+                  rowCount: 0,
+                  columns: [],
+                  rows: [],
+                  dbIdentifier,
+                  visualType: "chart",
+                  isSqlExpandedInitial: isSqlExpandedInitial ?? false,
+                }
+              }
+              selectedForChart={selectedForChart}
+              selectedForCard={selectedForCard}
+              chartConfig={chartConfig}
+              cardConfig={cardConfig}
+              columnsForDialog={columnsForDialog}
+              onChartConfigChange={setChartConfig}
+              onCardConfigChange={setCardConfig}
+              renderSqlControls={renderControls}
+              renderSqlEditor={renderEditor}
+            />
+          );
+        })()}
 
       {data && activeView === "table" && (
         <div className="group relative">
