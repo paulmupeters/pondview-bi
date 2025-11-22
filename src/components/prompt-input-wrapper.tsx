@@ -44,7 +44,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useConnectedTables } from "@/hooks/use-connected-tables";
+import { useMaterializedTables } from "@/hooks/use-materialized-tables";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
+import {
+  isMaterializedTableIdentifier,
+} from "@/lib/duckdb/materialized-tables";
 import { cn } from "@/lib/utils";
 
 export type PromptMode = "ai" | "sql" | "chart";
@@ -292,6 +297,9 @@ export function PromptInputWrapper({
     durationMs: number;
   } | null>(null);
 
+  const connectedTables = useConnectedTables();
+  const { tables: materializedTables } = useMaterializedTables();
+
   const promptMode = mode ?? internalMode;
 
   useEffect(() => {
@@ -344,17 +352,47 @@ export function PromptInputWrapper({
 
   const content = aiButtonLabel;
 
-  // Get display name for selected database
-  const getSelectedDbLabel = (): string | undefined => {
-    if (!selectedDb) return undefined;
-    // Try to extract a readable name from the identifier
-    // Format is usually "type:path" or "attachAs"
+  // Get display name for selected database - matches ConnectedDataPanel logic
+  const getSelectedDbLabel = (): string => {
+    // If no database selected, default to Materialized (HTTP connection)
+    if (!selectedDb) {
+      return materializedTables.length > 0
+        ? `Materialized (${materializedTables.length})`
+        : "Materialized";
+    }
+
+    // Check if it's a materialized table identifier
+    if (isMaterializedTableIdentifier(selectedDb)) {
+      return materializedTables.length > 0
+        ? `Materialized (${materializedTables.length})`
+        : "Materialized";
+    }
+
+    // Find matching connected table and use same display logic as ConnectedDataPanel
+    const matchingEntry = connectedTables.find((entry) => {
+      // Match by databasePath (same as getDbIdentifier in ConnectedDataPanel)
+      return entry.databasePath === selectedDb || entry.attachAs === selectedDb;
+    });
+
+    if (matchingEntry) {
+      // Use same logic as getDbDisplayName in ConnectedDataPanel
+      const parts: string[] = [];
+      if (matchingEntry.schema) parts.push(matchingEntry.schema);
+      if (matchingEntry.table) parts.push(matchingEntry.table);
+      if (parts.length === 0) {
+        parts.push(matchingEntry.databasePath);
+      }
+      return `${parts.join(".")} (${matchingEntry.type})`;
+    }
+
+  // Fallback: try to extract a readable name from the identifier
     if (selectedDb.includes(":")) {
       const [type, ...pathParts] = selectedDb.split(":");
       const path = pathParts.join(":");
       const fileName = path.split("/").pop() || path.split("\\").pop() || path;
       return `${fileName} (${type})`;
     }
+
     return selectedDb;
   };
 
@@ -398,7 +436,7 @@ export function PromptInputWrapper({
                   mode="sidebar"
                   onInsertTable={handleInsertTableIntoSql}
                 />
-                <div className="flex-1 flex flex-col gap-3 p-3 overflow-y-auto min-w-0 min-h-0">
+                <div className="flex-1 flex flex-col gap-3 p-3 overflow-y-auto min-w-0 min-h-0 justify-center h-full">
                   <DuckdbRepl
                     selectedDbLabel={getSelectedDbLabel()}
                     selectedDbIdentifier={selectedDb}

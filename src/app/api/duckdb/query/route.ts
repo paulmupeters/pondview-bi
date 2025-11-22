@@ -24,7 +24,6 @@ export async function POST(req: NextRequest) {
     // If dbIdentifier is provided, use local/MotherDuck connection
     if (body.dbIdentifier) {
       const dbPath = resolveDbPath(body.dbIdentifier);
-      console.log("dbPath-----------s>> ", dbPath);
       const rows = await runSqlAndGetRowObjectsJson(dbPath, body.sql);
       return Response.json({ rows });
     }
@@ -35,11 +34,11 @@ export async function POST(req: NextRequest) {
       body.sql,
       req.signal
     );
-
     return Response.json({ rows });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : String(error ?? "");
+    console.error("error-----------s>> ", error);
     return Response.json({ error: message }, { status: 500 });
   }
 }

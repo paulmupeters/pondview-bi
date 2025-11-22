@@ -1,10 +1,10 @@
+import { join } from "node:path";
 import type { NextRequest } from "next/server";
 import {
   addDimension,
   removeDimension,
 } from "@/../semantic-layer/model-updater";
 import type { DimensionDef } from "@/../semantic-layer/types";
-import { join } from "node:path";
 import { materializeSemanticLayer } from "@/lib/materialization/semantic-layer";
 
 export const runtime = "nodejs";
@@ -87,4 +87,3 @@ export async function DELETE(
     );
   }
 }
-

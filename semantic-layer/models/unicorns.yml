@@ -17,12 +17,12 @@ dimensions:
   - name: Industry
     sql: unicorns.Industry
     type: string
-  - name: unnamed
-    sql: ''
-    type: string
   - name: Valuation
     sql: unicorns.Valuation
     type: string
+  - name: as
+    sql: '112'
+    type: number
 measures:
   - name: num_unicorns
     agg: count

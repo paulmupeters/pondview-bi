@@ -125,7 +125,7 @@ export function DuckdbRepl({
   }, [internalApi, onConsoleApiChangeAction]);
 
   return (
-    <div className="space-y-3 w-full">
+    <div className="w-full h-full">
       {lastResult && (
         <div className="flex items-center gap-2">
           {canShare && (

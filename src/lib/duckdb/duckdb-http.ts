@@ -151,9 +151,24 @@ export async function executeDuckDbHttpQuery(
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error');
+    const errorText = await response.text().catch(() => "Unknown error");
+
+    // Handle DETACH DATABASE IF EXISTS gracefully - if database doesn't exist, treat as success
+    // DuckDB HTTP server returns 500 with "database not found" for DETACH DATABASE IF EXISTS
+    // when the database doesn't exist, but semantically this should be a no-op
+    const sqlUpper = sql.trim().toUpperCase();
+    if (
+      (sqlUpper.startsWith("DETACH DATABASE IF EXISTS") ||
+        sqlUpper.startsWith("DETACH IF EXISTS")) &&
+      (errorText.includes("database not found") ||
+        errorText.includes("Failed to detach database"))
+    ) {
+      // Return empty result set (successful no-op)
+      return [];
+    }
+
     throw new Error(
-      `DuckDB HTTP query failed: ${response.status} ${response.statusText}. ${errorText}`,
+      `DuckDB HTTP query failed: ${response.status} ${response.statusText}. ${errorText}`
     );
   }
 

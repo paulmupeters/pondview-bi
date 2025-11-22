@@ -33,7 +33,10 @@ export function quoteIdentifier(value: string): string {
 
 function deriveAlias(connection: SourceConnectionConfig): string {
   if (connection.alias) {
-    return connection.alias;
+    // Sanitize the explicitly provided alias to ensure it's a valid DuckDB identifier
+    const sanitized = connection.alias.replace(/[^A-Za-z0-9_]/g, "_");
+    const withoutLeadingUnderscore = sanitized.replace(/^_+/, "");
+    return withoutLeadingUnderscore || "source";
   }
 
   const identifier = connection.identifier;
@@ -88,7 +91,9 @@ export function buildDetachStatement(
   alias: string,
   options: { ifExists?: boolean } = {}
 ): string {
-  const keyword = options.ifExists ? "DETACH IF EXISTS" : "DETACH";
+  const keyword = options.ifExists
+    ? "DETACH DATABASE IF EXISTS"
+    : "DETACH DATABASE";
   return `${keyword} ${quoteIdentifier(alias)};`;
 }
 

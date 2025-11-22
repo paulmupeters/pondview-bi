@@ -318,11 +318,23 @@ export function SqlConsole({
     }
   };
 
+  const displayDbLabel = selectedDbLabel || "HTTP Connection (Materialized Data)";
+
   return (
-    <div className={cn("flex w-full flex-col gap-3", className)}>
-      <div className="rounded-sm border border-border bg-card transition-colors">
+    <div className={cn("flex w-full h-full flex-col gap-3", className)}>
+      <div className="rounded-sm border border-border bg-card transition-colors h-full">
         <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4">
-          <div className="flex-1">
+          <div className="flex-1 flex flex-col gap-2">
+            {displayDbLabel && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground font-medium">
+                  Database:
+                </span>
+                <span className="text-xs px-2 py-1 rounded-md bg-muted/50 text-muted-foreground font-mono border border-border">
+                  {displayDbLabel}
+                </span>
+              </div>
+            )}
             <PromptInputTextarea
               ref={textareaRef}
               value={sql}
@@ -364,7 +376,7 @@ export function SqlConsole({
         </div>
       )}
       {error && (
-        <div className="border border-destructive/60 bg-destructive/20 px-3 py-2 text-xs text-destructive font-mono rounded-sm dark:border-destructive/60 dark:bg-destructive/20 dark:text-destructive">
+        <div className="border border-destructive/60 bg-destructive/20 px-3 py-2 text-xs text-destructive font-mono rounded-sm dark:border-destructive/60 dark:bg-destructive/20 dark:text-destructive z-20">
           ERROR: {error}
         </div>
       )}

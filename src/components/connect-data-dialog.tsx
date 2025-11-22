@@ -56,54 +56,54 @@ const DATABASE_OPTIONS: Array<{
       disabled: true,
       description: "Coming soon",
     },
-    {
-      label: "Databricks",
-      value: "databricks",
-      disabled: true,
-      description: "Coming soon",
-    },
+    // {
+    //   label: "Databricks",
+    //   value: "databricks",
+    //   disabled: true,
+    //   description: "Coming soon",
+    // },
     {
       label: "Supabase",
       value: "supabase",
       disabled: true,
       description: "Coming soon",
     },
-    {
-      label: "DuckLake",
-      value: "ducklake",
-      disabled: true,
-      description: "Coming soon",
-    },
-    {
-      label: "Apache Iceberg",
-      value: "iceberg",
-      disabled: true,
-      description: "Coming soon",
-    },
-    {
-      label: "Delta Lake",
-      value: "delta_lake",
-      disabled: true,
-      description: "Coming soon",
-    },
-    {
-      label: "Google Sheets",
-      value: "google_sheets",
-      disabled: true,
-      description: "Coming soon",
-    },
-    {
-      label: "SharePoint",
-      value: "sharepoint",
-      disabled: true,
-      description: "Coming soon",
-    },
-    {
-      label: "AWS",
-      value: "aws",
-      disabled: true,
-      description: "Coming soon",
-  },
+    //   {
+    //     label: "DuckLake",
+    //     value: "ducklake",
+    //     disabled: true,
+    //     description: "Coming soon",
+    //   },
+    //   {
+    //     label: "Apache Iceberg",
+    //     value: "iceberg",
+    //     disabled: true,
+    //     description: "Coming soon",
+    //   },
+    //   {
+    //     label: "Delta Lake",
+    //     value: "delta_lake",
+    //     disabled: true,
+    //     description: "Coming soon",
+    //   },
+    //   {
+    //     label: "Google Sheets",
+    //     value: "google_sheets",
+    //     disabled: true,
+    //     description: "Coming soon",
+    //   },
+    //   {
+    //     label: "SharePoint",
+    //     value: "sharepoint",
+    //     disabled: true,
+    //     description: "Coming soon",
+    //   },
+    //   {
+    //     label: "AWS",
+    //     value: "aws",
+    //     disabled: true,
+    //     description: "Coming soon",
+    // },
   {
     label: "MySQL",
     value: "mysql",
@@ -150,7 +150,6 @@ export function ConnectDataDialog({
   const { theme } = useTheme();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [selectedDatabase, setSelectedDatabase] = useState<DatabaseType>(null);
-  const [chacheInDuckdbWasm, setChacheInDuckdbWasm] = useState(false);
   const [databasePath, setDatabasePath] = useState("");
   const [motherduckToken, setMotherduckToken] = useState("");
   const [schemas, setSchemas] = useState<string[]>([]);
@@ -228,22 +227,6 @@ export function ConnectDataDialog({
         return "/Postgresql_elephant.png";
       case "snowflake":
         return "/sources/snowflake.svg";
-      case "databricks":
-        return "/sources/Databricks.svg";
-      case "supabase":
-        return "/sources/supabase.svg";
-      case "ducklake":
-        return "/sources/DuckLake_Logo-horizontal.svg";
-      case "iceberg":
-        return "/sources/Apache_Iceberg_Logo.svg";
-      case "delta_lake":
-        return "/sources/delta_lake.png";
-      case "google_sheets":
-        return "/sources/Google_Sheets.svg";
-      case "sharepoint":
-        return "/sources/sharepoint.svg";
-      case "aws":
-        return isDarkMode ? "/aws_dark.svg" : "/aws_light.svg";
       case "mysql":
         return isDarkMode ? "/mysql-icon-dark.svg" : "/mysql-icon-light.svg";
       case "web":
@@ -328,36 +311,12 @@ export function ConnectDataDialog({
           dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
         }
       }
-      // Ingest selected tables into local DuckDB-Wasm database (row-major JSON)
-      if (selectedTables.size > 0 && chacheInDuckdbWasm) {
-        const client = new DuckdbWasmClient();
-        setChacheInDuckdbWasm(true)
-        for (const t of selectedTables) {
-          console.log("handleAddTable: fetching rows for ", selectedSchema, t);
-          const url = new URL("/api/tables", window.location.origin);
-          url.searchParams.set("id", dbPath);
-          url.searchParams.set("schema", selectedSchema);
-          url.searchParams.set("table", t);
-          const res = await fetch(url.toString());
-          if (!res.ok) {
-            throw new Error(`Failed to fetch rows for ${selectedSchema}.${t}`);
-          }
-          const { rows } = (await res.json()) as { rows: unknown[] };
-          // Insert into schema.table format (e.g., main.unicorns)
-          console.log("handleAddTable: inserting rows for ", selectedSchema, t);
-          await client.insertJSONRows(selectedSchema, t, rows);
-        }
-      }
 
-      const aliasBase =
-        selectedSchema.trim() ||
-        selectedDatabase ||
-        "source";
-      const attachAs = aliasBase
-        .trim()
-        .replace(/[^A-Za-z0-9_]/g, "_")
-        .replace(/^_+/g, "")
-        .replace(/_+/g, "_");
+      const attachAs = dbPath
+      // .trim()
+      // .replace(/[^A-Za-z0-9_]/g, "_")
+      // .replace(/^_+/g, "")
+      // .replace(/_+/g, "_");
       const sanitizedAlias =
         attachAs && !/^[0-9]/.test(attachAs)
           ? attachAs
@@ -390,7 +349,6 @@ export function ConnectDataDialog({
     selectedSchema,
     selectedTables,
     tableDescription,
-    chacheInDuckdbWasm,
   ]);
 
   const isAddDisabled = useMemo(() => {
