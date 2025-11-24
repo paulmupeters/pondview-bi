@@ -1,6 +1,6 @@
+import { join } from "node:path";
 import type { NextRequest } from "next/server";
 import { loadModelsFromDirectory } from "@/../semantic-layer/model-loader";
-import { join } from "node:path";
 
 export const runtime = "nodejs";
 
@@ -20,4 +20,3 @@ export async function GET(_req: NextRequest) {
     );
   }
 }
-

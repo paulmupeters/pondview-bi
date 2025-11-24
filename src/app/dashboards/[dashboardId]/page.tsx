@@ -332,7 +332,7 @@ function SortableChartCard({
         rows.length > 0 &&
         !isCardConfig(config) &&
         !isTableConfig(config) ? (
-        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-20">
           <ChartConfigDialog
             trigger={
               <button

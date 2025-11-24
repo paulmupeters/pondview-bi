@@ -11,8 +11,9 @@ import type { Result } from "@/lib/types";
 
 export const runSqlAndGetRowObjectsJson = async (
   dbIdentifier: string,
-  sql: string
-): Promise<Result[]> => runSqlNormalized(dbIdentifier, sql);
+  sql: string,
+  useHttp?: boolean
+): Promise<Result[]> => runSqlNormalized(dbIdentifier, sql, useHttp);
 
 export const getTables = async (dbIdentifier: string) =>
   getTablesLib(dbIdentifier);

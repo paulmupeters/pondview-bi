@@ -42,7 +42,8 @@ export default function Home() {
     <div className="h-full w-full flex items-center justify-center bg-background p-4 overflow-hidden">
       <div className="w-full max-w-7xl h-full flex flex-col font-mono justify-between py-4">
         <div className="flex items-center justify-center">
-          <h1 className="text-5xl font-bold tracking-wider">Data Assistant</h1>
+
+          <h1>Pondview</h1>
         </div>
 
         <div className="p-2 flex gap-2 py-2 justify-center">

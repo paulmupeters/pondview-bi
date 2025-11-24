@@ -1,15 +1,10 @@
-import { join } from "node:path";
 import type { NextRequest } from "next/server";
-import { loadModelsFromDirectory } from "@/../semantic-layer/model-loader";
 import { compileToDuckdb } from "@/../semantic-layer/query-builder";
-import type { DataModel, Filter, QueryAST } from "@/../semantic-layer/types";
+import type { Filter, QueryAST } from "@/../semantic-layer/types";
 import { runSqlNormalized } from "@/lib/db/router";
 import { listChartsByDashboard } from "@/lib/repositories/dashboard";
+import { loadMaterializedModel } from "@/lib/semantic-layer/load-materialized-model";
 import type { Result } from "@/lib/types";
-import {
-  applyMaterializationsToDataModel,
-  listMaterializations,
-} from "@/lib/materialization/semantic-layer";
 
 export const runtime = "nodejs";
 
@@ -40,29 +35,9 @@ export async function GET(
     }
   }
 
-  // Load semantic models (best-effort)
-  const modelsDir = join(process.cwd(), "semantic-layer", "models");
-  let dataModel: DataModel | null = null;
-  try {
-    dataModel = loadModelsFromDirectory(modelsDir);
-    try {
-      const materializations = await listMaterializations();
-      if (materializations.length > 0) {
-        dataModel = applyMaterializationsToDataModel(
-          dataModel,
-          materializations
-        );
-      }
-    } catch (materializationError) {
-      console.warn(
-        "[Dashboard Data] Materialization metadata unavailable:",
-        materializationError
-      );
-    }
-  } catch (error) {
-    console.error("[Dashboard Data] Failed to load models:", error);
-    dataModel = null;
-  }
+  // Load semantic models and ensure they are materialized
+  // This checks for changes and materializes explores if needed
+  const dataModel = await loadMaterializedModel();
 
   const charts = await listChartsByDashboard(dashboardId);
 
@@ -103,9 +78,13 @@ export async function GET(
           }
         }
 
+        // Use HTTP connection for materialized queries
+        const useHttp = Boolean(chart.semanticQueryJson && dataModel);
+        console.log("useHttp", useHttp);
         const rows = await runSqlNormalized(
           chart.dbIdentifier || "md:my_db",
-          sqlToExecute
+          sqlToExecute,
+          useHttp
         );
         return { ...chart, rows, filtersApplied };
       } catch (executionError) {
