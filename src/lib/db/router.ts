@@ -2,21 +2,13 @@ import type { DbAdapter } from "@/lib/db/driver";
 import * as duckMeta from "@/lib/duckdb/metadata";
 import * as duckQuery from "@/lib/duckdb/query";
 import * as duckQueryHttp from "@/lib/duckdb/query-http";
-import * as pgMeta from "@/lib/postgres/metadata";
-import * as pgQuery from "@/lib/postgres/query";
 
+// All queries now go through DuckDB, which handles postgres URIs via the postgres extension
 const duckdbAdapter: DbAdapter = {
   runSqlNormalized: duckQuery.runSqlNormalized,
   getSchemas: duckMeta.getSchemas,
   getTablesForSchema: duckMeta.getTablesForSchema,
   getTables: duckMeta.getTables,
-};
-
-const postgresAdapter: DbAdapter = {
-  runSqlNormalized: pgQuery.runSqlNormalized,
-  getSchemas: pgMeta.getSchemas,
-  getTablesForSchema: pgMeta.getTablesForSchema,
-  getTables: pgMeta.getTables,
 };
 
 // HTTP adapter for DuckDB - only supports queries, not metadata operations
@@ -34,17 +26,6 @@ const httpDuckdbAdapter: DbAdapter = {
   },
 };
 
-function selectAdapter(dbIdentifier: string): DbAdapter {
-  const id = (dbIdentifier ?? "").trim();
-  if (
-    id.startsWith("postgres://") ||
-    id.startsWith("postgresql://") ||
-    id.startsWith("pg:")
-  )
-    return postgresAdapter;
-  return duckdbAdapter;
-}
-
 export const runSqlNormalized = (
   id: string,
   sql: string,
@@ -53,9 +34,9 @@ export const runSqlNormalized = (
   if (useHttp) {
     return httpDuckdbAdapter.runSqlNormalized(id, sql);
   }
-  return selectAdapter(id).runSqlNormalized(id, sql);
+  return duckdbAdapter.runSqlNormalized(id, sql);
 };
-export const getSchemas = (id: string) => selectAdapter(id).getSchemas(id);
+export const getSchemas = (id: string) => duckdbAdapter.getSchemas(id);
 export const getTablesForSchema = (id: string, s: string, l?: number) =>
-  selectAdapter(id).getTablesForSchema(id, s, l);
-export const getTables = (id: string) => selectAdapter(id).getTables(id);
+  duckdbAdapter.getTablesForSchema(id, s, l);
+export const getTables = (id: string) => duckdbAdapter.getTables(id);

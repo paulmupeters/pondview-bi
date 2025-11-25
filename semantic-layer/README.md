@@ -58,6 +58,18 @@ The tracking table can be queried directly or through the exported `listMaterial
 
 Options accept an optional DuckDB HTTP config if you need to override the global environment variables.
 
+## Query Execution Architecture
+
+All SQL queries (including connections to other databases like PostgreSQL) are now executed through DuckDB. When a PostgreSQL URI is detected (e.g., `postgres://...` or `pg:ALIAS`), DuckDB automatically:
+
+1. Installs and loads the `postgres` extension
+2. Attaches the PostgreSQL database using `ATTACH ... TYPE postgres`
+3. Rewrites the SQL query to reference tables through the attached database alias
+4. Executes the query
+5. Detaches the database
+
+This unified approach means all queries benefit from DuckDB's query engine and extensions. The postgres adapter (`src/lib/postgres/`) is no longer used for query execution, though the files remain for reference.
+
 ## Adding new connectors
 
 To support an additional backend:
@@ -65,6 +77,7 @@ To support an additional backend:
 1. Extend `DEFAULT_EXTENSION_BY_SOURCE` and (if needed) `ATTACH_TYPE_BY_SOURCE` in `src/lib/duckdb/duckdb-attachments.ts` with the required extension name and attach type.
 2. Ensure `connectedTables` captures the DSN/identifier and sets `type` (and optionally `duckdbExtension`) accordingly.
 3. Provide any credentials/tokens through the `databasePath`/`identifier` fields (for MotherDuck you can continue to append `motherduck_token=...`).
+4. Update `detectPostgresConnection` in `src/lib/duckdb/query.ts` and `src/lib/duckdb/metadata.ts` to detect your new connection type, or create a similar detection function.
 
 Once those pieces are in place, the materializer will automatically install the extension, attach the database, and refresh the materialized table on the next model edit.
 
