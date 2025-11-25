@@ -1,4 +1,3 @@
-```markdown
 # DuckDB Extension Connections
 
 This project now routes all SQL traffic through DuckDB, even when the identifier points to an external data source. DuckDB installs the proper extension (postgres, mysql, Google Sheets, etc.), attaches the database, rewrites the SQL to reference the attached alias, executes the query, and finally detaches. This keeps the runtime in one place while still allowing the rich extension ecosystem.

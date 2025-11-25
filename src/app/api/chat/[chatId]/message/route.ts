@@ -1,4 +1,4 @@
-import { appendAssistantMessage } from "@/lib/repositories/chat";
+import { appendAssistantMessage, ensureChat } from "@/lib/repositories/chat";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +21,12 @@ export async function POST(
       );
     }
 
+    const now = createdAt || Date.now();
+
+    // Ensure the chat exists before adding the message
+    // This handles the case when adding SQL/Chart results from the home page
+    await ensureChat(chatId, "SQL Query Results", now);
+
     // Serialize parts to JSON string if provided
     const partsJson = parts ? JSON.stringify(parts) : undefined;
 
@@ -30,7 +36,7 @@ export async function POST(
       messageId,
       content || "",
       partsJson,
-      createdAt || Date.now(),
+      now,
     );
 
     return NextResponse.json({ success: true });

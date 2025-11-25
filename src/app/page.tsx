@@ -1,9 +1,12 @@
 "use client";
 
 import { nanoid } from "nanoid";
+import type { UIMessage } from "ai";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
+import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
+import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import {
   PromptInputWrapper,
   type PromptMode,
@@ -19,6 +22,7 @@ const EXAMPLE_COMMANDS = [
 export default function Home() {
   const [mode, setMode] = useState<PromptMode>("ai");
   const router = useRouter();
+  const executeSqlArtifactType = `data-artifact-${ExecuteSqlArtifact.id}`;
 
   const handleSubmit = useCallback(
     (message: PromptInputMessage) => {
@@ -29,6 +33,70 @@ export default function Home() {
       router.push(`/${chatId}?q=${encodedQuery}`);
     },
     [router],
+  );
+
+  const handleAddSqlResultToChat = useCallback(
+    async (payload: SqlAnalysisData) => {
+      const now = Date.now();
+      const normalizedPayload: SqlAnalysisData = {
+        stage: payload.stage ?? "complete",
+        progress: payload.progress ?? 1,
+        query: payload.query ?? "",
+        dbIdentifier: payload.dbIdentifier,
+        executionTime: payload.executionTime,
+        rowCount:
+          payload.rowCount ??
+          payload.rows?.length ??
+          payload.summary?.totalRows ??
+          0,
+        columns: payload.columns ?? [],
+        rows: payload.rows ?? [],
+        visualType: payload.visualType ?? "table",
+        chartConfig: payload.chartConfig,
+        cardConfig: payload.cardConfig,
+        summary: payload.summary ?? {
+          totalRows: payload.rows?.length ?? 0,
+          executionTimeMs: payload.executionTime,
+          insights: [],
+        },
+      };
+
+      const chatId = nanoid();
+      const messageId = `sql-${now}`;
+      const artifactId = `sql-artifact-${now}`;
+      const artifactPart = {
+        type: executeSqlArtifactType as `data-${string}`,
+        data: {
+          id: artifactId,
+          type: ExecuteSqlArtifact.id,
+          version: 1,
+          status: "complete",
+          progress: 1,
+          payload: normalizedPayload,
+          createdAt: now,
+          updatedAt: now,
+        },
+      } as unknown as UIMessage["parts"][number];
+
+      // Persist to database
+      try {
+        await fetch(`/api/chat/${chatId}/message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messageId,
+            content: "",
+            parts: [artifactPart],
+            createdAt: now,
+          }),
+        });
+        // Navigate to the new chat after persisting
+        router.push(`/${chatId}`);
+      } catch (error) {
+        console.error("Failed to persist message:", error);
+      }
+    },
+    [router, executeSqlArtifactType],
   );
 
   const handleExampleClick = useCallback(
@@ -66,6 +134,7 @@ export default function Home() {
             <div className="w-full max-w-5xl">
               <PromptInputWrapper
                 onSubmit={handleSubmit}
+                onAddSqlResultToChat={handleAddSqlResultToChat}
                 className="transition delay-150 duration-300 ease-in-out"
                 onHomePage={true}
                 mode={mode}
