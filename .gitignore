@@ -52,3 +52,5 @@ next-env.d.ts
 # semantic-layer
 semantic-layer/data
 semantic-layer/models
+
+landing/

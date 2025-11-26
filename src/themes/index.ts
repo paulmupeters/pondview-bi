@@ -1,5 +1,6 @@
 import * as defaultTheme from "./default";
 import * as monoGreenTheme from "./mono-green";
+import * as redTheme from "./red";
 
 export type Theme = {
   name: string;
@@ -17,6 +18,11 @@ export const themes: Record<string, Theme> = {
     name: monoGreenTheme.themeName,
     displayName: monoGreenTheme.themeDisplayName,
     css: monoGreenTheme.themeCss,
+  },
+  [redTheme.themeName]: {
+    name: redTheme.themeName,
+    displayName: redTheme.themeDisplayName,
+    css: redTheme.themeCss,
   },
 };
 
