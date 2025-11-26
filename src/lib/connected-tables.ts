@@ -5,6 +5,8 @@ export const CONNECTED_TABLES_UPDATED_EVENT = "connectedTablesUpdated";
 export type ConnectedTable = {
   type: string;
   databasePath: string;
+  // Friendly name for the database (e.g., "my_db" for MotherDuck, database name for Postgres)
+  databaseName?: string;
   // For backward compatibility keep `table` optional now
   table?: string;
   // New: allow storing schema instead of table
@@ -47,9 +49,12 @@ export function readConnectedTablesFromStorage(): ConnectedTable[] {
         maybeTables === undefined ||
         (Array.isArray(maybeTables) &&
           maybeTables.every((t) => typeof t === "string"));
+      const databaseName = (entry as any).databaseName;
       const attachAs = (entry as any).attachAs;
       const readOnly = (entry as any).readOnly;
       const duckdbExtension = (entry as any).duckdbExtension;
+      const databaseNameValid =
+        databaseName === undefined || typeof databaseName === "string";
       const attachValid =
         attachAs === undefined || typeof attachAs === "string";
       const readOnlyValid =
@@ -59,6 +64,7 @@ export function readConnectedTablesFromStorage(): ConnectedTable[] {
       return (
         tablesValid &&
         (hasTable || hasSchema) &&
+        databaseNameValid &&
         attachValid &&
         readOnlyValid &&
         duckdbExtensionValid
@@ -105,6 +111,7 @@ export async function updateSemanticLayerSources(
         tables: entry.tables,
         type: entry.type,
         databasePath: entry.databasePath,
+        databaseName: entry.databaseName,
         attachAs: entry.attachAs,
         readOnly: entry.readOnly,
         duckdbExtension: entry.duckdbExtension,
@@ -146,6 +153,7 @@ export async function appendConnectedTable(
         tables: entry.tables,
         type: entry.type,
         databasePath: entry.databasePath,
+        databaseName: entry.databaseName,
         attachAs: entry.attachAs,
         readOnly: entry.readOnly,
         duckdbExtension: entry.duckdbExtension,

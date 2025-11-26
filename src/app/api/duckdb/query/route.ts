@@ -2,10 +2,9 @@ import type { NextRequest } from "next/server";
 
 import {
   type HttpDuckDbConfig,
-  runSqlAndGetRowObjectsJson,
   runSqlAndGetRowObjectsJsonHttp,
 } from "@/lib/duckdb/duckdb-node";
-import { resolveDbPath } from "@/lib/duckdb/path";
+import { runSqlNormalized } from "@/lib/duckdb/query";
 
 export const runtime = "nodejs";
 
@@ -21,10 +20,10 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "SQL query is required" }, { status: 400 });
     }
 
-    // If dbIdentifier is provided, use local/MotherDuck connection
+    // If dbIdentifier is provided, use runSqlNormalized which handles
+    // Postgres attachments, MotherDuck, and local DuckDB connections
     if (body.dbIdentifier) {
-      const dbPath = resolveDbPath(body.dbIdentifier);
-      const rows = await runSqlAndGetRowObjectsJson(dbPath, body.sql);
+      const rows = await runSqlNormalized(body.dbIdentifier, body.sql);
       return Response.json({ rows });
     }
 

@@ -12,7 +12,10 @@ import { getSchemas, getTablesForSchema } from "@/actions/queries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { appendConnectedTable } from "@/lib/connected-tables";
-import { DuckdbWasmClient } from "@/lib/duckdb/duckdb-wasm-client";
+import {
+  buildPostgresConnectionString,
+  type PostgresUrlComponents,
+} from "@/lib/duckdb/path";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 
@@ -152,6 +155,13 @@ export function ConnectDataDialog({
   const [selectedDatabase, setSelectedDatabase] = useState<DatabaseType>(null);
   const [databasePath, setDatabasePath] = useState("");
   const [motherduckToken, setMotherduckToken] = useState("");
+  // Postgres-specific connection fields
+  const [postgresHost, setPostgresHost] = useState("");
+  const [postgresPort, setPostgresPort] = useState("5432");
+  const [postgresUser, setPostgresUser] = useState("");
+  const [postgresPassword, setPostgresPassword] = useState("");
+  const [postgresDatabase, setPostgresDatabase] = useState("");
+  const [postgresSslMode, setPostgresSslMode] = useState<string>("");
   const [schemas, setSchemas] = useState<string[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>("");
   const [schemaTablesPreview, setSchemaTablesPreview] = useState<string[]>([]);
@@ -166,6 +176,12 @@ export function ConnectDataDialog({
     setSelectedDatabase(null);
     setDatabasePath("");
     setMotherduckToken("");
+    setPostgresHost("");
+    setPostgresPort("5432");
+    setPostgresUser("");
+    setPostgresPassword("");
+    setPostgresDatabase("");
+    setPostgresSslMode("");
     setSchemas([]);
     setSelectedSchema("");
     setSchemaTablesPreview([]);
@@ -236,8 +252,43 @@ export function ConnectDataDialog({
     }
   };
 
+  // Build Postgres connection string from individual fields
+  const buildPostgresConnectionStringFromFields = useCallback((): string => {
+    const components: PostgresUrlComponents = {
+      host: postgresHost.trim() || "localhost",
+      port: parseInt(postgresPort.trim() || "5432", 10),
+      user: postgresUser.trim() || "postgres",
+      password: postgresPassword,
+      database: postgresDatabase.trim() || "postgres",
+      sslmode: postgresSslMode.trim() || undefined,
+    };
+    return buildPostgresConnectionString(components);
+  }, [postgresHost, postgresPort, postgresUser, postgresPassword, postgresDatabase, postgresSslMode]);
+
+  // Extract a friendly database name from the database path
+  const extractDatabaseName = useCallback((dbType: DatabaseType, dbPath: string): string => {
+    if (dbType === "postgres") {
+      // For Postgres, use the database name from the connection string
+      return postgresDatabase.trim() || "postgres";
+    } else if (dbType === "motherduck") {
+      // For MotherDuck, remove "md:" prefix and query parameters
+      const withoutPrefix = dbPath.startsWith("md:") ? dbPath.slice(3) : dbPath;
+      const withoutQuery = withoutPrefix.split("?")[0];
+      return withoutQuery.trim() || "motherduck";
+    } else {
+      // For other types, use the path or a default name
+      return dbPath.trim() || dbType || "database";
+    }
+  }, [postgresDatabase]);
+
   const handleConnectClick = useCallback(async () => {
-    if (!databasePath.trim()) {
+    // For Postgres, validate required fields
+    if (selectedDatabase === "postgres") {
+      if (!postgresHost.trim() || !postgresUser.trim() || !postgresDatabase.trim()) {
+        setErrorMessage("Please fill in all required Postgres connection fields (Host, Username, Database).");
+        return;
+      }
+    } else if (!databasePath.trim()) {
       setErrorMessage("Enter a database identifier before connecting.");
       return;
     }
@@ -247,13 +298,19 @@ export function ConnectDataDialog({
       setErrorMessage(null);
 
       // Build database path - prepend "md:" for MotherDuck and add token if provided
-      let dbPath = databasePath.trim();
-      if (selectedDatabase === "motherduck") {
+      // For Postgres, build connection string from individual fields
+      let dbPath: string;
+      if (selectedDatabase === "postgres") {
+        dbPath = buildPostgresConnectionStringFromFields();
+      } else if (selectedDatabase === "motherduck") {
+        dbPath = databasePath.trim();
         dbPath = `md:${dbPath}`;
         if (motherduckToken.trim()) {
           const encodedToken = encodeURIComponent(motherduckToken.trim());
           dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
         }
+      } else {
+        dbPath = databasePath.trim();
       }
 
       const fetchedSchemas = await getSchemas(dbPath);
@@ -266,7 +323,7 @@ export function ConnectDataDialog({
     } finally {
       setIsLoadingSchemas(false);
     }
-  }, [databasePath, motherduckToken, selectedDatabase]);
+  }, [databasePath, motherduckToken, selectedDatabase, postgresHost, postgresUser, postgresDatabase, buildPostgresConnectionStringFromFields]);
 
   const handleSchemaSelect = useCallback(async (schema: string) => {
     setSelectedSchema(schema);
@@ -274,13 +331,19 @@ export function ConnectDataDialog({
     try {
       setIsLoadingTables(true);
       // Build database path - prepend "md:" for MotherDuck and add token if provided
-      let dbPath = databasePath.trim();
-      if (selectedDatabase === "motherduck") {
+      // For Postgres, build connection string from individual fields
+      let dbPath: string;
+      if (selectedDatabase === "postgres") {
+        dbPath = buildPostgresConnectionStringFromFields();
+      } else if (selectedDatabase === "motherduck") {
+        dbPath = databasePath.trim();
         dbPath = `md:${dbPath}`;
         if (motherduckToken.trim()) {
           const encodedToken = encodeURIComponent(motherduckToken.trim());
           dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
         }
+      } else {
+        dbPath = databasePath.trim();
       }
       console.log("Calling getTablesForSchema with:", { dbPath, schema });
       const tables = await getTablesForSchema(dbPath, schema, 20);
@@ -294,22 +357,34 @@ export function ConnectDataDialog({
     } finally {
       setIsLoadingTables(false);
     }
-  }, [databasePath, motherduckToken, selectedDatabase]);
+  }, [databasePath, motherduckToken, selectedDatabase, buildPostgresConnectionStringFromFields]);
 
   const handleAddTable = useCallback(async () => {
-    if (!selectedDatabase || !selectedSchema.trim() || !databasePath.trim()) {
+    // For Postgres, validate required fields
+    if (selectedDatabase === "postgres") {
+      if (!postgresHost.trim() || !postgresUser.trim() || !postgresDatabase.trim() || !selectedSchema.trim()) {
+        console.log("handleAddTable: disabled for Postgres");
+        return;
+      }
+    } else if (!selectedDatabase || !selectedSchema.trim() || !databasePath.trim()) {
       console.log("handleAddTable: disabled");
       return;
     }
     try {
       // Build database path - prepend "md:" for MotherDuck and add token if provided
-      let dbPath = databasePath.trim();
-      if (selectedDatabase === "motherduck") {
+      // For Postgres, build connection string from individual fields
+      let dbPath: string;
+      if (selectedDatabase === "postgres") {
+        dbPath = buildPostgresConnectionStringFromFields();
+      } else if (selectedDatabase === "motherduck") {
+        dbPath = databasePath.trim();
         dbPath = `md:${dbPath}`;
         if (motherduckToken.trim()) {
           const encodedToken = encodeURIComponent(motherduckToken.trim());
           dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
         }
+      } else {
+        dbPath = databasePath.trim();
       }
 
       const attachAs = dbPath
@@ -325,9 +400,11 @@ export function ConnectDataDialog({
             : "source";
       const connectionType = selectedDatabase ?? "motherduck";
       const duckdbExtension = resolveDuckdbExtension(connectionType);
+      const databaseName = extractDatabaseName(selectedDatabase, dbPath);
       const newEntry = {
         type: connectionType,
         databasePath: dbPath,
+        databaseName,
         schema: selectedSchema,
         tables: Array.from(selectedTables),
         description: tableDescription.trim(),
@@ -349,23 +426,31 @@ export function ConnectDataDialog({
     selectedSchema,
     selectedTables,
     tableDescription,
+    postgresHost,
+    postgresUser,
+    postgresDatabase,
+    buildPostgresConnectionStringFromFields,
+    extractDatabaseName,
   ]);
 
   const isAddDisabled = useMemo(() => {
-    return (
-      !selectedDatabase ||
-      !selectedSchema.trim() ||
-      !databasePath.trim() ||
-      !tableDescription.trim()
-    );
-  }, [databasePath, selectedDatabase, selectedSchema, tableDescription]);
+    if (!selectedDatabase || !selectedSchema.trim() || !tableDescription.trim()) {
+      return true;
+    }
+    // For Postgres, check individual fields
+    if (selectedDatabase === "postgres") {
+      return !postgresHost.trim() || !postgresUser.trim() || !postgresDatabase.trim();
+    }
+    // For other databases, check databasePath
+    return !databasePath.trim();
+  }, [databasePath, selectedDatabase, selectedSchema, tableDescription, postgresHost, postgresUser, postgresDatabase]);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 fixed inset-0 z-50 bg-black/60" />
-        <Dialog.Content className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95 data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 fixed left-1/2 top-1/2 z-50 w-full max-w-4xl -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card shadow-2xl focus:outline-hidden">
-          <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        <Dialog.Content className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95 data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 fixed left-1/2 top-1/2 z-50 w-full max-w-4xl max-h-[90vh] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card shadow-2xl focus:outline-hidden flex flex-col">
+          <div className="flex items-center justify-between border-b border-border px-6 py-4 shrink-0">
             <div>
               <Dialog.Title className="text-lg font-semibold text-foreground">
                 Connect Data Source
@@ -386,7 +471,7 @@ export function ConnectDataDialog({
             </Dialog.Close>
           </div>
 
-          <div className="space-y-6 px-6 py-5">
+          <div className="space-y-6 px-6 py-5 overflow-y-auto flex-1 min-h-0">
             {schemas.length === 0 && (
               <section className="space-y-3">
                 <header className="space-y-1">
@@ -411,6 +496,15 @@ export function ConnectDataDialog({
                           setSchemas([]);
                           setSchemaTablesPreview([]);
                           setHasConnected(false);
+                          // Reset Postgres fields when switching away
+                          if (option.value !== "postgres") {
+                            setPostgresHost("");
+                            setPostgresPort("5432");
+                            setPostgresUser("");
+                            setPostgresPassword("");
+                            setPostgresDatabase("");
+                            setPostgresSslMode("");
+                          }
                         }}
                         disabled={option.disabled}
                         className={cn(
@@ -460,49 +554,131 @@ export function ConnectDataDialog({
                     {selectedDatabase === "motherduck"
                       ? "MotherDuck Database"
                       : selectedDatabase === "postgres"
-                        ? "Postgres Connection URL"
+                        ? "Postgres Connection"
                         : "Connection"}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {selectedDatabase === "motherduck"
                       ? "Provide the name of your MotherDuck database (e.g., my_db)."
                       : selectedDatabase === "postgres"
-                        ? "Provide a Postgres connection URL (postgres://...) or pg:ALIAS."
+                        ? "Enter your Postgres connection details."
                         : null}
                   </p>
                 </header>
                 <div className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <Input
-                      placeholder={
-                        selectedDatabase === "motherduck"
-                          ? "my_db"
-                          : selectedDatabase === "postgres"
-                            ? "postgres://user:pass@host:5432/db?sslmode=require or pg:DEFAULT"
+                  {selectedDatabase === "postgres" ? (
+                    <div className="space-y-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <label htmlFor="postgres-host" className="text-xs font-medium text-foreground">
+                            Host <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            id="postgres-host"
+                            placeholder="localhost"
+                            value={postgresHost}
+                            onChange={(event) => setPostgresHost(event.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label htmlFor="postgres-port" className="text-xs font-medium text-foreground">
+                            Port
+                          </label>
+                          <Input
+                            id="postgres-port"
+                            type="number"
+                            placeholder="5432"
+                            value={postgresPort}
+                            onChange={(event) => setPostgresPort(event.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <label htmlFor="postgres-user" className="text-xs font-medium text-foreground">
+                            Username <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            id="postgres-user"
+                            placeholder="postgres"
+                            value={postgresUser}
+                            onChange={(event) => setPostgresUser(event.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label htmlFor="postgres-password" className="text-xs font-medium text-foreground">
+                            Password
+                          </label>
+                          <Input
+                            id="postgres-password"
+                            type="password"
+                            placeholder="password"
+                            value={postgresPassword}
+                            onChange={(event) => setPostgresPassword(event.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label htmlFor="postgres-database" className="text-xs font-medium text-foreground">
+                          Database <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          id="postgres-database"
+                          placeholder="postgres"
+                          value={postgresDatabase}
+                          onChange={(event) => setPostgresDatabase(event.target.value)}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full sm:w-fit"
+                        onClick={handleConnectClick}
+                      >
+                        {isLoadingSchemas ? (
+                          <span className="flex items-center gap-2">
+                            <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                            Connecting...
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            <LinkIcon className="size-4" />
+                            Connect
+                          </span>
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <Input
+                          placeholder={
+                            selectedDatabase === "motherduck"
+                              ? "my_db"
                             : ""
-                      }
-                      value={databasePath}
-                      onChange={(event) => setDatabasePath(event.target.value)}
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="sm:w-fit"
-                      onClick={handleConnectClick}
-                    >
-                      {isLoadingSchemas ? (
-                        <span className="flex items-center gap-2">
-                          <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                          Connecting...
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <LinkIcon className="size-4" />
-                          Connect
-                        </span>
-                      )}
-                    </Button>
-                  </div>
+                        }
+                          value={databasePath}
+                          onChange={(event) => setDatabasePath(event.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="sm:w-fit"
+                          onClick={handleConnectClick}
+                        >
+                          {isLoadingSchemas ? (
+                            <span className="flex items-center gap-2">
+                              <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                              Connecting...
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-2">
+                              <LinkIcon className="size-4" />
+                              Connect
+                            </span>
+                          )}
+                        </Button>
+                      </div>
+                  )}
                   {selectedDatabase === "motherduck" && (
                     <div>
                       <Input
@@ -659,7 +835,7 @@ export function ConnectDataDialog({
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
+          <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4 shrink-0">
             <Dialog.Close asChild>
               <Button type="button" variant="ghost">
                 Cancel

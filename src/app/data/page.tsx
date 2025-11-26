@@ -97,14 +97,18 @@ export default function ViewDataPage() {
           return count + 1;
         }, 0);
 
+        // Use databaseName if available, otherwise fallback to dbPath
+        const displayName = data.entries[0]?.databaseName || dbPath;
+
         return {
           dbPath,
+          displayName,
           type: data.type,
           entries: [...data.entries],
           totalTables,
         };
       })
-      .sort((a, b) => a.dbPath.localeCompare(b.dbPath));
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [tables]);
 
   const toggleDatabase = (dbPath: string) => {
@@ -298,7 +302,7 @@ export default function ViewDataPage() {
                                 );
                               })()}
                               <span className="truncate text-sm font-semibold text-foreground">
-                                {database.dbPath}
+                                {database.displayName}
                               </span>
                             </div>
                             <span className="text-xs text-muted-foreground">

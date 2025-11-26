@@ -8,3 +8,11 @@ sources:
       alias: md:my_db
       readOnly: false
       duckdbExtension: motherduck
+  - name: recipes
+    table: public.recipes
+    connection:
+      type: postgres
+      identifier: host=127.0.0.1 port=54322 user=postgres password=REDACTED_LOCAL dbname=postgres
+      alias: host=127.0.0.1 port=54322 user=postgres password=REDACTED_LOCAL dbname=postgres
+      readOnly: true
+      duckdbExtension: postgres
