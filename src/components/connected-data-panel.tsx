@@ -166,8 +166,8 @@ export function ConnectedDataPanel({
                   <Button
                     variant="ghost"
                     className={cn(
-                      "flex-1 justify-start gap-2 h-8 rounded-none",
-                      isSelected && "bg-accent",
+                      "flex-1 justify-start gap-2 h-8 rounded-none hover:bg-muted hover:text-muted-foreground",
+                      isSelected && "bg-muted text-muted-foreground",
                     )}
                     onClick={() => handleSelect(dbIdentifier)}
                   >
@@ -182,7 +182,7 @@ export function ConnectedDataPanel({
                         <button
                           key={tableName}
                           type="button"
-                          className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-accent/50 cursor-pointer"
+                          className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-muted hover:text-muted-foreground cursor-pointer"
                           onClick={() => handleInsertTable(entry, tableName)}
                         >
                           <Table className="h-3 w-3 shrink-0" />
@@ -192,7 +192,7 @@ export function ConnectedDataPanel({
                       : entry.table && (
                         <button
                           type="button"
-                          className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-accent/50 cursor-pointer"
+                          className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-muted hover:text-muted-foreground cursor-pointer"
                           onClick={() =>
                             handleInsertTable(entry, entry.table as string)
                           }
@@ -213,7 +213,7 @@ export function ConnectedDataPanel({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 p-0"
+                className="h-8 w-8 p-0 hover:bg-muted hover:text-muted-foreground"
                 onClick={() =>
                   setIsMaterializedExpanded(!isMaterializedExpanded)
                 }
@@ -227,10 +227,10 @@ export function ConnectedDataPanel({
               <Button
                 variant="ghost"
                 className={cn(
-                  "flex-1 justify-start gap-2 h-8 rounded-none",
+                  "flex-1 justify-start gap-2 h-8 rounded-none hover:bg-muted hover:text-muted-foreground",
                   selectedDb &&
                   isMaterializedTableIdentifier(selectedDb) &&
-                  "bg-accent",
+                  "bg-muted text-muted-foreground",
                 )}
                 onClick={handleSelectMaterialized}
               >
@@ -246,7 +246,7 @@ export function ConnectedDataPanel({
                   <button
                     key={tableName}
                     type="button"
-                    className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-accent/50 cursor-pointer"
+                    className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-muted hover:text-muted-foreground cursor-pointer"
                     onClick={() => handleInsertMaterializedTable(tableName)}
                   >
                     <Table className="h-3 w-3 shrink-0" />
@@ -267,13 +267,11 @@ export function ConnectedDataPanel({
     return (
       <div
         className={cn(
-          "w-72 border-r border-border bg-card flex flex-col h-full",
+          "bg-card flex flex-col h-full",
           className,
         )}
       >
-        <div className="p-3 border-b border-border shrink-0">
-          <h3 className="text-sm font-medium">Connected Databases</h3>
-        </div>
+        <div className="p-2 border-b border-border text-xs text-muted-foreground font-bold tracking-widest uppercase">Explorer</div>
         <div className="flex-1 overflow-y-auto min-h-0">
           {renderDatabaseList()}
         </div>

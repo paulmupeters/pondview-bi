@@ -23,6 +23,7 @@ import type {
   SqlAnalysisStage,
 } from "@/components/sql-analysis-display.types";
 import { Button } from "@/components/ui/button";
+import { VisualizationPanel } from "@/components/visualization-panel";
 import type { ArtifactStatus } from "@/hooks/types";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import {
@@ -33,7 +34,7 @@ import {
 const AUTO_SENT_FLAG_PREFIX = "autoSent:";
 const AUTO_SENT_STALE_MS = 5 * 60 * 1000;
 const AUTO_SENT_CLEANUP_DELAY_MS = 3_000;
-type PromptMode = "ai" | "sql" | "chart";
+type PromptMode = "ai" | "manual";
 
 export default function Chat({
   chatId,
@@ -113,7 +114,7 @@ export default function Chat({
   };
 
   const handleAddVisual = useCallback(async () => {
-    setPromptPendingMode("chart");
+    setPromptPendingMode("manual");
     const now = Date.now();
     const messageId = `manual-visual-${now}`;
     const artifactId = `manual-artifact-${now}`;
@@ -167,7 +168,7 @@ export default function Chat({
 
     // Update local state immediately for responsive UI
     setMessages((prevMessages) => [...prevMessages, newMessage]);
-    setPromptPendingMode((current) => (current === "chart" ? null : current));
+    setPromptPendingMode((current) => (current === "manual" ? null : current));
 
     // Persist to database
     try {
@@ -258,7 +259,7 @@ export default function Chat({
 
   const handleRemoveMessage = useCallback(
     async (messageId: string) => {
-    // Optimistically remove from UI
+      // Optimistically remove from UI
       setMessages((prev) => prev.filter((message) => message.id !== messageId));
 
       // Attempt to delete, then always reload from server to avoid rehydration
@@ -270,7 +271,9 @@ export default function Chat({
         console.error("Failed to delete message:", error);
       } finally {
         try {
-          const reload = await fetch(`/api/chat/${chatId}`, { cache: "no-store" });
+          const reload = await fetch(`/api/chat/${chatId}`, {
+            cache: "no-store",
+          });
           if (reload.ok) {
             const data = (await reload.json()) as { messages: UIMessage[] };
             setMessages(data.messages ?? []);
@@ -412,6 +415,70 @@ export default function Chat({
     setVerbAiIsThinking(getRandomVerbAiIsThinking());
   }, []);
 
+  // Extract visualizations from messages
+  const visualizations = useMemo(() => {
+    const vizList: Array<{
+      id: string;
+      data: SqlAnalysisData | null;
+      stage?: SqlAnalysisStage;
+      progress?: number;
+    }> = [];
+
+    messages.forEach((message) => {
+      if (message.parts) {
+        message.parts.forEach((part) => {
+          if (part.type === executeSqlArtifactType) {
+            const artifactPart = part as {
+              data?: {
+                id?: string;
+                status?: ArtifactStatus;
+                progress?: number;
+                error?: string;
+                payload?: SqlAnalysisData;
+              };
+            };
+            const artifactData = artifactPart.data;
+
+            if (artifactData && artifactData.status !== "error") {
+              const payload = (artifactData.payload ??
+                null) as SqlAnalysisData | null;
+              const artifactStatus = artifactData.status;
+              const derivedStage = (payload?.stage ??
+                (artifactStatus === "complete"
+                  ? "complete"
+                  : "loading")) as SqlAnalysisStage;
+              const progressValue =
+                typeof artifactData.progress === "number"
+                  ? artifactData.progress
+                  : (payload?.progress ?? 0);
+
+              // Include if it has visualization data or is in progress with a query
+              // Include charts/cards, tables with data, or artifacts being processed
+              if (
+                payload &&
+                (payload.visualType === "chart" ||
+                  payload.visualType === "card" ||
+                  (payload.visualType === "table" &&
+                    payload.rows &&
+                    payload.rows.length > 0) ||
+                  (payload.query && derivedStage !== "complete"))
+              ) {
+                vizList.push({
+                  id: artifactData.id ?? `${message.id}-${vizList.length}`,
+                  data: payload,
+                  stage: derivedStage,
+                  progress: progressValue,
+                });
+              }
+            }
+          }
+        });
+      }
+    });
+
+    return vizList;
+  }, [messages, executeSqlArtifactType]);
+
   const isConversationEmpty = messages.length === 0;
 
   return (
@@ -424,157 +491,185 @@ export default function Chat({
         } ${isDashboardBuilderOpen ? "mr-[50vw]" : ""}`}
       >
         <div className="flex h-full w-full flex-col">
-          <div className="flex-1 overflow-y-auto bg-background">
-            <div className="mx-auto flex h-full w-full flex-col space-y-6">
-              <Conversation>
-                <ConversationContent className="max-w-6xl mx-auto w-full">
-                  {isConversationEmpty && (
-                    <Message from="assistant" key="assistant-ready">
-                      <MessageContent>
-                        <Response key="assistant-ready-response">
-                          Ready to help...
-                        </Response>
-                      </MessageContent>
-                    </Message>
-                  )}
-                  {messages.map((message) => (
-                    <Message from={message.role} key={message.id}>
-                      <MessageContent className="relative w-full">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
-                          onClick={() => handleRemoveMessage(message.id)}
-                          aria-label="Remove message"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </Button>
-                        {message.parts?.map((part, partIndex) => {
-                          if (status === "submitted") {
-                            return (
-                              <span
-                                key={`${message.id}-part-${partIndex}-submitted`}
-                              >
-                                {animationFrame}
-                              </span>
-                            );
-                          }
-                          if (part.type === "text") {
-                            return (
-                              <Response key={`${message.id}-part-${partIndex}`}>
-                                {part.text}
-                              </Response>
-                            );
-                          }
-
-                          if (part.type === executeSqlArtifactType) {
-                            const artifactPart = part as {
-                              data?: {
-                                status?: ArtifactStatus;
-                                progress?: number;
-                                error?: string;
-                                payload?: SqlAnalysisData;
-                              };
-                            };
-                            const artifactData = artifactPart.data;
-
-                            if (!artifactData) {
-                              return null;
-                            }
-
-                            if (artifactData.status === "error") {
+          {/* Two-column layout: Messages on left, Visualizations on right */}
+          <div className="flex-1 overflow-hidden bg-background">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full p-6">
+              {/* Left: Messages Panel */}
+              <div className="flex flex-col min-w-0 h-full overflow-hidden">
+                <Conversation className="flex-1 min-h-0">
+                  <ConversationContent className="max-w-full mx-auto w-full space-y-6">
+                    {isConversationEmpty && (
+                      <Message from="assistant" key="assistant-ready">
+                        <MessageContent>
+                          <Response key="assistant-ready-response">
+                            Ready to help...
+                          </Response>
+                        </MessageContent>
+                      </Message>
+                    )}
+                    {messages.map((message) => (
+                      <Message from={message.role} key={message.id}>
+                        <MessageContent className="relative w-full">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
+                            onClick={() => handleRemoveMessage(message.id)}
+                            aria-label="Remove message"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </Button>
+                          {message.parts?.map((part, partIndex) => {
+                            if (status === "submitted") {
                               return (
-                                <div
-                                  key={`${message.id}-part-${partIndex}`}
-                                  className="mt-4 max-w-3xl text-sm text-red-500"
+                                <span
+                                  key={`${message.id}-part-${partIndex}-submitted`}
                                 >
-                                  {artifactData.error ?? "SQL analysis failed."}
-                                </div>
+                                  {animationFrame}
+                                </span>
+                              );
+                            }
+                            if (part.type === "text") {
+                              return (
+                                <Response
+                                  key={`${message.id}-part-${partIndex}`}
+                                >
+                                  {part.text}
+                                </Response>
                               );
                             }
 
-                            const payload = (artifactData.payload ??
-                              null) as SqlAnalysisData | null;
-                            const artifactStatus = artifactData.status;
-                            const derivedStage = (payload?.stage ??
-                              (artifactStatus === "complete"
-                                ? "complete"
-                                : "loading")) as SqlAnalysisStage;
-                            const progressValue =
-                              typeof artifactData.progress === "number"
-                                ? artifactData.progress
-                                : (payload?.progress ?? 0);
+                            if (part.type === executeSqlArtifactType) {
+                              const artifactPart = part as {
+                                data?: {
+                                  status?: ArtifactStatus;
+                                  progress?: number;
+                                  error?: string;
+                                  payload?: SqlAnalysisData;
+                                };
+                              };
+                              const artifactData = artifactPart.data;
 
-                            const shouldShowStageIndicator =
-                              artifactStatus !== "complete" &&
-                              derivedStage !== "complete";
+                              if (!artifactData) {
+                                return null;
+                              }
 
-                            return (
-                              <div
-                                key={`${message.id}-part-${partIndex}`}
-                                className="mt-4 w-full"
-                              >
-                                <SqlAnalysisDisplay
-                                  data={payload}
-                                  stage={derivedStage}
-                                  progress={progressValue}
-                                  showStageIndicator={shouldShowStageIndicator}
-                                  className="max-w-3xl w-full"
-                                  onDelete={
-                                    message.id.startsWith("manual-visual-")
-                                      ? () => handleRemoveMessage(message.id)
-                                      : undefined
-                                  }
-                                />
-                              </div>
-                            );
-                          }
+                              if (artifactData.status === "error") {
+                                return (
+                                  <div
+                                    key={`${message.id}-part-${partIndex}`}
+                                    className="mt-4 max-w-full text-sm text-red-500"
+                                  >
+                                    {artifactData.error ??
+                                      "SQL analysis failed."}
+                                  </div>
+                                );
+                              }
 
-                          if (part.type === "tool-getTableSchema") {
-                            return (
-                              <span key={`${message.id}-part-${partIndex}`}>
-                                Getting table schema
-                              </span>
-                            );
-                          }
+                              const payload = (artifactData.payload ??
+                                null) as SqlAnalysisData | null;
 
-                          if (part.type === "tool-generateChartConfig") {
-                            return (
-                              <span key={`${message.id}-part-${partIndex}`}>
-                                Generating chart config...{animationFrame}
-                              </span>
-                            );
-                          }
+                              // Show SQL query inline in messages
+                              if (payload?.query) {
+                                return (
+                                  <div
+                                    key={`${message.id}-part-${partIndex}`}
+                                    className="mt-4 w-full"
+                                  >
+                                    <div className="flex gap-4">
+                                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                                        <svg
+                                          aria-hidden="true"
+                                          className="w-4 h-4 text-primary"
+                                          fill="none"
+                                          viewBox="0 0 24 24"
+                                          stroke="currentColor"
+                                          aria-label="Generated SQL"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth="2"
+                                            d="M13 10V3L4 14h7v7l9-11h-7z"
+                                          />
+                                        </svg>
+                                      </div>
+                                      <div className="bg-muted/50 p-4 rounded-2xl rounded-tl-none border border-border max-w-[90%]">
+                                        <p className="font-mono text-xs text-muted-foreground mb-2">
+                                          GENERATED SQL
+                                        </p>
+                                        <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-background p-3 rounded border border-border">
+                                          {payload.query}
+                                        </code>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
 
-                          if (part.type === "tool-executeSql") {
-                            return (
-                              <span key={`${message.id}-part-${partIndex}`}>
-                                Processing...
-                              </span>
-                            );
-                          }
+                              return null;
+                            }
 
-                          return null;
-                        })}
-                      </MessageContent>
-                    </Message>
-                  ))}
-                  {status === "streaming" && (
-                    <span key="assistant-streaming-div">
-                      {animationFrame} {verbAiIsThinking}
-                    </span>
-                  )}
-                </ConversationContent>
-                <ConversationScrollButton />
-              </Conversation>
+                            if (part.type === "tool-getTableSchema") {
+                              return (
+                                <span key={`${message.id}-part-${partIndex}`}>
+                                  Getting table schema
+                                </span>
+                              );
+                            }
+
+                            if (part.type === "tool-generateChartConfig") {
+                              return (
+                                <span key={`${message.id}-part-${partIndex}`}>
+                                  Generating chart config...{animationFrame}
+                                </span>
+                              );
+                            }
+
+                            if (part.type === "tool-executeSql") {
+                              return (
+                                <span key={`${message.id}-part-${partIndex}`}>
+                                  Processing...
+                                </span>
+                              );
+                            }
+
+                            return null;
+                          })}
+                        </MessageContent>
+                      </Message>
+                    ))}
+                    {status === "streaming" && (
+                      <span key="assistant-streaming-div">
+                        {animationFrame} {verbAiIsThinking}
+                      </span>
+                    )}
+                  </ConversationContent>
+                  <ConversationScrollButton />
+                </Conversation>
+              </div>
+
+              {/* Right: Visualization Panel */}
+              <div className="hidden lg:flex flex-col min-w-0 h-full">
+                <VisualizationPanel visualizations={visualizations} />
+              </div>
             </div>
           </div>
+
+          {/* Visualization Panel for Mobile (below messages) */}
+          <div className="lg:hidden border-t border-border bg-background">
+            <div className="h-[400px] p-6">
+              <VisualizationPanel visualizations={visualizations} />
+            </div>
+          </div>
+
+          {/* Input Area */}
           <div className="p-1 max-w-6xl w-full mx-auto">
             <PromptInputWrapper
               onSubmit={handleSubmit}
               onAddSqlResultToChat={handleAddSqlResultToChat}
-              className="transition delay-150 duration-300 ease-in-out"
+              className="transition delay-150 duration-300 ease-in-out bg-card-background"
               status={status}
               onCreateDashboard={handleOpenDashboardBuilder}
               onAddVisual={handleAddVisual}

@@ -18,11 +18,11 @@ import {
 import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
 import { runQuery } from "@/lib/sql/run-query";
 import type { Result } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 type DuckdbReplProps = {
   className?: string;
   httpConfig?: HttpDuckDbConfig;
-  selectedDbLabel?: string;
   selectedDbIdentifier?: string;
   onRunSqlAction?: (params: {
     sql: string;
@@ -47,7 +47,6 @@ const HISTORY_KEY = "bi.repl.history";
 export function DuckdbRepl({
   className,
   httpConfig,
-  selectedDbLabel,
   selectedDbIdentifier,
   onRunSqlAction,
   onConsoleApiChangeAction,
@@ -125,7 +124,7 @@ export function DuckdbRepl({
   }, [internalApi, onConsoleApiChangeAction]);
 
   return (
-    <div className="w-full h-full">
+    <div className={cn("w-full h-full", className)}>
       {lastResult && (
         <div className="flex items-center gap-2">
           {canShare && (
@@ -173,7 +172,6 @@ export function DuckdbRepl({
       <SqlConsole
         className={className}
         historyKey={HISTORY_KEY}
-        selectedDbLabel={selectedDbLabel}
         executeQuery={executeQuery}
         onApiChange={setInternalApi}
         showInlineResults={inlineResults}

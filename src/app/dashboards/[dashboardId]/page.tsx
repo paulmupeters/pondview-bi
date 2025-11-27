@@ -73,6 +73,11 @@ type DashboardChart = {
   filtersApplied?: boolean;
 };
 
+type ChartGroup = {
+  type: 'metric-group' | 'single';
+  items: DashboardChart[];
+};
+
 type SortableChartCardProps = {
   chart: DashboardChart & { filtersApplied?: boolean };
   config: Config | CardConfig | TableConfig | null;
@@ -83,6 +88,7 @@ type SortableChartCardProps = {
   onToggleSql: (chartId: string) => void;
   onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
   totalColumns: number;
+  isInGroup?: boolean;
 };
 
 // Helper function to check if config is a card config
@@ -119,6 +125,337 @@ function isTableConfig(
   return false;
 }
 
+// Group consecutive metric cards together
+function groupConsecutiveMetricCards(
+  charts: DashboardChart[],
+  chartData: Record<string, Result[]>,
+): ChartGroup[] {
+  const groups: ChartGroup[] = [];
+  let currentMetricGroup: DashboardChart[] = [];
+
+  for (const chart of charts) {
+    let config: Config | CardConfig | TableConfig | null = null;
+    try {
+      const parsed = JSON.parse(chart.chartConfigJson);
+      config = parsed as Config | CardConfig | TableConfig;
+    } catch {
+      config = null;
+    }
+
+    const rows = chartData[chart.id] || [];
+    const isMetricCard = config && rows.length > 0 && isCardConfig(config);
+
+    if (isMetricCard) {
+      // Add to current metric group
+      currentMetricGroup.push(chart);
+    } else {
+      // If we have a pending metric group, finalize it
+      if (currentMetricGroup.length > 0) {
+        // Only group if there are 2+ cards, otherwise treat as single
+        if (currentMetricGroup.length > 1) {
+          groups.push({ type: 'metric-group', items: [...currentMetricGroup] });
+        } else {
+          groups.push({ type: 'single', items: [...currentMetricGroup] });
+        }
+        currentMetricGroup = [];
+      }
+      // Add non-metric card as single item
+      groups.push({ type: 'single', items: [chart] });
+    }
+  }
+
+  // Finalize any remaining metric group
+  if (currentMetricGroup.length > 0) {
+    // Only group if there are 2+ cards, otherwise treat as single
+    if (currentMetricGroup.length > 1) {
+      groups.push({ type: 'metric-group', items: currentMetricGroup });
+    } else {
+      groups.push({ type: 'single', items: currentMetricGroup });
+    }
+  }
+
+  return groups;
+}
+
+type MetricCardGroupProps = {
+  charts: DashboardChart[];
+  chartData: Record<string, Result[]>;
+  onConfigChange: (chartId: string, newJson: string) => Promise<void>;
+  onDelete: (chartId: string) => Promise<void>;
+  expandedSqlChartId: string | null;
+  onToggleSql: (chartId: string) => void;
+  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
+  totalColumns: number;
+};
+
+function MetricCardInGroup({
+  chart,
+  chartData,
+  onConfigChange,
+  onDelete,
+  expandedSqlChartId,
+  onToggleSql,
+  onSqlUpdate,
+  isFirst,
+  isLast,
+}: {
+  chart: DashboardChart;
+  chartData: Record<string, Result[]>;
+  onConfigChange: (chartId: string, newJson: string) => Promise<void>;
+  onDelete: (chartId: string) => Promise<void>;
+  expandedSqlChartId: string | null;
+  onToggleSql: (chartId: string) => void;
+  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
+  isFirst: boolean;
+  isLast: boolean;
+}) {
+  const { filters } = useFilters();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: chart.id });
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  let config: Config | CardConfig | TableConfig | null = null;
+  try {
+    const parsed = JSON.parse(chart.chartConfigJson);
+    config = parsed as Config | CardConfig | TableConfig;
+  } catch {
+    config = null;
+  }
+  const rows = chartData[chart.id] || [];
+  const isExpanded = expandedSqlChartId === chart.id;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex-1 flex flex-col p-4 md:p-2 relative group/item"
+    >
+      <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-30">
+        <button
+          type="button"
+          aria-label="Reorder card"
+          title="Drag to reorder"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-input bg-background text-muted-foreground hover:bg-muted"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+      </div>
+      {chart.filtersApplied && filters.length > 0 && isFirst && (
+        <div className="absolute left-1/2 top-2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100">
+          <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+            {filters.length} filter{filters.length !== 1 ? "s" : ""} applied
+          </span>
+        </div>
+      )}
+      <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-20">
+        <CardConfigDialog
+          trigger={
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Configure card"
+              title="Configure card"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
+          }
+          config={config as CardConfig}
+          onConfigChange={async (newConfig) => {
+            const newJson = JSON.stringify(newConfig);
+            await onConfigChange(chart.id, newJson);
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => onDelete(chart.id)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          aria-label="Delete card"
+          title="Delete card"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+      {config && rows.length > 0 && isCardConfig(config) ? (
+        <MetricCard
+          value={rows[0]?.[Object.keys(rows[0] || {})[0]]}
+          title={config.title}
+          description={config.description}
+          takeaway={config.takeaway}
+          className="w-full h-full flex flex-col border-0 shadow-none"
+        />
+      ) : (
+        <div className="text-xs text-muted-foreground">No data</div>
+      )}
+      {isExpanded && (
+        <div className="mt-4 border-t pt-4 transition-all duration-200">
+          <MetricCardSqlEditor
+            chart={chart}
+            expandedSqlChartId={expandedSqlChartId}
+            onToggleSql={onToggleSql}
+            onSqlUpdate={onSqlUpdate}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetricCardGroup({
+  charts,
+  chartData,
+  onConfigChange,
+  onDelete,
+  expandedSqlChartId,
+  onToggleSql,
+  onSqlUpdate,
+  totalColumns,
+}: MetricCardGroupProps) {
+  // Get col-span class based on number of cards in group
+  const getColSpanClass = (cardCount: number) => {
+    if (totalColumns <= 1 || cardCount === 1) return "";
+    const colSpanMap: Record<number, Record<number, string>> = {
+      2: {
+        2: "md:col-span-2",
+      },
+      3: {
+        2: "lg:col-span-2",
+        3: "lg:col-span-3",
+      },
+      4: {
+        2: "lg:col-span-2",
+        3: "lg:col-span-3",
+        4: "lg:col-span-4",
+      },
+      5: {
+        2: "lg:col-span-2",
+        3: "lg:col-span-3",
+        4: "lg:col-span-4",
+        5: "lg:col-span-5",
+      },
+      6: {
+        2: "lg:col-span-2",
+        3: "lg:col-span-3",
+        4: "lg:col-span-4",
+        5: "lg:col-span-5",
+        6: "lg:col-span-6",
+      },
+    };
+    const span = Math.min(cardCount, totalColumns);
+    return colSpanMap[totalColumns]?.[span] || "";
+  };
+
+  return (
+    <div
+      className={`group relative flex rounded-xl bg-card divide-x divide-border overflow-hidden ${getColSpanClass(charts.length)}`}
+    >
+      {charts.map((chart, index) => (
+        <MetricCardInGroup
+          key={chart.id}
+          chart={chart}
+          chartData={chartData}
+          onConfigChange={onConfigChange}
+          onDelete={onDelete}
+          expandedSqlChartId={expandedSqlChartId}
+          onToggleSql={onToggleSql}
+          onSqlUpdate={onSqlUpdate}
+          isFirst={index === 0}
+          isLast={index === charts.length - 1}
+        />
+      ))}
+    </div>
+  );
+}
+
+type MetricCardSqlEditorProps = {
+  chart: DashboardChart;
+  expandedSqlChartId: string | null;
+  onToggleSql: (chartId: string) => void;
+  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
+};
+
+function MetricCardSqlEditor({
+  chart,
+  expandedSqlChartId,
+  onToggleSql,
+  onSqlUpdate,
+}: MetricCardSqlEditorProps) {
+  const [editedSql, setEditedSql] = useState(chart.sql);
+  const [isSaving, setIsSaving] = useState(false);
+  const isExpanded = expandedSqlChartId === chart.id;
+
+  useEffect(() => {
+    if (isExpanded) {
+      setEditedSql(chart.sql);
+    }
+  }, [isExpanded, chart.sql]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSqlUpdate(chart.id, editedSql);
+      onToggleSql(chart.id);
+    } catch (error) {
+      console.error("Failed to save SQL:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditedSql(chart.sql);
+    onToggleSql(chart.id);
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label
+        htmlFor={`sql-editor-${chart.id}`}
+        className="text-sm font-medium"
+      >
+        SQL Query
+      </label>
+      <textarea
+        id={`sql-editor-${chart.id}`}
+        value={editedSql}
+        onChange={(e) => setEditedSql(e.target.value)}
+        className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        placeholder="SELECT * FROM ..."
+      />
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleCancel}
+          disabled={isSaving}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleSave}
+          disabled={isSaving || editedSql === chart.sql}
+        >
+          {isSaving ? "Saving..." : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function SortableChartCard({
   chart,
   config,
@@ -129,6 +466,7 @@ function SortableChartCard({
   onToggleSql,
   onSqlUpdate,
   totalColumns,
+  isInGroup = false,
 }: SortableChartCardProps) {
   const { filters } = useFilters();
   const [editedSql, setEditedSql] = useState(chart.sql);
@@ -979,25 +1317,42 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
           strategy={rectSortingStrategy}
         >
           <div className={`grid gap-6 ${getGridColsClass(columns)}`}>
-            {charts.map((c) => {
+            {groupConsecutiveMetricCards(charts, chartData).map((group, groupIndex) => {
+              if (group.type === 'metric-group') {
+                return (
+                  <MetricCardGroup
+                    key={`group-${group.items[0]?.id}`}
+                    charts={group.items}
+                    chartData={chartData}
+                    onConfigChange={handleChartConfigChange}
+                    onDelete={handleChartDelete}
+                    expandedSqlChartId={expandedSqlChartId}
+                    onToggleSql={handleToggleSql}
+                    onSqlUpdate={handleSqlUpdate}
+                    totalColumns={columns}
+                  />
+                );
+              }
+              // Render single chart/table/card as before
+              const chart = group.items[0];
               let config: Config | CardConfig | TableConfig | null = null;
               try {
-                const parsed = JSON.parse(c.chartConfigJson);
+                const parsed = JSON.parse(chart.chartConfigJson);
                 config = parsed as Config | CardConfig | TableConfig;
               } catch {
                 config = null;
               }
-              const rows = chartData[c.id] || [];
+              const rows = chartData[chart.id] || [];
               return (
                 <SortableChartCard
-                  key={c.id}
-                  chart={c}
+                  key={chart.id}
+                  chart={chart}
                   config={config}
                   rows={rows}
                   onConfigChange={(newJson) =>
-                    handleChartConfigChange(c.id, newJson)
+                    handleChartConfigChange(chart.id, newJson)
                   }
-                  onDelete={() => handleChartDelete(c.id)}
+                  onDelete={() => handleChartDelete(chart.id)}
                   expandedSqlChartId={expandedSqlChartId}
                   onToggleSql={handleToggleSql}
                   onSqlUpdate={handleSqlUpdate}

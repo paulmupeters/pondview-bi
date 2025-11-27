@@ -5,7 +5,6 @@ import type { Result } from "@/lib/types";
 
 interface SqlEditorProps {
   dbIdentifier: string;
-  selectedDbLabel?: string;
   onQuerySuccess: (
     query: string,
     results: Result[],
@@ -20,7 +19,6 @@ const HISTORY_LIMIT = 50;
 export function SqlEditor({
   dbIdentifier,
   onQuerySuccess,
-  selectedDbLabel,
   className,
 }: SqlEditorProps) {
   const executeQuery = createDuckDbExecuteQuery({ dbIdentifier });
@@ -29,10 +27,9 @@ export function SqlEditor({
     <SqlConsole
       className={className}
       historyKey={HISTORY_KEY}
-      selectedDbLabel={selectedDbLabel}
       historyLimit={HISTORY_LIMIT}
       executeQuery={executeQuery}
-      onSuccess={({ sql, rows, columns }) =>
+      onSuccessAction={({ sql, rows, columns }) =>
         onQuerySuccess(sql, rows as Result[], columns)
       }
     />

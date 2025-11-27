@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
 import { runQuery } from "@/lib/sql/run-query";
 import { cn } from "@/lib/utils";
-import { PromptInputTextarea } from "./ai-elements/prompt-input";
+import { SqlCodeEditor, type SqlCodeEditorApi } from "./sql-code-editor";
 
 type ResultsPayload = {
   stage: "complete";
@@ -76,7 +76,6 @@ export type SqlConsoleProps = {
   historyKey: string;
   historyLimit?: number;
   placeholder?: string;
-  selectedDbLabel?: string;
   runButtonLabel?: string;
   stopButtonLabel?: string;
   executeQuery: ExecuteQueryFn;
@@ -93,15 +92,14 @@ export type SqlConsoleProps = {
 const DEFAULT_PLACEHOLDER =
   "ENTER SQL QUERY... (ENTER to execute, SHIFT+ENTER for newline)";
 const DEFAULT_HISTORY_LIMIT = 100;
-const DEFAULT_RUN_LABEL = "[RUN |>]";
-const DEFAULT_STOP_LABEL = "[STOP X]";
+const DEFAULT_RUN_LABEL = "▶ RUN";
+const DEFAULT_STOP_LABEL = "⏹ STOP";
 
 export function SqlConsole({
   className,
   historyKey,
   historyLimit = DEFAULT_HISTORY_LIMIT,
   placeholder = DEFAULT_PLACEHOLDER,
-  selectedDbLabel,
   runButtonLabel = DEFAULT_RUN_LABEL,
   stopButtonLabel = DEFAULT_STOP_LABEL,
   executeQuery,
@@ -109,7 +107,7 @@ export function SqlConsole({
   onApiChange,
   showInlineResults = true,
 }: SqlConsoleProps) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorRef = useRef<SqlCodeEditorApi | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const [sql, setSql] = useState<string>("");
@@ -118,6 +116,7 @@ export function SqlConsole({
   const [isRunning, setIsRunning] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState<number>(-1);
+
   useEffect(() => {
     if (!onApiChange) {
       return;
@@ -125,38 +124,15 @@ export function SqlConsole({
 
     const api: SqlConsoleApi = {
       insertText: (text: string) => {
-        setSql((prev) => {
-          const current = prev ?? "";
-          const el = textareaRef.current;
-          if (!el) {
-            return `${current}${text}`;
-          }
-          const selectionStart = el.selectionStart ?? current.length;
-          const selectionEnd = el.selectionEnd ?? current.length;
-          const before = current.slice(0, selectionStart);
-          const after = current.slice(selectionEnd);
-          const next = `${before}${text}${after}`;
-          requestAnimationFrame(() => {
-            const caret = selectionStart + text.length;
-            el.setSelectionRange(caret, caret);
-            el.focus();
-          });
-          return next;
-        });
+        editorRef.current?.insertText(text);
       },
       setQuery: (value: string) => {
         setSql(value);
-        requestAnimationFrame(() => {
-          const el = textareaRef.current;
-          if (!el) return;
-          const caret = value.length;
-          el.setSelectionRange(caret, caret);
-          el.focus();
-        });
+        editorRef.current?.setValue(value);
       },
-      getQuery: () => textareaRef.current?.value ?? "",
+      getQuery: () => editorRef.current?.getValue() ?? sql,
       focus: () => {
-        textareaRef.current?.focus();
+        editorRef.current?.focus();
       },
       clearResults: () => {
         setResults(null);
@@ -164,20 +140,12 @@ export function SqlConsole({
       },
     };
 
-    // Only update API if it has actually changed (which shouldn't happen often)
-    // or rely on a stable ref if we want to avoid this effect re-running.
-    // For now, let's just call onApiChange.
     onApiChange(api);
 
     return () => {
-      // We intentionally don't clean up with null here to avoid the parent
-      // component seeing a flickering "null" API state during re-renders.
-      // Only clear if we're truly unmounting (which this effect cleanup
-      // can't distinguish from re-render, but the parent state update loop
-      // is likely caused by onApiChange triggering a re-render in parent
-      // which re-renders this component, triggering this effect again).
+      // Intentionally not cleaning up to avoid flickering null API state
     };
-  }, [onApiChange]);
+  }, [onApiChange, sql]);
 
   useEffect(() => {
     try {
@@ -191,7 +159,7 @@ export function SqlConsole({
     } catch {
       // ignore parse errors
     }
-    textareaRef.current?.focus();
+    editorRef.current?.focus();
   }, [historyKey, historyLimit]);
 
   const persistHistory = (items: string[]) => {
@@ -218,56 +186,26 @@ export function SqlConsole({
     });
   };
 
-  const caretOnFirstLine = (): boolean => {
-    const el = textareaRef.current;
-    if (!el) return true;
-    const pos = el.selectionStart ?? 0;
-    return el.value.lastIndexOf("\n", Math.max(0, pos - 1)) === -1;
-  };
+  // History navigation handlers for CodeMirror
+  const handleHistoryPrev = useCallback(() => {
+    if (history.length === 0) return;
+    const nextIdx = Math.max(
+      0,
+      (historyIdx === -1 ? history.length : historyIdx) - 1,
+    );
+    setHistoryIdx(nextIdx);
+    setSql(history[nextIdx] ?? "");
+  }, [history, historyIdx]);
 
-  const caretOnLastLine = (): boolean => {
-    const el = textareaRef.current;
-    if (!el) return true;
-    const pos = el.selectionStart ?? el.value.length;
-    return el.value.indexOf("\n", pos) === -1;
-  };
+  const handleHistoryNext = useCallback(() => {
+    if (history.length === 0) return;
+    const base = historyIdx === -1 ? history.length : historyIdx;
+    const nextIdx = Math.min(history.length, base + 1);
+    setHistoryIdx(nextIdx);
+    setSql(history[nextIdx] ?? "");
+  }, [history, historyIdx]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      void runQuery();
-      return;
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      cancelRun();
-      return;
-    }
-    if (e.key === "ArrowUp" && caretOnFirstLine()) {
-      if (history.length === 0) return;
-      e.preventDefault();
-      const nextIdx = Math.max(
-        0,
-        (historyIdx === -1 ? history.length : historyIdx) - 1,
-      );
-      setHistoryIdx(nextIdx);
-      setSql(history[nextIdx] ?? "");
-      // Move caret to start
-      setTimeout(() => textareaRef.current?.setSelectionRange(0, 0), 0);
-      return;
-    }
-    if (e.key === "ArrowDown" && caretOnLastLine()) {
-      if (history.length === 0) return;
-      e.preventDefault();
-      const base = historyIdx === -1 ? history.length : historyIdx;
-      const nextIdx = Math.min(history.length, base + 1);
-      setHistoryIdx(nextIdx);
-      setSql(history[nextIdx] ?? "");
-      return;
-    }
-  };
-
-  const runQuery = async () => {
+  const handleRunQuery = async () => {
     if (isRunning) return;
     setError(null);
     setResults(null);
@@ -318,38 +256,32 @@ export function SqlConsole({
     }
   };
 
-  const displayDbLabel = selectedDbLabel || "HTTP Connection (Materialized Data)";
 
   return (
-    <div className={cn("flex w-full h-full flex-col gap-3", className)}>
-      <div className="rounded-sm border border-border bg-card transition-colors h-full">
-        <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4">
-          <div className="flex-1 flex flex-col gap-2">
-            {displayDbLabel && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground font-medium">
-                  Database:
-                </span>
-                <span className="text-xs px-2 py-1 rounded-md bg-muted/50 text-muted-foreground font-mono border border-border">
-                  {displayDbLabel}
-                </span>
-              </div>
-            )}
-            <PromptInputTextarea
-              ref={textareaRef}
+    <div className={cn("flex w-full h-full flex-col gap-3 p-0 relative", className)}>
+      <div className="rounded-sm bg-card transition-colors h-full">
+        <div className="flex flex-col gap-3 p-0 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex-1 flex flex-col gap-2 mt-12">
+            <SqlCodeEditor
+              ref={editorRef}
               value={sql}
-              onChange={(e) => setSql(e.target.value)}
-              onKeyDown={handleKeyDown}
+              onChange={setSql}
               placeholder={placeholder}
-              className="flex-1 min-h-32"
+              minHeight="8rem"
+              autoFocus
+              onRunQuery={() => void handleRunQuery()}
+              onCancel={cancelRun}
+              onHistoryPrev={handleHistoryPrev}
+              onHistoryNext={handleHistoryNext}
+              className="flex-1"
             />
           </div>
-          <div className="flex flex-row justify-end gap-2 sm:flex-col sm:items-center sm:px-1">
+          <div className="flex flex-row justify-end gap-2 sm:flex-col sm:items-center sm:px-1 absolute top-2 right-1">
             {!isRunning && (
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => void runQuery()}
+                onClick={() => void handleRunQuery()}
                 disabled={isRunning}
                 className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
               >
