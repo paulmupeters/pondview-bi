@@ -1,4 +1,5 @@
 import * as defaultTheme from "./default";
+import * as improvedTheme from "./default2";
 import * as monoGreenTheme from "./mono-green";
 import * as redTheme from "./red";
 
@@ -24,6 +25,11 @@ export const themes: Record<string, Theme> = {
     displayName: redTheme.themeDisplayName,
     css: redTheme.themeCss,
   },
+  [improvedTheme.themeName]: {
+    name: improvedTheme.themeName,
+    displayName: improvedTheme.themeDisplayName,
+    css: improvedTheme.themeCss,
+  },
 };
 
 export const getTheme = (themeName: string): Theme | undefined => {
@@ -37,4 +43,3 @@ export const getAllThemes = (): Theme[] => {
 export const getThemeNames = (): string[] => {
   return Object.keys(themes);
 };
-

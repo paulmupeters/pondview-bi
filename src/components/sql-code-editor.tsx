@@ -221,12 +221,12 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
           tabSize: 2,
         }}
         className={cn(
-          "sql-code-editor rounded-sm border border-border overflow-hidden",
-          "[&_.cm-editor]:!bg-card [&_.cm-editor]:!font-mono [&_.cm-editor]:!text-sm",
+          "sql-code-editor rounded-sm overflow-hidden bg-background",
+          "[&_.cm-editor]:!font-mono [&_.cm-editor]:!text-sm",
           "[&_.cm-gutters]:!bg-muted [&_.cm-gutters]:!border-r [&_.cm-gutters]:!border-border",
           "[&_.cm-lineNumbers]:!text-muted-foreground",
           "[&_.cm-content]:!text-foreground [&_.cm-content]:!caret-primary",
-          "[&_.cm-activeLine]:!bg-muted/50",
+          "[&_.cm-activeLine]:!bg-background/50",
           "[&_.cm-activeLineGutter]:!bg-muted",
           "[&_.cm-selectionBackground]:!bg-primary/20",
           "[&_.cm-cursor]:!border-l-2 [&_.cm-cursor]:!border-primary",

@@ -167,8 +167,9 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
           {/* Header */}
           <div className="flex items-center justify-around border-b border-border p-4">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-16 items-center justify-center rounded-lg">
+              <div className="flex flex-col h-12 w-24 items-center justify-center rounded-lg">
                 {/* <Database className="h-4 w-4 text-primary-foreground" /> */}
+                <div><span className="text-primary font-bold text-xs font-mono">POND</span><span className="text-xs font-mono font-semibold text-sidebar-foreground">VIEW</span></div>
                 <svg
                   width="100%"
                   height="100%"
@@ -183,10 +184,10 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                     strokeLinejoin: "round",
                     strokeMiterlimit: 1.5,
                   }}
-                  className="h-full w-full"
+                  className="h-full w-full -mt-2"
                   aria-label="DataChat"
                 >
-                  <title>DataChat</title>
+                  <title>Pondview</title>
                   <path
                     d="M1133.333,111.015l0,536.303c0,23.327 -18.938,42.265 -42.265,42.265l-923.803,0c-23.327,0 -42.265,-18.938 -42.265,-42.265l0,-536.303c0,-23.327 18.938,-42.265 42.265,-42.265l923.803,0c23.327,0 42.265,18.938 42.265,42.265Z"
                     style={{ fill: "var(--background)" }}
@@ -195,8 +196,8 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                     <path
                       d="M804.167,291.667l87.5,0l0,16.667l62.5,0l0,16.667l33.333,0l0,20.833l29.167,0l0,12.5l33.333,0l0,16.667l16.667,0l0,20.833l16.667,0l0,83.333l-16.667,0l0,16.667l-12.5,0l0,16.667l-20.833,0l0,16.667l-16.667,0l0,12.5l-29.167,0l0,16.667l-50,0l0,12.5l-50,0l0,12.5l-100,0l0,20.833l-316.667,0l0,-20.833l-95.833,0l0,-16.667l-50,0l0,-16.667l-50,0l0,-16.667l-29.167,0l0,-16.667l-20.833,0l0,-12.5l-12.5,0l0,-16.667l-16.667,0l0,-16.667l-16.667,0l0,-79.167l16.667,0l0,-16.667l16.667,0l0,-16.667l33.333,0l0,-16.667l29.167,0l0,-16.667l33.333,0l0,-16.667l66.667,0l0,-16.667l75,0l0,16.667l-62.5,0l0,12.5l-54.167,0l0,16.667l-45.833,0l0,16.667l-12.5,0l0,16.667l-16.667,0l0,16.667l-16.667,0l0,66.667l12.5,0l0,20.833l33.333,0l0,20.833l33.333,0l0,16.667l45.833,0l0,16.667l66.667,0l0,20.833l387.5,0l0,-20.833l62.5,0l0,-16.667l50,0l0,-16.667l33.333,0l0,-20.833l33.333,0l0,-16.667l16.667,0l0,-62.5l-16.667,0l0,-16.667l-12.5,0l0,-12.5l-20.833,0l0,-20.833l-37.5,0l0,-16.667l-54.167,0l0,-20.833l-70.833,0l0,-16.667Z"
                       style={{
-                        fill: "var(--accent)",
-                        stroke: "var(--accent)",
+                        fill: "var(--primary)",
+                        stroke: "var(--primary)",
                         strokeWidth: "4.17px",
                       }}
                     />
@@ -205,8 +206,8 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                     <path
                       d="M550,325c0.218,35.525 0,-50 0,-50l0,-4.167l16.667,0l0,-45.833l16.667,0l0,-25l16.667,0l0,-33.333l20.833,0l0,-16.667l20.833,0l0,16.667l16.667,0l0,33.333l20.833,0l0,29.167l16.667,0l0,45.833l16.667,0l0,83.333l-16.667,0l0,33.333l-16.667,0l0,16.667l-37.5,0l0,4.167l-29.167,0l0,-4.167l-25,0l0,-16.667l-20.833,0l0,-33.333l-16.667,0c0,0 -0.218,-68.858 0,-33.333Z"
                       style={{
-                        fill: "var(--accent)",
-                        stroke: "var(--accent)",
+                        fill: "var(--primary)",
+                        stroke: "var(--primary)",
                         strokeWidth: "4.17px",
                       }}
                     />
@@ -219,8 +220,8 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                     <path
                       d="M450,358.333l-45.833,0l0,16.667l-29.167,0l0,16.667l-20.833,0l0,45.833l20.833,0l0,16.667l29.167,0l0,16.667l33.333,0l0,16.667l66.667,0l0,20.833l254.167,0l0,-20.833l62.5,0l0,-12.5l37.5,0l0,-20.833l25,0l0,-12.5l20.833,0l0,-45.833l-20.833,0l0,-16.667l-29.167,0l0,-16.667l-45.833,0l0,16.667l33.333,0l0,12.5l16.667,0l0,33.333l-16.667,0l0,16.667l-33.333,0l0,16.667l-66.667,0l0,20.833l-225,0l0,-20.833l-66.667,0l0,-16.667l-33.333,0l0,-16.667l-16.667,0l0,-37.5l16.667,0l0,-12.5l33.333,0l0,-16.667"
                       style={{
-                        fill: "var(--accent)",
-                        stroke: "var(--accent)",
+                        fill: "var(--primary)",
+                        stroke: "var(--primary)",
                         strokeWidth: "4.17px",
                       }}
                     />
@@ -230,8 +231,8 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                       width="45.833"
                       height="16.667"
                       style={{
-                        fill: "var(--accent)",
-                        stroke: "var(--accent)",
+                        fill: "var(--primary)",
+                        stroke: "var(--primary)",
                         strokeWidth: "4.17px",
                       }}
                     />
@@ -241,8 +242,8 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                       width="45.833"
                       height="16.667"
                       style={{
-                        fill: "var(--accent)",
-                        stroke: "var(--accent)",
+                        fill: "var(--primary)",
+                        stroke: "var(--primary)",
                         strokeWidth: "4.17px",
                       }}
                     />
@@ -291,7 +292,7 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                         className={cn(
                           "flex w-full flex-col items-start gap-1 group rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                           activeChatId === chat.id &&
-                          "border-2 border-accent/40 bg-sidebar-accent",
+                          "border-2 border-primary/40 bg-sidebar-primary hover:bg-sidebar-primary/80",
                         )}
                       >
                         <div className="flex items-center gap-2">
@@ -300,7 +301,7 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                             className={cn(
                               "text-sm font-medium text-sidebar-foreground line-clamp-1 group-hover:text-sidebar-accent-foreground",
                               activeChatId === chat.id &&
-                              "text-sidebar-accent-foreground",
+                              "text-sidebar-primary-foreground",
                             )}
                           >
                             {chat.title || chat.id}
@@ -310,7 +311,7 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                           className={cn(
                             "pl-6 text-xs text-muted-foreground",
                             activeChatId === chat.id &&
-                            "text-sidebar-accent-foreground",
+                            "text-sidebar-primary-foreground",
                           )}
                         >
                           {formatDate(chat.updatedAt)}

@@ -90,7 +90,7 @@ export type SqlConsoleProps = {
 };
 
 const DEFAULT_PLACEHOLDER =
-  "ENTER SQL QUERY... (ENTER to execute, SHIFT+ENTER for newline)";
+  "ENTER SQL QUERY...";
 const DEFAULT_HISTORY_LIMIT = 100;
 const DEFAULT_RUN_LABEL = "▶ RUN";
 const DEFAULT_STOP_LABEL = "⏹ STOP";
@@ -259,7 +259,7 @@ export function SqlConsole({
 
   return (
     <div className={cn("flex w-full h-full flex-col gap-3 p-0 relative", className)}>
-      <div className="rounded-sm bg-card transition-colors h-full">
+      <div className="rounded-sm bg-background transition-colors h-full">
         <div className="flex flex-col gap-3 p-0 sm:flex-row sm:items-center sm:gap-4">
           <div className="flex-1 flex flex-col gap-2 mt-12">
             <SqlCodeEditor
@@ -294,7 +294,7 @@ export function SqlConsole({
                 variant="outline"
                 onClick={cancelRun}
                 disabled={!isRunning}
-                className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                className="text-sm font-mono bg-primary text-primary-foreground border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
               >
                 {stopButtonLabel}
               </Button>

@@ -499,7 +499,7 @@ export function PromptInputWrapper({
           {promptMode === "manual" && (
             <div className="flex flex-row gap-0 w-full h-[800px] max-h-[calc(100vh-200px)]">
               {/* Left Panel: Sidebar + SQL Editor */}
-              <div className="flex flex-row border-r border-border min-w-0">
+              <div className="flex flex-row bg-sidebar">
                 <ConnectedDataPanel
                   selectedDb={selectedDb}
                   onSelect={setSelectedDb}

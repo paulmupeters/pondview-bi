@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDownIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
-import { Database, Table } from "lucide-react";
+import { Database } from "lucide-react";
 import { useState } from "react";
 import {
   PromptInputHoverCard,
@@ -21,6 +21,7 @@ import {
   MATERIALIZED_SCHEMA,
 } from "@/lib/duckdb/materialized-tables";
 import { cn } from "@/lib/utils";
+import { Separator } from "./ui/separator";
 
 interface ConnectedDataPanelProps {
   selectedDb?: string;
@@ -127,7 +128,7 @@ export function ConnectedDataPanel({
     }
 
     return (
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-2">
         {/* Connected Tables Section */}
         {hasConnectedTables &&
           connectedTables.map((entry) => {
@@ -137,67 +138,58 @@ export function ConnectedDataPanel({
         // Check both databasePath and attachAs for backward compatibility
             const isSelected =
               selectedDb === dbIdentifier || selectedDb === entry.attachAs;
-            const isExpanded = expandedDbs.has(dbKey);
             const hasTables =
               (entry.tables && entry.tables.length > 0) || entry.table;
 
             return (
               <div
                 key={dbKey}
-                className="border-b border-border last:border-b-0"
+                className="space-y-1"
               >
-                <div className="flex items-center">
-                  {hasTables ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0"
-                      onClick={() => toggleDb(dbKey)}
-                    >
-                      {isExpanded ? (
-                        <ChevronDownIcon className="h-4 w-4" />
-                      ) : (
-                        <ChevronRightIcon className="h-4 w-4" />
-                      )}
-                    </Button>
-                  ) : (
-                    <div className="w-8" />
+                <div
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 bg-card-background border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
+                    isSelected && "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
+                    mode === "sidebar" && "hover:bg-sidebar-accent/50"
                   )}
-                  <Button
-                    variant="ghost"
-                    className={cn(
-                      "flex-1 justify-start gap-2 h-8 rounded-none hover:bg-muted hover:text-muted-foreground",
-                      isSelected && "bg-muted text-muted-foreground",
-                    )}
+                >
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 flex-1 text-left cursor-pointer"
                     onClick={() => handleSelect(dbIdentifier)}
                   >
-                    <Database className="h-4 w-4 shrink-0" />
-                    <span className="text-xs truncate">{dbDisplayName}</span>
-                  </Button>
+                    <Database className="h-4 w-4 shrink-0 text-[#A8BCA1]" />
+                    <span className="truncate">{dbDisplayName}</span>
+                  </button>
                 </div>
-                {hasTables && isExpanded && (
-                  <div className="pl-8 pb-1">
+                {
+                  hasTables && (
+                    <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
                     {entry.tables && entry.tables.length > 0
-                      ? entry.tables.map((tableName) => (
-                        <button
-                          key={tableName}
-                          type="button"
-                          className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-muted hover:text-muted-foreground cursor-pointer"
-                          onClick={() => handleInsertTable(entry, tableName)}
-                        >
-                          <Table className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{tableName}</span>
-                        </button>
-                      ))
+                        ? entry.tables.map((tableName, idx) => {
+                          const colors = ['bg-blue-400', 'bg-purple-400', 'bg-amber-400'];
+                          const color = colors[idx % colors.length];
+                          return (
+                            <button
+                              key={tableName}
+                              type="button"
+                              className="hover:text-[#2A3028] cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
+                              onClick={() => handleInsertTable(entry, tableName)}
+                            >
+                              <span className={cn("w-1.5 h-1.5 rounded-full", color)}></span>
+                              <span className="truncate">{tableName}</span>
+                            </button>
+                          );
+                        })
                       : entry.table && (
                         <button
                           type="button"
-                          className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-muted hover:text-muted-foreground cursor-pointer"
+                            className="hover:text-[#2A3028] cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
                           onClick={() =>
                             handleInsertTable(entry, entry.table as string)
                           }
                         >
-                          <Table className="h-3 w-3 shrink-0" />
+                            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
                           <span className="truncate">{entry.table}</span>
                         </button>
                       )}
@@ -208,54 +200,49 @@ export function ConnectedDataPanel({
           })}
         {/* Materialized Tables Section */}
         {hasMaterializedTables && (
-          <div className="border-b border-border">
-            <div className="flex items-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 hover:bg-muted hover:text-muted-foreground"
-                onClick={() =>
-                  setIsMaterializedExpanded(!isMaterializedExpanded)
-                }
-              >
-                {isMaterializedExpanded ? (
-                  <ChevronDownIcon className="h-4 w-4" />
-                ) : (
-                  <ChevronRightIcon className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                variant="ghost"
+          <>
+            <Separator />
+            <div className="space-y-1 mt-2">
+              <div
                 className={cn(
-                  "flex-1 justify-start gap-2 h-8 rounded-none hover:bg-muted hover:text-muted-foreground",
+                  "flex items-center gap-2 px-3 py-2 bg-card-background border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
                   selectedDb &&
                   isMaterializedTableIdentifier(selectedDb) &&
-                  "bg-muted text-muted-foreground",
+                  "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
+                  mode === "sidebar" && "hover:bg-sidebar-accent/50"
                 )}
+              >
+                <button
+                  type="button"
+                  className="flex items-center gap-2 flex-1 text-left cursor-pointer"
                 onClick={handleSelectMaterialized}
               >
-                <Database className="h-4 w-4 shrink-0" />
-                <span className="text-xs truncate">
+                  <Database className="h-4 w-4 shrink-0 text-sidebar-primary" />
+                  <span className="truncate">
                   Materialized ({materializedTables.length})
                 </span>
-              </Button>
+                </button>
             </div>
-            {isMaterializedExpanded && (
-              <div className="pl-8 pb-1">
-                {materializedTables.map((tableName) => (
-                  <button
-                    key={tableName}
-                    type="button"
-                    className="px-2 py-1 w-full text-left text-xs text-muted-foreground flex items-center gap-2 hover:bg-muted hover:text-muted-foreground cursor-pointer"
-                    onClick={() => handleInsertMaterializedTable(tableName)}
-                  >
-                    <Table className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{tableName}</span>
-                  </button>
-                ))}
+
+              <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
+                {materializedTables.map((tableName, idx) => {
+                  const colors = ['bg-blue-400', 'bg-purple-400', 'bg-amber-400'];
+                  const color = colors[idx % colors.length];
+                  return (
+                    <button
+                      key={tableName}
+                      type="button"
+                      className="hover:text-[#2A3028] cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
+                      onClick={() => handleInsertMaterializedTable(tableName)}
+                    >
+                      <span className={cn("w-1.5 h-1.5 rounded-full", color)}></span>
+                      <span className="truncate">{tableName}</span>
+                    </button>
+                  );
+                })}
               </div>
-            )}
           </div>
+          </>
         )}
 
       </div>
@@ -267,12 +254,12 @@ export function ConnectedDataPanel({
     return (
       <div
         className={cn(
-          "bg-card flex flex-col h-full",
+          "flex flex-col border-r border-border",
           className,
         )}
       >
-        <div className="p-2 border-b border-border text-xs text-muted-foreground font-bold tracking-widest uppercase">Explorer</div>
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="p-4 border-b border-slate-200 text-xs text-[#5C6658] font-bold tracking-widest uppercase">Explorer</div>
+        <div className="flex-1 overflow-y-auto min-h-0 p-2">
           {renderDatabaseList()}
         </div>
       </div>
