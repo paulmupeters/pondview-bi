@@ -69,6 +69,10 @@ export type SqlConsoleApi = {
    * Clears the executed results and error messages.
    */
   clearResults: () => void;
+  /**
+   * Runs the current query programmatically.
+   */
+  runQuery: () => void;
 };
 
 export type SqlConsoleProps = {
@@ -78,15 +82,16 @@ export type SqlConsoleProps = {
   placeholder?: string;
   runButtonLabel?: string;
   stopButtonLabel?: string;
-  executeQuery: ExecuteQueryFn;
+  executeQueryAction: ExecuteQueryFn;
   onSuccessAction?: (payload: {
     sql: string;
     rows: Record<string, unknown>[];
     columns: { name: string; type?: string }[];
     durationMs: number;
   }) => void;
-  onApiChange?: (api: SqlConsoleApi | null) => void;
+  onApiChangeAction?: (api: SqlConsoleApi | null) => void;
   showInlineResults?: boolean;
+  showRunControls?: boolean;
 };
 
 const DEFAULT_PLACEHOLDER =
@@ -102,10 +107,11 @@ export function SqlConsole({
   placeholder = DEFAULT_PLACEHOLDER,
   runButtonLabel = DEFAULT_RUN_LABEL,
   stopButtonLabel = DEFAULT_STOP_LABEL,
-  executeQuery,
+  executeQueryAction,
   onSuccessAction,
-  onApiChange,
+  onApiChangeAction,
   showInlineResults = true,
+  showRunControls = true,
 }: SqlConsoleProps) {
   const editorRef = useRef<SqlCodeEditorApi | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -116,36 +122,6 @@ export function SqlConsole({
   const [isRunning, setIsRunning] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState<number>(-1);
-
-  useEffect(() => {
-    if (!onApiChange) {
-      return;
-    }
-
-    const api: SqlConsoleApi = {
-      insertText: (text: string) => {
-        editorRef.current?.insertText(text);
-      },
-      setQuery: (value: string) => {
-        setSql(value);
-        editorRef.current?.setValue(value);
-      },
-      getQuery: () => editorRef.current?.getValue() ?? sql,
-      focus: () => {
-        editorRef.current?.focus();
-      },
-      clearResults: () => {
-        setResults(null);
-        setError(null);
-      },
-    };
-
-    onApiChange(api);
-
-    return () => {
-      // Intentionally not cleaning up to avoid flickering null API state
-    };
-  }, [onApiChange, sql]);
 
   useEffect(() => {
     try {
@@ -162,29 +138,35 @@ export function SqlConsole({
     editorRef.current?.focus();
   }, [historyKey, historyLimit]);
 
-  const persistHistory = (items: string[]) => {
-    try {
-      localStorage.setItem(
-        historyKey,
-        JSON.stringify(items.slice(-historyLimit)),
-      );
-    } catch {
-      // ignore storage errors
-    }
-  };
+  const persistHistory = useCallback(
+    (items: string[]) => {
+      try {
+        localStorage.setItem(
+          historyKey,
+          JSON.stringify(items.slice(-historyLimit)),
+        );
+      } catch {
+        // ignore storage errors
+      }
+    },
+    [historyKey, historyLimit],
+  );
 
-  const addToHistory = (entry: string) => {
-    const trimmed = entry.trim();
-    if (!trimmed) return;
-    setHistory((prev) => {
-      const last = prev[prev.length - 1];
-      const next =
-        last === trimmed ? prev : [...prev, trimmed].slice(-historyLimit);
-      persistHistory(next);
-      setHistoryIdx(next.length);
-      return next;
-    });
-  };
+  const addToHistory = useCallback(
+    (entry: string) => {
+      const trimmed = entry.trim();
+      if (!trimmed) return;
+      setHistory((prev) => {
+        const last = prev[prev.length - 1];
+        const next =
+          last === trimmed ? prev : [...prev, trimmed].slice(-historyLimit);
+        persistHistory(next);
+        setHistoryIdx(next.length);
+        return next;
+      });
+    },
+    [historyLimit, persistHistory],
+  );
 
   // History navigation handlers for CodeMirror
   const handleHistoryPrev = useCallback(() => {
@@ -205,7 +187,7 @@ export function SqlConsole({
     setSql(history[nextIdx] ?? "");
   }, [history, historyIdx]);
 
-  const handleRunQuery = async () => {
+  const handleRunQuery = useCallback(async () => {
     if (isRunning) return;
     setError(null);
     setResults(null);
@@ -220,7 +202,7 @@ export function SqlConsole({
     const startedAt = performance.now();
 
     try {
-      const { rows, columns: providedColumns } = await executeQuery({
+      const { rows, columns: providedColumns } = await executeQueryAction({
         sql: currentSql,
         signal: controller.signal,
       });
@@ -248,7 +230,7 @@ export function SqlConsole({
       setIsRunning(false);
       abortRef.current = null;
     }
-  };
+  }, [addToHistory, executeQueryAction, isRunning, onSuccessAction, sql]);
 
   const cancelRun = () => {
     if (abortRef.current) {
@@ -256,10 +238,48 @@ export function SqlConsole({
     }
   };
 
+  const runQueryRef = useRef<() => void>(() => { });
+  useEffect(() => {
+    runQueryRef.current = () => {
+      void handleRunQuery();
+    };
+  }, [handleRunQuery]);
+
+  useEffect(() => {
+    if (!onApiChangeAction) {
+      return;
+    }
+
+    const api: SqlConsoleApi = {
+      insertText: (text: string) => {
+        editorRef.current?.insertText(text);
+      },
+      setQuery: (value: string) => {
+        setSql(value);
+        editorRef.current?.setValue(value);
+      },
+      getQuery: () => editorRef.current?.getValue() ?? sql,
+      focus: () => {
+        editorRef.current?.focus();
+      },
+      clearResults: () => {
+        setResults(null);
+        setError(null);
+      },
+      runQuery: () => runQueryRef.current(),
+    };
+
+    onApiChangeAction(api);
+
+    return () => {
+      // Intentionally not cleaning up to avoid flickering null API state
+    };
+  }, [onApiChangeAction, sql]);
+
 
   return (
-    <div className={cn("flex w-full h-full flex-col gap-3 p-0 relative", className)}>
-      <div className="rounded-sm bg-background transition-colors h-full">
+    <div className={cn("flex w-full h-full flex-col gap-3 p-0 py-4 relative", className)}>
+      <div className="rounded-sm bg-popover transition-colors h-full">
         <div className="flex flex-col gap-3 p-0 sm:flex-row sm:items-center sm:gap-4">
           <div className="flex-1 flex flex-col gap-2 mt-12">
             <SqlCodeEditor
@@ -276,6 +296,7 @@ export function SqlConsole({
               className="flex-1"
             />
           </div>
+          {showRunControls && (
           <div className="flex flex-row justify-end gap-2 sm:flex-col sm:items-center sm:px-1 absolute top-2 right-1">
             {!isRunning && (
               <Button
@@ -300,6 +321,7 @@ export function SqlConsole({
               </Button>
             )}
           </div>
+          )} 
         </div>
       </div>
       {showInlineResults && results && (

@@ -43,6 +43,9 @@ export function ChartView({
   renderSqlControls,
   renderSqlEditor,
 }: ChartViewProps) {
+  console.log("data... chart view", data);
+  console.log("----------");
+  console.log("chartConfig,", chartConfig);
   return (
     <div className="group relative flex flex-col rounded-xl bg-card p-4 md:p-2">
       {selectedForCard ? (

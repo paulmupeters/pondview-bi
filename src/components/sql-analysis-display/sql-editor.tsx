@@ -28,7 +28,7 @@ export function SqlEditor({
       className={className}
       historyKey={HISTORY_KEY}
       historyLimit={HISTORY_LIMIT}
-      executeQuery={executeQuery}
+      executeQueryAction={executeQuery}
       onSuccessAction={({ sql, rows, columns }) =>
         onQuerySuccess(sql, rows as Result[], columns)
       }

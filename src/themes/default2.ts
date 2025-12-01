@@ -5,12 +5,11 @@ export const themeCss = `:root {
   --foreground: oklch(0.3005 0.0164 137.8610);
   --card: oklch(1.0000 0 0);
   --card-foreground: oklch(0.3005 0.0164 137.8610);
-  --popover: oklch(0.9907 0.0054 95.0978);
+  --popover: oklch(0.9851 0 0);
   --popover-foreground: oklch(0.3005 0.0164 137.8610);
   --primary: oklch(0.7719 0.0460 135.9064);
   --primary-foreground: oklch(0.2988 0.0136 131.6671);
-  --secondary: oklch(68.38% 0.0352 138.2361) /* #8F9F8A */
-    --secondary-foreground;
+  --secondary: oklch(68.38% 0.0352 138.2361);
   --secondary-foreground: oklch(0.2417 0.0298 269.8827);
   --muted: oklch(0.9185 0.0096 93.5751);
   --muted-foreground: oklch(0.4973 0.0250 136.6868);
@@ -21,9 +20,8 @@ export const themeCss = `:root {
   --border: oklch(0.9185 0.0096 93.5751);
   --input: oklch(0.9185 0.0096 93.5751);
   --ring: oklch(0.7719 0.0460 135.9064);
-  --chart-1: oklch(0.7719 0.0460 135.9064);
-  --chart-2: oklch(68.38% 0.0352 138.2361) /* Darker sage */
-    --chart-3;
+  --chart-1: oklch(0.8691 0.0454 133.9421);
+  --chart-2: oklch(0.8132 0.0379 136.4759);
   --chart-3: oklch(0.6744 0.0427 136.0110);
   --chart-4: oklch(0.4973 0.0250 136.6868);
   --chart-5: oklch(0.3005 0.0164 137.8610);
@@ -79,12 +77,11 @@ export const themeCss = `:root {
   --border: oklch(0.4148 0.0270 132.8667);
   --input: oklch(0.4148 0.0270 132.8667);
   --ring: oklch(0.7719 0.0460 135.9064);
-  --chart-1: oklch(0.7719 0.0460 135.9064);
-  --chart-2: oklch(68.38% 0.0352 138.2361)
-    --chart-3;
-  --chart-3: oklch(0.6744 0.0427 136.0110);
-  --chart-4: oklch(0.6208 0.0406 132.8703);
-  --chart-5: oklch(0.9033 0.0262 92.4097);
+  --chart-1: oklch(0.9789 0.0436 132.7011);
+  --chart-2: oklch(0.7254 0.0253 133.5292);
+  --chart-3: oklch(0.5971 0.0265 109.7753);
+  --chart-4: oklch(0.4468 0.0514 135.1063);
+  --chart-5: oklch(0.5545 0.0138 96.5672);
   --sidebar: oklch(0.3110 0.0200 136.2686);
   --sidebar-foreground: oklch(0.9907 0.0054 95.0978);
   --sidebar-primary: oklch(0.7719 0.0460 135.9064);
@@ -112,8 +109,5 @@ export const themeCss = `:root {
   --shadow-lg: 0px 1px 3px 0px hsl(0 0% 0% / 0.30), 0px 4px 6px -1px hsl(0 0% 0% / 0.30);
   --shadow-xl: 0px 1px 3px 0px hsl(0 0% 0% / 0.30), 0px 8px 10px -1px hsl(0 0% 0% / 0.30);
   --shadow-2xl: 0px 1px 3px 0px hsl(0 0% 0% / 0.75);
-
-}
-}
 }`;
 

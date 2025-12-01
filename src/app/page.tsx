@@ -1,16 +1,16 @@
 "use client";
 
-import { nanoid } from "nanoid";
 import type { UIMessage } from "ai";
+import { nanoid } from "nanoid";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import {
   PromptInputWrapper,
   type PromptMode,
 } from "@/components/prompt-input-wrapper";
+import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 
 const EXAMPLE_COMMANDS = [
   "Show me trends of unicorns over the year in China",
@@ -109,22 +109,84 @@ export default function Home() {
   return (
     <div className="h-full w-full flex items-center justify-center bg-background p-4 overflow-hidden">
       <div className="w-full max-w-7xl h-full flex flex-col font-mono justify-between py-4">
-        <div className="flex items-center justify-center">
-
-          <h1>Pondview</h1>
-        </div>
-
         <div className="p-2 flex gap-2 py-2 justify-center">
           <div className="flex flex-col items-center justify-center gap-2">
-            <p className="text-sm opacity-70" aria-hidden="true">
-              ═══════════════════════════════════════════════════════════════
-            </p>
-            <p className="text-sm opacity-70">
-              QUERY DATA AND GENERATE CHARTS WITH NATURAL LANGUAGE QUERIES.
-            </p>
-            <p className="text-sm opacity-70" aria-hidden="true">
-              ═══════════════════════════════════════════════════════════════
-            </p>
+            <div><span className="text-primary font-bold text-4xl font-mono">POND</span><span className="text-4xl font-mono font-semibold text-sidebar-foreground">VIEW</span></div>
+            <svg
+              width="100%"
+              height="100%"
+              viewBox="0 0 1280 792"
+              version="1.1"
+              xmlns="http://www.w3.org/2000/svg"
+              xmlnsXlink="http://www.w3.org/1999/xlink"
+              style={{
+                fillRule: "evenodd",
+                clipRule: "evenodd",
+                strokeLinecap: "round",
+                strokeLinejoin: "round",
+                strokeMiterlimit: 1.5,
+              }}
+              className="h-32 w-32 -mt-16 ml-1"
+              aria-label="DataChat"
+            >
+              <title>Pondview</title>
+              <g id="water1">
+                <path
+                  d="M804.167,291.667l87.5,0l0,16.667l62.5,0l0,16.667l33.333,0l0,20.833l29.167,0l0,12.5l33.333,0l0,16.667l16.667,0l0,20.833l16.667,0l0,83.333l-16.667,0l0,16.667l-12.5,0l0,16.667l-20.833,0l0,16.667l-16.667,0l0,12.5l-29.167,0l0,16.667l-50,0l0,12.5l-50,0l0,12.5l-100,0l0,20.833l-316.667,0l0,-20.833l-95.833,0l0,-16.667l-50,0l0,-16.667l-50,0l0,-16.667l-29.167,0l0,-16.667l-20.833,0l0,-12.5l-12.5,0l0,-16.667l-16.667,0l0,-16.667l-16.667,0l0,-79.167l16.667,0l0,-16.667l16.667,0l0,-16.667l33.333,0l0,-16.667l29.167,0l0,-16.667l33.333,0l0,-16.667l66.667,0l0,-16.667l75,0l0,16.667l-62.5,0l0,12.5l-54.167,0l0,16.667l-45.833,0l0,16.667l-12.5,0l0,16.667l-16.667,0l0,16.667l-16.667,0l0,66.667l12.5,0l0,20.833l33.333,0l0,20.833l33.333,0l0,16.667l45.833,0l0,16.667l66.667,0l0,20.833l387.5,0l0,-20.833l62.5,0l0,-16.667l50,0l0,-16.667l33.333,0l0,-20.833l33.333,0l0,-16.667l16.667,0l0,-62.5l-16.667,0l0,-16.667l-12.5,0l0,-12.5l-20.833,0l0,-20.833l-37.5,0l0,-16.667l-54.167,0l0,-20.833l-70.833,0l0,-16.667Z"
+                  style={{
+                    fill: "var(--primary)",
+                    stroke: "var(--primary)",
+                    strokeWidth: "4.17px",
+                  }}
+                />
+              </g>
+              <g id="drop">
+                <path
+                  d="M550,325c0.218,35.525 0,-50 0,-50l0,-4.167l16.667,0l0,-45.833l16.667,0l0,-25l16.667,0l0,-33.333l20.833,0l0,-16.667l20.833,0l0,16.667l16.667,0l0,33.333l20.833,0l0,29.167l16.667,0l0,45.833l16.667,0l0,83.333l-16.667,0l0,33.333l-16.667,0l0,16.667l-37.5,0l0,4.167l-29.167,0l0,-4.167l-25,0l0,-16.667l-20.833,0l0,-33.333l-16.667,0c0,0 -0.218,-68.858 0,-33.333Z"
+                  style={{
+                    fill: "var(--primary)",
+                    stroke: "var(--primary)",
+                    strokeWidth: "4.17px",
+                  }}
+                />
+                <path
+                  d="M675,304.167l0,37.5l-16.667,0l0,16.667l-25,0l0,20.833l25,0l0,-20.833l16.667,0l0,-16.667l16.667,0l0,-37.5l-16.667,0Z"
+                  style={{ fill: "var(--background)" }}
+                />
+              </g>
+              <g id="water2">
+                <path
+                  d="M450,358.333l-45.833,0l0,16.667l-29.167,0l0,16.667l-20.833,0l0,45.833l20.833,0l0,16.667l29.167,0l0,16.667l33.333,0l0,16.667l66.667,0l0,20.833l254.167,0l0,-20.833l62.5,0l0,-12.5l37.5,0l0,-20.833l25,0l0,-12.5l20.833,0l0,-45.833l-20.833,0l0,-16.667l-29.167,0l0,-16.667l-45.833,0l0,16.667l33.333,0l0,12.5l16.667,0l0,33.333l-16.667,0l0,16.667l-33.333,0l0,16.667l-66.667,0l0,20.833l-225,0l0,-20.833l-66.667,0l0,-16.667l-33.333,0l0,-16.667l-16.667,0l0,-37.5l16.667,0l0,-12.5l33.333,0l0,-16.667"
+                  style={{
+                    fill: "var(--primary)",
+                    stroke: "var(--primary)",
+                    strokeWidth: "4.17px",
+                  }}
+                />
+                <rect
+                  x="454.167"
+                  y="341.667"
+                  width="45.833"
+                  height="16.667"
+                  style={{
+                    fill: "var(--primary)",
+                    stroke: "var(--primary)",
+                    strokeWidth: "4.17px",
+                  }}
+                />
+                <rect
+                  x="762.5"
+                  y="341.667"
+                  width="45.833"
+                  height="16.667"
+                  style={{
+                    fill: "var(--primary)",
+                    stroke: "var(--primary)",
+                    strokeWidth: "4.17px",
+                  }}
+                />
+              </g>
+            </svg>
           </div>
         </div>
 
@@ -158,7 +220,9 @@ export default function Home() {
                         onClick={() => handleExampleClick(command)}
                         className="hover:text-primary cursor-pointer transition-colors text-left w-full block group"
                       >
-                        <span className="opacity-50 group-hover:opacity-100 transition-opacity mr-2">{">"}</span>
+                        <span className="opacity-50 group-hover:opacity-100 transition-opacity mr-2">
+                          {">"}
+                        </span>
                         {command}
                       </button>
                     ))}

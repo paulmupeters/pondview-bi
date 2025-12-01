@@ -10,17 +10,28 @@ export const generateChartConfig = async (results: Result[], userQuery: string) 
     prompt: `Given the following data from a SQL query result, generate the chart config that best visualises the data and answers the users query.
       For multiple groups use multi-lines.
 
-      Here is an example complete config:
+      IMPORTANT: 
+      - yKeys must contain the column name(s) with numeric values to plot on the Y-axis. Never leave yKeys empty!
+      - countMode should ONLY be true when you have RAW non-aggregated data and want to count occurrences.
+      - If the data already contains aggregated values (like columns named "count", "total", "sum", "avg", etc.), set countMode to FALSE and put those column names in yKeys.
+      - Look at the actual column names in the data and use them exactly as they appear.
+
+      Here is an example complete config for pre-aggregated data:
       export const chartConfig = {
-        type: "pie",
-        xKey: "month",
-        yKeys: ["sales", "profit", "expenses"],
-        colors: {
-          sales: "#4CAF50",
-          profit: "#2196F3",
-          expenses: "#F44336"
-        },
-        legend: true
+        type: "bar",
+        xKey: "year",
+        yKeys: ["count"],  // Use the actual column name from the data
+        countMode: false,  // FALSE because data is already aggregated
+        legend: false
+      }
+
+      Here is an example for raw non-aggregated data where you want to count occurrences:
+      export const chartConfig = {
+        type: "bar",
+        xKey: "category",
+        yKeys: [],  // Empty only when countMode is true
+        countMode: true,  // TRUE to count occurrences of each category
+        legend: false
       }
 
       User Query:

@@ -40,7 +40,7 @@ export function SqlChart({
   }
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 p-2">
       {/* Summary */}
       {summary && (
         <div className="space-y-2">

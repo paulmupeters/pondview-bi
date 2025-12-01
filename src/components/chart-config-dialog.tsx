@@ -123,6 +123,12 @@ export function ChartConfigForm({
       
       getCheckedValues("yKeys").forEach(val => formData.append("yKeys", val));
       
+      // Handle countMode checkbox separately
+      const countModeChecked = container.querySelector(`[name="countMode"]:checked`) as HTMLInputElement | null;
+      if (countModeChecked) {
+        formData.append("countMode", "true");
+      }
+      
       formData.append("legend", getRadioValue("legend") || (config?.legend ? "yes" : "no"));
       formData.append("multipleLines", multipleLines ? "yes" : "no");
       formData.append("measurementColumn", getValue("measurementColumn") || "");
@@ -170,10 +176,7 @@ export function ChartConfigForm({
       type: formData.get("type") as "bar" | "line" | "area" | "pie",
       title: formData.get("title") as string,
       xKey: formData.get("xKey") as string,
-      yKeys: (() => {
-        const yKeysRaw = formData.getAll("yKeys") as string[];
-        return yKeysRaw.filter((key) => key !== "count");
-      })(),
+      yKeys: formData.getAll("yKeys") as string[],
       legend: formData.get("legend") === "yes",
       multipleLines: formData.get("multipleLines") === "yes",
       measurementColumn:
@@ -182,10 +185,7 @@ export function ChartConfigForm({
       lineCategories:
         (formData.getAll("lineCategories") as string[]) || undefined,
       colors: undefined,
-      countMode: (() => {
-        const yKeysRaw = formData.getAll("yKeys") as string[];
-        return yKeysRaw.includes("count") ? true : false;
-      })(),
+      countMode: formData.get("countMode") === "true",
       showGrid: getBooleanField("showGrid", config?.showGrid ?? true),
       showXAxis: getBooleanField("showXAxis", config?.showXAxis ?? true),
       showYAxis: getBooleanField("showYAxis", config?.showYAxis ?? true),
@@ -296,8 +296,8 @@ export function ChartConfigForm({
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                name="yKeys"
-                value="count"
+                name="countMode"
+                value="true"
                 defaultChecked={config?.countMode}
                 className="rounded border-input"
               />

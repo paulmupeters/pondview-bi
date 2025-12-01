@@ -15,13 +15,16 @@ import {
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Response } from "@/components/ai-elements/response";
+import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
+import { DuckdbRepl } from "@/components/duckdb-shell/repl";
+import { ManualModeResultsPanel } from "@/components/manual-mode-results-panel";
 import { PromptInputWrapper } from "@/components/prompt-input-wrapper";
-import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import type {
   SqlAnalysisData,
   SqlAnalysisStage,
 } from "@/components/sql-analysis-display.types";
+import type { SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import { VisualizationPanel } from "@/components/visualization-panel";
 import type { ArtifactStatus } from "@/hooks/types";
@@ -30,6 +33,7 @@ import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
+import { cn } from "@/lib/utils";
 
 const AUTO_SENT_FLAG_PREFIX = "autoSent:";
 const AUTO_SENT_STALE_MS = 5 * 60 * 1000;
@@ -48,6 +52,27 @@ export default function Chat({
   const [promptPendingMode, setPromptPendingMode] = useState<PromptMode | null>(
     null,
   );
+  const isAiMode = promptMode === "ai";
+
+  // Manual mode state
+  const [selectedDb, setSelectedDb] = useState<string | undefined>();
+  const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(
+    null,
+  );
+  const [sqlResult, setSqlResult] = useState<{
+    sql: string;
+    rows: Record<string, unknown>[];
+    columns: { name: string; type?: string }[];
+    durationMs: number;
+  } | null>(null);
+
+  // Initialize selectedDb with first connected table's database if available
+  useEffect(() => {
+    if (!selectedDb && connectedTables.length > 0) {
+      setSelectedDb(connectedTables[0]?.databasePath);
+    }
+  }, [connectedTables, selectedDb]);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -111,6 +136,15 @@ export default function Chat({
 
   const handleOpenDashboardBuilder = () => {
     setIsDashboardBuilderOpen(true);
+  };
+
+  const handleInsertTableIntoSql = (tableName: string) => {
+    if (!sqlConsoleApi) return;
+    const current = sqlConsoleApi.getQuery() ?? "";
+    const lastChar = current.length > 0 ? current[current.length - 1] : "";
+    const needsSpace = current.length > 0 && !/\s/.test(lastChar);
+    sqlConsoleApi.insertText(`${needsSpace ? " " : ""}${tableName}`);
+    sqlConsoleApi.focus();
   };
 
   const handleAddVisual = useCallback(async () => {
@@ -481,6 +515,61 @@ export default function Chat({
 
   const isConversationEmpty = messages.length === 0;
 
+  const manualWorkspace = (
+    <div className="flex h-full min-h-0 overflow-hidden py-1">
+      <ConnectedDataPanel
+        selectedDb={selectedDb}
+        onSelect={setSelectedDb}
+        mode="sidebar"
+        onInsertTable={handleInsertTableIntoSql}
+        className="w-64 shrink-0 bg-sidebar p-2"
+      />
+      <div className="flex-1 min-w-0 h-full bg-popover">
+        <DuckdbRepl
+          className="h-full w-full"
+          selectedDbIdentifier={selectedDb}
+          onConsoleApiChangeAction={setSqlConsoleApi}
+          onAddToChatAction={handleAddSqlResultToChat}
+          inlineResults={false}
+          showRunControls={false}
+          onResultChangeAction={(result) => {
+            setSqlResult(result);
+          }}
+        />
+      </div>
+    </div>
+  );
+
+  const rightPanelContent = (
+    <div className="relative h-full w-full overflow-hidden">
+      <div
+        aria-hidden={!isAiMode}
+        className={cn(
+          "absolute inset-0 flex flex-col transition-all duration-300 ease-out",
+          isAiMode
+            ? "opacity-100 translate-y-0 pointer-events-auto"
+            : "opacity-0 translate-y-2 pointer-events-none",
+        )}
+      >
+        <VisualizationPanel visualizations={visualizations} />
+      </div>
+      <div
+        aria-hidden={isAiMode}
+        className={cn(
+          "absolute inset-0 flex flex-col transition-all duration-300 ease-out",
+          isAiMode
+            ? "opacity-0 -translate-y-2 pointer-events-none"
+            : "opacity-100 translate-y-0 pointer-events-auto",
+        )}
+      >
+        <ManualModeResultsPanel
+          sqlResult={sqlResult}
+          onSwitchToAiMode={() => setPromptMode("ai")}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div
@@ -490,169 +579,192 @@ export default function Chat({
             : "flex-col"
         } ${isDashboardBuilderOpen ? "mr-[50vw]" : ""}`}
       >
-        <div className="flex h-full w-full flex-col">
+        <div className="flex h-full w-full flex-col relative">
           {/* Two-column layout: Messages on left, Visualizations on right */}
           <div className="flex-1 overflow-hidden bg-background">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full p-6">
-              {/* Left: Messages Panel */}
-              <div className="flex flex-col min-w-0 h-full overflow-hidden">
-                <Conversation className="flex-1 min-h-0">
-                  <ConversationContent className="max-w-full mx-auto w-full space-y-6">
-                    {isConversationEmpty && (
-                      <Message from="assistant" key="assistant-ready">
-                        <MessageContent>
-                          <Response key="assistant-ready-response">
-                            Ready to help...
-                          </Response>
-                        </MessageContent>
-                      </Message>
-                    )}
-                    {messages.map((message) => (
-                      <Message from={message.role} key={message.id}>
-                        <MessageContent className="relative w-full">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
-                            onClick={() => handleRemoveMessage(message.id)}
-                            aria-label="Remove message"
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </Button>
-                          {message.parts?.map((part, partIndex) => {
-                            if (status === "submitted") {
-                              return (
-                                <span
-                                  key={`${message.id}-part-${partIndex}-submitted`}
-                                >
-                                  {animationFrame}
-                                </span>
-                              );
-                            }
-                            if (part.type === "text") {
-                              return (
-                                <Response
-                                  key={`${message.id}-part-${partIndex}`}
-                                >
-                                  {part.text}
-                                </Response>
-                              );
-                            }
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-y-6 lg:gap-x-0 h-full">
+              {/* Left Panel */}
+              <div className="flex flex-col min-w-0 h-full overflow-hidden lg:col-span-3">
+                <div className="flex-1 min-h-0 flex flex-col">
+                  {promptMode === "ai" ? (
+                    <Conversation className="flex-1 min-h-0 h-full">
+                      <ConversationContent className="max-w-full mx-auto w-full space-y-6 overflow-y-auto">
+                        {isConversationEmpty && (
+                          <Message from="assistant" key="assistant-ready">
+                            <MessageContent>
+                              <Response key="assistant-ready-response">
+                                Ready to help...
+                              </Response>
+                            </MessageContent>
+                          </Message>
+                        )}
+                        {messages.map((message) => (
+                          <Message from={message.role} key={message.id}>
+                            <MessageContent className="relative w-full">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
+                                onClick={() => handleRemoveMessage(message.id)}
+                                aria-label="Remove message"
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                              </Button>
+                              {message.parts?.map((part, partIndex) => {
+                                if (status === "submitted") {
+                                  return (
+                                    <span
+                                      key={`${message.id}-part-${partIndex}-submitted`}
+                                    >
+                                      {animationFrame}
+                                    </span>
+                                  );
+                                }
+                                if (part.type === "text") {
+                                  return (
+                                    <Response
+                                      key={`${message.id}-part-${partIndex}`}
+                                    >
+                                      {part.text}
+                                    </Response>
+                                  );
+                                }
 
-                            if (part.type === executeSqlArtifactType) {
-                              const artifactPart = part as {
-                                data?: {
-                                  status?: ArtifactStatus;
-                                  progress?: number;
-                                  error?: string;
-                                  payload?: SqlAnalysisData;
-                                };
-                              };
-                              const artifactData = artifactPart.data;
+                                if (part.type === executeSqlArtifactType) {
+                                  const artifactPart = part as {
+                                    data?: {
+                                      status?: ArtifactStatus;
+                                      progress?: number;
+                                      error?: string;
+                                      payload?: SqlAnalysisData;
+                                    };
+                                  };
+                                  const artifactData = artifactPart.data;
 
-                              if (!artifactData) {
+                                  if (!artifactData) {
+                                    return null;
+                                  }
+
+                                  if (artifactData.status === "error") {
+                                    return (
+                                      <div
+                                        key={`${message.id}-part-${partIndex}`}
+                                        className="mt-4 max-w-full text-sm text-red-500"
+                                      >
+                                        {artifactData.error ??
+                                          "SQL analysis failed."}
+                                      </div>
+                                    );
+                                  }
+
+                                  const payload = (artifactData.payload ??
+                                    null) as SqlAnalysisData | null;
+
+                                  // Show SQL query inline in messages
+                                  if (payload?.query) {
+                                    return (
+                                      <div
+                                        key={`${message.id}-part-${partIndex}`}
+                                        className="mt-4 w-full"
+                                      >
+                                        <div className="flex gap-4">
+                                          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                                            <svg
+                                              aria-hidden="true"
+                                              className="w-4 h-4 text-primary"
+                                              fill="none"
+                                              viewBox="0 0 24 24"
+                                              stroke="currentColor"
+                                              aria-label="Generated SQL"
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth="2"
+                                                d="M13 10V3L4 14h7v7l9-11h-7z"
+                                              />
+                                            </svg>
+                                          </div>
+                                          <div className="bg-muted/50 p-4 rounded-2xl rounded-tl-none border border-border max-w-[90%]">
+                                            <p className="font-mono text-xs text-muted-foreground mb-2">
+                                              GENERATED SQL
+                                            </p>
+                                            <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-background p-3 rounded border border-border">
+                                              {payload.query}
+                                            </code>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+
+                                  return null;
+                                }
+
+                                if (part.type === "tool-getTableSchema") {
+                                  return (
+                                    <span key={`${message.id}-part-${partIndex}`}>
+                                      Getting table schema
+                                    </span>
+                                  );
+                                }
+
+                                if (part.type === "tool-generateChartConfig") {
+                                  return (
+                                    <span key={`${message.id}-part-${partIndex}`}>
+                                      Generating chart config...{animationFrame}
+                                    </span>
+                                  );
+                                }
+
+                                if (part.type === "tool-executeSql") {
+                                  return (
+                                    <span key={`${message.id}-part-${partIndex}`}>
+                                      Processing...
+                                    </span>
+                                  );
+                                }
+
                                 return null;
-                              }
+                              })}
+                            </MessageContent>
+                          </Message>
+                        ))}
+                        {status === "streaming" && (
+                          <span key="assistant-streaming-div">
+                            {animationFrame} {verbAiIsThinking}
+                          </span>
+                        )}
+                      </ConversationContent>
+                      <ConversationScrollButton />
+                    </Conversation>
+                  ) : (
+                    manualWorkspace
+                  )}
+                </div>
 
-                              if (artifactData.status === "error") {
-                                return (
-                                  <div
-                                    key={`${message.id}-part-${partIndex}`}
-                                    className="mt-4 max-w-full text-sm text-red-500"
-                                  >
-                                    {artifactData.error ??
-                                      "SQL analysis failed."}
-                                  </div>
-                                );
-                              }
-
-                              const payload = (artifactData.payload ??
-                                null) as SqlAnalysisData | null;
-
-                              // Show SQL query inline in messages
-                              if (payload?.query) {
-                                return (
-                                  <div
-                                    key={`${message.id}-part-${partIndex}`}
-                                    className="mt-4 w-full"
-                                  >
-                                    <div className="flex gap-4">
-                                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                                        <svg
-                                          aria-hidden="true"
-                                          className="w-4 h-4 text-primary"
-                                          fill="none"
-                                          viewBox="0 0 24 24"
-                                          stroke="currentColor"
-                                          aria-label="Generated SQL"
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth="2"
-                                            d="M13 10V3L4 14h7v7l9-11h-7z"
-                                          />
-                                        </svg>
-                                      </div>
-                                      <div className="bg-muted/50 p-4 rounded-2xl rounded-tl-none border border-border max-w-[90%]">
-                                        <p className="font-mono text-xs text-muted-foreground mb-2">
-                                          GENERATED SQL
-                                        </p>
-                                        <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-background p-3 rounded border border-border">
-                                          {payload.query}
-                                        </code>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              }
-
-                              return null;
-                            }
-
-                            if (part.type === "tool-getTableSchema") {
-                              return (
-                                <span key={`${message.id}-part-${partIndex}`}>
-                                  Getting table schema
-                                </span>
-                              );
-                            }
-
-                            if (part.type === "tool-generateChartConfig") {
-                              return (
-                                <span key={`${message.id}-part-${partIndex}`}>
-                                  Generating chart config...{animationFrame}
-                                </span>
-                              );
-                            }
-
-                            if (part.type === "tool-executeSql") {
-                              return (
-                                <span key={`${message.id}-part-${partIndex}`}>
-                                  Processing...
-                                </span>
-                              );
-                            }
-
-                            return null;
-                          })}
-                        </MessageContent>
-                      </Message>
-                    ))}
-                    {status === "streaming" && (
-                      <span key="assistant-streaming-div">
-                        {animationFrame} {verbAiIsThinking}
-                      </span>
-                    )}
-                  </ConversationContent>
-                  <ConversationScrollButton />
-                </Conversation>
+                {/* Input Area - aligned with messages */}
+                <div className="flex-shrink-0 p-1 w-full max-h-[50vh] overflow-hidden">
+                  <PromptInputWrapper
+                    onSubmit={handleSubmit}
+                    className="transition delay-150 duration-300 ease-in-out bg-card-background"
+                    status={status}
+                    onCreateDashboard={handleOpenDashboardBuilder}
+                    onAddVisual={handleAddVisual}
+                    mode={promptMode}
+                    onModeChange={setPromptMode}
+                    pendingMode={promptPendingMode}
+                    selectedDb={selectedDb}
+                    onSelectDb={setSelectedDb}
+                    onInsertTable={handleInsertTableIntoSql}
+                  />
+                </div>
               </div>
 
-              {/* Right: Visualization Panel */}
-              <div className="hidden lg:flex flex-col min-w-0 h-full">
-                <VisualizationPanel visualizations={visualizations} />
+              {/* Right: Visualization Panel or Manual Results */}
+              <div className="hidden lg:flex flex-col min-w-0 h-full lg:col-span-2">
+                {rightPanelContent}
               </div>
             </div>
           </div>
@@ -660,23 +772,8 @@ export default function Chat({
           {/* Visualization Panel for Mobile (below messages) */}
           <div className="lg:hidden border-t border-border bg-background">
             <div className="h-[400px] p-6">
-              <VisualizationPanel visualizations={visualizations} />
+              {rightPanelContent}
             </div>
-          </div>
-
-          {/* Input Area */}
-          <div className="p-1 max-w-6xl w-full mx-auto">
-            <PromptInputWrapper
-              onSubmit={handleSubmit}
-              onAddSqlResultToChat={handleAddSqlResultToChat}
-              className="transition delay-150 duration-300 ease-in-out bg-card-background"
-              status={status}
-              onCreateDashboard={handleOpenDashboardBuilder}
-              onAddVisual={handleAddVisual}
-              mode={promptMode}
-              onModeChange={setPromptMode}
-              pendingMode={promptPendingMode}
-            />
           </div>
         </div>
       </div>

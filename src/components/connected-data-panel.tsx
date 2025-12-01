@@ -41,20 +41,6 @@ export function ConnectedDataPanel({
   const connectedTables = useConnectedTables();
   const { tables: materializedTables } = useMaterializedTables();
   const [isOpen, setIsOpen] = useState(false);
-  const [expandedDbs, setExpandedDbs] = useState<Set<string>>(new Set());
-  const [isMaterializedExpanded, setIsMaterializedExpanded] = useState(false);
-
-  const toggleDb = (dbKey: string) => {
-    setExpandedDbs((prev) => {
-      const next = new Set(prev);
-      if (next.has(dbKey)) {
-        next.delete(dbKey);
-      } else {
-        next.add(dbKey);
-      }
-      return next;
-    });
-  };
 
   const getDbIdentifier = (entry: (typeof connectedTables)[0]): string => {
     // Use databasePath as the identifier for queries, not attachAs
@@ -148,7 +134,7 @@ export function ConnectedDataPanel({
               >
                 <div
                   className={cn(
-                    "flex items-center gap-2 px-3 py-2 bg-card-background border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
+                    "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
                     isSelected && "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
                     mode === "sidebar" && "hover:bg-sidebar-accent/50"
                   )}
@@ -173,7 +159,7 @@ export function ConnectedDataPanel({
                             <button
                               key={tableName}
                               type="button"
-                              className="hover:text-[#2A3028] cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
+                              className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
                               onClick={() => handleInsertTable(entry, tableName)}
                             >
                               <span className={cn("w-1.5 h-1.5 rounded-full", color)}></span>
@@ -184,7 +170,7 @@ export function ConnectedDataPanel({
                       : entry.table && (
                         <button
                           type="button"
-                            className="hover:text-[#2A3028] cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
+                            className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
                           onClick={() =>
                             handleInsertTable(entry, entry.table as string)
                           }
@@ -205,7 +191,7 @@ export function ConnectedDataPanel({
             <div className="space-y-1 mt-2">
               <div
                 className={cn(
-                  "flex items-center gap-2 px-3 py-2 bg-card-background border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
+                  "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
                   selectedDb &&
                   isMaterializedTableIdentifier(selectedDb) &&
                   "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
@@ -232,7 +218,7 @@ export function ConnectedDataPanel({
                     <button
                       key={tableName}
                       type="button"
-                      className="hover:text-[#2A3028] cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
+                      className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
                       onClick={() => handleInsertMaterializedTable(tableName)}
                     >
                       <span className={cn("w-1.5 h-1.5 rounded-full", color)}></span>
