@@ -5,7 +5,7 @@ import { TrashIcon } from "@heroicons/react/24/outline";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import {
   Conversation,
@@ -33,6 +33,7 @@ import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
+import type { CardConfig, Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const AUTO_SENT_FLAG_PREFIX = "autoSent:";
@@ -65,6 +66,10 @@ export default function Chat({
     columns: { name: string; type?: string }[];
     durationMs: number;
   } | null>(null);
+  const [manualChartConfig, setManualChartConfig] = useState<Config | null>(
+    null,
+  );
+  const prevSqlRef = useRef<string | null>(null);
 
   // Initialize selectedDb with first connected table's database if available
   useEffect(() => {
@@ -291,6 +296,99 @@ export default function Chat({
     [chatId, executeSqlArtifactType, setMessages],
   );
 
+  const handleUpdateArtifactConfig = useCallback(
+    async (
+      artifactId: string,
+      config: { chartConfig?: Config; cardConfig?: CardConfig },
+    ) => {
+      // Find the message containing this artifact
+      const message = messages.find((msg) =>
+        msg.parts?.some(
+          (part) =>
+            part.type === executeSqlArtifactType &&
+            (part as { data?: { id?: string } }).data?.id === artifactId,
+        ),
+      );
+
+      if (!message) {
+        console.warn(`Message not found for artifact ${artifactId}`);
+        return;
+      }
+
+      // Find the artifact part
+      const artifactPart = message.parts?.find(
+        (part) =>
+          part.type === executeSqlArtifactType &&
+          (part as { data?: { id?: string } }).data?.id === artifactId,
+      ) as { data?: { payload?: SqlAnalysisData } } | undefined;
+
+      if (!artifactPart?.data) {
+        console.warn(`Artifact part not found for ${artifactId}`);
+        return;
+      }
+
+      // Update the payload
+      const updatedPayload: SqlAnalysisData = {
+        ...artifactPart.data.payload,
+        chartConfig: config.chartConfig ?? artifactPart.data.payload?.chartConfig,
+        cardConfig: config.cardConfig ?? artifactPart.data.payload?.cardConfig,
+      };
+
+      // Update local state optimistically
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id !== message.id) return msg;
+          return {
+            ...msg,
+            parts: msg.parts?.map((part) => {
+              if (
+                part.type === executeSqlArtifactType &&
+                (part as { data?: { id?: string } }).data?.id === artifactId
+              ) {
+                return {
+                  ...part,
+                  data: {
+                    ...((part as { data?: unknown }).data as Record<string, unknown>),
+                    payload: updatedPayload,
+                    updatedAt: Date.now(),
+                  },
+                };
+              }
+              return part;
+            }),
+          };
+        }),
+      );
+
+      // Persist to database
+      try {
+        await fetch(`/api/chat/${chatId}/message/${message.id}/artifact`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            artifactId,
+            payload: updatedPayload,
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to update artifact config:", error);
+        // Reload messages from server on error
+        try {
+          const res = await fetch(`/api/chat/${chatId}`);
+          if (res.ok) {
+            const data = (await res.json()) as { messages?: UIMessage[] };
+            if (data.messages) {
+              setMessages(data.messages);
+            }
+          }
+        } catch (reloadError) {
+          console.error("Failed to reload messages:", reloadError);
+        }
+      }
+    },
+    [chatId, executeSqlArtifactType, messages, setMessages],
+  );
+
   const handleRemoveMessage = useCallback(
     async (messageId: string) => {
       // Optimistically remove from UI
@@ -412,6 +510,14 @@ export default function Chat({
     }
   }, [searchParams, manualVisualHandled, handleAddVisual, router, chatId]);
 
+  useEffect(() => {
+    const modeParam = searchParams?.get("mode");
+    if (modeParam === "manual") {
+      setPromptMode("manual");
+      router.replace(`/${chatId}`);
+    }
+  }, [searchParams, router, chatId]);
+
   // Remove the auto-send marker after it served its purpose to avoid storage build-up
   useEffect(() => {
     if (!autoSentFromQuery || typeof window === "undefined") {
@@ -532,8 +638,15 @@ export default function Chat({
           onAddToChatAction={handleAddSqlResultToChat}
           inlineResults={false}
           showRunControls={false}
+          chartConfig={manualChartConfig}
           onResultChangeAction={(result) => {
             setSqlResult(result);
+            // Reset chart config when SQL query changes
+            const newSql = result?.sql ?? null;
+            if (newSql !== prevSqlRef.current) {
+              setManualChartConfig(null);
+              prevSqlRef.current = newSql;
+            }
           }}
         />
       </div>
@@ -551,7 +664,10 @@ export default function Chat({
             : "opacity-0 translate-y-2 pointer-events-none",
         )}
       >
-        <VisualizationPanel visualizations={visualizations} />
+        <VisualizationPanel
+          visualizations={visualizations}
+          onConfigChange={handleUpdateArtifactConfig}
+        />
       </div>
       <div
         aria-hidden={isAiMode}
@@ -565,6 +681,8 @@ export default function Chat({
         <ManualModeResultsPanel
           sqlResult={sqlResult}
           onSwitchToAiMode={() => setPromptMode("ai")}
+          chartConfig={manualChartConfig}
+          onChartConfigChange={setManualChartConfig}
         />
       </div>
     </div>
@@ -581,7 +699,7 @@ export default function Chat({
       >
         <div className="flex h-full w-full flex-col relative">
           {/* Two-column layout: Messages on left, Visualizations on right */}
-          <div className="flex-1 overflow-hidden bg-background">
+          <div className="flex-1 overflow-hidden bg-card">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-y-6 lg:gap-x-0 h-full">
               {/* Left Panel */}
               <div className="flex flex-col min-w-0 h-full overflow-hidden lg:col-span-3">
@@ -600,7 +718,7 @@ export default function Chat({
                         )}
                         {messages.map((message) => (
                           <Message from={message.role} key={message.id}>
-                            <MessageContent className="relative w-full">
+                            <MessageContent className="relative w-full group-[.is-user]:bg-card group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -625,6 +743,7 @@ export default function Chat({
                                   return (
                                     <Response
                                       key={`${message.id}-part-${partIndex}`}
+                                      className="p-4 rounded-lg group-[.is-user]:bg-primary/60 group-[.is-user]:shadow-md"
                                     >
                                       {part.text}
                                     </Response>
@@ -669,28 +788,11 @@ export default function Chat({
                                         className="mt-4 w-full"
                                       >
                                         <div className="flex gap-4">
-                                          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                                            <svg
-                                              aria-hidden="true"
-                                              className="w-4 h-4 text-primary"
-                                              fill="none"
-                                              viewBox="0 0 24 24"
-                                              stroke="currentColor"
-                                              aria-label="Generated SQL"
-                                            >
-                                              <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth="2"
-                                                d="M13 10V3L4 14h7v7l9-11h-7z"
-                                              />
-                                            </svg>
-                                          </div>
-                                          <div className="bg-muted/50 p-4 rounded-2xl rounded-tl-none border border-border max-w-[90%]">
+                                          <div className="bg-sidebar p-4 rounded-2xl rounded-tl-none max-w-[90%]">
                                             <p className="font-mono text-xs text-muted-foreground mb-2">
                                               GENERATED SQL
                                             </p>
-                                            <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-background p-3 rounded border border-border">
+                                            <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-card p-3 rounded border border-border">
                                               {payload.query}
                                             </code>
                                           </div>
@@ -731,6 +833,9 @@ export default function Chat({
                             </MessageContent>
                           </Message>
                         ))}
+                        {/* empty space to push the input area to the bottom */}
+                        <div className="h-[20vh]" />
+
                         {status === "streaming" && (
                           <span key="assistant-streaming-div">
                             {animationFrame} {verbAiIsThinking}
@@ -745,10 +850,10 @@ export default function Chat({
                 </div>
 
                 {/* Input Area - aligned with messages */}
-                <div className="flex-shrink-0 p-1 w-full max-h-[50vh] overflow-hidden">
+                <div className="flex-shrink-0 w-full mx-auto max-h-[20vh] overflow-hidden shadow-md z-10">
                   <PromptInputWrapper
                     onSubmit={handleSubmit}
-                    className="transition delay-150 duration-300 ease-in-out bg-card-background"
+                    className="transition delay-150 duration-300 ease-in-out bg-card"
                     status={status}
                     onCreateDashboard={handleOpenDashboardBuilder}
                     onAddVisual={handleAddVisual}

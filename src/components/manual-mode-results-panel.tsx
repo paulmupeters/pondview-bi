@@ -1,7 +1,7 @@
 "use client";
 
 import { ChatBubbleLeftRightIcon } from "@heroicons/react/24/outline";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { SqlChart } from "@/components/sql-chart";
 import { SqlResultsTable } from "@/components/sql-results-table";
@@ -18,25 +18,61 @@ interface ManualModeResultsPanelProps {
     durationMs: number;
   } | null;
   onSwitchToAiMode?: () => void;
+  chartConfig?: Config | null;
+  onChartConfigChange?: (config: Config | null) => void;
 }
 
 export function ManualModeResultsPanel({
   sqlResult,
   onSwitchToAiMode,
+  chartConfig: externalChartConfig,
+  onChartConfigChange,
 }: ManualModeResultsPanelProps) {
   const [manualViewMode, setManualViewMode] = useState<"chart" | "table">(
     "table",
   );
-  const [chartConfig, setChartConfig] = useState<Config | null>(null);
+  const [localChartConfig, setLocalChartConfig] = useState<Config | null>(null);
   const lastSqlQueryRef = useRef<string | null>(null);
 
-  // Reset chart config and view mode when SQL query changes
+  // Use external chart config if provided, otherwise use local state
+  const chartConfig = externalChartConfig ?? localChartConfig;
+
+  // Create a setter that supports both direct values and updater functions
+  const setChartConfig = useCallback(
+    (
+      configOrUpdater:
+        | Config
+        | null
+        | ((prev: Config | null) => Config | null),
+    ) => {
+      if (typeof configOrUpdater === "function") {
+        // Handle updater function pattern
+        const currentConfig = externalChartConfig ?? localChartConfig;
+        const newConfig = configOrUpdater(currentConfig);
+        if (onChartConfigChange) {
+          onChartConfigChange(newConfig);
+        } else {
+          setLocalChartConfig(newConfig);
+        }
+      } else {
+        // Handle direct value pattern
+        if (onChartConfigChange) {
+          onChartConfigChange(configOrUpdater);
+        } else {
+          setLocalChartConfig(configOrUpdater);
+        }
+      }
+    },
+    [externalChartConfig, localChartConfig, onChartConfigChange],
+  );
+
+  // Reset view mode when SQL query changes (chart config reset is handled by parent)
   useEffect(() => {
-    const sqlChanged = sqlResult?.sql !== lastSqlQueryRef.current;
+    const currentSql = sqlResult?.sql ?? null;
+    const sqlChanged = currentSql !== lastSqlQueryRef.current;
     if (sqlChanged) {
-      setChartConfig(null);
       setManualViewMode(sqlResult ? "table" : "chart");
-      lastSqlQueryRef.current = sqlResult?.sql ?? null;
+      lastSqlQueryRef.current = currentSql;
     }
   }, [sqlResult]);
 
@@ -171,8 +207,8 @@ export function ManualModeResultsPanel({
               }))}
               rows={chartRows}
               onConfigChange={(config) => {
-                setChartConfig(() => ({ ...config }));
-                setManualViewMode(() => "chart");
+                setChartConfig({ ...config });
+                setManualViewMode("chart");
               }}
               tooltip="Open advanced chart settings"
             />

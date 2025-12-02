@@ -99,6 +99,18 @@ export default function Home() {
     [router, executeSqlArtifactType],
   );
 
+  const handleModeChange = useCallback(
+    (newMode: PromptMode) => {
+      if (newMode === "manual") {
+        const chatId = nanoid();
+        router.push(`/${chatId}?mode=manual`);
+      } else {
+        setMode(newMode);
+      }
+    },
+    [router],
+  );
+
   const handleExampleClick = useCallback(
     (command: string) => {
       handleSubmit({ text: command });
@@ -200,7 +212,7 @@ export default function Home() {
                 className="transition delay-150 duration-300 ease-in-out"
                 onHomePage={true}
                 mode={mode}
-                onModeChange={setMode}
+                onModeChange={handleModeChange}
               />
               {/* Example Commands - Only show in AI mode */}
               {mode === "ai" && (

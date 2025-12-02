@@ -46,6 +46,10 @@ export interface SqlAnalysisDisplayProps {
   selectedDbLabel?: string;
   onAddToChat?: (payload: SqlAnalysisData) => void;
   canAddToChat?: boolean;
+  onConfigChange?: (config: {
+    chartConfig?: Config;
+    cardConfig?: CardConfig;
+  }) => void;
 }
 
 export interface StageIndicatorProps {

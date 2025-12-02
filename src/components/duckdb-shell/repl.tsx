@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
 import { runQuery } from "@/lib/sql/run-query";
-import type { Result } from "@/lib/types";
+import type { Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const SQL_SAMPLE_SQL = `-- Create a sample table with two columns (col1, col2)
@@ -126,6 +126,7 @@ type DuckdbReplProps = {
     } | null,
   ) => void;
   showRunControls?: boolean;
+  chartConfig?: Config | null;
 };
 
 const HISTORY_KEY = "bi.repl.history";
@@ -140,6 +141,7 @@ export function DuckdbRepl({
   inlineResults = true,
   onResultChangeAction,
   showRunControls = true,
+  chartConfig,
 }: DuckdbReplProps) {
   const [lastResult, setLastResult] = useState<{
     sql: string;
@@ -181,7 +183,8 @@ export function DuckdbRepl({
       rowCount: lastResult.rows.length,
       columns: lastResult.columns,
       rows: lastResult.rows as Result[],
-      visualType: "table",
+      visualType: chartConfig ? "chart" : "table",
+      chartConfig: chartConfig ?? undefined,
       summary: {
         totalRows: lastResult.rows.length,
         executionTimeMs: lastResult.durationMs,

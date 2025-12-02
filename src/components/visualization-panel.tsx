@@ -8,6 +8,7 @@ import type {
   SqlAnalysisStage,
 } from "@/components/sql-analysis-display.types";
 import { Button } from "@/components/ui/button";
+import type { CardConfig, Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export interface VisualizationPanelProps {
@@ -18,11 +19,19 @@ export interface VisualizationPanelProps {
     progress?: number;
   }>;
   className?: string;
+  onConfigChange?: (
+    artifactId: string,
+    config: {
+      chartConfig?: Config;
+      cardConfig?: CardConfig;
+    },
+  ) => void;
 }
 
 export function VisualizationPanel({
   visualizations,
   className,
+  onConfigChange,
 }: VisualizationPanelProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -117,6 +126,11 @@ export function VisualizationPanel({
               progress={currentViz.progress}
               showStageIndicator={true}
               className="w-full"
+              onConfigChange={
+                onConfigChange
+                  ? (config) => onConfigChange(currentViz.id, config)
+                  : undefined
+              }
             />
           </div>
         </div>

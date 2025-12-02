@@ -6,7 +6,7 @@ import {
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import { ChartBar, ChevronLeft, ChevronRight, Table } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +39,7 @@ export function SqlAnalysisDisplay({
   selectedDbLabel,
   onAddToChat,
   canAddToChat,
+  onConfigChange,
 }: SqlAnalysisDisplayProps) {
   const [activeView, setActiveView] = useState<ActiveView>(() =>
     data?.visualType === "chart" || data?.visualType === "card"
@@ -99,6 +100,27 @@ export function SqlAnalysisDisplay({
     isExpanded: isSqlExpanded,
     onToggleExpanded: toggleSqlExpanded,
   });
+
+  // Wrapper functions to notify parent of config changes
+  const handleChartConfigChange = useCallback(
+    (newConfig: Config | null) => {
+      setChartConfig(newConfig);
+      if (onConfigChange) {
+        onConfigChange({ chartConfig: newConfig ?? undefined });
+      }
+    },
+    [onConfigChange],
+  );
+
+  const handleCardConfigChange = useCallback(
+    (newConfig: CardConfig | null) => {
+      setCardConfig(newConfig);
+      if (onConfigChange) {
+        onConfigChange({ cardConfig: newConfig ?? undefined });
+      }
+    },
+    [onConfigChange],
+  );
 
   useEffect(() => {
     const currentQuery = data?.query ?? null;
@@ -344,7 +366,7 @@ export function SqlAnalysisDisplay({
               variant={activeView === "table" ? "default" : "outline"}
               size="sm"
               onClick={() => setActiveView("table")}
-              className="flex items-center gap-2 hover:text-gray-500"
+              className="flex items-center gap-2"
               disabled={!canShowTable}
             >
               <Table className="w-4 h-4" />
@@ -354,7 +376,7 @@ export function SqlAnalysisDisplay({
               variant={activeView === "chart" ? "default" : "outline"}
               size="sm"
               onClick={() => setActiveView("chart")}
-              className="flex items-center gap-2 hover:text-gray-500"
+              className="flex items-center gap-2"
             >
               <ChartBar className="w-4 h-4" />
               Visual
@@ -463,8 +485,8 @@ export function SqlAnalysisDisplay({
               chartConfig={chartConfig}
               cardConfig={cardConfig}
               columnsForDialog={columnsForDialog}
-              onChartConfigChange={setChartConfig}
-              onCardConfigChange={setCardConfig}
+              onChartConfigChange={handleChartConfigChange}
+              onCardConfigChange={handleCardConfigChange}
               renderSqlControls={renderControls}
               renderSqlEditor={renderEditor}
             />

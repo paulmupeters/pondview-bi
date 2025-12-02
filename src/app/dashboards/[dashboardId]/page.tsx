@@ -358,7 +358,7 @@ function MetricCardGroup({
 
   return (
     <div
-      className={`group relative flex rounded-xl bg-card divide-x divide-border overflow-hidden ${getColSpanClass(charts.length)}`}
+      className={`group relative flex rounded-xl bg-card border border-border shadow-md divide-x divide-border overflow-hidden ${getColSpanClass(charts.length)}`}
     >
       {charts.map((chart, index) => (
         <MetricCardInGroup
@@ -634,7 +634,7 @@ function SortableChartCard({
         }
       }}
       style={style}
-      className={`group relative flex flex-col rounded-xl bg-card p-4 md:p-2 ${isChart ? getColSpanClass(displayColSpan) : ""}`}
+      className={`group relative flex flex-col rounded-xl bg-card border border-border shadow-md p-4 md:p-2 ${isChart ? getColSpanClass(displayColSpan) : ""}`}
     >
       <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
         <button

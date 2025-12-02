@@ -320,7 +320,7 @@ export function PromptInputWrapper({
 
   // Get display name for selected database - matches ConnectedDataPanel logic
   return (
-    <div className="flex">
+    <div className="flex mx-auto">
       <PromptInput
         onSubmit={handlePromptSubmit}
         className={cn("flex-1 flex flex-row", className)}
