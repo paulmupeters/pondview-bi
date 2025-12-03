@@ -46,6 +46,7 @@ export interface SqlAnalysisDisplayProps {
   selectedDbLabel?: string;
   onAddToChat?: (payload: SqlAnalysisData) => void;
   canAddToChat?: boolean;
+  artifactId?: string;
   onConfigChange?: (config: {
     chartConfig?: Config;
     cardConfig?: CardConfig;

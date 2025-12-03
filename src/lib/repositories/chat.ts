@@ -142,4 +142,34 @@ export async function deleteMessageFromChat(chatId: string, messageId: string, n
     .where(eq(chats.id, chatId));
 }
 
+// Function to update message parts (e.g., for updating artifact config)
+export async function updateMessageParts(
+  chatId: string,
+  messageId: string,
+  partsJson: string,
+  now = Date.now(),
+) {
+  const db = getDb();
+  await db
+    .update(messages)
+    .set({ parts: partsJson })
+    .where(eq(messages.id, messageId));
+
+  // Update chat's updatedAt timestamp
+  await db
+    .update(chats)
+    .set({ updatedAt: now })
+    .where(eq(chats.id, chatId));
+}
+
+// Function to get a single message by ID
+export async function getMessageById(messageId: string) {
+  const db = getDb();
+  const result = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .limit(1);
+  return result[0] ?? null;
+}
 

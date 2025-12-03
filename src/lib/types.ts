@@ -7,8 +7,12 @@ export const explanationSchema = z.object({
 
 export type QueryExplanation = z.infer<typeof explanationSchema>;
 export type Result = Record<string, string | number | boolean | Date>;
+export type VisualType = "chart" | "table" | "card";
 export const configSchema = z
   .object({
+    visualType: z
+      .enum(["chart", "table", "card"])
+      .describe("Type of visualization"),
     description: z
       .string()
       .describe(
@@ -35,16 +39,19 @@ export const configSchema = z
       .default(false),
     measurementColumn: z
       .string()
+      .nullish()
       .describe(
         "For line charts only: key for quantitative y-axis column to measure against (eg. values, counts etc.)"
       )
       .optional(),
     categoryColumn: z
       .string()
+      .nullish()
       .describe("Column to group lines by (e.g., Country)")
       .optional(),
     lineCategories: z
       .array(z.string())
+      .nullish()
       .describe(
         "For line charts only: Categories used to compare different lines or data series. Each category represents a distinct line in the chart."
       )
@@ -102,6 +109,7 @@ export const configSchema = z
       .optional(),
     referenceLineLabel: z
       .string()
+      .nullish()
       .describe("Label to display alongside a reference line if rendered")
       .optional(),
     colSpan: z
@@ -115,6 +123,14 @@ export const configSchema = z
   .describe("Chart configuration object");
 
 export type Config = z.infer<typeof configSchema>;
+
+export const normalizeChartConfig = (config: Config): Config => ({
+  ...config,
+  measurementColumn: config.measurementColumn ?? undefined,
+  categoryColumn: config.categoryColumn ?? undefined,
+  lineCategories: config.lineCategories ?? undefined,
+  referenceLineLabel: config.referenceLineLabel ?? undefined,
+});
 
 export const cardConfigSchema = z
   .object({

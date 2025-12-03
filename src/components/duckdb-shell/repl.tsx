@@ -3,11 +3,9 @@
 import {
   ClipboardDocumentIcon,
   PlayIcon,
-  PlusCircleIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import {
   type ExecuteQueryFn,
   SqlConsole,
@@ -20,7 +18,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
 import { runQuery } from "@/lib/sql/run-query";
-import type { Config, Result } from "@/lib/types";
+import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const SQL_SAMPLE_SQL = `-- Create a sample table with two columns (col1, col2)
@@ -115,7 +113,6 @@ type DuckdbReplProps = {
     signal: AbortSignal;
   }) => ReturnType<ExecuteQueryFn>;
   onConsoleApiChangeAction?: (api: SqlConsoleApi | null) => void;
-  onAddToChatAction?: (payload: SqlAnalysisData) => void;
   inlineResults?: boolean;
   onResultChangeAction?: (
     result: {
@@ -137,7 +134,6 @@ export function DuckdbRepl({
   selectedDbIdentifier,
   onRunSqlAction,
   onConsoleApiChangeAction,
-  onAddToChatAction,
   inlineResults = true,
   onResultChangeAction,
   showRunControls = true,
@@ -149,7 +145,6 @@ export function DuckdbRepl({
     columns: { name: string; type?: string }[];
     durationMs: number;
   } | null>(null);
-  const [hasShared, setHasShared] = useState(false);
   const [internalApi, setInternalApi] = useState<SqlConsoleApi | null>(null);
   const [copiedSqlSnippet, setCopiedSqlSnippet] = useState(false);
   const copySnippetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -169,35 +164,6 @@ export function DuckdbRepl({
       signal,
     });
   };
-
-  const handleShareResult = () => {
-    if (!onAddToChatAction || !lastResult) {
-      return;
-    }
-    const payload: SqlAnalysisData = {
-      stage: "complete",
-      progress: 1,
-      query: lastResult.sql,
-      dbIdentifier: selectedDbIdentifier,
-      executionTime: lastResult.durationMs,
-      rowCount: lastResult.rows.length,
-      columns: lastResult.columns,
-      rows: lastResult.rows as Result[],
-      visualType: chartConfig ? "chart" : "table",
-      chartConfig: chartConfig ?? undefined,
-      summary: {
-        totalRows: lastResult.rows.length,
-        executionTimeMs: lastResult.durationMs,
-        insights: [],
-      },
-    };
-
-    onAddToChatAction(payload);
-    setHasShared(true);
-  };
-
-  const canShare = Boolean(onAddToChatAction && lastResult && !hasShared);
-
 
   const handleCopySqlSnippet = () => {
     const currentSql = internalApi?.getQuery()?.trim();
@@ -307,24 +273,6 @@ export function DuckdbRepl({
           Run
         </button>
 
-        {canShare && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="flex items-center gap-2 bg-card border border-border text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors shadow-sm h-[26px]"
-                onClick={handleShareResult}
-              >
-                <PlusCircleIcon className="w-3 h-3" />
-                Add to chat
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Share this result</p>
-            </TooltipContent>
-          </Tooltip>
-        )}
-
         {lastResult && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -362,7 +310,6 @@ export function DuckdbRepl({
           showRunControls={showRunControls}
           onSuccessAction={({ sql, rows, columns, durationMs }) => {
             setLastResult({ sql, rows, columns, durationMs });
-            setHasShared(false);
           }}
         />
       </div>

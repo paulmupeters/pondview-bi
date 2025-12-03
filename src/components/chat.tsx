@@ -15,6 +15,7 @@ import {
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Response } from "@/components/ai-elements/response";
+import { ArtifactMutationProvider } from "@/components/artifact-mutation-context";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
@@ -33,7 +34,7 @@ import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
-import type { CardConfig, Config } from "@/lib/types";
+import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const AUTO_SENT_FLAG_PREFIX = "autoSent:";
@@ -70,6 +71,19 @@ export default function Chat({
     null,
   );
   const prevSqlRef = useRef<string | null>(null);
+
+  // Right panel resize state
+  const [rightPanelWidth, setRightPanelWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 40; // Default 40% of container
+    const saved = window.localStorage.getItem("chat-right-panel-width");
+    return saved ? parseFloat(saved) : 40;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeStartX, setResizeStartX] = useState(0);
+  const [resizeStartWidth, setResizeStartWidth] = useState(0);
+  const [pointerId, setPointerId] = useState<number | null>(null);
+  const resizeHandleRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Initialize selectedDb with first connected table's database if available
   useEffect(() => {
@@ -170,6 +184,7 @@ export default function Chat({
       rows: [],
       visualType: "table",
       chartConfig: {
+        visualType: "chart",
         title: "New visual",
         description: "",
         type: "bar",
@@ -296,98 +311,6 @@ export default function Chat({
     [chatId, executeSqlArtifactType, setMessages],
   );
 
-  const handleUpdateArtifactConfig = useCallback(
-    async (
-      artifactId: string,
-      config: { chartConfig?: Config; cardConfig?: CardConfig },
-    ) => {
-      // Find the message containing this artifact
-      const message = messages.find((msg) =>
-        msg.parts?.some(
-          (part) =>
-            part.type === executeSqlArtifactType &&
-            (part as { data?: { id?: string } }).data?.id === artifactId,
-        ),
-      );
-
-      if (!message) {
-        console.warn(`Message not found for artifact ${artifactId}`);
-        return;
-      }
-
-      // Find the artifact part
-      const artifactPart = message.parts?.find(
-        (part) =>
-          part.type === executeSqlArtifactType &&
-          (part as { data?: { id?: string } }).data?.id === artifactId,
-      ) as { data?: { payload?: SqlAnalysisData } } | undefined;
-
-      if (!artifactPart?.data) {
-        console.warn(`Artifact part not found for ${artifactId}`);
-        return;
-      }
-
-      // Update the payload
-      const updatedPayload: SqlAnalysisData = {
-        ...artifactPart.data.payload,
-        chartConfig: config.chartConfig ?? artifactPart.data.payload?.chartConfig,
-        cardConfig: config.cardConfig ?? artifactPart.data.payload?.cardConfig,
-      };
-
-      // Update local state optimistically
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id !== message.id) return msg;
-          return {
-            ...msg,
-            parts: msg.parts?.map((part) => {
-              if (
-                part.type === executeSqlArtifactType &&
-                (part as { data?: { id?: string } }).data?.id === artifactId
-              ) {
-                return {
-                  ...part,
-                  data: {
-                    ...((part as { data?: unknown }).data as Record<string, unknown>),
-                    payload: updatedPayload,
-                    updatedAt: Date.now(),
-                  },
-                };
-              }
-              return part;
-            }),
-          };
-        }),
-      );
-
-      // Persist to database
-      try {
-        await fetch(`/api/chat/${chatId}/message/${message.id}/artifact`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            artifactId,
-            payload: updatedPayload,
-          }),
-        });
-      } catch (error) {
-        console.error("Failed to update artifact config:", error);
-        // Reload messages from server on error
-        try {
-          const res = await fetch(`/api/chat/${chatId}`);
-          if (res.ok) {
-            const data = (await res.json()) as { messages?: UIMessage[] };
-            if (data.messages) {
-              setMessages(data.messages);
-            }
-          }
-        } catch (reloadError) {
-          console.error("Failed to reload messages:", reloadError);
-        }
-      }
-    },
-    [chatId, executeSqlArtifactType, messages, setMessages],
-  );
 
   const handleRemoveMessage = useCallback(
     async (messageId: string) => {
@@ -555,6 +478,66 @@ export default function Chat({
     setVerbAiIsThinking(getRandomVerbAiIsThinking());
   }, []);
 
+  // Persist right panel width to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("chat-right-panel-width", rightPanelWidth.toString());
+    }
+  }, [rightPanelWidth]);
+
+  // Resize handlers
+  const handleResizeStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    setResizeStartX(e.clientX);
+    setPointerId(e.pointerId);
+    if (containerRef.current) {
+      const containerWidth = containerRef.current.getBoundingClientRect().width;
+      const currentRightWidth = (rightPanelWidth / 100) * containerWidth;
+      setResizeStartWidth(currentRightWidth);
+    }
+    if (resizeHandleRef.current) {
+      resizeHandleRef.current.setPointerCapture(e.pointerId);
+    }
+  }, [rightPanelWidth]);
+
+  const handleResizeMove = useCallback((e: PointerEvent) => {
+    if (!isResizing || !containerRef.current) return;
+
+    const containerWidth = containerRef.current.getBoundingClientRect().width;
+    const deltaX = resizeStartX - e.clientX; // Negative because we're dragging left
+    const newRightWidth = resizeStartWidth + deltaX;
+    const newRightWidthPercent = (newRightWidth / containerWidth) * 100;
+
+    // Constrain between 20% and 60%
+    const constrainedPercent = Math.max(20, Math.min(60, newRightWidthPercent));
+    setRightPanelWidth(constrainedPercent);
+  }, [isResizing, resizeStartX, resizeStartWidth]);
+
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false);
+    if (resizeHandleRef.current && pointerId !== null) {
+      resizeHandleRef.current.releasePointerCapture(pointerId);
+    }
+    setPointerId(null);
+  }, [pointerId]);
+
+  useEffect(() => {
+    if (isResizing) {
+      const handleMove = (e: PointerEvent) => handleResizeMove(e);
+      const handleEnd = () => void handleResizeEnd();
+
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", handleEnd);
+
+      return () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleEnd);
+      };
+    }
+  }, [isResizing, handleResizeMove, handleResizeEnd]);
+
   // Extract visualizations from messages
   const visualizations = useMemo(() => {
     const vizList: Array<{
@@ -628,14 +611,13 @@ export default function Chat({
         onSelect={setSelectedDb}
         mode="sidebar"
         onInsertTable={handleInsertTableIntoSql}
-        className="w-64 shrink-0 bg-sidebar p-2"
+        className="w-64 shrink-0 bg-background p-2"
       />
-      <div className="flex-1 min-w-0 h-full bg-popover">
+      <div className="flex-1 min-w-0 h-full bg-card">
         <DuckdbRepl
           className="h-full w-full"
           selectedDbIdentifier={selectedDb}
           onConsoleApiChangeAction={setSqlConsoleApi}
-          onAddToChatAction={handleAddSqlResultToChat}
           inlineResults={false}
           showRunControls={false}
           chartConfig={manualChartConfig}
@@ -664,10 +646,7 @@ export default function Chat({
             : "opacity-0 translate-y-2 pointer-events-none",
         )}
       >
-        <VisualizationPanel
-          visualizations={visualizations}
-          onConfigChange={handleUpdateArtifactConfig}
-        />
+        <VisualizationPanel visualizations={visualizations} />
       </div>
       <div
         aria-hidden={isAiMode}
@@ -683,13 +662,20 @@ export default function Chat({
           onSwitchToAiMode={() => setPromptMode("ai")}
           chartConfig={manualChartConfig}
           onChartConfigChange={setManualChartConfig}
+          onAddToChatAction={handleAddSqlResultToChat}
+          selectedDbIdentifier={selectedDb}
         />
       </div>
     </div>
   );
 
   return (
-    <>
+    <ArtifactMutationProvider
+      chatId={chatId}
+      messages={messages}
+      setMessages={setMessages}
+      executeSqlArtifactType={executeSqlArtifactType}
+    >
       <div
         className={`chat-container flex h-screen transition-all duration-300 ${
           isConversationEmpty
@@ -700,9 +686,18 @@ export default function Chat({
         <div className="flex h-full w-full flex-col relative">
           {/* Two-column layout: Messages on left, Visualizations on right */}
           <div className="flex-1 overflow-hidden bg-card">
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-y-6 lg:gap-x-0 h-full">
+            <div
+              ref={containerRef}
+              className="flex h-full"
+            >
               {/* Left Panel */}
-              <div className="flex flex-col min-w-0 h-full overflow-hidden lg:col-span-3">
+              <div
+                className="flex flex-col min-w-0 h-full overflow-hidden"
+                style={{
+                  width: `calc(100% - ${rightPanelWidth}% - ${isResizing ? "0px" : "4px"})`,
+                  transition: isResizing ? "none" : "width 0.2s ease-out",
+                }}
+              >
                 <div className="flex-1 min-h-0 flex flex-col">
                   {promptMode === "ai" ? (
                     <Conversation className="flex-1 min-h-0 h-full">
@@ -716,131 +711,183 @@ export default function Chat({
                             </MessageContent>
                           </Message>
                         )}
-                        {messages.map((message) => (
-                          <Message from={message.role} key={message.id}>
-                            <MessageContent className="relative w-full group-[.is-user]:bg-card group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
-                                onClick={() => handleRemoveMessage(message.id)}
-                                aria-label="Remove message"
-                              >
-                                <TrashIcon className="h-4 w-4" />
-                              </Button>
-                              {message.parts?.map((part, partIndex) => {
-                                if (status === "submitted") {
-                                  return (
-                                    <span
-                                      key={`${message.id}-part-${partIndex}-submitted`}
-                                    >
-                                      {animationFrame}
-                                    </span>
-                                  );
-                                }
-                                if (part.type === "text") {
-                                  return (
-                                    <Response
-                                      key={`${message.id}-part-${partIndex}`}
-                                      className="p-4 rounded-lg group-[.is-user]:bg-primary/60 group-[.is-user]:shadow-md"
-                                    >
-                                      {part.text}
-                                    </Response>
-                                  );
-                                }
+                        {messages.map((message, messageIndex) => {
+                          // Check if this is the last message, it's an assistant message, streaming is active, and it has no meaningful content
+                          const isLastMessage = messageIndex === messages.length - 1;
+                          const isEmptyAssistantMessage =
+                            isLastMessage &&
+                            message.role === "assistant" &&
+                            (status === "streaming" || status === "submitted") &&
+                            (!message.parts ||
+                              message.parts.length === 0 ||
+                              message.parts.every(
+                                (part) =>
+                                  (part.type === "text" &&
+                                    (!(part as { text?: string }).text ||
+                                      (part as { text?: string }).text?.trim() ===
+                                      "")) ||
+                                  (part.type === executeSqlArtifactType &&
+                                    !(part as { data?: unknown }).data),
+                              ));
 
-                                if (part.type === executeSqlArtifactType) {
-                                  const artifactPart = part as {
-                                    data?: {
-                                      status?: ArtifactStatus;
-                                      progress?: number;
-                                      error?: string;
-                                      payload?: SqlAnalysisData;
-                                    };
-                                  };
-                                  const artifactData = artifactPart.data;
+                          // If it's an empty assistant message during streaming, show animation instead
+                          if (isEmptyAssistantMessage) {
+                            return (
+                              <Message from="assistant" key={message.id}>
+                                <MessageContent className="relative w-full group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
+                                  <span>
+                                    {animationFrame} {verbAiIsThinking}
+                                  </span>
+                                </MessageContent>
+                              </Message>
+                            );
+                          }
 
-                                  if (!artifactData) {
-                                    return null;
-                                  }
-
-                                  if (artifactData.status === "error") {
+                          return (
+                            <Message from={message.role} key={message.id}>
+                              <MessageContent className="relative w-full group-[.is-user]:bg-card group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
+                                  onClick={() => handleRemoveMessage(message.id)}
+                                  aria-label="Remove message"
+                                >
+                                  <TrashIcon className="h-4 w-4" />
+                                </Button>
+                                {message.parts?.map((part, partIndex) => {
+                                  if (status === "submitted") {
                                     return (
-                                      <div
-                                        key={`${message.id}-part-${partIndex}`}
-                                        className="mt-4 max-w-full text-sm text-red-500"
+                                      <span
+                                        key={`${message.id}-part-${partIndex}-submitted`}
                                       >
-                                        {artifactData.error ??
-                                          "SQL analysis failed."}
-                                      </div>
+                                        {animationFrame}
+                                      </span>
+                                    );
+                                  }
+                                  if (part.type === "text") {
+                                    return (
+                                      <Response
+                                        key={`${message.id}-part-${partIndex}`}
+                                        className="p-4 rounded-lg group-[.is-user]:bg-primary/60 group-[.is-user]:shadow-md"
+                                      >
+                                        {part.text}
+                                      </Response>
                                     );
                                   }
 
-                                  const payload = (artifactData.payload ??
-                                    null) as SqlAnalysisData | null;
+                                  if (part.type === executeSqlArtifactType) {
+                                    const artifactPart = part as {
+                                      data?: {
+                                        status?: ArtifactStatus;
+                                        progress?: number;
+                                        error?: string;
+                                        payload?: SqlAnalysisData;
+                                      };
+                                    };
+                                    const artifactData = artifactPart.data;
 
-                                  // Show SQL query inline in messages
-                                  if (payload?.query) {
-                                    return (
-                                      <div
-                                        key={`${message.id}-part-${partIndex}`}
-                                        className="mt-4 w-full"
-                                      >
-                                        <div className="flex gap-4">
-                                          <div className="bg-sidebar p-4 rounded-2xl rounded-tl-none max-w-[90%]">
-                                            <p className="font-mono text-xs text-muted-foreground mb-2">
-                                              GENERATED SQL
-                                            </p>
-                                            <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-card p-3 rounded border border-border">
-                                              {payload.query}
-                                            </code>
+                                    if (!artifactData) {
+                                      return null;
+                                    }
+
+                                    if (artifactData.status === "error") {
+                                      return (
+                                        <div
+                                          key={`${message.id}-part-${partIndex}`}
+                                          className="mt-4 max-w-full text-sm text-red-500"
+                                        >
+                                          {artifactData.error ??
+                                            "SQL analysis failed."}
+                                        </div>
+                                      );
+                                    }
+
+                                    const payload = (artifactData.payload ??
+                                      null) as SqlAnalysisData | null;
+
+                                    // Show SQL query inline in messages
+                                    if (payload?.query) {
+                                      return (
+                                        <div
+                                          key={`${message.id}-part-${partIndex}`}
+                                          className="mt-4 w-full"
+                                        >
+                                          <div className="flex gap-4">
+                                            <div className="bg-sidebar p-4 rounded-2xl rounded-tl-none max-w-[90%]">
+                                              <p className="font-mono text-xs text-muted-foreground mb-2">
+                                                GENERATED SQL
+                                              </p>
+                                              <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-card p-3 rounded border border-border">
+                                                {payload.query}
+                                              </code>
+                                            </div>
                                           </div>
                                         </div>
-                                      </div>
+                                      );
+                                    }
+
+                                    return null;
+                                  }
+
+                                  if (part.type === "tool-getTableSchema") {
+                                    return (
+                                      <span key={`${message.id}-part-${partIndex}`}>
+                                        Getting table schema
+                                      </span>
+                                    );
+                                  }
+
+                                  if (part.type === "tool-generateChartConfig") {
+                                    return (
+                                      <span key={`${message.id}-part-${partIndex}`}>
+                                        Generating chart config...{animationFrame}
+                                      </span>
+                                    );
+                                  }
+
+                                  if (part.type === "tool-executeSql") {
+                                    return (
+                                      <span key={`${message.id}-part-${partIndex}`}>
+                                        Processing...
+                                      </span>
                                     );
                                   }
 
                                   return null;
-                                }
+                                })}
+                              </MessageContent>
+                            </Message>
+                          );
+                        })}
 
-                                if (part.type === "tool-getTableSchema") {
-                                  return (
-                                    <span key={`${message.id}-part-${partIndex}`}>
-                                      Getting table schema
-                                    </span>
-                                  );
-                                }
-
-                                if (part.type === "tool-generateChartConfig") {
-                                  return (
-                                    <span key={`${message.id}-part-${partIndex}`}>
-                                      Generating chart config...{animationFrame}
-                                    </span>
-                                  );
-                                }
-
-                                if (part.type === "tool-executeSql") {
-                                  return (
-                                    <span key={`${message.id}-part-${partIndex}`}>
-                                      Processing...
-                                    </span>
-                                  );
-                                }
-
-                                return null;
-                              })}
+                        {status === "streaming" &&
+                          !(
+                            messages.length > 0 &&
+                            messages[messages.length - 1]?.role === "assistant" &&
+                            (!messages[messages.length - 1]?.parts ||
+                              messages[messages.length - 1]?.parts.length === 0 ||
+                              messages[messages.length - 1]?.parts.every(
+                                (part) =>
+                                  (part.type === "text" &&
+                                    (!(part as { text?: string }).text ||
+                                      (part as { text?: string }).text?.trim() ===
+                                      "")) ||
+                                  (part.type === executeSqlArtifactType &&
+                                    !(part as { data?: unknown }).data),
+                              ))
+                          ) && (
+                            <Message from="assistant" key="assistant-streaming">
+                              <MessageContent className="relative w-full group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
+                                <span>
+                                  {animationFrame} {verbAiIsThinking}
+                                </span>
                             </MessageContent>
                           </Message>
-                        ))}
+                          )}
                         {/* empty space to push the input area to the bottom */}
-                        <div className="h-[20vh]" />
-
-                        {status === "streaming" && (
-                          <span key="assistant-streaming-div">
-                            {animationFrame} {verbAiIsThinking}
-                          </span>
-                        )}
+                        <div className="h-[10vh]" />
                       </ConversationContent>
                       <ConversationScrollButton />
                     </Conversation>
@@ -867,8 +914,28 @@ export default function Chat({
                 </div>
               </div>
 
+              {/* Resize Handle */}
+              <div
+                ref={resizeHandleRef}
+                onPointerDown={handleResizeStart}
+                className={cn(
+                  "hidden lg:block w-1 bg-border hover:bg-primary/50 cursor-col-resize transition-colors relative z-10",
+                  "hover:w-1.5",
+                  isResizing && "bg-primary w-1.5"
+                )}
+                style={{
+                  touchAction: "none",
+                }}
+              />
+
               {/* Right: Visualization Panel or Manual Results */}
-              <div className="hidden lg:flex flex-col min-w-0 h-full lg:col-span-2">
+              <div
+                className="hidden lg:flex flex-col min-w-0 h-full"
+                style={{
+                  width: `${rightPanelWidth}%`,
+                  transition: isResizing ? "none" : "width 0.2s ease-out",
+                }}
+              >
                 {rightPanelContent}
               </div>
             </div>
@@ -888,6 +955,6 @@ export default function Chat({
         storeId={chatId}
       />
       {/* <AIDevtools /> */}
-    </>
+    </ArtifactMutationProvider>
   );
 }

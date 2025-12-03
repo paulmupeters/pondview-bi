@@ -7,6 +7,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { ChartBar, ChevronLeft, ChevronRight, Table } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useArtifactMutation } from "@/components/artifact-mutation-context";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,21 +40,28 @@ export function SqlAnalysisDisplay({
   selectedDbLabel,
   onAddToChat,
   canAddToChat,
+  artifactId,
   onConfigChange,
 }: SqlAnalysisDisplayProps) {
+  const { updateArtifactConfig } = useArtifactMutation();
   const [activeView, setActiveView] = useState<ActiveView>(() =>
     data?.visualType === "chart" || data?.visualType === "card"
       ? "chart"
       : "table",
   );
-  const [chartConfig, setChartConfig] = useState<Config | null>(null);
-  const [cardConfig, setCardConfig] = useState<CardConfig | null>(null);
+  const [chartConfig, setChartConfig] = useState<Config | null>(
+    () => data?.chartConfig ?? null,
+  );
+  const [cardConfig, setCardConfig] = useState<CardConfig | null>(
+    () => data?.cardConfig ?? null,
+  );
   const [executedRows, setExecutedRows] = useState<Result[] | null>(null);
   const [executedColumns, setExecutedColumns] = useState<
     { name: string; type?: string }[] | null
   >(null);
-  const lastQueryRef = useRef<string | null>(null);
-  const lastAutoSwitchQueryRef = useRef<string | null>(null);
+  const lastQueryRef = useRef<string | null>(data?.query ?? null);
+  const lastAutoSwitchQueryRef = useRef<string | null>(data?.query ?? null);
+  const lastVisualTypeRef = useRef<string | undefined>(data?.visualType);
   const [query, setQuery] = useState<string | null>(null);
   const [isSqlExpanded, setIsSqlExpanded] = useState(
     data?.isSqlExpandedInitial ?? false,
@@ -65,7 +73,6 @@ export function SqlAnalysisDisplay({
 
   const handleExecute = async () => {
     const queryToExecute = query || data?.query || "";
-
 
     try {
       const result = await runQuery({
@@ -105,72 +112,69 @@ export function SqlAnalysisDisplay({
   const handleChartConfigChange = useCallback(
     (newConfig: Config | null) => {
       setChartConfig(newConfig);
-      if (onConfigChange) {
+      if (artifactId) {
+        updateArtifactConfig(artifactId, {
+          chartConfig: newConfig ?? undefined,
+        });
+      } else if (onConfigChange) {
         onConfigChange({ chartConfig: newConfig ?? undefined });
       }
     },
-    [onConfigChange],
+    [artifactId, onConfigChange, updateArtifactConfig],
   );
 
   const handleCardConfigChange = useCallback(
     (newConfig: CardConfig | null) => {
       setCardConfig(newConfig);
-      if (onConfigChange) {
+      if (artifactId) {
+        updateArtifactConfig(artifactId, {
+          cardConfig: newConfig ?? undefined,
+        });
+      } else if (onConfigChange) {
         onConfigChange({ cardConfig: newConfig ?? undefined });
       }
     },
-    [onConfigChange],
+    [artifactId, onConfigChange, updateArtifactConfig],
   );
 
+  // Reset state when query changes (different artifact) or visualType changes during streaming
   useEffect(() => {
     const currentQuery = data?.query ?? null;
+    const currentVisualType = data?.visualType;
+
     if (currentQuery !== lastQueryRef.current) {
-      setChartConfig(null);
-      setCardConfig(null);
+      // Query changed - full reset to data's config
+      setChartConfig(data?.chartConfig ?? null);
+      setCardConfig(data?.cardConfig ?? null);
       setExecutedRows(null);
       setExecutedColumns(null);
       setQuery(null);
       setActiveView(
-        data?.visualType === "chart" || data?.visualType === "card"
+        currentVisualType === "chart" || currentVisualType === "card"
           ? "chart"
           : "table",
       );
-      lastAutoSwitchQueryRef.current = null;
+      lastAutoSwitchQueryRef.current = currentQuery;
       lastQueryRef.current = currentQuery;
-    }
-  }, [data?.query, data?.visualType]);
-
-  useEffect(() => {
-    const q = data?.query ?? null;
-    const vt = data?.visualType ?? "table";
-
-    if (!q) {
-      lastAutoSwitchQueryRef.current = null;
-      return;
-    }
-
-    if (
-      ((data?.chartConfig && !chartConfig && vt === "chart") ||
-        (data?.cardConfig && !cardConfig && vt === "card")) &&
-      lastAutoSwitchQueryRef.current !== q
-    ) {
-      if (data?.chartConfig && vt === "chart") {
+      lastVisualTypeRef.current = currentVisualType;
+    } else if (currentVisualType !== lastVisualTypeRef.current) {
+      // Same query but visualType changed (data streaming completed)
+      // Update activeView to match the new visualType
+      setActiveView(
+        currentVisualType === "chart" || currentVisualType === "card"
+          ? "chart"
+          : "table",
+      );
+      // Also sync chartConfig/cardConfig if they weren't set yet
+      if (data?.chartConfig && !chartConfig) {
         setChartConfig(data.chartConfig);
       }
-      if (data?.cardConfig && vt === "card") {
+      if (data?.cardConfig && !cardConfig) {
         setCardConfig(data.cardConfig);
       }
-      setActiveView("chart");
-      lastAutoSwitchQueryRef.current = q;
+      lastVisualTypeRef.current = currentVisualType;
     }
-  }, [
-    data?.chartConfig,
-    data?.cardConfig,
-    data?.visualType,
-    data?.query,
-    chartConfig,
-    cardConfig,
-  ]);
+  }, [data?.query, data?.visualType, data?.chartConfig, data?.cardConfig, chartConfig, cardConfig]);
 
   const columnsForDialog = useMemo(
     () =>

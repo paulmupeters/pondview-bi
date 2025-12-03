@@ -174,6 +174,11 @@ export function CardConfigDialog({
     setOpen(false);
   };
 
+  // Create a key based on config to reset form when config changes or dialog opens
+  const formKey = open
+    ? `${config?.title || ""}-${config?.description || ""}-${config?.takeaway || ""}`
+    : "";
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {tooltip ? (
@@ -196,6 +201,7 @@ export function CardConfigDialog({
           </DialogTitle>
         </DialogHeader>
         <CardConfigForm
+          key={formKey}
           config={config}
           onConfigChange={handleConfigChange}
           onCancel={() => setOpen(false)}

@@ -573,8 +573,6 @@ const aiVerbs = [
   "thinking extremely hard and deeply",
   "thinking extremely deeply",
   "analyzing",
-  "not confused at all",
-  "dreaming about pizza",
   "working hard",
   "creating amazing charts",
 ];

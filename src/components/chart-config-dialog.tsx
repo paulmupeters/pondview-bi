@@ -111,7 +111,7 @@ export function ChartConfigForm({
       // Helper to get all checked checkbox values
       const getCheckedValues = (name: string): string[] => {
         const els = container.querySelectorAll(`[name="${name}"]:checked`) as NodeListOf<HTMLInputElement>;
-        return Array.from(els).map(el => el.value);
+        return Array.from(els).map((el) => el.value);
       };
       
       // Build FormData
@@ -121,7 +121,9 @@ export function ChartConfigForm({
       formData.append("takeaway", getValue("takeaway") || "");
       formData.append("xKey", getValue("xKey") || "");
       
-      getCheckedValues("yKeys").forEach(val => formData.append("yKeys", val));
+      getCheckedValues("yKeys").forEach((val) => {
+        formData.append("yKeys", val);
+      });
       
       // Handle countMode checkbox separately
       const countModeChecked = container.querySelector(`[name="countMode"]:checked`) as HTMLInputElement | null;
@@ -134,7 +136,9 @@ export function ChartConfigForm({
       formData.append("measurementColumn", getValue("measurementColumn") || "");
       formData.append("categoryColumn", categoryColumn || "");
       
-      selectedCategories.forEach(cat => formData.append("lineCategories", cat));
+      selectedCategories.forEach((cat) => {
+        formData.append("lineCategories", cat);
+      });
       
       formData.append("showGrid", getRadioValue("showGrid") || (config?.showGrid !== false ? "true" : "false"));
       formData.append("showXAxis", getRadioValue("showXAxis") || (config?.showXAxis !== false ? "true" : "false"));
@@ -169,6 +173,7 @@ export function ChartConfigForm({
       const parsed = Number(value);
       return Number.isNaN(parsed) ? fallback : parsed;
     };
+    const visualType = formData.get("type") || config?.type ? "chart" : "table";
 
     const newConfig: Config = {
       description: formData.get("description") as string,
@@ -192,6 +197,7 @@ export function ChartConfigForm({
       showDots: getBooleanField("showDots", config?.showDots ?? true),
       showTooltip: getBooleanField("showTooltip", config?.showTooltip ?? true),
       lineSize: getNumberField("lineSize", config?.lineSize ?? 2),
+      visualType,
       suffixLabelY:
         ((formData.get("suffixLabelY") as string) || "").trim() || undefined,
       labelYAngle: getNumberField("labelYAngle", config?.labelYAngle ?? -90),

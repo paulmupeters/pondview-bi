@@ -279,7 +279,7 @@ export function SqlConsole({
 
   return (
     <div className={cn("flex w-full h-full flex-col gap-3 p-0 py-4 relative", className)}>
-      <div className="rounded-sm bg-popover transition-colors h-full">
+      <div className="rounded-sm bg-card transition-colors h-full">
         <div className="flex flex-col gap-3 p-0 sm:flex-row sm:items-center sm:gap-4">
           <div className="flex-1 flex flex-col gap-2 mt-12">
             <SqlCodeEditor

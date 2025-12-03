@@ -1,7 +1,10 @@
 import { generateObject } from "ai";
-import { configSchema, type Result } from "@/lib/types";
+import { configSchema, normalizeChartConfig, type Result } from "@/lib/types";
 
-export const generateChartConfig = async (results: Result[], userQuery: string) => {
+export const generateChartConfig = async (
+  results: Result[],
+  userQuery: string
+) => {
   "use server";
 
   const { object: config } = await generateObject({
@@ -42,11 +45,12 @@ export const generateChartConfig = async (results: Result[], userQuery: string) 
     schema: configSchema,
   });
 
+  const normalizedConfig = normalizeChartConfig(config);
   const colors: Record<string, string> = {};
   // config.yKeys.forEach((key, index) => {
   //   colors[key] = `hsl(var(--chart-${index + 1}))`;
   // });
 
-  const updatedConfig = { ...config, colors };
+  const updatedConfig = { ...normalizedConfig, colors };
   return { config: updatedConfig };
 };

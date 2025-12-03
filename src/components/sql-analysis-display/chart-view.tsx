@@ -1,6 +1,5 @@
 import {
   Cog6ToothIcon,
-  PlusIcon,
   Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 import type { ReactNode } from "react";
@@ -13,10 +12,11 @@ import type { CardConfig, Config } from "@/lib/types";
 import type {
   SelectedForCard,
   SelectedForChart,
+  SqlAnalysisData,
 } from "../sql-analysis-display.types";
 
 interface ChartViewProps {
-  data: any;
+  data: SqlAnalysisData;
   selectedForChart: SelectedForChart | undefined;
   selectedForCard: SelectedForCard | undefined;
   chartConfig: Config | null;
@@ -43,9 +43,6 @@ export function ChartView({
   renderSqlControls,
   renderSqlEditor,
 }: ChartViewProps) {
-  console.log("data... chart view", data);
-  console.log("----------");
-  console.log("chartConfig,", chartConfig);
   return (
     <div className="group relative flex flex-col rounded-xl bg-card border border-border shadow-md p-4 md:p-2">
       {selectedForCard ? (
@@ -86,7 +83,7 @@ export function ChartView({
             </>,
             "sql-editor-analysis-card",
           )}
-          {cardConfig ? (
+          {cardConfig || data.cardConfig ? (
             <MetricCard
               value={selectedForCard.value as string | number | boolean | Date}
               title={
@@ -100,7 +97,7 @@ export function ChartView({
             />
           ) : (
             <div className="mb-4">
-              <div className="p-6 max-h-[400px] overflow-y-auto border rounded-lg">
+                <div className="p-6 overflow-y-auto border rounded-lg">
                 <div className="mb-4">
                   <h3 className="text-lg font-semibold mb-2">Card Configuration</h3>
                   <p className="text-sm text-muted-foreground">
@@ -153,6 +150,7 @@ export function ChartView({
                 chartConfig={
                   chartConfig ??
                   data.chartConfig ?? {
+                    visualType: "chart",
                     description: "",
                     type: "bar",
                     title: "",
@@ -171,19 +169,19 @@ export function ChartView({
           )}
 
             {selectedForChart && selectedForChart.rows.length > 0 ? (
-              chartConfig ? (
+              chartConfig || data.chartConfig ? (
                 <SqlChart
-                  customChartConfig={chartConfig ?? undefined}
+                  customChartConfig={chartConfig ?? data.chartConfig ?? undefined}
                   dataOverride={selectedForChart}
                 />
               ) : (
                 <div className="mb-4">
-                  <div className="p-6 max-h-[400px] overflow-y-auto border rounded-lg">
+                    <div className="p-6 overflow-y-auto border rounded-lg">
                     <div className="mb-4">
                       <h3 className="text-lg font-semibold mb-2">Chart Configuration</h3>
                     </div>
                     <ChartConfigForm
-                      config={chartConfig}
+                        config={chartConfig ?? data.chartConfig ?? null}
                       columns={columnsForDialog}
                       rows={selectedForChart.rows}
                       onConfigChange={onChartConfigChange}
