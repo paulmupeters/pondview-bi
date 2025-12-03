@@ -5,6 +5,7 @@ import {
   PlayIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
+import { Eraser } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   type ExecuteQueryFn,
@@ -221,12 +222,35 @@ export function DuckdbRepl({
   return (
     <div
       className={cn(
-        "relative flex-1 h-full overflow-hidden border-r border-border p-4",
+        "relative flex-1 min-w-0 h-full overflow-hidden border-r border-border p-4",
         className,
       )}
     >
       {/* Toolbar Buttons */}
       <div className="absolute top-4 right-4 z-20 flex gap-2 text-xs">
+        {lastResult && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-2 bg-card text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors h-[26px]"
+                onClick={() => {
+                  setLastResult(null);
+                  internalApi?.clearResults();
+                  internalApi?.setQuery("");
+                  if (!inlineResults && onResultChangeAction) {
+                    onResultChangeAction(null);
+                  }
+                }}
+              >
+                <Eraser className="w-3 h-3" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Clear results</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
         <button
           type="button"
           className="flex items-center gap-2 bg-card border border-border text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors shadow-sm h-[26px]"
@@ -273,29 +297,6 @@ export function DuckdbRepl({
           Run
         </button>
 
-        {lastResult && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="flex items-center gap-2 bg-card border border-border text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors shadow-sm h-[26px]"
-                onClick={() => {
-                  setLastResult(null);
-                  internalApi?.clearResults();
-                  if (!inlineResults && onResultChangeAction) {
-                    onResultChangeAction(null);
-                  }
-                }}
-              >
-                <TrashIcon className="w-3 h-3" />
-                Clear
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Clear results</p>
-            </TooltipContent>
-          </Tooltip>
-        )}
       </div>
 
 
