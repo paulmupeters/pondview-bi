@@ -79,7 +79,7 @@ export function VisualizationPanel({
 
       {/* Visualization Content */}
       {currentViz && (
-        <div className="flex-1 flex flex-col min-h-0 bg-background rounded-2xl border border-border shadow-xl">
+        <div className="flex-1 flex flex-col min-h-0 bg-background border border-border shadow-xl">
           {/* Navigation Header */}
           {hasMultiple && (
             <div className="flex items-center justify-between p-4 border-b border-border">
@@ -110,7 +110,7 @@ export function VisualizationPanel({
           )}
 
           {/* Visualization Display */}
-          <div className="flex-1 overflow-y-auto p-6 min-h-0">
+          <div className="flex-1 overflow-y-auto p-0 min-h-0">
             <SqlAnalysisDisplay
               key={currentViz.id}
               data={currentViz.data}

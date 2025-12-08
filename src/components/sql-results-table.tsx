@@ -5,11 +5,15 @@ import {
   flexRender,
   getCoreRowModel,
   getPaginationRowModel,
+  type PaginationState,
   useReactTable,
 } from "@tanstack/react-table";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 10;
 
 export function SqlResultsTable({
   dataOverride,
@@ -36,35 +40,51 @@ export function SqlResultsTable({
   const rows = payload?.rows ?? [];
   const summary = payload?.summary;
 
-  const tableColumns: ColumnDef<Record<string, unknown>>[] = columns.map(
-    (column) => ({
-      accessorKey: column.name,
-      header: column.name,
-      cell: ({ getValue }) => {
-        const value = getValue();
-        const stringValue = String(value ?? "");
-        return (
-          <div className="truncate" title={stringValue}>
-            {stringValue}
-          </div>
-        );
-      },
-    }),
+  const tableColumns: ColumnDef<Record<string, unknown>>[] = useMemo(
+    () =>
+      columns.map((column) => ({
+        accessorKey: column.name,
+        header: column.name,
+        cell: ({ getValue }) => {
+          const value = getValue();
+          const stringValue = String(value ?? "");
+          return (
+            <div className="truncate" title={stringValue}>
+              {stringValue}
+            </div>
+          );
+        },
+      })),
+    [columns],
   );
 
-  const PAGE_SIZE = 10;
   const shouldPaginate = rows.length > PAGE_SIZE;
+
+  // Controlled pagination state - resets when rows change
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: shouldPaginate ? PAGE_SIZE : Math.max(rows.length, 1),
+  });
+
+  // Update pageSize when rows change
+  useEffect(() => {
+    const newPageSize =
+      rows.length > PAGE_SIZE ? PAGE_SIZE : Math.max(rows.length, 1);
+    setPagination({
+      pageIndex: 0, // Reset to first page when data changes
+      pageSize: newPageSize,
+    });
+  }, [rows.length]);
 
   const table = useReactTable({
     data: rows,
     columns: tableColumns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: shouldPaginate ? PAGE_SIZE : rows.length || 1,
-      },
+    state: {
+      pagination,
     },
+    onPaginationChange: setPagination,
   });
 
   if (!payload || payload.stage !== "complete") {
@@ -95,7 +115,12 @@ export function SqlResultsTable({
       )}
 
       {/* Table */}
-      <div className={cn("flex-1 overflow-auto rounded-md border w-full", className)}>
+      <div
+        className={cn(
+          "flex-1 overflow-auto rounded-md border w-full",
+          className,
+        )}
+      >
         <table className="w-full table-fixed caption-bottom text-sm">
           <thead className="bg-muted/50 sticky top-0">
             {table.getHeaderGroups().map((headerGroup) => (

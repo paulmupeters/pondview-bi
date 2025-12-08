@@ -220,6 +220,7 @@ export const executeSqlTool = tool({
       rowCount,
       visualType,
       hasChartConfig: Boolean(chartConfig),
+      actualRowsInPayload: finalData.rows.length,
     });
 
     // Return the artifact data in the format expected by the AI SDK

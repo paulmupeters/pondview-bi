@@ -16,24 +16,46 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { CardConfig, Config } from "@/lib/types";
+import type { CardConfig, Config, TableConfig, VisualType } from "@/lib/types";
+
+export type AddToDashboardVisualOption =
+  | {
+    type: "chart";
+    config: Config;
+    columns?: { name: string; type?: string }[];
+    rows?: Record<string, unknown>[];
+  }
+  | {
+    type: "table";
+    config: TableConfig;
+    columns: { name: string; type?: string }[];
+    rows: Record<string, unknown>[];
+  }
+  | {
+    type: "card";
+    config: CardConfig;
+    columns: { name: string; type?: string }[];
+    rows: Record<string, unknown>[];
+  };
 
 type DashboardLite = { id: string; title: string | null; updatedAt: number };
 
 export function AddToDashboardDialog({
   trigger,
   sql,
-  chartConfig,
-  cardConfig,
+  dbIdentifier,
   defaultTitle,
   tooltip,
+  visualOptions,
+  defaultVisualType,
 }: {
   trigger: React.ReactNode;
   sql: string;
-  chartConfig?: Config;
-  cardConfig?: CardConfig;
+    dbIdentifier?: string | null;
   defaultTitle?: string;
   tooltip?: string;
+    visualOptions: AddToDashboardVisualOption[];
+    defaultVisualType?: VisualType;
 }) {
   const [open, setOpen] = useState(false);
   const [dashboards, setDashboards] = useState<DashboardLite[]>([]);
@@ -42,13 +64,74 @@ export function AddToDashboardDialog({
     string | "new"
   >("new");
   const [newDashboardTitle, setNewDashboardTitle] = useState("My Dashboard");
-  const config = chartConfig ?? cardConfig;
-  const [chartTitle, setChartTitle] = useState(
-    defaultTitle ?? config?.title ?? (cardConfig ? "Card" : "Chart"),
-  );
-  const [chartDescription, setChartDescription] = useState(
-    cardConfig?.description ?? chartConfig?.description ?? "",
-  );
+  const resolvedDefaultType = useMemo<VisualType | null>(() => {
+    if (!visualOptions.length) return null;
+    if (
+      defaultVisualType &&
+      visualOptions.some((option) => option.type === defaultVisualType)
+    ) {
+      return defaultVisualType;
+    }
+    return visualOptions[0]?.type ?? null;
+  }, [defaultVisualType, visualOptions]);
+  const [selectedVisualType, setSelectedVisualType] =
+    useState<VisualType | null>(resolvedDefaultType);
+
+  useEffect(() => {
+    setSelectedVisualType((prev) => {
+      if (prev && visualOptions.some((option) => option.type === prev)) {
+        return prev;
+      }
+      return resolvedDefaultType;
+    });
+  }, [visualOptions, resolvedDefaultType]);
+
+  type VisualFormValue = { title: string; description: string };
+
+  const initialVisualState = useMemo<
+    Partial<Record<VisualType, VisualFormValue>>
+  >(() => {
+    const state: Partial<Record<VisualType, VisualFormValue>> = {};
+    for (const option of visualOptions) {
+      if (option.type === "chart") {
+        state.chart = {
+          title: defaultTitle?.trim().length
+            ? defaultTitle
+            : option.config.title || "Chart",
+          description: option.config.description ?? "",
+        };
+      } else if (option.type === "table") {
+        state.table = {
+          title: option.config.title || "Table",
+          description: option.config.description ?? "",
+        };
+      } else {
+        state.card = {
+          title: option.config.title || option.columns[0]?.name || "Card",
+          description: option.config.description ?? "",
+        };
+      }
+    }
+    return state;
+  }, [defaultTitle, visualOptions]);
+
+  const [visualFormState, setVisualFormState] =
+    useState<Partial<Record<VisualType, VisualFormValue>>>(initialVisualState);
+
+  useEffect(() => {
+    setVisualFormState(initialVisualState);
+  }, [initialVisualState]);
+
+  const currentVisualOption = useMemo(() => {
+    if (!selectedVisualType) return undefined;
+    return visualOptions.find((option) => option.type === selectedVisualType);
+  }, [selectedVisualType, visualOptions]);
+
+  const currentFormState = (selectedVisualType &&
+    visualFormState[selectedVisualType]) || {
+    title: "",
+    description: "",
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -67,13 +150,21 @@ export function AddToDashboardDialog({
   }, [open]);
 
   const canSubmit = useMemo(() => {
+    if (!visualOptions.length || !currentFormState.title.trim().length) {
+      return false;
+    }
     if (selectedDashboardId === "new")
       return newDashboardTitle.trim().length > 0;
     return (selectedDashboardId ?? "").length > 0;
-  }, [selectedDashboardId, newDashboardTitle]);
+  }, [
+    currentFormState.title,
+    newDashboardTitle,
+    selectedDashboardId,
+    visualOptions.length,
+  ]);
 
   const handleSave = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || !currentVisualOption || !selectedVisualType) return;
     setLoading(true);
     try {
       let dashboardId = selectedDashboardId as string;
@@ -88,15 +179,38 @@ export function AddToDashboardDialog({
         dashboardId = data.id;
       }
 
+      let configJson: Config | CardConfig | TableConfig;
+      if (currentVisualOption.type === "chart") {
+        configJson = {
+          ...currentVisualOption.config,
+          title: currentFormState.title,
+          description: currentFormState.description,
+        };
+      } else if (currentVisualOption.type === "table") {
+        configJson = {
+          ...currentVisualOption.config,
+          configType: "table",
+          title: currentFormState.title,
+          description: currentFormState.description,
+        };
+      } else {
+        configJson = {
+          ...currentVisualOption.config,
+          configType: "card",
+          title: currentFormState.title,
+          description: currentFormState.description,
+        };
+      }
+
       const res2 = await fetch(`/api/dashboard/${dashboardId}/charts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: chartTitle,
-          description: chartDescription,
+          title: currentFormState.title,
+          description: currentFormState.description,
           sql,
-          dbIdentifier: "md:my_db",
-          chartConfigJson: JSON.stringify(chartConfig ?? cardConfig ?? {}),
+          dbIdentifier: dbIdentifier ?? "md:my_db",
+          chartConfigJson: JSON.stringify(configJson),
         }),
       });
       if (!res2.ok) throw new Error("Failed to add chart");
@@ -135,7 +249,7 @@ export function AddToDashboardDialog({
             <select
               className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
               value={selectedDashboardId}
-              onChange={(e) => setSelectedDashboardId(e.target.value as any)}
+              onChange={(event) => setSelectedDashboardId(event.target.value)}
             >
               <option value="new">Create new dashboard…</option>
               {dashboards.map((d) => (
@@ -165,29 +279,94 @@ export function AddToDashboardDialog({
 
           <Separator />
 
+          <Separator />
+
+          {visualOptions.length > 1 && (
+            <div className="space-y-2">
+              <span className="text-sm font-medium">Visualization to add</span>
+              <div className="flex flex-wrap gap-2">
+                {visualOptions.map((option) => {
+                  const isSelected = option.type === selectedVisualType;
+                  const label =
+                    option.type === "chart"
+                      ? "Chart"
+                      : option.type === "table"
+                        ? "Table"
+                        : "Card";
+                  return (
+                    <Button
+                      key={option.type}
+                      type="button"
+                      variant={isSelected ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setSelectedVisualType(option.type)}
+                      disabled={selectedVisualType === option.type}
+                    >
+                      {label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {selectedVisualType === "card" && (
+            <p className="text-xs text-muted-foreground">
+              Cards use the value from the first column of the first row when
+              your query returns multiple results.
+            </p>
+          )}
+
           <div className="space-y-2">
-            <label htmlFor="chart-title" className="text-sm font-medium">
-              {cardConfig ? "Card" : "Chart"} title
+            <label htmlFor="visual-title" className="text-sm font-medium">
+              {selectedVisualType
+                ? selectedVisualType.charAt(0).toUpperCase() +
+                selectedVisualType.slice(1)
+                : "Visual"}{" "}
+              title
             </label>
             <Input
-              id="chart-title"
-              value={chartTitle}
-              onChange={(e) => setChartTitle(e.target.value)}
-              placeholder={
-                cardConfig ? "e.g. Total Revenue" : "e.g. Revenue by Month"
-              }
+              id="visual-title"
+              value={currentFormState.title}
+              onChange={(e) => {
+                const value = e.target.value;
+                setVisualFormState((prev) => ({
+                  ...prev,
+                  [selectedVisualType ?? "chart"]: {
+                    title: value,
+                    description:
+                      prev[selectedVisualType ?? "chart"]?.description ?? "",
+                  },
+                }));
+              }}
+              placeholder="e.g. Revenue by Month"
+              disabled={!selectedVisualType}
             />
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="chart-description" className="text-sm font-medium">
-              {cardConfig ? "Card" : "Chart"} description (optional)
+            <label htmlFor="visual-description" className="text-sm font-medium">
+              {selectedVisualType
+                ? selectedVisualType.charAt(0).toUpperCase() +
+                selectedVisualType.slice(1)
+                : "Visual"}{" "}
+              description (optional)
             </label>
             <Input
-              id="chart-description"
-              value={chartDescription}
-              onChange={(e) => setChartDescription(e.target.value)}
+              id="visual-description"
+              value={currentFormState.description}
+              onChange={(e) => {
+                const value = e.target.value;
+                setVisualFormState((prev) => ({
+                  ...prev,
+                  [selectedVisualType ?? "chart"]: {
+                    title: prev[selectedVisualType ?? "chart"]?.title ?? "",
+                    description: value,
+                  },
+                }));
+              }}
               placeholder="Short description"
+              disabled={!selectedVisualType}
             />
           </div>
 

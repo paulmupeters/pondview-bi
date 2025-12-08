@@ -37,7 +37,7 @@ export function SqlAnalysisDisplay({
   showStageIndicator = true,
   history,
   className,
-  selectedDbLabel,
+  selectedDbLabel: _selectedDbLabel,
   onAddToChat,
   canAddToChat,
   artifactId,
@@ -174,7 +174,14 @@ export function SqlAnalysisDisplay({
       }
       lastVisualTypeRef.current = currentVisualType;
     }
-  }, [data?.query, data?.visualType, data?.chartConfig, data?.cardConfig, chartConfig, cardConfig]);
+  }, [
+    data?.query,
+    data?.visualType,
+    data?.chartConfig,
+    data?.cardConfig,
+    chartConfig,
+    cardConfig,
+  ]);
 
   const columnsForDialog = useMemo(
     () =>
@@ -200,7 +207,14 @@ export function SqlAnalysisDisplay({
           summary: data.summary,
         }
       : undefined;
-  }, [executedRows, chartConfig, data]);
+  }, [
+    executedRows,
+    chartConfig,
+    data?.stage,
+    data?.rows,
+    data?.chartConfig,
+    data?.summary,
+  ]);
 
   const selectedForTable = useMemo((): SelectedForTable | undefined => {
     if (executedRows !== null && executedColumns !== null) {
@@ -220,7 +234,14 @@ export function SqlAnalysisDisplay({
           summary: data.summary,
         }
       : undefined;
-  }, [executedRows, executedColumns, data]);
+  }, [
+    executedRows,
+    executedColumns,
+    data?.stage,
+    data?.columns,
+    data?.rows,
+    data?.summary,
+  ]);
 
   const cardSourceRows =
     executedRows ?? (data?.stage === "complete" ? (data.rows ?? null) : null);
@@ -364,7 +385,7 @@ export function SqlAnalysisDisplay({
       )}
 
       {data && (
-        <div className="flex items-center justify-between gap-2 p-2 lg:w-[300px] xl:w-[500px] w-full overflow-y-auto">
+        <div className="flex items-center justify-between gap-2 px-4 pt-4 lg:w-[300px] xl:w-[500px] w-full overflow-y-auto">
           <div className="flex gap-2">
             <Button
               variant={activeView === "table" ? "default" : "outline"}
@@ -486,6 +507,7 @@ export function SqlAnalysisDisplay({
               }
               selectedForChart={selectedForChart}
               selectedForCard={selectedForCard}
+              selectedForTable={selectedForTable}
               chartConfig={chartConfig}
               cardConfig={cardConfig}
               columnsForDialog={columnsForDialog}
