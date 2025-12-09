@@ -1,7 +1,7 @@
 import { tool } from "ai";
+import { nanoid } from "nanoid";
 import { z } from "zod";
-import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
-import { getCurrentUser } from "@/ai/context";
+import { getContext, getCurrentUser } from "@/ai/context";
 import { runSqlNormalized } from "@/lib/db/router";
 import { delay } from "@/lib/delay";
 import type { CardConfig, Config, Result } from "@/lib/types";
@@ -16,7 +16,7 @@ export const executeSqlTool = tool({
     databasePath: z
       .string()
       .describe(
-        "Database identifier/path to run the SQL against (e.g. md:my_db)"
+        "Database identifier/path to run the SQL against (e.g. md:my_db)",
       )
       .default("md:my_db"),
     userQuery: z
@@ -32,9 +32,41 @@ export const executeSqlTool = tool({
   execute: async ({ sql, userQuery, generateChart, databasePath }) => {
     // Get current user context
     const user = getCurrentUser();
+    const { writer } = getContext();
+    const artifactId = nanoid();
+    const createdAt = Date.now();
 
-    // Step 1: Create with loading state
-    const sqlArtifact = ExecuteSqlArtifact.stream({
+    // Helper to write data part updates
+    const writeArtifact = (
+      status: "loading" | "streaming" | "complete" | "error",
+      progress: number,
+      payload: Record<string, unknown>,
+      error?: string,
+    ) => {
+      writer.write({
+        type: "data-execute-sql",
+        id: artifactId,
+        data: {
+          id: artifactId,
+          version: 1,
+          status,
+          progress,
+          error,
+          payload,
+          createdAt,
+          updatedAt: Date.now(),
+        },
+      });
+    };
+
+    const debugContext = {
+      artifactId,
+      userId: user.id,
+      databasePath,
+    };
+
+    // Step 1: Loading state
+    writeArtifact("loading", 0, {
       stage: "loading",
       title: "SQL Query Results",
       query: sql,
@@ -42,11 +74,6 @@ export const executeSqlTool = tool({
       columns: [],
       rows: [],
     });
-    const debugContext = {
-      artifactId: sqlArtifact.id,
-      userId: user.id,
-      databasePath,
-    };
 
     console.debug("[executeSqlTool] Step 1 (loading) initialized", {
       ...debugContext,
@@ -54,7 +81,11 @@ export const executeSqlTool = tool({
     });
 
     // Step 2: Processing - execute query
-    await sqlArtifact.update({ stage: "processing", progress: 0.2 });
+    writeArtifact("streaming", 0.2, {
+      stage: "processing",
+      query: sql,
+      progress: 0.2,
+    });
     await delay(2000);
 
     console.debug("[executeSqlTool] Step 2 (processing) started", debugContext);
@@ -66,7 +97,7 @@ export const executeSqlTool = tool({
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      await sqlArtifact.error(errorMessage);
+      writeArtifact("error", 0, { stage: "error", query: sql }, errorMessage);
       throw new Error(errorMessage);
     }
 
@@ -77,7 +108,11 @@ export const executeSqlTool = tool({
     const executionTime = Date.now() - startTime;
 
     // Step 3: Analyzing - process results
-    await sqlArtifact.update({ stage: "analyzing", progress: 0.6 });
+    writeArtifact("streaming", 0.6, {
+      stage: "analyzing",
+      query: sql,
+      progress: 0.6,
+    });
     await delay(2500);
 
     console.debug("[executeSqlTool] Step 3 (analyzing) started", debugContext);
@@ -99,12 +134,12 @@ export const executeSqlTool = tool({
 
     if (rowCount > 0) {
       insights.push(
-        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`
+        `Query returned ${rowCount} row${rowCount === 1 ? "" : "s"}`,
       );
 
       if (rowCount === 50) {
         insights.push(
-          "Results limited to 50 rows - there may be more data available"
+          "Results limited to 50 rows - there may be more data available",
         );
       }
 
@@ -120,7 +155,7 @@ export const executeSqlTool = tool({
         insights.push(
           `Found ${numericColumns.length} numeric column${
             numericColumns.length === 1 ? "" : "s"
-          } for analysis`
+          } for analysis`,
         );
       }
     } else {
@@ -145,10 +180,14 @@ export const executeSqlTool = tool({
         typeof sampleValue === "number" || !Number.isNaN(Number(sampleValue))
       );
     });
-    await sqlArtifact.update({ stage: "visualizing", progress: 0.8 });
+    writeArtifact("streaming", 0.8, {
+      stage: "visualizing",
+      query: sql,
+      progress: 0.8,
+    });
     console.debug(
       "[executeSqlTool] Step 4 (visualizing) started",
-      debugContext
+      debugContext,
     );
 
     if (isSingleValue && userQuery) {
@@ -159,7 +198,7 @@ export const executeSqlTool = tool({
         const cardResult = await generateCardConfig(
           singleValue,
           columns[0].name,
-          userQuery
+          userQuery,
         );
         cardConfig = cardResult.config;
         visualType = "card";
@@ -212,7 +251,7 @@ export const executeSqlTool = tool({
       },
     };
 
-    await sqlArtifact.complete(finalData);
+    writeArtifact("complete", 1, finalData);
 
     console.debug("[executeSqlTool] Step 5 (complete) finished", {
       ...debugContext,
@@ -223,27 +262,14 @@ export const executeSqlTool = tool({
       actualRowsInPayload: finalData.rows.length,
     });
 
-    // Return the artifact data in the format expected by the AI SDK
+    // Return the text summary for the AI model
     return {
-      parts: [
-        {
-          type: `data-artifact-${ExecuteSqlArtifact.id}`,
-          data: {
-            id: sqlArtifact.id,
-            version: 1,
-            status: "complete" as const,
-            progress: 1,
-            payload: finalData,
-            createdAt: Date.now(),
-          },
-        },
-      ],
       text: `Executed ${queryType} query successfully (User: ${
         user.fullName
       } - ${
         user.id
       }) on ${databasePath}. Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
-        ". "
+        ". ",
       )}.`,
     };
   },

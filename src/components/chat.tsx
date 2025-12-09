@@ -1,12 +1,10 @@
 "use client";
 
-import { useChat } from "@ai-sdk-tools/store";
+import { useChat, type UIMessage } from "@ai-sdk/react";
 import { TrashIcon } from "@heroicons/react/24/outline";
-import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import {
   Conversation,
   ConversationContent,
@@ -131,7 +129,6 @@ export default function Chat({
   const searchParams = useSearchParams();
   const { messages, sendMessage, status, setMessages } = useChat({
     id: chatId,
-    storeId: chatId,
     messages: initialMessages.length > 0 ? initialMessages : undefined,
     transport,
   });
@@ -140,7 +137,7 @@ export default function Chat({
   const [animationFrame, setAnimationFrame] = useState("");
   const [verbAiIsThinking, setVerbAiIsThinking] = useState("is thinking");
   const [isDashboardBuilderOpen, setIsDashboardBuilderOpen] = useState(false);
-  const executeSqlArtifactType = `data-artifact-${ExecuteSqlArtifact.id}`;
+  const executeSqlArtifactType = "data-execute-sql";
 
   const handleSubmit = (message: PromptInputMessage) => {
     const hasText = Boolean(message.text);
@@ -204,7 +201,6 @@ export default function Chat({
       type: executeSqlArtifactType as `data-${string}`,
       data: {
         id: artifactId,
-        type: ExecuteSqlArtifact.id,
         version: 1,
         status: "complete",
         progress: 1,
@@ -273,7 +269,6 @@ export default function Chat({
         type: executeSqlArtifactType as `data-${string}`,
         data: {
           id: artifactId,
-          type: ExecuteSqlArtifact.id,
           version: 1,
           status: "complete",
           progress: 1,
@@ -310,7 +305,6 @@ export default function Chat({
     },
     [chatId, executeSqlArtifactType, setMessages],
   );
-
 
   const handleRemoveMessage = useCallback(
     async (messageId: string) => {
@@ -481,39 +475,52 @@ export default function Chat({
   // Persist right panel width to localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
-      window.localStorage.setItem("chat-right-panel-width", rightPanelWidth.toString());
+      window.localStorage.setItem(
+        "chat-right-panel-width",
+        rightPanelWidth.toString(),
+      );
     }
   }, [rightPanelWidth]);
 
   // Resize handlers
-  const handleResizeStart = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsResizing(true);
-    setResizeStartX(e.clientX);
-    setPointerId(e.pointerId);
-    if (containerRef.current) {
+  const handleResizeStart = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsResizing(true);
+      setResizeStartX(e.clientX);
+      setPointerId(e.pointerId);
+      if (containerRef.current) {
+        const containerWidth =
+          containerRef.current.getBoundingClientRect().width;
+        const currentRightWidth = (rightPanelWidth / 100) * containerWidth;
+        setResizeStartWidth(currentRightWidth);
+      }
+      if (resizeHandleRef.current) {
+        resizeHandleRef.current.setPointerCapture(e.pointerId);
+      }
+    },
+    [rightPanelWidth],
+  );
+
+  const handleResizeMove = useCallback(
+    (e: PointerEvent) => {
+      if (!isResizing || !containerRef.current) return;
+
       const containerWidth = containerRef.current.getBoundingClientRect().width;
-      const currentRightWidth = (rightPanelWidth / 100) * containerWidth;
-      setResizeStartWidth(currentRightWidth);
-    }
-    if (resizeHandleRef.current) {
-      resizeHandleRef.current.setPointerCapture(e.pointerId);
-    }
-  }, [rightPanelWidth]);
+      const deltaX = resizeStartX - e.clientX; // Negative because we're dragging left
+      const newRightWidth = resizeStartWidth + deltaX;
+      const newRightWidthPercent = (newRightWidth / containerWidth) * 100;
 
-  const handleResizeMove = useCallback((e: PointerEvent) => {
-    if (!isResizing || !containerRef.current) return;
-
-    const containerWidth = containerRef.current.getBoundingClientRect().width;
-    const deltaX = resizeStartX - e.clientX; // Negative because we're dragging left
-    const newRightWidth = resizeStartWidth + deltaX;
-    const newRightWidthPercent = (newRightWidth / containerWidth) * 100;
-
-    // Constrain between 20% and 60%
-    const constrainedPercent = Math.max(20, Math.min(60, newRightWidthPercent));
-    setRightPanelWidth(constrainedPercent);
-  }, [isResizing, resizeStartX, resizeStartWidth]);
+      // Constrain between 20% and 60%
+      const constrainedPercent = Math.max(
+        20,
+        Math.min(60, newRightWidthPercent),
+      );
+      setRightPanelWidth(constrainedPercent);
+    },
+    [isResizing, resizeStartX, resizeStartWidth],
+  );
 
   const handleResizeEnd = useCallback(() => {
     setIsResizing(false);
@@ -686,10 +693,7 @@ export default function Chat({
         <div className="flex h-full w-full flex-col relative">
           {/* Two-column layout: Messages on left, Visualizations on right */}
           <div className="flex-1 overflow-hidden bg-card">
-            <div
-              ref={containerRef}
-              className="flex h-full"
-            >
+            <div ref={containerRef} className="flex h-full">
               {/* Left Panel */}
               <div
                 className="flex flex-col min-w-0 h-full overflow-hidden"
@@ -713,19 +717,22 @@ export default function Chat({
                         )}
                         {messages.map((message, messageIndex) => {
                           // Check if this is the last message, it's an assistant message, streaming is active, and it has no meaningful content
-                          const isLastMessage = messageIndex === messages.length - 1;
+                          const isLastMessage =
+                            messageIndex === messages.length - 1;
                           const isEmptyAssistantMessage =
                             isLastMessage &&
                             message.role === "assistant" &&
-                            (status === "streaming" || status === "submitted") &&
+                            (status === "streaming" ||
+                              status === "submitted") &&
                             (!message.parts ||
                               message.parts.length === 0 ||
                               message.parts.every(
                                 (part) =>
                                   (part.type === "text" &&
                                     (!(part as { text?: string }).text ||
-                                      (part as { text?: string }).text?.trim() ===
-                                      "")) ||
+                                      (
+                                        part as { text?: string }
+                                      ).text?.trim() === "")) ||
                                   (part.type === executeSqlArtifactType &&
                                     !(part as { data?: unknown }).data),
                               ));
@@ -751,7 +758,9 @@ export default function Chat({
                                   variant="ghost"
                                   size="icon"
                                   className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
-                                  onClick={() => handleRemoveMessage(message.id)}
+                                  onClick={() =>
+                                    handleRemoveMessage(message.id)
+                                  }
                                   aria-label="Remove message"
                                 >
                                   <TrashIcon className="h-4 w-4" />
@@ -833,23 +842,32 @@ export default function Chat({
 
                                   if (part.type === "tool-getTableSchema") {
                                     return (
-                                      <span key={`${message.id}-part-${partIndex}`}>
+                                      <span
+                                        key={`${message.id}-part-${partIndex}`}
+                                      >
                                         Getting table schema
                                       </span>
                                     );
                                   }
 
-                                  if (part.type === "tool-generateChartConfig") {
+                                  if (
+                                    part.type === "tool-generateChartConfig"
+                                  ) {
                                     return (
-                                      <span key={`${message.id}-part-${partIndex}`}>
-                                        Generating chart config...{animationFrame}
+                                      <span
+                                        key={`${message.id}-part-${partIndex}`}
+                                      >
+                                        Generating chart config...
+                                        {animationFrame}
                                       </span>
                                     );
                                   }
 
                                   if (part.type === "tool-executeSql") {
                                     return (
-                                      <span key={`${message.id}-part-${partIndex}`}>
+                                      <span
+                                        key={`${message.id}-part-${partIndex}`}
+                                      >
                                         Processing...
                                       </span>
                                     );
@@ -865,15 +883,18 @@ export default function Chat({
                         {status === "streaming" &&
                           !(
                             messages.length > 0 &&
-                            messages[messages.length - 1]?.role === "assistant" &&
+                            messages[messages.length - 1]?.role ===
+                              "assistant" &&
                             (!messages[messages.length - 1]?.parts ||
-                              messages[messages.length - 1]?.parts.length === 0 ||
+                              messages[messages.length - 1]?.parts.length ===
+                                0 ||
                               messages[messages.length - 1]?.parts.every(
                                 (part) =>
                                   (part.type === "text" &&
                                     (!(part as { text?: string }).text ||
-                                      (part as { text?: string }).text?.trim() ===
-                                      "")) ||
+                                      (
+                                        part as { text?: string }
+                                      ).text?.trim() === "")) ||
                                   (part.type === executeSqlArtifactType &&
                                     !(part as { data?: unknown }).data),
                               ))
@@ -883,8 +904,8 @@ export default function Chat({
                                 <span>
                                   {animationFrame} {verbAiIsThinking}
                                 </span>
-                            </MessageContent>
-                          </Message>
+                              </MessageContent>
+                            </Message>
                           )}
                         {/* empty space to push the input area to the bottom */}
                         <div className="h-[10vh]" />
@@ -921,7 +942,7 @@ export default function Chat({
                 className={cn(
                   "hidden lg:block w-1 bg-border hover:bg-primary/50 cursor-col-resize transition-colors relative z-10",
                   "hover:w-1.5",
-                  isResizing && "bg-primary w-1.5"
+                  isResizing && "bg-primary w-1.5",
                 )}
                 style={{
                   touchAction: "none",
@@ -943,16 +964,14 @@ export default function Chat({
 
           {/* Visualization Panel for Mobile (below messages) */}
           <div className="lg:hidden border-t border-border bg-background">
-            <div className="h-[400px] p-6">
-              {rightPanelContent}
-            </div>
+            <div className="h-[400px] p-6">{rightPanelContent}</div>
           </div>
         </div>
       </div>
       <DashboardBuilderPanel
         open={isDashboardBuilderOpen}
         onOpenChange={setIsDashboardBuilderOpen}
-        storeId={chatId}
+        messages={messages}
       />
       {/* <AIDevtools /> */}
     </ArtifactMutationProvider>

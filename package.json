@@ -13,9 +13,6 @@
     "migrate": "bun migrate.ts"
   },
   "dependencies": {
-    "@ai-sdk-tools/artifacts": "^0.4.0",
-    "@ai-sdk-tools/devtools": "^0.6.1",
-    "@ai-sdk-tools/store": "^0.1.2",
     "@codemirror/lang-sql": "^6.10.0",
     "@codemirror/theme-one-dark": "^6.1.3",
     "@dnd-kit/core": "^6.3.1",

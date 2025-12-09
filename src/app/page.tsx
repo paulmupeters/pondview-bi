@@ -4,7 +4,6 @@ import type { UIMessage } from "ai";
 import { nanoid } from "nanoid";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
-import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import {
   PromptInputWrapper,
@@ -22,7 +21,7 @@ const EXAMPLE_COMMANDS = [
 export default function Home() {
   const [mode, setMode] = useState<PromptMode>("ai");
   const router = useRouter();
-  const executeSqlArtifactType = `data-artifact-${ExecuteSqlArtifact.id}`;
+  const executeSqlArtifactType = "data-execute-sql";
 
   const handleSubmit = useCallback(
     (message: PromptInputMessage) => {
@@ -68,7 +67,6 @@ export default function Home() {
         type: executeSqlArtifactType as `data-${string}`,
         data: {
           id: artifactId,
-          type: ExecuteSqlArtifact.id,
           version: 1,
           status: "complete",
           progress: 1,
@@ -123,7 +121,14 @@ export default function Home() {
       <div className="w-full max-w-7xl h-full flex flex-col font-mono justify-between py-4">
         <div className="p-2 flex gap-2 py-2 justify-center">
           <div className="flex flex-col items-center justify-center gap-2">
-            <div><span className="text-primary font-bold text-4xl font-mono">POND</span><span className="text-4xl font-mono font-semibold text-sidebar-foreground">VIEW</span></div>
+            <div>
+              <span className="text-primary font-bold text-4xl font-mono">
+                POND
+              </span>
+              <span className="text-4xl font-mono font-semibold text-sidebar-foreground">
+                VIEW
+              </span>
+            </div>
             <svg
               width="100%"
               height="100%"
@@ -208,7 +213,6 @@ export default function Home() {
             <div className="w-full max-w-5xl">
               <PromptInputWrapper
                 onSubmit={handleSubmit}
-                onAddSqlResultToChat={handleAddSqlResultToChat}
                 className="transition delay-150 duration-300 ease-in-out"
                 onHomePage={true}
                 mode={mode}

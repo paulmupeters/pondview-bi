@@ -1,5 +1,4 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { useChatMessages } from "@ai-sdk-tools/store";
 import { useEffect, useMemo, useState } from "react";
 import type { z } from "zod";
 import type {
@@ -20,14 +19,13 @@ interface ArtifactPart<T = unknown> {
   data?: ArtifactData<T>;
 }
 
-export function useArtifact<T extends { id: string; schema: z.ZodSchema<unknown> }>(
+export function useArtifact<
+  T extends { id: string; schema: z.ZodSchema<unknown> },
+>(
   artifactDef: T,
+  messages: UIMessage[],
   callbacks?: ArtifactCallbacks<InferArtifactType<T>>,
-  storeId?: string
 ): UseArtifactReturn<InferArtifactType<T>> {
-  // Get messages from the chat store
-  const messages = useChatMessages(storeId);
-
   const [currentArtifact, setCurrentArtifact] = useState<ArtifactData<
     InferArtifactType<T>
   > | null>(null);
@@ -35,7 +33,7 @@ export function useArtifact<T extends { id: string; schema: z.ZodSchema<unknown>
   useEffect(() => {
     const artifacts = extractArtifactsFromMessages<InferArtifactType<T>>(
       messages,
-      artifactDef.id
+      artifactDef.id,
     );
     const latest = artifacts[0] || null;
 
@@ -125,10 +123,11 @@ export interface UseArtifactsReturn {
   current: ArtifactData<unknown> | null;
 }
 
-export function useArtifacts(options: UseArtifactsOptions = {}): UseArtifactsReturn {
-  const { onData, include, exclude, storeId } =
-    options as UseArtifactsOptions & { storeId?: string };
-  const messages = useChatMessages(storeId);
+export function useArtifacts(
+  messages: UIMessage[],
+  options: UseArtifactsOptions = {},
+): UseArtifactsReturn {
+  const { onData, include, exclude } = options;
 
   return useMemo(() => {
     const allArtifacts = extractAllArtifactsFromMessages(messages);
@@ -188,7 +187,7 @@ export function useArtifacts(options: UseArtifactsOptions = {}): UseArtifactsRet
 }
 
 function extractAllArtifactsFromMessages(
-  messages: UIMessage[]
+  messages: UIMessage[],
 ): ArtifactData<unknown>[] {
   const artifacts = new Map<string, ArtifactData<unknown>>();
 
@@ -196,8 +195,8 @@ function extractAllArtifactsFromMessages(
     // Check message parts for artifact data
     if (message.parts && Array.isArray(message.parts)) {
       for (const part of message.parts) {
-        // Check if this part is any artifact type
-        if (part.type.startsWith("data-artifact-") && "data" in part) {
+        // Check if this part is any data type (data-execute-sql, etc.)
+        if (part.type.startsWith("data-") && "data" in part) {
           const artifactPart = part as ArtifactPart<unknown>;
           if (artifactPart.data) {
             const existing = artifacts.get(artifactPart.data.id);
@@ -207,7 +206,12 @@ function extractAllArtifactsFromMessages(
               (artifactPart.data.version === existing.version &&
                 artifactPart.data.createdAt > existing.createdAt)
             ) {
-              artifacts.set(artifactPart.data.id, artifactPart.data);
+              // Extract type from part.type (e.g., "data-execute-sql" -> "execute-sql")
+              const typeWithoutPrefix = part.type.replace(/^data-/, "");
+              artifacts.set(artifactPart.data.id, {
+                ...artifactPart.data,
+                type: typeWithoutPrefix,
+              });
             }
           }
         }
@@ -219,10 +223,7 @@ function extractAllArtifactsFromMessages(
             const parts = (result as { parts?: ArtifactPart<unknown>[] }).parts;
             if (Array.isArray(parts)) {
               for (const nestedPart of parts) {
-                if (
-                  nestedPart.type.startsWith("data-artifact-") &&
-                  nestedPart.data
-                ) {
+                if (nestedPart.type.startsWith("data-") && nestedPart.data) {
                   const existing = artifacts.get(nestedPart.data.id);
                   if (
                     !existing ||
@@ -230,7 +231,14 @@ function extractAllArtifactsFromMessages(
                     (nestedPart.data.version === existing.version &&
                       nestedPart.data.createdAt > existing.createdAt)
                   ) {
-                    artifacts.set(nestedPart.data.id, nestedPart.data);
+                    const typeWithoutPrefix = nestedPart.type.replace(
+                      /^data-/,
+                      "",
+                    );
+                    artifacts.set(nestedPart.data.id, {
+                      ...nestedPart.data,
+                      type: typeWithoutPrefix,
+                    });
                   }
                 }
               }
@@ -242,13 +250,13 @@ function extractAllArtifactsFromMessages(
   }
 
   return Array.from(artifacts.values()).sort(
-    (a, b) => b.createdAt - a.createdAt
+    (a, b) => b.createdAt - a.createdAt,
   );
 }
 
 function extractArtifactsFromMessages<T>(
   messages: UIMessage[],
-  artifactType: string
+  artifactType: string,
 ): ArtifactData<T>[] {
   const artifacts = new Map<string, ArtifactData<T>>();
 
@@ -257,7 +265,7 @@ function extractArtifactsFromMessages<T>(
     if (message.parts && Array.isArray(message.parts)) {
       for (const part of message.parts) {
         // Check if this part is an artifact of the type we're looking for
-        if (part.type === `data-artifact-${artifactType}` && "data" in part) {
+        if (part.type === `data-${artifactType}` && "data" in part) {
           const artifactPart = part as ArtifactPart<T>;
           if (artifactPart.data) {
             const existing = artifacts.get(artifactPart.data.id);
@@ -280,7 +288,7 @@ function extractArtifactsFromMessages<T>(
             if (Array.isArray(parts)) {
               for (const nestedPart of parts) {
                 if (
-                  nestedPart.type === `data-artifact-${artifactType}` &&
+                  nestedPart.type === `data-${artifactType}` &&
                   nestedPart.data
                 ) {
                   const existing = artifacts.get(nestedPart.data.id);
@@ -302,6 +310,6 @@ function extractArtifactsFromMessages<T>(
   }
 
   return Array.from(artifacts.values()).sort(
-    (a, b) => b.createdAt - a.createdAt
+    (a, b) => b.createdAt - a.createdAt,
   );
 }

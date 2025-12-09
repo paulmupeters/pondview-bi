@@ -1,13 +1,25 @@
-import { type BaseContext, createTypedContext } from "@ai-sdk-tools/artifacts";
+import type { UIMessageStreamWriter } from "ai";
 
 // Define custom context type with userId and fullName
-interface ChatContext extends BaseContext {
+interface ChatContext {
+  writer: UIMessageStreamWriter;
   userId: string;
   fullName: string;
 }
 
-// Create typed context helpers
-const { setContext, getContext } = createTypedContext<ChatContext>();
+// Simple module-level context
+let currentContext: ChatContext | null = null;
+
+export function setContext(context: ChatContext) {
+  currentContext = context;
+}
+
+export function getContext(): ChatContext {
+  if (!currentContext) {
+    throw new Error("Context not set. Call setContext first.");
+  }
+  return currentContext;
+}
 
 // Helper function to get current user context (can be used in tools)
 export function getCurrentUser() {
@@ -17,5 +29,3 @@ export function getCurrentUser() {
     fullName: context.fullName,
   };
 }
-
-export { setContext, getContext };

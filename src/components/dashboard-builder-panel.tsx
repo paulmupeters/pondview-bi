@@ -1,5 +1,6 @@
 "use client";
 
+import type { UIMessage } from "@ai-sdk/react";
 import { MinusCircleIcon, PlusCircleIcon, XIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +19,7 @@ import type { ChartConfig } from "./ui/chart";
 type DashboardBuilderPanelProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  storeId: string;
+  messages: UIMessage[];
 };
 
 type VisualSnapshot = {
@@ -131,7 +132,7 @@ function normalizeVisualArtifact(
 export function DashboardBuilderPanel({
   open,
   onOpenChange,
-  storeId,
+  messages,
 }: DashboardBuilderPanelProps) {
   const router = useRouter();
   const [dashboardTitle, setDashboardTitle] = useState("New dashboard");
@@ -142,10 +143,9 @@ export function DashboardBuilderPanel({
 
   const includeExecuteSql = useMemo(() => ["execute-sql"], []);
 
-  const { artifacts } = useArtifacts({
+  const { artifacts } = useArtifacts(messages, {
     include: includeExecuteSql,
-    storeId,
-  } as UseArtifactsOptions & { storeId?: string });
+  });
 
   const visualSnapshots = useMemo<VisualSnapshot[]>(() => {
     return artifacts
@@ -362,12 +362,12 @@ export function DashboardBuilderPanel({
                         <span className="text-sm font-medium">
                           {snapshot.type === "card"
                             ? snapshot.payload.cardConfig?.title ||
-                            "Untitled card"
+                              "Untitled card"
                             : snapshot.type === "table"
                               ? snapshot.payload.tableConfig?.title ||
-                              "Untitled table"
+                                "Untitled table"
                               : snapshot.payload.chartConfig?.title ||
-                              "Untitled visual"}
+                                "Untitled visual"}
                         </span>
                         {snapshot.payload.query && (
                           <span className="text-xs text-muted-foreground truncate max-w-[280px]">
@@ -401,7 +401,7 @@ export function DashboardBuilderPanel({
                               {(() => {
                                 const value =
                                   snapshot.rows[0]?.[
-                                  snapshot.payload.columns?.[0]?.name ?? ""
+                                    snapshot.payload.columns?.[0]?.name ?? ""
                                   ];
                                 if (typeof value === "number") {
                                   return value.toLocaleString();
@@ -473,9 +473,9 @@ export function DashboardBuilderPanel({
                       ? snapshot.payload.cardConfig?.title || "Untitled card"
                       : snapshot.type === "table"
                         ? snapshot.payload.tableConfig?.title ||
-                        "Untitled table"
+                          "Untitled table"
                         : snapshot.payload.chartConfig?.title ||
-                        "Untitled visual"}
+                          "Untitled visual"}
                   </Button>
                 ))}
               </div>

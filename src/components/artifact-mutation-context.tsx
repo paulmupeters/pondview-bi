@@ -13,7 +13,8 @@ interface ArtifactMutationContextValue {
   ) => Promise<void>;
 }
 
-const ArtifactMutationContext = createContext<ArtifactMutationContextValue | null>(null);
+const ArtifactMutationContext =
+  createContext<ArtifactMutationContextValue | null>(null);
 
 interface ArtifactMutationProviderProps {
   chatId: string;
@@ -54,7 +55,9 @@ export function ArtifactMutationProvider({
         (part) =>
           part.type === executeSqlArtifactType &&
           (part as { data?: { id?: string } }).data?.id === artifactId,
-      ) as { data?: { payload?: SqlAnalysisData; status?: ArtifactStatus } } | undefined;
+      ) as
+        | { data?: { payload?: SqlAnalysisData; status?: ArtifactStatus } }
+        | undefined;
 
       if (!artifactPart?.data) {
         console.warn(`Artifact part not found for ${artifactId}`);
@@ -64,7 +67,8 @@ export function ArtifactMutationProvider({
       // Update the payload
       const updatedPayload: SqlAnalysisData = {
         ...artifactPart.data.payload,
-        chartConfig: config.chartConfig ?? artifactPart.data.payload?.chartConfig,
+        chartConfig:
+          config.chartConfig ?? artifactPart.data.payload?.chartConfig,
         cardConfig: config.cardConfig ?? artifactPart.data.payload?.cardConfig,
       };
 
@@ -82,7 +86,10 @@ export function ArtifactMutationProvider({
                 return {
                   ...part,
                   data: {
-                    ...((part as { data?: unknown }).data as Record<string, unknown>),
+                    ...((part as { data?: unknown }).data as Record<
+                      string,
+                      unknown
+                    >),
                     payload: updatedPayload,
                     updatedAt: Date.now(),
                   },
@@ -112,7 +119,7 @@ export function ArtifactMutationProvider({
           if (res.ok) {
             const data = (await res.json()) as { messages?: UIMessage[] };
             if (data.messages) {
-              setMessages(data.messages);
+              setMessages(() => data.messages!);
             }
           }
         } catch (reloadError) {
@@ -133,8 +140,9 @@ export function ArtifactMutationProvider({
 export function useArtifactMutation() {
   const context = useContext(ArtifactMutationContext);
   if (!context) {
-    throw new Error("useArtifactMutation must be used within an ArtifactMutationProvider");
+    throw new Error(
+      "useArtifactMutation must be used within an ArtifactMutationProvider",
+    );
   }
   return context;
 }
-
