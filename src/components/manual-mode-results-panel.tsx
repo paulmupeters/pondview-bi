@@ -158,6 +158,7 @@ export function ManualModeResultsPanel({
 
     onAddToChatAction(payload);
     setHasShared(true);
+    onSwitchToAiMode?.();
   };
 
   const canShare = Boolean(onAddToChatAction && sqlResult && !hasShared);

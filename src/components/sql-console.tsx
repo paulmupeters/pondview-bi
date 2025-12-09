@@ -193,6 +193,7 @@ export function SqlConsole({
     setResults(null);
 
     const currentSql = sql.trim();
+    console.log("sql", currentSql)
     if (!currentSql) return;
     addToHistory(currentSql);
 

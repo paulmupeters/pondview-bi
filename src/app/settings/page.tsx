@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -52,6 +52,11 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [secrets, setSecrets] = useState<{ name: string; provider: string }[]>(
+    []
+  );
+  const [secretsError, setSecretsError] = useState<string | null>(null);
+  const [isSecretsLoading, setIsSecretsLoading] = useState(false);
   const availableThemes = getAllThemes();
 
   // Load settings from localStorage on mount
@@ -72,6 +77,35 @@ export default function SettingsPage() {
       applyCustomCss(cssCode);
     }
   }, [cssCode, selectedTheme]);
+
+  const fetchSecrets = useCallback(async () => {
+    setIsSecretsLoading(true);
+    setSecretsError(null);
+    try {
+      const response = await fetch("/api/duckdb/secrets");
+      const data = (await response.json().catch(() => ({}))) as {
+        secrets?: { name: string; provider: string }[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load DuckDB secrets.");
+      }
+
+      setSecrets(Array.isArray(data.secrets) ? data.secrets : []);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load secrets.";
+      setSecrets([]);
+      setSecretsError(message);
+    } finally {
+      setIsSecretsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchSecrets();
+  }, [fetchSecrets]);
 
   const handleSaveApiKey = async () => {
     setIsSaving(true);
@@ -170,6 +204,63 @@ export default function SettingsPage() {
                 >
                   {isSaving ? "Saving..." : "Save API Key"}
                 </Button>
+              </div>
+            </div>
+          </Card>
+
+          {/* DuckDB Secrets Section */}
+          <Card className="p-6 mb-6">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <h2 className="text-xl font-semibold mb-2">DuckDB Secrets</h2>
+                  <p className="text-sm text-muted-foreground">
+                    View persistent secrets managed by DuckDB. Use{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                      CREATE PERSISTENT SECRET
+                    </code>{" "}
+                    in the DuckDB shell to add one.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => void fetchSecrets()}
+                  disabled={isSecretsLoading}
+                  className="whitespace-nowrap"
+                >
+                  {isSecretsLoading ? "Refreshing..." : "Refresh"}
+                </Button>
+              </div>
+
+              <div className="border rounded-lg divide-y bg-muted/20">
+                {isSecretsLoading ? (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    Loading secrets...
+                  </div>
+                ) : secretsError ? (
+                  <div className="p-4 text-sm text-red-600 dark:text-red-400">
+                    {secretsError}
+                  </div>
+                ) : secrets.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    No persistent secrets found. Create one and it will appear
+                    here.
+                  </div>
+                ) : (
+                  secrets.map((secret) => (
+                    <div
+                      key={`${secret.provider}:${secret.name}`}
+                      className="p-4 flex justify-between items-center gap-4"
+                    >
+                      <div>
+                        <p className="font-medium">{secret.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Provider: {secret.provider || "unknown"}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </Card>

@@ -3,7 +3,6 @@
 import {
   ClipboardDocumentIcon,
   PlayIcon,
-  TrashIcon,
 } from "@heroicons/react/24/outline";
 import { Eraser } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
