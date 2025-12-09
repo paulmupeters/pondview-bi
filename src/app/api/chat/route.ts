@@ -7,6 +7,7 @@ import {
   type UIMessage,
 } from "ai";
 import { setContext } from "@/ai/context";
+import { LEGACY_CHAT_MODEL } from "@/ai/models";
 import { analysisPrompt } from "@/ai/prompts";
 import { tools } from "@/ai/tools";
 import type { ConnectedTable } from "@/lib/connected-tables";
@@ -35,10 +36,10 @@ export async function POST(req: Request) {
       });
 
       const result = streamText({
-        model: "openai/gpt-5-nano",
+        model: LEGACY_CHAT_MODEL,
         system: analysisPrompt.replace(
           "{connectedTables}",
-          JSON.stringify(connectedTables)
+          JSON.stringify(connectedTables),
         ),
         messages: convertToModelMessages(messages),
         tools,

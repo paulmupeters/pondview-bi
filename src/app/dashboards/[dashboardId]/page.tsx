@@ -15,13 +15,20 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
-import { GripVertical, MoveDiagonal2, Pencil, Settings, Trash2 } from "lucide-react";
+import {
+  GripVertical,
+  MoveDiagonal2,
+  Pencil,
+  Settings,
+  Trash2,
+} from "lucide-react";
 import { useParams } from "next/navigation";
 import {
   type CSSProperties,
   type FormEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -74,8 +81,13 @@ type DashboardChart = {
 };
 
 type ChartGroup = {
-  type: 'metric-group' | 'single';
+  type: "metric-group" | "single";
   items: DashboardChart[];
+};
+
+type LayoutRow = {
+  columns: number;
+  groups: ChartGroup[];
 };
 
 type SortableChartCardProps = {
@@ -153,14 +165,14 @@ function groupConsecutiveMetricCards(
       if (currentMetricGroup.length > 0) {
         // Only group if there are 2+ cards, otherwise treat as single
         if (currentMetricGroup.length > 1) {
-          groups.push({ type: 'metric-group', items: [...currentMetricGroup] });
+          groups.push({ type: "metric-group", items: [...currentMetricGroup] });
         } else {
-          groups.push({ type: 'single', items: [...currentMetricGroup] });
+          groups.push({ type: "single", items: [...currentMetricGroup] });
         }
         currentMetricGroup = [];
       }
       // Add non-metric card as single item
-      groups.push({ type: 'single', items: [chart] });
+      groups.push({ type: "single", items: [chart] });
     }
   }
 
@@ -168,13 +180,75 @@ function groupConsecutiveMetricCards(
   if (currentMetricGroup.length > 0) {
     // Only group if there are 2+ cards, otherwise treat as single
     if (currentMetricGroup.length > 1) {
-      groups.push({ type: 'metric-group', items: currentMetricGroup });
+      groups.push({ type: "metric-group", items: currentMetricGroup });
     } else {
-      groups.push({ type: 'single', items: currentMetricGroup });
+      groups.push({ type: "single", items: currentMetricGroup });
     }
   }
 
   return groups;
+}
+
+// Determine desired colSpan for a single chart (defaults to 1)
+function getChartColSpan(chart: DashboardChart, maxColumns: number): number {
+  let span = 1;
+  try {
+    const parsed = JSON.parse(chart.chartConfigJson) as
+      | Config
+      | CardConfig
+      | TableConfig;
+    const isChartConfig =
+      parsed &&
+      !isCardConfig(parsed) &&
+      !isTableConfig(parsed) &&
+      "colSpan" in parsed;
+    if (isChartConfig) {
+      span = (parsed as Config).colSpan ?? 1;
+    }
+  } catch {
+    span = 1;
+  }
+  return Math.min(Math.max(1, span), maxColumns);
+}
+
+// Determine how many columns a chart group wants to occupy
+function getGroupColSpan(group: ChartGroup, maxColumns: number): number {
+  if (group.type === "metric-group") {
+    return Math.min(group.items.length, maxColumns);
+  }
+  const chart = group.items[0];
+  if (!chart) return 1;
+  return getChartColSpan(chart, maxColumns);
+}
+
+// Build rows so each row knows the columns it actually needs (up to max)
+function buildRows(groups: ChartGroup[], maxColumns: number): LayoutRow[] {
+  const rows: LayoutRow[] = [];
+  let currentGroups: ChartGroup[] = [];
+  let usedColumns = 0;
+
+  for (const group of groups) {
+    const span = getGroupColSpan(group, maxColumns);
+    if (currentGroups.length > 0 && usedColumns + span > maxColumns) {
+      rows.push({
+        columns: Math.min(maxColumns, Math.max(1, usedColumns)),
+        groups: currentGroups,
+      });
+      currentGroups = [];
+      usedColumns = 0;
+    }
+    currentGroups.push(group);
+    usedColumns = Math.min(maxColumns, usedColumns + span);
+  }
+
+  if (currentGroups.length > 0) {
+    rows.push({
+      columns: Math.min(maxColumns, Math.max(1, usedColumns || 1)),
+      groups: currentGroups,
+    });
+  }
+
+  return rows;
 }
 
 type MetricCardGroupProps = {
@@ -197,7 +271,7 @@ function MetricCardInGroup({
   onToggleSql,
   onSqlUpdate,
   isFirst,
-  isLast,
+  isLast: _isLast,
 }: {
   chart: DashboardChart;
   chartData: Record<string, Result[]>;
@@ -420,10 +494,7 @@ function MetricCardSqlEditor({
 
   return (
     <div className="flex flex-col gap-3">
-      <label
-        htmlFor={`sql-editor-${chart.id}`}
-        className="text-sm font-medium"
-      >
+      <label htmlFor={`sql-editor-${chart.id}`} className="text-sm font-medium">
         SQL Query
       </label>
       <textarea
@@ -466,7 +537,7 @@ function SortableChartCard({
   onToggleSql,
   onSqlUpdate,
   totalColumns,
-  isInGroup = false,
+  isInGroup: _isInGroup = false,
 }: SortableChartCardProps) {
   const { filters } = useFilters();
   const [editedSql, setEditedSql] = useState(chart.sql);
@@ -481,9 +552,13 @@ function SortableChartCard({
   const isExpanded = expandedSqlChartId === chart.id;
 
   // Get colSpan from config, default to 1
-  const currentColSpan = (config && !isCardConfig(config) && !isTableConfig(config) && "colSpan" in config)
-    ? (config as Config).colSpan ?? 1
-    : 1;
+  const currentColSpan =
+    config &&
+      !isCardConfig(config) &&
+      !isTableConfig(config) &&
+      "colSpan" in config
+      ? ((config as Config).colSpan ?? 1)
+      : 1;
 
   const displayColSpan = tempColSpan ?? currentColSpan;
 
@@ -509,47 +584,65 @@ function SortableChartCard({
   }, [isExpanded, chart.sql]);
 
   // Resize handlers
-  const handleResizeStart = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsResizing(true);
-    setResizeStartX(e.clientX);
-    setPointerId(e.pointerId);
-    if (cardRef.current) {
-      setResizeStartWidth(cardRef.current.getBoundingClientRect().width);
-    }
-    setTempColSpan(currentColSpan);
-    if (resizeRef.current) {
-      resizeRef.current.setPointerCapture(e.pointerId);
-    }
-  }, [currentColSpan]);
+  const handleResizeStart = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsResizing(true);
+      setResizeStartX(e.clientX);
+      setPointerId(e.pointerId);
+      if (cardRef.current) {
+        setResizeStartWidth(cardRef.current.getBoundingClientRect().width);
+      }
+      setTempColSpan(currentColSpan);
+      if (resizeRef.current) {
+        resizeRef.current.setPointerCapture(e.pointerId);
+      }
+    },
+    [currentColSpan],
+  );
 
-  const handleResizeMove = useCallback((e: PointerEvent) => {
-    if (!isResizing || !cardRef.current) return;
+  const handleResizeMove = useCallback(
+    (e: PointerEvent) => {
+      if (!isResizing || !cardRef.current) return;
 
-    const cardElement = cardRef.current;
-    const gridContainer = cardElement.closest('.grid') as HTMLElement;
-    if (!gridContainer) return;
+      const cardElement = cardRef.current;
+      const gridContainer = cardElement.closest(".grid") as HTMLElement;
+      if (!gridContainer) return;
 
-    const gridRect = gridContainer.getBoundingClientRect();
-    const gridGap = 24; // gap-6 = 24px
-    const gridColumnWidth = (gridRect.width - (gridGap * (totalColumns - 1))) / totalColumns;
+      const gridRect = gridContainer.getBoundingClientRect();
+      const gridGap = 24; // gap-6 = 24px
+      const gridColumnWidth =
+        (gridRect.width - gridGap * (totalColumns - 1)) / totalColumns;
 
-    // Calculate new width based on mouse movement
-    const deltaX = e.clientX - resizeStartX;
-    const newWidth = Math.max(gridColumnWidth, resizeStartWidth + deltaX);
+      // Calculate new width based on mouse movement
+      const deltaX = e.clientX - resizeStartX;
+      const newWidth = Math.max(gridColumnWidth, resizeStartWidth + deltaX);
 
-    // Convert width to column span
-    // For S columns: width = S * columnWidth + (S-1) * gap
-    // Solving for S: S = (width + gap) / (columnWidth + gap)
-    const newColSpan = Math.max(1, Math.min(totalColumns, Math.round((newWidth + gridGap) / (gridColumnWidth + gridGap))));
+      // Convert width to column span
+      // For S columns: width = S * columnWidth + (S-1) * gap
+      // Solving for S: S = (width + gap) / (columnWidth + gap)
+      const newColSpan = Math.max(
+        1,
+        Math.min(
+          totalColumns,
+          Math.round((newWidth + gridGap) / (gridColumnWidth + gridGap)),
+        ),
+      );
 
-    setTempColSpan(newColSpan);
-  }, [isResizing, resizeStartX, resizeStartWidth, totalColumns]);
+      setTempColSpan(newColSpan);
+    },
+    [isResizing, resizeStartX, resizeStartWidth, totalColumns],
+  );
 
   const handleResizeEnd = useCallback(async () => {
-    if (tempColSpan !== null && tempColSpan !== currentColSpan && isChart && config) {
-      const updatedConfig = { ...config as Config, colSpan: tempColSpan };
+    if (
+      tempColSpan !== null &&
+      tempColSpan !== currentColSpan &&
+      isChart &&
+      config
+    ) {
+      const updatedConfig = { ...(config as Config), colSpan: tempColSpan };
       await onConfigChange(JSON.stringify(updatedConfig));
     }
     setIsResizing(false);
@@ -565,12 +658,12 @@ function SortableChartCard({
       const handleMove = (e: PointerEvent) => handleResizeMove(e);
       const handleEnd = () => void handleResizeEnd();
 
-      window.addEventListener('pointermove', handleMove);
-      window.addEventListener('pointerup', handleEnd);
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", handleEnd);
 
       return () => {
-        window.removeEventListener('pointermove', handleMove);
-        window.removeEventListener('pointerup', handleEnd);
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleEnd);
       };
     }
   }, [isResizing, handleResizeMove, handleResizeEnd]);
@@ -1159,6 +1252,16 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     [dashboardId, filters],
   );
 
+  const chartGroups = useMemo(
+    () => groupConsecutiveMetricCards(charts, chartData),
+    [charts, chartData],
+  );
+
+  const layoutRows = useMemo(
+    () => buildRows(chartGroups, columns),
+    [chartGroups, columns],
+  );
+
   const getGridColsClass = (cols: number) => {
     const colMap: Record<number, string> = {
       1: "grid-cols-1",
@@ -1316,51 +1419,62 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
           items={charts.map((c) => c.id)}
           strategy={rectSortingStrategy}
         >
-          <div className={`grid gap-6 ${getGridColsClass(columns)}`}>
-            {groupConsecutiveMetricCards(charts, chartData).map((group, groupIndex) => {
-              if (group.type === 'metric-group') {
-                return (
-                  <MetricCardGroup
-                    key={`group-${group.items[0]?.id}`}
-                    charts={group.items}
-                    chartData={chartData}
-                    onConfigChange={handleChartConfigChange}
-                    onDelete={handleChartDelete}
-                    expandedSqlChartId={expandedSqlChartId}
-                    onToggleSql={handleToggleSql}
-                    onSqlUpdate={handleSqlUpdate}
-                    totalColumns={columns}
-                  />
-                );
-              }
-              // Render single chart/table/card as before
-              const chart = group.items[0];
-              let config: Config | CardConfig | TableConfig | null = null;
-              try {
-                const parsed = JSON.parse(chart.chartConfigJson);
-                config = parsed as Config | CardConfig | TableConfig;
-              } catch {
-                config = null;
-              }
-              const rows = chartData[chart.id] || [];
-              return (
-                <SortableChartCard
-                  key={chart.id}
-                  chart={chart}
-                  config={config}
-                  rows={rows}
-                  onConfigChange={(newJson) =>
-                    handleChartConfigChange(chart.id, newJson)
+          {layoutRows.map((row, rowIndex) => {
+            const rowKey =
+              row.groups
+                .map((group) => group.items.map((item) => item.id).join(","))
+                .join("|") || `row-${rowIndex}`;
+            return (
+              <div
+                key={rowKey}
+                className={`grid gap-2 md:gap-4 ${getGridColsClass(row.columns)} mb-6 last:mb-0`}
+              >
+                {row.groups.map((group, groupIndex) => {
+                  if (group.type === "metric-group") {
+                    return (
+                      <MetricCardGroup
+                        key={`group-${group.items[0]?.id ?? groupIndex}-${rowKey}`}
+                        charts={group.items}
+                        chartData={chartData}
+                        onConfigChange={handleChartConfigChange}
+                        onDelete={handleChartDelete}
+                        expandedSqlChartId={expandedSqlChartId}
+                        onToggleSql={handleToggleSql}
+                        onSqlUpdate={handleSqlUpdate}
+                        totalColumns={row.columns}
+                      />
+                    );
                   }
-                  onDelete={() => handleChartDelete(chart.id)}
-                  expandedSqlChartId={expandedSqlChartId}
-                  onToggleSql={handleToggleSql}
-                  onSqlUpdate={handleSqlUpdate}
-                  totalColumns={columns}
-                />
-              );
-            })}
-          </div>
+                  // Render single chart/table/card as before
+                  const chart = group.items[0];
+                  let config: Config | CardConfig | TableConfig | null = null;
+                  try {
+                    const parsed = JSON.parse(chart.chartConfigJson);
+                    config = parsed as Config | CardConfig | TableConfig;
+                  } catch {
+                    config = null;
+                  }
+                  const rows = chartData[chart.id] || [];
+                  return (
+                    <SortableChartCard
+                      key={chart.id}
+                      chart={chart}
+                      config={config}
+                      rows={rows}
+                      onConfigChange={(newJson) =>
+                        handleChartConfigChange(chart.id, newJson)
+                      }
+                      onDelete={() => handleChartDelete(chart.id)}
+                      expandedSqlChartId={expandedSqlChartId}
+                      onToggleSql={handleToggleSql}
+                      onSqlUpdate={handleSqlUpdate}
+                      totalColumns={row.columns}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })}
         </SortableContext>
       </DndContext>
     </div>

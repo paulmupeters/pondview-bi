@@ -49,6 +49,7 @@ export function SqlAnalysisDisplay({
       ? "chart"
       : "table",
   );
+
   const [chartConfig, setChartConfig] = useState<Config | null>(
     () => data?.chartConfig ?? null,
   );

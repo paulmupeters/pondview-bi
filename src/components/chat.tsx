@@ -1,6 +1,6 @@
 "use client";
 
-import { useChat, type UIMessage } from "@ai-sdk/react";
+import { type UIMessage, useChat } from "@ai-sdk/react";
 import { TrashIcon } from "@heroicons/react/24/outline";
 import { DefaultChatTransport } from "ai";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -235,7 +235,7 @@ export default function Chat({
     } catch (error) {
       console.error("Failed to persist message:", error);
     }
-  }, [chatId, connectedTables, executeSqlArtifactType, setMessages]);
+  }, [chatId, connectedTables, setMessages]);
 
   const handleAddSqlResultToChat = useCallback(
     async (payload: SqlAnalysisData) => {
@@ -303,7 +303,7 @@ export default function Chat({
         console.error("Failed to persist message:", error);
       }
     },
-    [chatId, executeSqlArtifactType, setMessages],
+    [chatId, setMessages],
   );
 
   const handleRemoveMessage = useCallback(
@@ -607,7 +607,7 @@ export default function Chat({
     });
 
     return vizList;
-  }, [messages, executeSqlArtifactType]);
+  }, [messages]);
 
   const isConversationEmpty = messages.length === 0;
 

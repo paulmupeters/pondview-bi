@@ -11,18 +11,35 @@ function safeJsonParse(value: string) {
   }
 }
 
+function parsePartsOrFallback(
+  partsJson: string | null | undefined,
+  content: string,
+): UIMessage["parts"] {
+  const parsed = partsJson ? safeJsonParse(partsJson) : undefined;
+
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    return parsed as UIMessage["parts"];
+  }
+
+  if (parsed && typeof parsed === "object") {
+    const maybeParts = (parsed as { parts?: unknown }).parts;
+    if (Array.isArray(maybeParts) && maybeParts.length > 0) {
+      return maybeParts as UIMessage["parts"];
+    }
+  }
+
+  return [{ type: "text", text: content }] as UIMessage["parts"];
+}
+
 async function getInitialMessages(chatId: string): Promise<UIMessage[]> {
   try {
     const rows = await listMessagesByChatId(chatId);
 
     const uiMessages: UIMessage[] = rows.map((row: DbMessageRow) => {
-      const parsedParts = row.parts ? safeJsonParse(row.parts) : undefined;
       return {
         id: row.id,
         role: row.role as UIMessage["role"],
-        parts: (Array.isArray(parsedParts) && parsedParts.length > 0
-          ? parsedParts
-          : [{ type: "text", text: row.content }]) as UIMessage["parts"],
+        parts: parsePartsOrFallback(row.parts, row.content),
       } satisfies UIMessage;
     });
     return uiMessages;

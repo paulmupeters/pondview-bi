@@ -100,7 +100,7 @@ export function SqlResultsTable({
   }
 
   return (
-    <div className="flex flex-col h-full w-full min-w-0 gap-4">
+    <div className="flex flex-col h-full w-full min-w-0 gap-4 p-4">
       {/* Summary */}
       {summary && (
         <div className="shrink-0 space-y-2">

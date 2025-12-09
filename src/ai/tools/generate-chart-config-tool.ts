@@ -1,4 +1,5 @@
 import { generateObject } from "ai";
+import { VISUALIZATION_MODEL } from "@/ai/models";
 import { configSchema, normalizeChartConfig, type Result } from "@/lib/types";
 
 export const generateChartConfig = async (
@@ -8,7 +9,7 @@ export const generateChartConfig = async (
   "use server";
 
   const { object: config } = await generateObject({
-    model: "openai/gpt-5-nano",
+    model: VISUALIZATION_MODEL,
     system: "You are a data visualization expert.",
     prompt: `Given the following data from a SQL query result, generate the chart config that best visualises the data and answers the users query.
       For multiple groups use multi-lines.
@@ -20,21 +21,27 @@ export const generateChartConfig = async (
       - Look at the actual column names in the data and use them exactly as they appear.
 
       Here is an example complete config for pre-aggregated data:
-      export const chartConfig = {
-        type: "bar",
-        xKey: "year",
-        yKeys: ["count"],  // Use the actual column name from the data
-        countMode: false,  // FALSE because data is already aggregated
-        legend: false
+      {
+        "visualType": "chart",
+        "title": "Yearly Overview",
+        "description": "A bar chart showing the count distribution over years",
+        "type": "bar",
+        "xKey": "year",
+        "yKeys": ["count"],
+        "countMode": false,
+        "legend": false
       }
 
       Here is an example for raw non-aggregated data where you want to count occurrences:
-      export const chartConfig = {
-        type: "bar",
-        xKey: "category",
-        yKeys: [],  // Empty only when countMode is true
-        countMode: true,  // TRUE to count occurrences of each category
-        legend: false
+      {
+        "visualType": "chart",
+        "title": "Category Distribution",
+        "description": "Counting occurrences of specific categories",
+        "type": "bar",
+        "xKey": "category",
+        "yKeys": [], 
+        "countMode": true, 
+        "legend": false
       }
 
       User Query:
@@ -47,10 +54,7 @@ export const generateChartConfig = async (
 
   const normalizedConfig = normalizeChartConfig(config);
   const colors: Record<string, string> = {};
-  // config.yKeys.forEach((key, index) => {
-  //   colors[key] = `hsl(var(--chart-${index + 1}))`;
-  // });
-
+  
   const updatedConfig = { ...normalizedConfig, colors };
   return { config: updatedConfig };
 };

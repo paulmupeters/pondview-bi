@@ -124,7 +124,7 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
   };
 
   const handleChatClick = (chatId: string) => {
-    router.push(`/${chatId}`);
+    router.push(`/chat/${chatId}`);
     setIsChatHistoryPopoverOpen(false);
   };
 
@@ -404,7 +404,7 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
                   chats.map((chat) => (
                     <div key={chat.id} className="group relative">
                       <Link
-                        href={`/${chat.id}`}
+                        href={`/chat/${chat.id}`}
                         className={cn(
                           "flex w-full flex-col items-start gap-1 group rounded-lg px-3 py-2 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                           activeChatId === chat.id &&

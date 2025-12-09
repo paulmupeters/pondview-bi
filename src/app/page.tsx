@@ -94,7 +94,7 @@ export default function Home() {
         console.error("Failed to persist message:", error);
       }
     },
-    [router, executeSqlArtifactType],
+    [router],
   );
 
   const handleModeChange = useCallback(
