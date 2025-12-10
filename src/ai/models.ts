@@ -8,7 +8,7 @@
 /**
  * Model used for main chat streaming with complex reasoning
  */
-export const CHAT_MODEL = "xai/grok-4-fast-reasoning";
+export const CHAT_MODEL = "xai/grok-4.1-fast-reasoning";
 
 /**
  * Model used for generating chart and card configurations
