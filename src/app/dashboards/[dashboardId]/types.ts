@@ -1,0 +1,86 @@
+import type {
+  CardConfig,
+  Config,
+  Result,
+  TableConfig,
+  TextConfig,
+} from "@/lib/types";
+
+export type Dashboard = {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type DashboardChart = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  sql: string;
+  dbIdentifier: string | null;
+  chartConfigJson: string;
+  position: number;
+  createdAt: number;
+  updatedAt: number;
+  filtersApplied?: boolean;
+};
+
+export type ChartGroup = {
+  type: "metric-group" | "single";
+  items: DashboardChart[];
+};
+
+export type LayoutRow = {
+  columns: number;
+  groups: ChartGroup[];
+};
+
+export type ResizeState = {
+  chartId: string;
+  tempColSpan: number;
+} | null;
+
+export type SortableChartCardProps = {
+  chart: DashboardChart & { filtersApplied?: boolean };
+  config: Config | CardConfig | TableConfig | TextConfig | null;
+  rows: Result[];
+  onConfigChange: (newChartJson: string) => Promise<void>;
+  onDelete: () => Promise<void>;
+  expandedSqlChartId: string | null;
+  onToggleSql: (chartId: string) => void;
+  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
+  totalColumns: number;
+  isInGroup?: boolean;
+  onResizeChange?: (tempColSpan: number | null) => void;
+};
+
+export type MetricCardGroupProps = {
+  charts: DashboardChart[];
+  chartData: Record<string, Result[]>;
+  onConfigChange: (chartId: string, newJson: string) => Promise<void>;
+  onDelete: (chartId: string) => Promise<void>;
+  expandedSqlChartId: string | null;
+  onToggleSql: (chartId: string) => void;
+  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
+  totalColumns: number;
+};
+
+export type MetricCardInGroupProps = {
+  chart: DashboardChart;
+  chartData: Record<string, Result[]>;
+  onConfigChange: (chartId: string, newJson: string) => Promise<void>;
+  onDelete: (chartId: string) => Promise<void>;
+  expandedSqlChartId: string | null;
+  onToggleSql: (chartId: string) => void;
+  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
+  isFirst: boolean;
+  isLast: boolean;
+};
+
+export type MetricCardSqlEditorProps = {
+  chart: DashboardChart;
+  expandedSqlChartId: string | null;
+  onToggleSql: (chartId: string) => void;
+  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
+};

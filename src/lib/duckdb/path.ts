@@ -103,6 +103,74 @@ export function normalizePostgresConnectionString(
 }
 
 /**
+ * Detects if a database identifier is a MySQL URI and converts it to a
+ * SourceConnectionConfig. Supports mysql:// URIs and mysql:ALIAS env lookups.
+ */
+export function detectMysqlConnection(
+  dbIdentifier: string
+): SourceConnectionConfig | null {
+  const id = (dbIdentifier ?? "").trim();
+  if (!id) return null;
+
+  // Direct mysql:// URI
+  if (id.startsWith("mysql://")) {
+    return {
+      type: "mysql",
+      identifier: id,
+      duckdbExtension: "mysql",
+      readOnly: true,
+    };
+  }
+
+  // Alias lookup: mysql:NAME -> MYSQL_NAME_URL | MYSQL_NAME | DATABASE_URL
+  if (id.startsWith("mysql:")) {
+    const name = id.slice(6).trim() || "DEFAULT";
+    const upper = name.toUpperCase();
+    const candidates = [
+      process.env[`MYSQL_${upper}_URL`],
+      process.env[`MYSQL_${upper}`],
+      process.env.DATABASE_URL,
+    ].filter(Boolean) as string[];
+
+    const uri = candidates[0];
+    if (!uri) {
+      throw new Error(`No MySQL URL found for alias ${name}`);
+    }
+
+    return {
+      type: "mysql",
+      identifier: uri,
+      duckdbExtension: "mysql",
+      readOnly: true,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Detects SQLite connection strings in the form sqlite:/path/to/file.db
+ */
+export function detectSqliteConnection(
+  dbIdentifier: string
+): SourceConnectionConfig | null {
+  const id = (dbIdentifier ?? "").trim();
+  if (!id.startsWith("sqlite:")) {
+    return null;
+  }
+
+  const path = id.slice("sqlite:".length).trim();
+  if (!path) return null;
+
+  return {
+    type: "sqlite",
+    identifier: path,
+    duckdbExtension: "sqlite",
+    readOnly: true,
+  };
+}
+
+/**
  * Detects if a database identifier is a PostgreSQL URI and converts it to a SourceConnectionConfig.
  * Returns null if it's not a postgres URI.
  */
@@ -164,13 +232,37 @@ export function detectPostgresConnection(
   return null;
 }
 
+/**
+ * Detects any external (non-DuckDB) connection supported via DuckDB extensions.
+ * Currently supports Postgres and MySQL.
+ */
+export function detectExternalConnection(
+  dbIdentifier: string
+): SourceConnectionConfig | null {
+  return (
+    detectPostgresConnection(dbIdentifier) ??
+    detectMysqlConnection(dbIdentifier) ??
+    detectSqliteConnection(dbIdentifier)
+  );
+}
+
 export function resolveDbPath(dbIdentifier: string, token?: string): string {
   const id = (dbIdentifier ?? "").trim();
   if (!id) return DEFAULT_RUNTIME_DUCKDB_PATH;
 
-  // Postgres identifiers are only used for attachments, so keep them in-memory
-  const isPostgres = detectPostgresConnection(id) !== null;
-  if (isPostgres) {
+  // External (e.g., Postgres/MySQL) identifiers are only used for attachments,
+  // so keep them in-memory
+  const isExternal = detectExternalConnection(id) !== null;
+  if (isExternal) {
+    return DEFAULT_RUNTIME_DUCKDB_PATH;
+  }
+
+  // Schema-less extensions should use the default runtime database
+  if (
+    id.startsWith("delta:") ||
+    id.startsWith("iceberg:") ||
+    id.startsWith("ducklake:")
+  ) {
     return DEFAULT_RUNTIME_DUCKDB_PATH;
   }
 

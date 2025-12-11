@@ -6,13 +6,21 @@ import {
   LayoutGrid,
   MessageSquare,
   Moon,
+  Palette,
   Settings,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  applyCustomCss,
+  applyTheme,
+  getSelectedTheme,
+  setSelectedTheme as setThemeInStorage,
+} from "@/lib/custom-css";
 import { useTheme } from "@/lib/theme-provider";
+import { getAllThemes } from "@/themes";
 
 interface CommandItem {
   id: string;
@@ -22,14 +30,55 @@ interface CommandItem {
   perform: () => void;
 }
 
+const CUSTOM_THEME_VALUE = "custom";
+
 export function CommandPalette() {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = useState("");
   const { theme, setTheme } = useTheme();
+  const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
+  const [hasCustomCss, setHasCustomCss] = useState(false);
+  const availableThemes = useMemo(() => getAllThemes(), []);
+  const [showThemeMenu, setShowThemeMenu] = useState(false);
+
+  useEffect(() => {
+    try {
+      const savedTheme = getSelectedTheme();
+      const savedCss = localStorage.getItem("CUSTOM_CSS") || "";
+      setSelectedTheme(savedTheme ?? (savedCss ? CUSTOM_THEME_VALUE : null));
+      setHasCustomCss(Boolean(savedCss));
+    } catch {
+      // no-op
+    }
+  }, []);
+
+  const handleThemeChange = useCallback((themeName: string) => {
+    try {
+      if (themeName === CUSTOM_THEME_VALUE) {
+        const savedCss = localStorage.getItem("CUSTOM_CSS") || "";
+        setSelectedTheme(CUSTOM_THEME_VALUE);
+        setThemeInStorage(null);
+        setHasCustomCss(Boolean(savedCss));
+        if (savedCss) {
+          applyCustomCss(savedCss);
+        }
+      } else {
+        setSelectedTheme(themeName);
+        setHasCustomCss(false);
+        applyTheme(themeName);
+        localStorage.removeItem("CUSTOM_CSS");
+      }
+    } catch (error) {
+      console.error("Failed to change theme", error);
+    } finally {
+      setOpen(false);
+      setSearch("");
+    }
+  }, []);
 
   // Define navigation commands to match the app's routes
-  const commands: CommandItem[] = useMemo(
+  const navigationCommands: CommandItem[] = useMemo(
     () => [
       {
         id: "home",
@@ -72,8 +121,54 @@ export function CommandPalette() {
           }
         },
       },
+      {
+        id: "change-theme-menu",
+        label: "Change theme",
+        icon: <Palette size={16} />,
+        perform: () => {
+          setShowThemeMenu(true);
+          setSearch("");
+        },
+      },
     ],
     [router, theme, setTheme],
+  );
+
+  const themeCommands: CommandItem[] = useMemo(() => {
+    const baseCommands = availableThemes.map((themeOption) => ({
+      id: `theme-${themeOption.name}`,
+      label: `Switch to ${themeOption.displayName}${selectedTheme === themeOption.name ? " (current)" : ""
+        }`,
+      icon: <Palette size={16} />,
+      perform: () => handleThemeChange(themeOption.name),
+    }));
+
+    if (hasCustomCss) {
+      baseCommands.push({
+        id: "theme-custom",
+        label: `Use Custom Theme${selectedTheme === CUSTOM_THEME_VALUE ? " (current)" : ""
+          }`,
+        icon: <Palette size={16} />,
+        perform: () => handleThemeChange(CUSTOM_THEME_VALUE),
+      });
+    }
+
+    baseCommands.unshift({
+      id: "theme-back",
+      label: "Back",
+      icon: <Settings size={16} />,
+      perform: () => {
+        setShowThemeMenu(false);
+        setSearch("");
+      },
+    });
+
+    return baseCommands;
+  }, [availableThemes, handleThemeChange, hasCustomCss, selectedTheme]);
+
+  const commands = useMemo(
+    () => (showThemeMenu ? themeCommands : navigationCommands),
+    [navigationCommands, showThemeMenu, themeCommands],
   );
 
   // Toggle the menu when ⌘K is pressed
@@ -91,20 +186,18 @@ export function CommandPalette() {
 
   const handleNumberKey = useCallback(
     (e: KeyboardEvent) => {
-      // Only handle number keys when the command palette is open
       if (!open) return;
 
       const key = e.key;
-      const numberKeys = ["1", "2", "3", "4", "5"];
+      const matchedCommand = commands.find(
+        (command) => command.shortcut?.includes(key),
+      );
 
-      if (numberKeys.includes(key)) {
+      if (matchedCommand) {
         e.preventDefault();
-        const index = Number.parseInt(key) - 1;
-        if (commands[index]) {
-          commands[index].perform();
-          setOpen(false);
-          setSearch("");
-        }
+        matchedCommand.perform();
+        setOpen(false);
+        setSearch("");
       }
     },
     [open, commands],
@@ -114,6 +207,13 @@ export function CommandPalette() {
     document.addEventListener("keydown", handleNumberKey);
     return () => document.removeEventListener("keydown", handleNumberKey);
   }, [handleNumberKey]);
+
+  useEffect(() => {
+    if (!open) {
+      setShowThemeMenu(false);
+      setSearch("");
+    }
+  }, [open]);
 
   // Listen for programmatic open/toggle/close events
   useEffect(() => {
@@ -162,8 +262,11 @@ export function CommandPalette() {
                   key={command.id}
                   onSelect={() => {
                     command.perform();
-                    setOpen(false);
-                    setSearch("");
+                    // Don't close dialog for menu navigation commands
+                    if (command.id !== "change-theme-menu" && command.id !== "theme-back") {
+                      setOpen(false);
+                      setSearch("");
+                    }
                   }}
                   className="px-3 py-2 text-sm rounded-md cursor-pointer hover:bg-muted aria-selected:bg-muted data-[selected=true]:bg-muted aria-selected:text-foreground flex items-center justify-between transition-colors"
                 >

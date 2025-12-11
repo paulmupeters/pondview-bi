@@ -54,7 +54,7 @@ The tracking table can be queried directly or through the exported `listMaterial
 
 - `materializeSemanticLayer(options)` – runs materialization for all explores or a single explore.
 - `listMaterializations(options)` – returns current rows from `semantic_materialization_runs`.
-- `applyMaterializationsToDataModel(dataModel, records)` – rewrites a loaded `DataModel` so the query planner operates on the materialized tables.
+- `applyMaterializationsToDataModel(dataModel, records)` – rewrites a loaded `DataModel` so the query planner oπperates on the materialized tables.
 
 Options accept an optional DuckDB HTTP config if you need to override the global environment variables.
 

@@ -3,12 +3,14 @@ import type { SourceConnectionConfig } from "@/../semantic-layer/source-updater"
 const ATTACH_TYPE_BY_SOURCE: Record<string, string | undefined> = {
   postgres: "postgres",
   mysql: "mysql",
+  sqlite: "sqlite",
 };
 
 const DEFAULT_EXTENSION_BY_SOURCE: Record<string, string | undefined> = {
   motherduck: "motherduck",
   postgres: "postgres",
   mysql: "mysql",
+  sqlite: "sqlite",
 };
 
 function sanitizeExtensionName(extension: string): string {

@@ -6,7 +6,7 @@ import {
   getDuckDbInstance,
   runSqlAndGetRowObjectsJson as runRaw,
 } from "@/lib/duckdb/duckdb-node";
-import { detectPostgresConnection, resolveDbPath } from "@/lib/duckdb/path";
+import { detectExternalConnection, resolveDbPath } from "@/lib/duckdb/path";
 import type { Result } from "@/lib/types";
 
 /**
@@ -104,12 +104,12 @@ export async function runSqlNormalized(
   dbIdentifier: string,
   sql: string
 ): Promise<Result[]> {
-  const postgresConfig = detectPostgresConnection(dbIdentifier);
+  const externalConnection = detectExternalConnection(dbIdentifier);
   const dbPath = resolveDbPath(dbIdentifier);
 
-  // If it's a postgres URI, we need to handle attachment/detachment
-  if (postgresConfig) {
-    const attachmentPlan = buildAttachmentPlan(postgresConfig);
+  // If it's an external URI (postgres/mysql), we need to handle attachment/detachment
+  if (externalConnection) {
+    const attachmentPlan = buildAttachmentPlan(externalConnection);
     const instance = await getDuckDbInstance(dbPath);
     const connection = await instance.connect();
 

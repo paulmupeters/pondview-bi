@@ -1,961 +1,21 @@
 "use client";
 
-import {
-  DndContext,
-  type DragEndEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  rectSortingStrategy,
-  SortableContext,
-  useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
-import {
-  GripVertical,
-  MoveDiagonal2,
-  Pencil,
-  Settings,
-  Trash2,
-} from "lucide-react";
+import type { DragEndEvent } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 import { useParams } from "next/navigation";
-import {
-  type CSSProperties,
-  type FormEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { CardConfigDialog } from "@/components/card-config-dialog";
-import { ChartConfigDialog } from "@/components/chart-config-dialog";
-import { DashboardFilterPane } from "@/components/dashboard-filter-pane";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
-import { DynamicChart } from "@/components/dynamic-chart";
-import { MetricCard } from "@/components/metric-card";
-import { SqlResultsTable } from "@/components/sql-results-table";
-import { TableConfigDialog } from "@/components/table-config-dialog";
+import { TextConfigDialog } from "@/components/text-config-dialog";
 import { Button } from "@/components/ui/button";
+import type { Result, TextConfig } from "@/lib/types";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Toggle } from "@/components/ui/toggle";
-import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
+  DashboardGrid,
+  DashboardHeader,
+  DashboardSettingsDialog,
+} from "./components";
 import { FilterProvider, useFilters } from "./filter-context";
-
-type Dashboard = {
-  id: string;
-  title: string;
-  createdAt: number;
-  updatedAt: number;
-};
-type DashboardChart = {
-  id: string;
-  title: string | null;
-  description: string | null;
-  sql: string;
-  dbIdentifier: string | null;
-  chartConfigJson: string;
-  position: number;
-  createdAt: number;
-  updatedAt: number;
-  filtersApplied?: boolean;
-};
-
-type ChartGroup = {
-  type: "metric-group" | "single";
-  items: DashboardChart[];
-};
-
-type LayoutRow = {
-  columns: number;
-  groups: ChartGroup[];
-};
-
-type ResizeState = {
-  chartId: string;
-  tempColSpan: number;
-} | null;
-
-type SortableChartCardProps = {
-  chart: DashboardChart & { filtersApplied?: boolean };
-  config: Config | CardConfig | TableConfig | null;
-  rows: Result[];
-  onConfigChange: (newChartJson: string) => Promise<void>;
-  onDelete: () => Promise<void>;
-  expandedSqlChartId: string | null;
-  onToggleSql: (chartId: string) => void;
-  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
-  totalColumns: number;
-  isInGroup?: boolean;
-  onResizeChange?: (tempColSpan: number | null) => void;
-};
-
-// Helper function to check if config is a card config
-function isCardConfig(
-  config: Config | CardConfig | TableConfig | null,
-): config is CardConfig {
-  if (!config) return false;
-  // Check if it has the configType discriminator
-  if ("configType" in config) {
-    return config.configType === "card";
-  }
-  // Backwards compatibility: check if it looks like a card config
-  // Cards have title and description but no chart-specific fields
-  return (
-    !("yKeys" in config) &&
-    !("type" in config) &&
-    !("xKey" in config) &&
-    "title" in config &&
-    "description" in config
-  );
-}
-
-// Helper function to check if config is a table config
-function isTableConfig(
-  config: Config | CardConfig | TableConfig | null,
-): config is TableConfig {
-  if (!config) return false;
-  // Check if it has the configType discriminator
-  if ("configType" in config) {
-    return config.configType === "table";
-  }
-  // New table configs will always have configType, so if it doesn't have it,
-  // it's not a table (it's either a card or chart)
-  return false;
-}
-
-// Group consecutive metric cards together
-function groupConsecutiveMetricCards(
-  charts: DashboardChart[],
-  chartData: Record<string, Result[]>,
-): ChartGroup[] {
-  const groups: ChartGroup[] = [];
-  let currentMetricGroup: DashboardChart[] = [];
-
-  for (const chart of charts) {
-    let config: Config | CardConfig | TableConfig | null = null;
-    try {
-      const parsed = JSON.parse(chart.chartConfigJson);
-      config = parsed as Config | CardConfig | TableConfig;
-    } catch {
-      config = null;
-    }
-
-    const rows = chartData[chart.id] || [];
-    const isMetricCard = config && rows.length > 0 && isCardConfig(config);
-
-    if (isMetricCard) {
-      // Add to current metric group
-      currentMetricGroup.push(chart);
-    } else {
-      // If we have a pending metric group, finalize it
-      if (currentMetricGroup.length > 0) {
-        // Only group if there are 2+ cards, otherwise treat as single
-        if (currentMetricGroup.length > 1) {
-          groups.push({ type: "metric-group", items: [...currentMetricGroup] });
-        } else {
-          groups.push({ type: "single", items: [...currentMetricGroup] });
-        }
-        currentMetricGroup = [];
-      }
-      // Add non-metric card as single item
-      groups.push({ type: "single", items: [chart] });
-    }
-  }
-
-  // Finalize any remaining metric group
-  if (currentMetricGroup.length > 0) {
-    // Only group if there are 2+ cards, otherwise treat as single
-    if (currentMetricGroup.length > 1) {
-      groups.push({ type: "metric-group", items: currentMetricGroup });
-    } else {
-      groups.push({ type: "single", items: currentMetricGroup });
-    }
-  }
-
-  return groups;
-}
-
-// Determine desired colSpan for a single chart (defaults to 1)
-function getChartColSpan(chart: DashboardChart, maxColumns: number): number {
-  let span = 1;
-  try {
-    const parsed = JSON.parse(chart.chartConfigJson) as
-      | Config
-      | CardConfig
-      | TableConfig;
-    const isChartConfig =
-      parsed &&
-      !isCardConfig(parsed) &&
-      !isTableConfig(parsed) &&
-      "colSpan" in parsed;
-    if (isChartConfig) {
-      span = (parsed as Config).colSpan ?? 1;
-    }
-  } catch {
-    span = 1;
-  }
-  return Math.min(Math.max(1, span), maxColumns);
-}
-
-// Determine how many columns a chart group wants to occupy
-function getGroupColSpan(group: ChartGroup, maxColumns: number): number {
-  if (group.type === "metric-group") {
-    return Math.min(group.items.length, maxColumns);
-  }
-  const chart = group.items[0];
-  if (!chart) return 1;
-  return getChartColSpan(chart, maxColumns);
-}
-
-// Build rows so each row knows the columns it actually needs (up to max)
-function buildRows(groups: ChartGroup[], maxColumns: number): LayoutRow[] {
-  const rows: LayoutRow[] = [];
-  let currentGroups: ChartGroup[] = [];
-  let usedColumns = 0;
-
-  for (const group of groups) {
-    const span = getGroupColSpan(group, maxColumns);
-    if (currentGroups.length > 0 && usedColumns + span > maxColumns) {
-      rows.push({
-        columns: Math.min(maxColumns, Math.max(1, usedColumns)),
-        groups: currentGroups,
-      });
-      currentGroups = [];
-      usedColumns = 0;
-    }
-    currentGroups.push(group);
-    usedColumns = Math.min(maxColumns, usedColumns + span);
-  }
-
-  if (currentGroups.length > 0) {
-    rows.push({
-      columns: Math.min(maxColumns, Math.max(1, usedColumns || 1)),
-      groups: currentGroups,
-    });
-  }
-
-  return rows;
-}
-
-type MetricCardGroupProps = {
-  charts: DashboardChart[];
-  chartData: Record<string, Result[]>;
-  onConfigChange: (chartId: string, newJson: string) => Promise<void>;
-  onDelete: (chartId: string) => Promise<void>;
-  expandedSqlChartId: string | null;
-  onToggleSql: (chartId: string) => void;
-  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
-  totalColumns: number;
-};
-
-function MetricCardInGroup({
-  chart,
-  chartData,
-  onConfigChange,
-  onDelete,
-  expandedSqlChartId,
-  onToggleSql,
-  onSqlUpdate,
-  isFirst,
-  isLast: _isLast,
-}: {
-  chart: DashboardChart;
-  chartData: Record<string, Result[]>;
-  onConfigChange: (chartId: string, newJson: string) => Promise<void>;
-  onDelete: (chartId: string) => Promise<void>;
-  expandedSqlChartId: string | null;
-  onToggleSql: (chartId: string) => void;
-  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
-  isFirst: boolean;
-  isLast: boolean;
-}) {
-  const { filters } = useFilters();
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: chart.id });
-  const style: CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : undefined,
-  };
-
-  let config: Config | CardConfig | TableConfig | null = null;
-  try {
-    const parsed = JSON.parse(chart.chartConfigJson);
-    config = parsed as Config | CardConfig | TableConfig;
-  } catch {
-    config = null;
-  }
-  const rows = chartData[chart.id] || [];
-  const isExpanded = expandedSqlChartId === chart.id;
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex-1 flex flex-col p-4 md:p-2 relative group/item"
-    >
-      <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-30">
-        <button
-          type="button"
-          aria-label="Reorder card"
-          title="Drag to reorder"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-input bg-background text-muted-foreground hover:bg-muted"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-      </div>
-      {chart.filtersApplied && filters.length > 0 && isFirst && (
-        <div className="absolute left-1/2 top-2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100">
-          <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-            {filters.length} filter{filters.length !== 1 ? "s" : ""} applied
-          </span>
-        </div>
-      )}
-      <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-20">
-        <CardConfigDialog
-          trigger={
-            <button
-              type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Configure card"
-              title="Configure card"
-            >
-              <Settings className="h-4 w-4" />
-            </button>
-          }
-          config={config as CardConfig}
-          onConfigChange={async (newConfig) => {
-            const newJson = JSON.stringify(newConfig);
-            await onConfigChange(chart.id, newJson);
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => onDelete(chart.id)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          aria-label="Delete card"
-          title="Delete card"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
-      {config && rows.length > 0 && isCardConfig(config) ? (
-        <MetricCard
-          value={rows[0]?.[Object.keys(rows[0] || {})[0]]}
-          title={config.title}
-          description={config.description}
-          takeaway={config.takeaway}
-          className="w-full h-full flex flex-col border-0 shadow-none"
-        />
-      ) : (
-        <div className="text-xs text-muted-foreground">No data</div>
-      )}
-      {isExpanded && (
-        <div className="mt-4 border-t pt-4 transition-all duration-200">
-          <MetricCardSqlEditor
-            chart={chart}
-            expandedSqlChartId={expandedSqlChartId}
-            onToggleSql={onToggleSql}
-            onSqlUpdate={onSqlUpdate}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MetricCardGroup({
-  charts,
-  chartData,
-  onConfigChange,
-  onDelete,
-  expandedSqlChartId,
-  onToggleSql,
-  onSqlUpdate,
-  totalColumns,
-}: MetricCardGroupProps) {
-  // Get col-span class based on number of cards in group
-  const getColSpanClass = (cardCount: number) => {
-    if (totalColumns <= 1 || cardCount === 1) return "";
-    const colSpanMap: Record<number, Record<number, string>> = {
-      2: {
-        2: "md:col-span-2",
-      },
-      3: {
-        2: "lg:col-span-2",
-        3: "lg:col-span-3",
-      },
-      4: {
-        2: "lg:col-span-2",
-        3: "lg:col-span-3",
-        4: "lg:col-span-4",
-      },
-      5: {
-        2: "lg:col-span-2",
-        3: "lg:col-span-3",
-        4: "lg:col-span-4",
-        5: "lg:col-span-5",
-      },
-      6: {
-        2: "lg:col-span-2",
-        3: "lg:col-span-3",
-        4: "lg:col-span-4",
-        5: "lg:col-span-5",
-        6: "lg:col-span-6",
-      },
-    };
-    const span = Math.min(cardCount, totalColumns);
-    return colSpanMap[totalColumns]?.[span] || "";
-  };
-
-  return (
-    <div
-      className={`group relative flex rounded-xl bg-card border border-border shadow-md divide-x divide-border overflow-hidden ${getColSpanClass(charts.length)}`}
-    >
-      {charts.map((chart, index) => (
-        <MetricCardInGroup
-          key={chart.id}
-          chart={chart}
-          chartData={chartData}
-          onConfigChange={onConfigChange}
-          onDelete={onDelete}
-          expandedSqlChartId={expandedSqlChartId}
-          onToggleSql={onToggleSql}
-          onSqlUpdate={onSqlUpdate}
-          isFirst={index === 0}
-          isLast={index === charts.length - 1}
-        />
-      ))}
-    </div>
-  );
-}
-
-type MetricCardSqlEditorProps = {
-  chart: DashboardChart;
-  expandedSqlChartId: string | null;
-  onToggleSql: (chartId: string) => void;
-  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
-};
-
-function MetricCardSqlEditor({
-  chart,
-  expandedSqlChartId,
-  onToggleSql,
-  onSqlUpdate,
-}: MetricCardSqlEditorProps) {
-  const [editedSql, setEditedSql] = useState(chart.sql);
-  const [isSaving, setIsSaving] = useState(false);
-  const isExpanded = expandedSqlChartId === chart.id;
-
-  useEffect(() => {
-    if (isExpanded) {
-      setEditedSql(chart.sql);
-    }
-  }, [isExpanded, chart.sql]);
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await onSqlUpdate(chart.id, editedSql);
-      onToggleSql(chart.id);
-    } catch (error) {
-      console.error("Failed to save SQL:", error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setEditedSql(chart.sql);
-    onToggleSql(chart.id);
-  };
-
-  return (
-    <div className="flex flex-col gap-3">
-      <label htmlFor={`sql-editor-${chart.id}`} className="text-sm font-medium">
-        SQL Query
-      </label>
-      <textarea
-        id={`sql-editor-${chart.id}`}
-        value={editedSql}
-        onChange={(e) => setEditedSql(e.target.value)}
-        className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-        placeholder="SELECT * FROM ..."
-      />
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleCancel}
-          disabled={isSaving}
-        >
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          onClick={handleSave}
-          disabled={isSaving || editedSql === chart.sql}
-        >
-          {isSaving ? "Saving..." : "Save"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function SortableChartCard({
-  chart,
-  config,
-  rows,
-  onConfigChange,
-  onDelete,
-  expandedSqlChartId,
-  onToggleSql,
-  onSqlUpdate,
-  totalColumns,
-  isInGroup: _isInGroup = false,
-  onResizeChange,
-}: SortableChartCardProps) {
-  const { filters } = useFilters();
-  const [editedSql, setEditedSql] = useState(chart.sql);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
-  const [tempColSpan, setTempColSpan] = useState<number | null>(null);
-  const [resizeStartX, setResizeStartX] = useState(0);
-  const [resizeStartWidth, setResizeStartWidth] = useState(0);
-  const [pointerId, setPointerId] = useState<number | null>(null);
-  const resizeRef = useRef<HTMLDivElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const isExpanded = expandedSqlChartId === chart.id;
-
-  // Get colSpan from config, default to 1
-  const currentColSpan =
-    config &&
-      !isCardConfig(config) &&
-      !isTableConfig(config) &&
-      "colSpan" in config
-      ? ((config as Config).colSpan ?? 1)
-      : 1;
-
-  const pendingColSpan = Math.min(
-    totalColumns,
-    Math.max(1, tempColSpan ?? currentColSpan),
-  );
-  const displayColSpan = pendingColSpan;
-
-  const isChart = config && !isCardConfig(config) && !isTableConfig(config);
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: chart.id });
-  const style: CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : undefined,
-  };
-
-  useEffect(() => {
-    if (isExpanded) {
-      setEditedSql(chart.sql);
-    }
-  }, [isExpanded, chart.sql]);
-
-  // Resize handlers
-  const handleResizeStart = useCallback(
-    (e: React.PointerEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsResizing(true);
-      setResizeStartX(e.clientX);
-      setPointerId(e.pointerId);
-      if (cardRef.current) {
-        setResizeStartWidth(cardRef.current.getBoundingClientRect().width);
-      }
-      setTempColSpan(currentColSpan);
-      onResizeChange?.(currentColSpan);
-      if (resizeRef.current) {
-        resizeRef.current.setPointerCapture(e.pointerId);
-      }
-    },
-    [currentColSpan, onResizeChange],
-  );
-
-  const handleResizeMove = useCallback(
-    (e: PointerEvent) => {
-      if (!isResizing || !cardRef.current) return;
-
-      const cardElement = cardRef.current;
-      const gridContainer = cardElement.closest(".grid") as HTMLElement;
-      if (!gridContainer) return;
-
-      const gridRect = gridContainer.getBoundingClientRect();
-      const gridGap = 16; // gap-4 = 16px (md:gap-4)
-      const gridColumnWidth =
-        (gridRect.width - gridGap * (totalColumns - 1)) / totalColumns;
-
-      // Calculate new width based on mouse movement
-      const deltaX = e.clientX - resizeStartX;
-      const newWidth = Math.max(gridColumnWidth, resizeStartWidth + deltaX);
-
-      // Convert width to column span
-      // For S columns: width = S * columnWidth + (S-1) * gap
-      // Solving for S: S = (width + gap) / (columnWidth + gap)
-      const newColSpan = Math.max(
-        1,
-        Math.min(
-          totalColumns,
-          Math.round((newWidth + gridGap) / (gridColumnWidth + gridGap)),
-        ),
-      );
-
-      setTempColSpan(newColSpan);
-      onResizeChange?.(newColSpan);
-    },
-    [isResizing, resizeStartX, resizeStartWidth, totalColumns, onResizeChange],
-  );
-
-  const handleResizeEnd = useCallback(async () => {
-    if (
-      tempColSpan !== null &&
-      tempColSpan !== currentColSpan &&
-      isChart &&
-      config
-    ) {
-      const updatedConfig = { ...(config as Config), colSpan: tempColSpan };
-      await onConfigChange(JSON.stringify(updatedConfig));
-    }
-    setIsResizing(false);
-    setTempColSpan(null);
-    onResizeChange?.(null);
-    if (resizeRef.current && pointerId !== null) {
-      resizeRef.current.releasePointerCapture(pointerId);
-    }
-    setPointerId(null);
-  }, [tempColSpan, currentColSpan, isChart, config, onConfigChange, pointerId, onResizeChange]);
-
-  useEffect(() => {
-    if (isResizing) {
-      const handleMove = (e: PointerEvent) => handleResizeMove(e);
-      const handleEnd = () => void handleResizeEnd();
-
-      window.addEventListener("pointermove", handleMove);
-      window.addEventListener("pointerup", handleEnd);
-
-      return () => {
-        window.removeEventListener("pointermove", handleMove);
-        window.removeEventListener("pointerup", handleEnd);
-      };
-    }
-  }, [isResizing, handleResizeMove, handleResizeEnd]);
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await onSqlUpdate(chart.id, editedSql);
-      onToggleSql(chart.id);
-    } catch (error) {
-      console.error("Failed to save SQL:", error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setEditedSql(chart.sql);
-    onToggleSql(chart.id);
-  };
-
-  // Get col-span class based on displayColSpan
-  const getColSpanClass = (span: number) => {
-    if (totalColumns <= 1 || span === 1) return "";
-    const colSpanMap: Record<number, Record<number, string>> = {
-      2: {
-        2: "md:col-span-2",
-      },
-      3: {
-        2: "lg:col-span-2",
-        3: "lg:col-span-3",
-      },
-      4: {
-        2: "lg:col-span-2",
-        3: "lg:col-span-3",
-        4: "lg:col-span-4",
-      },
-      5: {
-        2: "lg:col-span-2",
-        3: "lg:col-span-3",
-        4: "lg:col-span-4",
-        5: "lg:col-span-5",
-      },
-      6: {
-        2: "lg:col-span-2",
-        3: "lg:col-span-3",
-        4: "lg:col-span-4",
-        5: "lg:col-span-5",
-        6: "lg:col-span-6",
-      },
-    };
-    return colSpanMap[totalColumns]?.[span] || "";
-  };
-
-  return (
-    <div
-      ref={(node) => {
-        setNodeRef(node);
-        if (node) {
-          cardRef.current = node;
-        }
-      }}
-      style={style}
-      className={`group relative flex flex-col rounded-xl bg-card border border-border shadow-md p-4 md:p-2 ${isChart ? getColSpanClass(displayColSpan) : ""} ${isResizing ? "ring-2 ring-primary/50" : ""}`}
-    >
-      <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
-        <button
-          type="button"
-          aria-label="Reorder chart"
-          title="Drag to reorder"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-input bg-background text-muted-foreground hover:bg-muted"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            window.open(`/charts/${chart.id}`, "_blank");
-          }}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="View chart"
-          title="View chart"
-        >
-          <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-        </button>
-      </div>
-      {chart.filtersApplied && filters.length > 0 && (
-        <div className="absolute left-1/2 top-2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100">
-          <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-            {filters.length} filter{filters.length !== 1 ? "s" : ""} applied
-          </span>
-        </div>
-      )}
-      {config &&
-        rows.length > 0 &&
-        !isCardConfig(config) &&
-        !isTableConfig(config) ? (
-          <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-20">
-          <ChartConfigDialog
-            trigger={
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Configure chart"
-                title="Configure chart"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            }
-            config={config as Config}
-            columns={Object.keys(rows[0] || {}).map((name) => ({
-              name,
-            }))}
-            rows={rows}
-            onConfigChange={async (newConfig) => {
-              const newJson = JSON.stringify(newConfig);
-              await onConfigChange(newJson);
-            }}
-          />
-          <button
-            type="button"
-            onClick={onDelete}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Delete chart"
-            title="Delete chart"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      ) : config && rows.length > 0 && isTableConfig(config) ? (
-        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
-          <TableConfigDialog
-            trigger={
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Configure table"
-                title="Configure table"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            }
-            config={config as TableConfig}
-            columns={Object.keys(rows[0] || {}).map((name) => ({
-              name,
-            }))}
-            onConfigChange={async (newConfig) => {
-              const newJson = JSON.stringify(newConfig);
-              await onConfigChange(newJson);
-            }}
-          />
-          <button
-            type="button"
-            onClick={onDelete}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Delete table"
-            title="Delete table"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      ) : config && rows.length > 0 && isCardConfig(config) ? (
-        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <CardConfigDialog
-            trigger={
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Configure card"
-                title="Configure card"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            }
-            config={config as CardConfig}
-            onConfigChange={async (newConfig) => {
-              const newJson = JSON.stringify(newConfig);
-              await onConfigChange(newJson);
-            }}
-          />
-          <button
-            type="button"
-            onClick={onDelete}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            aria-label="Delete card"
-            title="Delete card"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      ) : null}
-      {config && rows.length > 0 ? (
-        isCardConfig(config) ? (
-          <MetricCard
-            value={rows[0]?.[Object.keys(rows[0] || {})[0]]}
-            title={config.title}
-            description={config.description}
-            takeaway={config.takeaway}
-            className="w-full h-full flex flex-col border-0 shadow-none"
-          />
-        ) : isTableConfig(config) ? (
-          <div className="w-full">
-            <SqlResultsTable
-              dataOverride={{
-                stage: "complete",
-                columns: Object.keys(rows[0] || {}).map((name) => ({ name })),
-                rows: rows as Record<string, unknown>[],
-              }}
-            />
-          </div>
-        ) : (
-              <DynamicChart
-                chartData={rows}
-                chartConfig={config as Config}
-                className="w-full"
-              />
-            )
-      ) : (
-        <div className="text-xs text-muted-foreground">No data</div>
-      )}
-      {isChart && (
-        <div
-          ref={resizeRef}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            handleResizeStart(e);
-          }}
-          className="absolute bottom-0 right-0 cursor-nwse-resize opacity-0 transition-opacity group-hover:opacity-100 z-40 p-2 bg-background/80 rounded-tl-md"
-          style={{ cursor: isResizing ? "nwse-resize" : "nwse-resize" }}
-          title="Drag to resize chart width"
-        >
-          <MoveDiagonal2 className="h-4 w-4 text-muted-foreground" />
-        </div>
-      )}
-      {isExpanded && (
-        <div className="mt-4 border-t pt-4 transition-all duration-200">
-          <div className="flex flex-col gap-3">
-            <label
-              htmlFor={`sql-editor-${chart.id}`}
-              className="text-sm font-medium"
-            >
-              SQL Query
-            </label>
-            <textarea
-              id={`sql-editor-${chart.id}`}
-              value={editedSql}
-              onChange={(e) => setEditedSql(e.target.value)}
-              className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="SELECT * FROM ..."
-            />
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleCancel}
-                disabled={isSaving}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleSave}
-                disabled={isSaving || editedSql === chart.sql}
-              >
-                {isSaving ? "Saving..." : "Save"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+import type { Dashboard, DashboardChart, ResizeState } from "./types";
+import { buildRows, groupConsecutiveMetricCards } from "./utils";
 
 export default function DashboardDetailPage() {
   const params = useParams<{ dashboardId: string }>();
@@ -978,27 +38,11 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   const [expandedSqlChartId, setExpandedSqlChartId] = useState<string | null>(
     null,
   );
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editedTitle, setEditedTitle] = useState("");
-  const [isSavingTitle, setIsSavingTitle] = useState(false);
-  const [titleError, setTitleError] = useState<string | null>(null);
   const [resizingChart, setResizingChart] = useState<ResizeState>(null);
-  const titleInputRef = useRef<HTMLInputElement>(null);
+  const [isAddingTextCard, setIsAddingTextCard] = useState(false);
   const { filters } = useFilters();
 
-  useEffect(() => {
-    if (!isEditingTitle && dashboard?.title) {
-      setEditedTitle(dashboard.title);
-    }
-  }, [dashboard?.title, isEditingTitle]);
-
-  useEffect(() => {
-    if (isEditingTitle) {
-      titleInputRef.current?.focus();
-      titleInputRef.current?.select();
-    }
-  }, [isEditingTitle]);
-
+  // Load saved preferences from localStorage
   useEffect(() => {
     const savedColumns = localStorage.getItem(
       `dashboard_${dashboardId}_columns`,
@@ -1017,6 +61,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     }
   }, [dashboardId]);
 
+  // Load dashboard metadata
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1037,96 +82,69 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     };
   }, [dashboardId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  // Refresh dashboard data with filters
+  const refreshDashboardData = useCallback(
+    async (signal?: AbortSignal) => {
       const filtersParam =
         filters.length > 0
           ? `?filters=${encodeURIComponent(JSON.stringify(filters))}`
           : "";
-      const res = await fetch(
-        `/api/dashboard/${dashboardId}/data${filtersParam}`,
-        {
-          cache: "no-store",
-        },
-      );
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        charts: (DashboardChart & {
-          rows: Result[];
-          filtersApplied?: boolean;
-        })[];
-      };
-      if (cancelled) return;
-      const sortedCharts = [...data.charts].sort(
-        (a, b) => a.position - b.position,
-      );
-      setCharts(sortedCharts);
-      const map: Record<string, Result[]> = {};
-      for (const c of data.charts) map[c.id] = c.rows;
-      setChartData(map);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [dashboardId, filters]);
+      try {
+        const res = await fetch(
+          `/api/dashboard/${dashboardId}/data${filtersParam}`,
+          {
+            cache: "no-store",
+            signal,
+          },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          charts: (DashboardChart & {
+            rows: Result[];
+            filtersApplied?: boolean;
+          })[];
+        };
+        if (signal?.aborted) return;
+        const sortedCharts = [...data.charts].sort(
+          (a, b) => a.position - b.position,
+        );
+        setCharts(sortedCharts);
+        const map: Record<string, Result[]> = {};
+        for (const c of data.charts) map[c.id] = c.rows;
+        setChartData(map);
+      } catch (error) {
+        if (signal?.aborted) return;
+        console.error("Failed to refresh dashboard data:", error);
+      }
+    },
+    [dashboardId, filters],
+  );
 
-  const startEditingTitle = useCallback(() => {
-    if (!dashboard) return;
-    setEditedTitle(dashboard.title);
-    setTitleError(null);
-    setIsEditingTitle(true);
-  }, [dashboard]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void refreshDashboardData(controller.signal);
+    return () => controller.abort();
+  }, [refreshDashboardData]);
 
-  const cancelTitleEdit = useCallback(() => {
-    setEditedTitle(dashboard?.title ?? "");
-    setTitleError(null);
-    setIsEditingTitle(false);
-  }, [dashboard]);
-
-  const saveTitle = useCallback(async () => {
-    if (!dashboard) return;
-    const trimmedTitle = editedTitle.trim();
-    if (!trimmedTitle) {
-      setTitleError("Title cannot be empty");
-      return;
-    }
-    try {
-      setIsSavingTitle(true);
+  // Title update handler
+  const handleTitleUpdate = useCallback(
+    async (newTitle: string) => {
       const res = await fetch(`/api/dashboards/${dashboardId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: trimmedTitle }),
+        body: JSON.stringify({ title: newTitle }),
       });
       if (!res.ok) {
         throw new Error("Failed to update dashboard title");
       }
       setDashboard((prev) =>
-        prev ? { ...prev, title: trimmedTitle, updatedAt: Date.now() } : prev,
+        prev ? { ...prev, title: newTitle, updatedAt: Date.now() } : prev,
       );
-      setTitleError(null);
-      setIsEditingTitle(false);
-    } catch (error) {
-      console.error("Failed to update dashboard title:", error);
-    } finally {
-      setIsSavingTitle(false);
-    }
-  }, [dashboard, dashboardId, editedTitle]);
-
-  const handleTitleFormSubmit = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      void saveTitle();
     },
-    [saveTitle],
+    [dashboardId],
   );
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-  );
-
+  // Persist chart order
   const persistOrder = useCallback(
     async (previousOrder: DashboardChart[], nextOrder: DashboardChart[]) => {
       try {
@@ -1184,6 +202,32 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
       });
     },
     [],
+  );
+
+  const handleAddTextCard = useCallback(
+    async (textConfig: TextConfig) => {
+      setIsAddingTextCard(true);
+      try {
+        const res = await fetch(`/api/dashboard/${dashboardId}/charts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: textConfig.title ?? "Text Card",
+            description: textConfig.title ?? null,
+            sql: "SELECT 1",
+            dbIdentifier: "md:my_db",
+            chartConfigJson: JSON.stringify(textConfig),
+          }),
+        });
+        if (!res.ok) throw new Error("Failed to add text card");
+        await refreshDashboardData();
+      } catch (error) {
+        console.error("Failed to add text card:", error);
+      } finally {
+        setIsAddingTextCard(false);
+      }
+    },
+    [dashboardId, refreshDashboardData],
   );
 
   const handleChartDelete = useCallback(
@@ -1248,7 +292,6 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   const handleSqlUpdate = useCallback(
     async (chartId: string, newSql: string) => {
       try {
-        // Update the SQL via API
         const res = await fetch(`/api/charts/${chartId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -1256,7 +299,6 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
         });
         if (!res.ok) throw new Error("Failed to update SQL");
 
-        // Update local chart state
         setCharts((prev) =>
           prev.map((chart) =>
             chart.id === chartId ? { ...chart, sql: newSql } : chart,
@@ -1315,18 +357,6 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     [chartGroups, columns, autoFitRows],
   );
 
-  const getGridColsClass = (cols: number) => {
-    const colMap: Record<number, string> = {
-      1: "grid-cols-1",
-      2: "md:grid-cols-2",
-      3: "md:grid-cols-2 lg:grid-cols-3",
-      4: "md:grid-cols-2 lg:grid-cols-4",
-      5: "md:grid-cols-2 lg:grid-cols-5",
-      6: "md:grid-cols-2 lg:grid-cols-6",
-    };
-    return colMap[cols] || colMap[3];
-  };
-
   if (loading)
     return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
   if (!dashboard)
@@ -1336,258 +366,54 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
       </div>
     );
 
-  const trimmedEditedTitle = editedTitle.trim();
-  const trimmedCurrentTitle = dashboard.title.trim();
-  const isTitleSaveDisabled =
-    isSavingTitle ||
-    trimmedEditedTitle.length === 0 ||
-    trimmedEditedTitle === trimmedCurrentTitle;
-
   return (
     <div className="mx-auto flex h-full w-full flex-col gap-1 overflow-y-auto px-6 md:px-12 lg:px-18 pt-2 pb-6 md:pb-10">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          {isEditingTitle ? (
-            <form
-              className="flex flex-col gap-2 sm:flex-row sm:items-center"
-              onSubmit={handleTitleFormSubmit}
-            >
-              <div className="flex flex-col gap-1">
-                <Input
-                  ref={titleInputRef}
-                  value={editedTitle}
-                  onChange={(event) => {
-                    setEditedTitle(event.target.value);
-                    if (titleError) setTitleError(null);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      cancelTitleEdit();
-                    }
-                  }}
-                  disabled={isSavingTitle}
-                  placeholder="Dashboard title"
-                  className="h-10 min-w-[200px] sm:min-w-[260px]"
-                />
-                {titleError ? (
-                  <span className="text-xs text-destructive">{titleError}</span>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button type="submit" size="sm" disabled={isTitleSaveDisabled}>
-                  {isSavingTitle ? "Saving…" : "Save"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={cancelTitleEdit}
-                  disabled={isSavingTitle}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <div className="group flex items-center gap-2">
-                <h1 className="text-2xl md:text-4xl font-semibold leading-tight py-4">{dashboard.title}</h1>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={startEditingTitle}
-                aria-label="Edit dashboard title"
-                title="Edit title"
-                className="opacity-0 transition-opacity group-hover:opacity-100"
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-        </div>
+        <DashboardHeader
+          dashboard={dashboard}
+          onTitleUpdate={handleTitleUpdate}
+        />
         <div className="flex items-center gap-2">
-          <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="default">
-                <Settings className="h-4 w-4" />
-                Settings
+          <TextConfigDialog
+            trigger={
+              <Button
+                variant="outline"
+                size="default"
+                disabled={isAddingTextCard}
+              >
+                Add Text Card
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Dashboard Settings</DialogTitle>
-                <DialogDescription>
-                  Configure your dashboard layout preferences and filters.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex flex-col gap-6 py-4">
-                <div className="flex flex-col gap-2">
-                  <label
-                    htmlFor="columns-select"
-                    className="text-sm font-medium"
-                  >
-                    Number of Columns
-                  </label>
-                  <Select
-                    value={columns.toString()}
-                    onValueChange={handleColumnsChange}
-                  >
-                    <SelectTrigger id="columns-select" className="w-full">
-                      <SelectValue placeholder="Select columns" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1 Column</SelectItem>
-                      <SelectItem value="2">2 Columns</SelectItem>
-                      <SelectItem value="3">3 Columns</SelectItem>
-                      <SelectItem value="4">4 Columns</SelectItem>
-                      <SelectItem value="5">5 Columns</SelectItem>
-                      <SelectItem value="6">6 Columns</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center justify-between rounded-md border p-4">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm font-medium">
-                      Auto-fit under-filled rows
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      When a row has empty slots, stretch its charts to fill the
-                      available columns.
-                    </span>
-                  </div>
-                  <Toggle
-                    aria-label="Toggle auto-fit rows"
-                    pressed={autoFitRows}
-                    onPressedChange={handleAutoFitChange}
-                    variant="outline"
-                  >
-                    {autoFitRows ? "On" : "Off"}
-                  </Toggle>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <h3 className="text-sm font-medium">Filters</h3>
-                  <div className="rounded-md border p-4">
-                    <DashboardFilterPane />
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsSettingsOpen(false)}
-                >
-                  Close
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            }
+            config={null}
+            onConfigChange={(newConfig) => {
+              void handleAddTextCard(newConfig);
+            }}
+          />
+          <DashboardSettingsDialog
+            isOpen={isSettingsOpen}
+            onOpenChange={setIsSettingsOpen}
+            columns={columns}
+            onColumnsChange={handleColumnsChange}
+            autoFitRows={autoFitRows}
+            onAutoFitChange={handleAutoFitChange}
+          />
         </div>
       </div>
       <DashboardSlicersBar dashboardId={dashboardId} />
 
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <SortableContext
-          items={charts.map((c) => c.id)}
-          strategy={rectSortingStrategy}
-        >
-          {layoutRows.map((row, rowIndex) => {
-            const rowKey =
-              row.groups
-                .map((group) => group.items.map((item) => item.id).join(","))
-                .join("|") || `row-${rowIndex}`;
-            // Check if any chart in this row is being resized
-            const rowChartIds = row.groups.flatMap((g) =>
-              g.items.map((item) => item.id),
-            );
-            const isRowResizing =
-              resizingChart && rowChartIds.includes(resizingChart.chartId);
-            return (
-              <div key={rowKey} className="relative mb-6 last:mb-0">
-                {/* Row-level resize snap indicator overlay */}
-                {isRowResizing && (
-                  <div className="pointer-events-none absolute inset-x-0 top-0 bottom-0 z-50">
-                    <div className="sticky top-2 flex justify-center mb-2">
-                      <span className="inline-flex items-center gap-2 rounded-full border border-primary/50 bg-background/95 px-3 py-1.5 text-sm font-medium shadow-lg">
-                        {resizingChart.tempColSpan} / {row.columns} columns
-                      </span>
-                    </div>
-                    <div
-                      className="grid h-full w-full gap-2 md:gap-4"
-                      style={{
-                        gridTemplateColumns: `repeat(${row.columns}, minmax(0, 1fr))`,
-                      }}
-                    >
-                      {Array.from({ length: row.columns }).map((_, idx) => {
-                        const guideKey = `snap-guide-${rowKey}-col-${idx + 1}`;
-                        return (
-                          <div
-                            key={guideKey}
-                            className={`rounded-lg border-2 border-dashed transition-colors ${idx < resizingChart.tempColSpan
-                              ? "border-primary bg-primary/10"
-                              : "border-muted-foreground/30 bg-muted/20"
-                              }`}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                <div
-                  className={`grid gap-2 md:gap-4 ${getGridColsClass(row.columns)}`}
-                >
-                  {row.groups.map((group, groupIndex) => {
-                    if (group.type === "metric-group") {
-                      return (
-                        <MetricCardGroup
-                          key={`group-${group.items[0]?.id ?? groupIndex}-${rowKey}`}
-                          charts={group.items}
-                          chartData={chartData}
-                          onConfigChange={handleChartConfigChange}
-                          onDelete={handleChartDelete}
-                          expandedSqlChartId={expandedSqlChartId}
-                          onToggleSql={handleToggleSql}
-                          onSqlUpdate={handleSqlUpdate}
-                          totalColumns={row.columns}
-                        />
-                      );
-                    }
-                    // Render single chart/table/card as before
-                    const chart = group.items[0];
-                    let config: Config | CardConfig | TableConfig | null = null;
-                    try {
-                      const parsed = JSON.parse(chart.chartConfigJson);
-                      config = parsed as Config | CardConfig | TableConfig;
-                    } catch {
-                      config = null;
-                    }
-                    const rows = chartData[chart.id] || [];
-                    return (
-                      <SortableChartCard
-                        key={chart.id}
-                        chart={chart}
-                        config={config}
-                        rows={rows}
-                        onConfigChange={(newJson) =>
-                          handleChartConfigChange(chart.id, newJson)
-                        }
-                        onDelete={() => handleChartDelete(chart.id)}
-                        expandedSqlChartId={expandedSqlChartId}
-                        onToggleSql={handleToggleSql}
-                        onSqlUpdate={handleSqlUpdate}
-                        totalColumns={row.columns}
-                        onResizeChange={(tempColSpan) =>
-                          handleResizeChange(chart.id, tempColSpan)
-                        }
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </SortableContext>
-      </DndContext>
+      <DashboardGrid
+        charts={charts}
+        chartData={chartData}
+        layoutRows={layoutRows}
+        onDragEnd={handleDragEnd}
+        onConfigChange={handleChartConfigChange}
+        onDelete={handleChartDelete}
+        expandedSqlChartId={expandedSqlChartId}
+        onToggleSql={handleToggleSql}
+        onSqlUpdate={handleSqlUpdate}
+        resizingChart={resizingChart}
+        onResizeChange={handleResizeChange}
+      />
     </div>
   );
 }
