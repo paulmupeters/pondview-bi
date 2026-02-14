@@ -73,13 +73,16 @@ DATABASE_PATH=./sqlite.db  # Optional, custom SQLite path
 4. Run the development server:
 ```bash
 # Using Bun
-bun dev
+bun --bun run dev
 
 # Or using npm
 npm run dev
 ```
 
 5. Open [http://localhost:3000](http://localhost:3000) in your browser
+
+
+6. dont forget to run duckdb with httpserver plugin: add auth to login
 
 ## Usage
 

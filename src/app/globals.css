@@ -172,6 +172,25 @@
   body {
     @apply bg-background text-foreground;
   }
+        /* Restore list styling for markdown/prose content (Streamdown output) */
+        .prose ul,
+        .prose ol {
+          list-style-position: outside;
+          padding-left: 1.25rem;
+          margin: 0.5em 0;
+        }
+    
+        .prose ul {
+          list-style-type: disc;
+        }
+    
+        .prose ol {
+          list-style-type: decimal;
+        }
+    
+        .prose li {
+          margin: 0.25em 0;
+        }
 }
 
 /* Custom wave animation for background */

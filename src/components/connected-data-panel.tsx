@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDownIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import { ChevronLeftIcon } from "@heroicons/react/24/outline";
 import { Database } from "lucide-react";
 import { useState } from "react";
 import {
@@ -29,6 +29,8 @@ interface ConnectedDataPanelProps {
   className?: string;
   onInsertTable?: (tableName: string) => void;
   mode?: "popover" | "sidebar";
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function ConnectedDataPanel({
@@ -37,6 +39,8 @@ export function ConnectedDataPanel({
   className,
   onInsertTable,
   mode = "popover",
+  collapsed = false,
+  onToggleCollapse,
 }: ConnectedDataPanelProps) {
   const connectedTables = useConnectedTables();
   const { tables: materializedTables } = useMaterializedTables();
@@ -237,14 +241,50 @@ export function ConnectedDataPanel({
 
   // Sidebar mode: render directly without hover card
   if (mode === "sidebar") {
+    if (collapsed) {
+      return (
+        <div
+          className={cn(
+            "flex h-full w-11 flex-col items-center border-r border-border bg-background p-2 transition-all duration-200 ease-out",
+            className,
+          )}
+        >
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={onToggleCollapse}
+            aria-label="Expand explorer"
+          >
+            <Database className="h-4 w-4" />
+          </Button>
+        </div>
+      );
+    }
+
     return (
       <div
         className={cn(
-          "flex flex-col border-r border-border",
+          "flex h-full w-64 flex-col border-r border-border transition-all duration-200 ease-out",
           className,
         )}
       >
-        <div className="p-4 border-b border-slate-200 text-xs text-[#5C6658] font-bold tracking-widest uppercase">Explorer</div>
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 p-4">
+          <span className="text-xs font-bold tracking-widest text-[#5C6658] uppercase">
+            Explorer
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={onToggleCollapse}
+            aria-label="Collapse explorer"
+          >
+            <ChevronLeftIcon className="h-4 w-4" />
+          </Button>
+        </div>
         <div className="flex-1 overflow-y-auto min-h-0 p-2">
           {renderDatabaseList()}
         </div>

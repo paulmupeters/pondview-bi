@@ -56,6 +56,7 @@ export default function Chat({
 
   // Manual mode state
   const [selectedDb, setSelectedDb] = useState<string | undefined>();
+  const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false);
   const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(
     null,
   );
@@ -408,7 +409,7 @@ export default function Chat({
       }
 
       // Drop the query param to avoid duplicate sends on remounts
-      router.replace(`/${chatId}`);
+      router.replace(`/chat/${chatId}`);
       window.localStorage.setItem(
         flagKey,
         JSON.stringify({ timestamp: Date.now() }),
@@ -423,7 +424,7 @@ export default function Chat({
     if (manual === "1" && !manualVisualHandled) {
       handleAddVisual();
       setManualVisualHandled(true);
-      router.replace(`/${chatId}`);
+      router.replace(`/chat/${chatId}`);
     }
   }, [searchParams, manualVisualHandled, handleAddVisual, router, chatId]);
 
@@ -431,7 +432,7 @@ export default function Chat({
     const modeParam = searchParams?.get("mode");
     if (modeParam === "manual") {
       setPromptMode("manual");
-      router.replace(`/${chatId}`);
+      router.replace(`/chat/${chatId}`);
     }
   }, [searchParams, router, chatId]);
 
@@ -612,32 +613,192 @@ export default function Chat({
   const isConversationEmpty = messages.length === 0;
 
   const manualWorkspace = (
-    <div className="flex h-full min-h-0 overflow-hidden py-1">
-      <ConnectedDataPanel
-        selectedDb={selectedDb}
-        onSelect={setSelectedDb}
-        mode="sidebar"
-        onInsertTable={handleInsertTableIntoSql}
-        className="w-64 shrink-0 bg-background p-2"
-      />
-      <div className="flex-1 min-w-0 h-full bg-card">
-        <DuckdbRepl
-          className="h-full w-full"
-          selectedDbIdentifier={selectedDb}
-          onConsoleApiChangeAction={setSqlConsoleApi}
-          inlineResults={false}
-          showRunControls={false}
-          chartConfig={manualChartConfig}
-          onResultChangeAction={(result) => {
-            setSqlResult(result);
-            // Reset chart config when SQL query changes
-            const newSql = result?.sql ?? null;
-            if (newSql !== prevSqlRef.current) {
-              setManualChartConfig(null);
-              prevSqlRef.current = newSql;
-            }
-          }}
-        />
+    <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <Conversation className="flex-1 min-h-0 h-full">
+          <ConversationContent className="max-w-full mx-auto w-full space-y-6 overflow-y-auto">
+            {isConversationEmpty && (
+              <Message from="assistant" key="assistant-ready">
+                <MessageContent>
+                  <Response key="assistant-ready-response">
+                    Ready to help...
+                  </Response>
+                </MessageContent>
+              </Message>
+            )}
+            {messages.map((message, messageIndex) => {
+              const isLastMessage = messageIndex === messages.length - 1;
+              const isEmptyAssistantMessage =
+                isLastMessage &&
+                message.role === "assistant" &&
+                (status === "streaming" || status === "submitted") &&
+                (!message.parts ||
+                  message.parts.length === 0 ||
+                  message.parts.every(
+                    (part) =>
+                      (part.type === "text" &&
+                        (!(part as { text?: string }).text ||
+                          (part as { text?: string }).text?.trim() === "")) ||
+                      (part.type === executeSqlArtifactType &&
+                        !(part as { data?: unknown }).data),
+                  ));
+
+              if (isEmptyAssistantMessage) {
+                return (
+                  <Message from="assistant" key={message.id}>
+                    <MessageContent className="relative w-full group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
+                      <span>
+                        {animationFrame} {verbAiIsThinking}
+                      </span>
+                    </MessageContent>
+                  </Message>
+                );
+              }
+
+              return (
+                <Message from={message.role} key={message.id}>
+                  <MessageContent className="relative w-full group-[.is-user]:bg-card group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
+                      onClick={() => handleRemoveMessage(message.id)}
+                      aria-label="Remove message"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </Button>
+                    {message.parts?.map((part, partIndex) => {
+                      if (status === "submitted") {
+                        return (
+                          <span
+                            key={`${message.id}-part-${partIndex}-submitted`}
+                          >
+                            {animationFrame}
+                          </span>
+                        );
+                      }
+                      if (part.type === "text") {
+                        return (
+                          <Response
+                            key={`${message.id}-part-${partIndex}`}
+                            className="p-4 rounded-lg group-[.is-user]:bg-primary/60 group-[.is-user]:shadow-md"
+                          >
+                            {part.text}
+                          </Response>
+                        );
+                      }
+
+                      if (part.type === executeSqlArtifactType) {
+                        const artifactPart = part as {
+                          data?: {
+                            status?: ArtifactStatus;
+                            progress?: number;
+                            error?: string;
+                            payload?: SqlAnalysisData;
+                          };
+                        };
+                        const artifactData = artifactPart.data;
+
+                        if (!artifactData) {
+                          return null;
+                        }
+
+                        if (artifactData.status === "error") {
+                          return (
+                            <div
+                              key={`${message.id}-part-${partIndex}`}
+                              className="mt-4 max-w-full text-sm text-red-500"
+                            >
+                              {artifactData.error ?? "SQL analysis failed."}
+                            </div>
+                          );
+                        }
+
+                        const payload = (artifactData.payload ??
+                          null) as SqlAnalysisData | null;
+
+                        if (payload?.query) {
+                          return (
+                            <div
+                              key={`${message.id}-part-${partIndex}`}
+                              className="mt-4 w-full"
+                            >
+                              <div className="flex gap-4">
+                                <div className="bg-sidebar p-4 rounded-2xl rounded-tl-none max-w-[90%]">
+                                  <p className="font-mono text-xs text-muted-foreground mb-2">
+                                    GENERATED SQL
+                                  </p>
+                                  <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-card p-3 rounded border border-border">
+                                    {payload.query}
+                                  </code>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return null;
+                      }
+
+                      if (part.type === "tool-getTableSchema") {
+                        return (
+                          <span key={`${message.id}-part-${partIndex}`}>
+                            Getting table schema
+                          </span>
+                        );
+                      }
+
+                      if (part.type === "tool-generateChartConfig") {
+                        return (
+                          <span key={`${message.id}-part-${partIndex}`}>
+                            Generating chart config...
+                            {animationFrame}
+                          </span>
+                        );
+                      }
+
+                      if (part.type === "tool-executeSql") {
+                        return (
+                          <span key={`${message.id}-part-${partIndex}`}>
+                            Processing...
+                          </span>
+                        );
+                      }
+
+                      return null;
+                    })}
+                  </MessageContent>
+                </Message>
+              );
+            })}
+
+            {status === "streaming" &&
+              !(
+                messages.length > 0 &&
+                messages[messages.length - 1]?.role === "assistant" &&
+                (!messages[messages.length - 1]?.parts ||
+                  messages[messages.length - 1]?.parts.length === 0 ||
+                  messages[messages.length - 1]?.parts.every(
+                    (part) =>
+                      (part.type === "text" &&
+                        (!(part as { text?: string }).text ||
+                          (part as { text?: string }).text?.trim() === "")) ||
+                      (part.type === executeSqlArtifactType &&
+                        !(part as { data?: unknown }).data),
+                  ))
+              ) && (
+                <Message from="assistant" key="assistant-streaming">
+                  <MessageContent className="relative w-full group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
+                    <span>
+                      {animationFrame} {verbAiIsThinking}
+                    </span>
+                  </MessageContent>
+                </Message>
+              )}
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
       </div>
     </div>
   );
@@ -660,7 +821,7 @@ export default function Chat({
         className={cn(
           "absolute inset-0 flex flex-col transition-all duration-300 ease-out",
           isAiMode
-            ? "opacity-0 -translate-y-2 pointer-events-none"
+            ? "opacity-0 translate-y-2 pointer-events-none"
             : "opacity-100 translate-y-0 pointer-events-auto",
         )}
       >
@@ -702,237 +863,289 @@ export default function Chat({
                   transition: isResizing ? "none" : "width 0.2s ease-out",
                 }}
               >
-                <div className="flex-1 min-h-0 flex flex-col">
-                  {promptMode === "ai" ? (
-                    <Conversation className="flex-1 min-h-0 h-full">
-                      <ConversationContent className="max-w-full mx-auto w-full space-y-6 overflow-y-auto">
-                        {isConversationEmpty && (
-                          <Message from="assistant" key="assistant-ready">
-                            <MessageContent>
-                              <Response key="assistant-ready-response">
-                                Ready to help...
-                              </Response>
-                            </MessageContent>
-                          </Message>
-                        )}
-                        {messages.map((message, messageIndex) => {
-                          // Check if this is the last message, it's an assistant message, streaming is active, and it has no meaningful content
-                          const isLastMessage =
-                            messageIndex === messages.length - 1;
-                          const isEmptyAssistantMessage =
-                            isLastMessage &&
-                            message.role === "assistant" &&
-                            (status === "streaming" ||
-                              status === "submitted") &&
-                            (!message.parts ||
-                              message.parts.length === 0 ||
-                              message.parts.every(
-                                (part) =>
-                                  (part.type === "text" &&
-                                    (!(part as { text?: string }).text ||
-                                      (
-                                        part as { text?: string }
-                                      ).text?.trim() === "")) ||
-                                  (part.type === executeSqlArtifactType &&
-                                    !(part as { data?: unknown }).data),
-                              ));
+                <div className="flex-1 min-h-0 flex overflow-hidden">
+                  <ConnectedDataPanel
+                    selectedDb={selectedDb}
+                    onSelect={setSelectedDb}
+                    mode="sidebar"
+                    onInsertTable={handleInsertTableIntoSql}
+                    collapsed={isExplorerCollapsed}
+                    onToggleCollapse={() =>
+                      setIsExplorerCollapsed((prev) => !prev)
+                    }
+                    className="shrink-0 bg-background"
+                  />
+                  <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+                    {promptMode === "ai" ? (
+                      <Conversation className="flex-1 min-h-0 h-full">
+                        <ConversationContent className="max-w-full mx-auto w-full space-y-6 overflow-y-auto">
+                          {isConversationEmpty && (
+                            <Message from="assistant" key="assistant-ready">
+                              <MessageContent>
+                                <Response key="assistant-ready-response">
+                                  Ready to help...
+                                </Response>
+                              </MessageContent>
+                            </Message>
+                          )}
+                          {messages.map((message, messageIndex) => {
+                            // Check if this is the last message, it's an assistant message, streaming is active, and it has no meaningful content
+                            const isLastMessage =
+                              messageIndex === messages.length - 1;
+                            const isEmptyAssistantMessage =
+                              isLastMessage &&
+                              message.role === "assistant" &&
+                              (status === "streaming" ||
+                                status === "submitted") &&
+                              (!message.parts ||
+                                message.parts.length === 0 ||
+                                message.parts.every(
+                                  (part) =>
+                                    (part.type === "text" &&
+                                      (!(part as { text?: string }).text ||
+                                        (
+                                          part as { text?: string }
+                                        ).text?.trim() === "")) ||
+                                    (part.type === executeSqlArtifactType &&
+                                      !(part as { data?: unknown }).data),
+                                ));
 
-                          // If it's an empty assistant message during streaming, show animation instead
-                          if (isEmptyAssistantMessage) {
+                            // If it's an empty assistant message during streaming, show animation instead
+                            if (isEmptyAssistantMessage) {
+                              return (
+                                <Message from="assistant" key={message.id}>
+                                  <MessageContent className="relative w-full group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
+                                    <span>
+                                      {animationFrame} {verbAiIsThinking}
+                                    </span>
+                                  </MessageContent>
+                                </Message>
+                              );
+                            }
+
                             return (
-                              <Message from="assistant" key={message.id}>
+                              <Message from={message.role} key={message.id}>
+                                <MessageContent className="relative w-full group-[.is-user]:bg-card group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
+                                    onClick={() =>
+                                      handleRemoveMessage(message.id)
+                                    }
+                                    aria-label="Remove message"
+                                  >
+                                    <TrashIcon className="h-4 w-4" />
+                                  </Button>
+                                  {message.parts?.map((part, partIndex) => {
+                                    if (status === "submitted") {
+                                      return (
+                                        <span
+                                          key={`${message.id}-part-${partIndex}-submitted`}
+                                        >
+                                          {animationFrame}
+                                        </span>
+                                      );
+                                    }
+                                    if (part.type === "text") {
+                                      return (
+                                        <Response
+                                          key={`${message.id}-part-${partIndex}`}
+                                          className="p-4 rounded-lg group-[.is-user]:bg-primary/60 group-[.is-user]:shadow-md"
+                                        >
+                                          {part.text}
+                                        </Response>
+                                      );
+                                    }
+
+                                    if (part.type === executeSqlArtifactType) {
+                                      const artifactPart = part as {
+                                        data?: {
+                                          status?: ArtifactStatus;
+                                          progress?: number;
+                                          error?: string;
+                                          payload?: SqlAnalysisData;
+                                        };
+                                      };
+                                      const artifactData = artifactPart.data;
+
+                                      if (!artifactData) {
+                                        return null;
+                                      }
+
+                                      if (artifactData.status === "error") {
+                                        return (
+                                          <div
+                                            key={`${message.id}-part-${partIndex}`}
+                                            className="mt-4 max-w-full text-sm text-red-500"
+                                          >
+                                            {artifactData.error ??
+                                              "SQL analysis failed."}
+                                          </div>
+                                        );
+                                      }
+
+                                      const payload = (artifactData.payload ??
+                                        null) as SqlAnalysisData | null;
+
+                                      // Show SQL query inline in messages
+                                      if (payload?.query) {
+                                        return (
+                                          <div
+                                            key={`${message.id}-part-${partIndex}`}
+                                            className="mt-4 w-full"
+                                          >
+                                            <div className="flex gap-4">
+                                              <div className="bg-sidebar p-4 rounded-2xl rounded-tl-none max-w-[90%]">
+                                                <p className="font-mono text-xs text-muted-foreground mb-2">
+                                                  GENERATED SQL
+                                                </p>
+                                                <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-card p-3 rounded border border-border">
+                                                  {payload.query}
+                                                </code>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      }
+
+                                      return null;
+                                    }
+
+                                    if (part.type === "tool-getTableSchema") {
+                                      return (
+                                        <span
+                                          key={`${message.id}-part-${partIndex}`}
+                                        >
+                                          Getting table schema
+                                        </span>
+                                      );
+                                    }
+
+                                    if (
+                                      part.type === "tool-generateChartConfig"
+                                    ) {
+                                      return (
+                                        <span
+                                          key={`${message.id}-part-${partIndex}`}
+                                        >
+                                          Generating chart config...
+                                          {animationFrame}
+                                        </span>
+                                      );
+                                    }
+
+                                    if (part.type === "tool-executeSql") {
+                                      return (
+                                        <span
+                                          key={`${message.id}-part-${partIndex}`}
+                                        >
+                                          Processing...
+                                        </span>
+                                      );
+                                    }
+
+                                    return null;
+                                  })}
+                                </MessageContent>
+                              </Message>
+                            );
+                          })}
+
+                          {status === "streaming" &&
+                            !(
+                              messages.length > 0 &&
+                              messages[messages.length - 1]?.role ===
+                                "assistant" &&
+                              (!messages[messages.length - 1]?.parts ||
+                                messages[messages.length - 1]?.parts.length ===
+                                  0 ||
+                                messages[messages.length - 1]?.parts.every(
+                                  (part) =>
+                                    (part.type === "text" &&
+                                      (!(part as { text?: string }).text ||
+                                        (
+                                          part as { text?: string }
+                                        ).text?.trim() === "")) ||
+                                    (part.type === executeSqlArtifactType &&
+                                      !(part as { data?: unknown }).data),
+                                ))
+                            ) && (
+                              <Message
+                                from="assistant"
+                                key="assistant-streaming"
+                              >
                                 <MessageContent className="relative w-full group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
                                   <span>
                                     {animationFrame} {verbAiIsThinking}
                                   </span>
                                 </MessageContent>
                               </Message>
-                            );
-                          }
-
-                          return (
-                            <Message from={message.role} key={message.id}>
-                              <MessageContent className="relative w-full group-[.is-user]:bg-card group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
-                                  onClick={() =>
-                                    handleRemoveMessage(message.id)
-                                  }
-                                  aria-label="Remove message"
-                                >
-                                  <TrashIcon className="h-4 w-4" />
-                                </Button>
-                                {message.parts?.map((part, partIndex) => {
-                                  if (status === "submitted") {
-                                    return (
-                                      <span
-                                        key={`${message.id}-part-${partIndex}-submitted`}
-                                      >
-                                        {animationFrame}
-                                      </span>
-                                    );
-                                  }
-                                  if (part.type === "text") {
-                                    return (
-                                      <Response
-                                        key={`${message.id}-part-${partIndex}`}
-                                        className="p-4 rounded-lg group-[.is-user]:bg-primary/60 group-[.is-user]:shadow-md"
-                                      >
-                                        {part.text}
-                                      </Response>
-                                    );
-                                  }
-
-                                  if (part.type === executeSqlArtifactType) {
-                                    const artifactPart = part as {
-                                      data?: {
-                                        status?: ArtifactStatus;
-                                        progress?: number;
-                                        error?: string;
-                                        payload?: SqlAnalysisData;
-                                      };
-                                    };
-                                    const artifactData = artifactPart.data;
-
-                                    if (!artifactData) {
-                                      return null;
-                                    }
-
-                                    if (artifactData.status === "error") {
-                                      return (
-                                        <div
-                                          key={`${message.id}-part-${partIndex}`}
-                                          className="mt-4 max-w-full text-sm text-red-500"
-                                        >
-                                          {artifactData.error ??
-                                            "SQL analysis failed."}
-                                        </div>
-                                      );
-                                    }
-
-                                    const payload = (artifactData.payload ??
-                                      null) as SqlAnalysisData | null;
-
-                                    // Show SQL query inline in messages
-                                    if (payload?.query) {
-                                      return (
-                                        <div
-                                          key={`${message.id}-part-${partIndex}`}
-                                          className="mt-4 w-full"
-                                        >
-                                          <div className="flex gap-4">
-                                            <div className="bg-sidebar p-4 rounded-2xl rounded-tl-none max-w-[90%]">
-                                              <p className="font-mono text-xs text-muted-foreground mb-2">
-                                                GENERATED SQL
-                                              </p>
-                                              <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-card p-3 rounded border border-border">
-                                                {payload.query}
-                                              </code>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    }
-
-                                    return null;
-                                  }
-
-                                  if (part.type === "tool-getTableSchema") {
-                                    return (
-                                      <span
-                                        key={`${message.id}-part-${partIndex}`}
-                                      >
-                                        Getting table schema
-                                      </span>
-                                    );
-                                  }
-
-                                  if (
-                                    part.type === "tool-generateChartConfig"
-                                  ) {
-                                    return (
-                                      <span
-                                        key={`${message.id}-part-${partIndex}`}
-                                      >
-                                        Generating chart config...
-                                        {animationFrame}
-                                      </span>
-                                    );
-                                  }
-
-                                  if (part.type === "tool-executeSql") {
-                                    return (
-                                      <span
-                                        key={`${message.id}-part-${partIndex}`}
-                                      >
-                                        Processing...
-                                      </span>
-                                    );
-                                  }
-
-                                  return null;
-                                })}
-                              </MessageContent>
-                            </Message>
-                          );
-                        })}
-
-                        {status === "streaming" &&
-                          !(
-                            messages.length > 0 &&
-                            messages[messages.length - 1]?.role ===
-                              "assistant" &&
-                            (!messages[messages.length - 1]?.parts ||
-                              messages[messages.length - 1]?.parts.length ===
-                                0 ||
-                              messages[messages.length - 1]?.parts.every(
-                                (part) =>
-                                  (part.type === "text" &&
-                                    (!(part as { text?: string }).text ||
-                                      (
-                                        part as { text?: string }
-                                      ).text?.trim() === "")) ||
-                                  (part.type === executeSqlArtifactType &&
-                                    !(part as { data?: unknown }).data),
-                              ))
-                          ) && (
-                            <Message from="assistant" key="assistant-streaming">
-                              <MessageContent className="relative w-full group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
-                                <span>
-                                  {animationFrame} {verbAiIsThinking}
-                                </span>
-                              </MessageContent>
-                            </Message>
-                          )}
-                        {/* empty space to push the input area to the bottom */}
-                        <div className="h-[10vh]" />
-                      </ConversationContent>
-                      <ConversationScrollButton />
-                    </Conversation>
-                  ) : (
-                    manualWorkspace
-                  )}
+                            )}
+                          {/* empty space to push the input area to the bottom */}
+                          <div className="h-[10vh]" />
+                        </ConversationContent>
+                        <ConversationScrollButton />
+                      </Conversation>
+                    ) : (
+                      manualWorkspace
+                    )}
+                  </div>
                 </div>
 
                 {/* Input Area - aligned with messages */}
-                <div className="flex-shrink-0 w-full mx-auto max-h-[20vh] overflow-hidden shadow-md z-10">
-                  <PromptInputWrapper
-                    onSubmit={handleSubmit}
-                    className="transition delay-150 duration-300 ease-in-out bg-card"
-                    status={status}
-                    onCreateDashboard={handleOpenDashboardBuilder}
-                    onAddVisual={handleAddVisual}
-                    mode={promptMode}
-                    onModeChange={setPromptMode}
-                    pendingMode={promptPendingMode}
-                    selectedDb={selectedDb}
-                    onSelectDb={setSelectedDb}
-                    onInsertTable={handleInsertTableIntoSql}
-                  />
-                </div>
+                {isAiMode ? (
+                  <div className="flex-shrink-0 w-full mx-auto max-h-[20vh] overflow-hidden shadow-md z-10 grid transition-[grid-template-rows,opacity,transform] duration-300 ease-out grid-rows-[1fr] opacity-100 translate-y-0">
+                    <PromptInputWrapper
+                      onSubmit={handleSubmit}
+                      showHeader
+                      showAiInput
+                      className="transition delay-150 duration-300 ease-in-out bg-card"
+                      status={status}
+                      onCreateDashboard={handleOpenDashboardBuilder}
+                      onAddVisual={handleAddVisual}
+                      mode={promptMode}
+                      onModeChange={setPromptMode}
+                      pendingMode={promptPendingMode}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex-shrink-0 w-full mx-auto max-h-[56vh] overflow-hidden shadow-md z-10 transition-[max-height,opacity,transform] duration-300 ease-out opacity-100 translate-y-0">
+                    <div className="w-full overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+                      <PromptInputWrapper
+                        onSubmit={handleSubmit}
+                        showHeader
+                        showAiInput={false}
+                        className="bg-card transition delay-150 duration-300 ease-in-out"
+                        status={status}
+                        onCreateDashboard={handleOpenDashboardBuilder}
+                        onAddVisual={handleAddVisual}
+                        mode={promptMode}
+                        onModeChange={setPromptMode}
+                        pendingMode={promptPendingMode}
+                      />
+                      <div className="h-[44vh] min-h-[320px] overflow-hidden border-t border-border">
+                        <DuckdbRepl
+                          className="h-full w-full border-r-0 p-0"
+                          selectedDbIdentifier={selectedDb}
+                          onConsoleApiChangeAction={setSqlConsoleApi}
+                          inlineResults={false}
+                          showRunControls={false}
+                          chartConfig={manualChartConfig}
+                          onResultChangeAction={(result) => {
+                            setSqlResult(result);
+                            const newSql = result?.sql ?? null;
+                            if (newSql !== prevSqlRef.current) {
+                              setManualChartConfig(null);
+                              prevSqlRef.current = newSql;
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Resize Handle */}

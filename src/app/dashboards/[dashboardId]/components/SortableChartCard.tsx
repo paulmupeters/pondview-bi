@@ -412,7 +412,7 @@ export function SortableChartCard({
             />
           </div>
         ) : isTextConfig(config) ? (
-          <div className="flex w-full flex-col gap-2">
+          <div className="flex w-full flex-col gap-2 p-2">
             {config.title ? (
               <h3 className="text-base font-semibold leading-tight">
                 {config.title}
