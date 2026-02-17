@@ -1,16 +1,38 @@
 # Semantic Layer Materialization
 
-This project now materializes semantic models into a DuckDB instance that is reachable through the HTTP `httpserver` extension. The flow is designed so that every time a semantic model is edited, the corresponding explore is re-materialized and dashboards automatically read from the freshly built tables.
+Semantic models are materialized into the in-process DuckDB Node API instance. Every time a semantic model is edited the corresponding explore is re-materialized and dashboards automatically read from the freshly built tables — no external DuckDB HTTP server required.
+
+For a route-by-route explanation of exactly when materialization runs (including dashboard creation vs. dashboard data load), see `docs/materialization-lifecycle.md`.
 
 ## Prerequisites
 
-Set the DuckDB HTTP connection parameters via environment variables (or pass an equivalent config to the helper functions):
+Materialization uses the DuckDB Node API (`@duckdb/node-api`) running inside the Next.js server process. No external server is required.
+
+### Optional: persistent storage
+
+By default, materialized tables live in an in-memory DuckDB instance. To persist them across process restarts, set:
+
+```bash
+DUCKDB_PERSIST_PATH=./data/materialized.duckdb
+```
+
+### MotherDuck authentication
+
+If your source is a MotherDuck database, set the token in `.env.local`:
+
+```bash
+MOTHERDUCK_TOKEN=your_token_here
+```
+
+The in-process DuckDB Node API reads `motherduck_token` from the process environment automatically — no separate server configuration needed.
+
+### Optional: DuckDB HTTP server (general queries)
+
+The DuckDB HTTP adapter is still available as a general-purpose data source (not used for materialization). If you want to use it for ad-hoc queries, set:
 
 - `DUCKDB_HTTP_HOST` – host or base URL of the DuckDB HTTP server
 - `DUCKDB_HTTP_PORT` – port exposed by the HTTP server
 - `DUCKDB_HTTP_AUTH` *(optional)* – basic auth credentials (`user:pass`) or API token
-
-These values are consumed by `resolveHttpDuckDbConfig` inside `src/lib/duckdb/duckdb-http.ts`.
 
 ## `sources.yml` structure
 
@@ -53,10 +75,9 @@ The tracking table can be queried directly or through the exported `listMaterial
 ## Available helpers
 
 - `materializeSemanticLayer(options)` – runs materialization for all explores or a single explore.
-- `listMaterializations(options)` – returns current rows from `semantic_materialization_runs`.
-- `applyMaterializationsToDataModel(dataModel, records)` – rewrites a loaded `DataModel` so the query planner oπperates on the materialized tables.
-
-Options accept an optional DuckDB HTTP config if you need to override the global environment variables.
+- `listMaterializations()` – returns current rows from `semantic_materialization_runs`.
+- `applyMaterializationsToDataModel(dataModel, records)` – rewrites a loaded `DataModel` so the query planner operates on the materialized tables.
+- `getMaterializationDbPath()` – returns the DuckDB path used for materialization (from `DUCKDB_PERSIST_PATH` or `:memory:`).
 
 ## Query Execution Architecture
 

@@ -5,6 +5,7 @@ import {
   applyMaterializationsToDataModel,
   listMaterializations,
   materializeSemanticLayer,
+  type MaterializationResult,
 } from "@/lib/materialization/semantic-layer";
 
 const DEFAULT_MODELS_DIR = join(process.cwd(), "semantic-layer", "models");
@@ -35,16 +36,18 @@ export async function loadMaterializedModel(
       if (options.exploreNames && options.exploreNames.length > 0) {
         // Materialize specific explores
         for (const exploreName of options.exploreNames) {
-          await materializeSemanticLayer({
+          const results = await materializeSemanticLayer({
             modelsDir,
             exploreName,
           });
+          logMaterializationResults(results);
         }
       } else {
         // Materialize all explores
-        await materializeSemanticLayer({
+        const results = await materializeSemanticLayer({
           modelsDir,
         });
+        logMaterializationResults(results);
       }
     } catch (materializationError) {
       console.warn(
@@ -78,6 +81,17 @@ export async function loadMaterializedModel(
       error
     );
     return null;
+  }
+}
+
+function logMaterializationResults(results: MaterializationResult[]): void {
+  if (results.length === 0) {
+    return;
+  }
+
+  const failures = results.filter((result) => result.status === "error");
+  if (failures.length > 0) {
+    console.warn("[Load Materialized Model] Materialization errors:", failures);
   }
 }
 

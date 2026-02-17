@@ -37,6 +37,21 @@ function normalizeDbPath(dbPath: string): string {
   return trimmed.length > 0 ? trimmed : ":memory:";
 }
 
+/**
+ * Returns the DuckDB database path used for materialization.
+ * When DUCKDB_PERSIST_PATH is set, materialized tables are stored in a file on
+ * disk and survive process restarts. Otherwise, an in-memory instance is used.
+ */
+export function getMaterializationDbPath(): string {
+  return (
+    process.env.DUCKDB_PERSIST_PATH?.trim() ||
+    process.env.DUCKDB_RUNTIME_DB?.trim() ||
+    process.env.DUCKDB_PATH?.trim() ||
+    process.env.DUCKDB_DATABASE_PATH?.trim() ||
+    ":memory:"
+  );
+}
+
 export async function getDuckDbInstance(
   dbPath: string
 ): Promise<DuckDBInstance> {

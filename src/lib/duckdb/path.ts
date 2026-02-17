@@ -4,6 +4,7 @@ const DEFAULT_RUNTIME_DUCKDB_PATH =
   process.env.DUCKDB_RUNTIME_DB?.trim() ||
   process.env.DUCKDB_PATH?.trim() ||
   process.env.DUCKDB_DATABASE_PATH?.trim() ||
+  process.env.DUCKDB_PERSIST_PATH?.trim() ||
   ":memory:";
 
 /**

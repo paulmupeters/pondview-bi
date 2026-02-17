@@ -8,7 +8,6 @@ import {
 import * as Dialog from "@radix-ui/react-dialog";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getSchemas, getTablesForSchema } from "@/actions/queries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { appendConnectedTable } from "@/lib/connected-tables";
@@ -125,6 +124,40 @@ const resolveDuckdbExtension = (dbType: DatabaseType): string | undefined => {
 };
 
 // Removed unused DuckDB preview constants
+
+async function fetchSchemas(dbIdentifier: string): Promise<string[]> {
+  const response = await fetch(
+    `/api/tables?id=${encodeURIComponent(dbIdentifier)}`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    throw new Error(payload.error || "Failed to fetch schemas.");
+  }
+  const payload = (await response.json()) as { schemas?: string[] };
+  return payload.schemas ?? [];
+}
+
+async function fetchTablesForSchema(
+  dbIdentifier: string,
+  schema: string,
+  limit = 20,
+): Promise<string[]> {
+  const response = await fetch(
+    `/api/tables?id=${encodeURIComponent(dbIdentifier)}&schema=${encodeURIComponent(schema)}&limit=${limit}`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    throw new Error(payload.error || "Failed to fetch tables for schema.");
+  }
+  const payload = (await response.json()) as { tables?: string[] };
+  return payload.tables ?? [];
+}
 
 type ConnectDataDialogProps = {
   open: boolean;
@@ -439,7 +472,7 @@ export function ConnectDataDialog({
         dbPath = databasePath.trim();
       }
 
-      const fetchedSchemas = await getSchemas(dbPath);
+      const fetchedSchemas = await fetchSchemas(dbPath);
       setSchemas(fetchedSchemas);
       setHasConnected(true);
     } catch (e: unknown) {
@@ -496,7 +529,7 @@ export function ConnectDataDialog({
         dbPath = databasePath.trim();
       }
       console.log("Calling getTablesForSchema with:", { dbPath, schema });
-      const tables = await getTablesForSchema(dbPath, schema, 20);
+      const tables = await fetchTablesForSchema(dbPath, schema, 20);
       console.log("getTablesForSchema returned:", tables);
       setSchemaTablesPreview(tables);
     } catch (e: unknown) {

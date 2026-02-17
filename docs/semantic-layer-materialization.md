@@ -1,6 +1,6 @@
-## Semantic Layer Materialization (DuckDB HTTP)
+## Semantic Layer Materialization (DuckDB Node API)
 
-This document explains how explores defined in `semantic-layer/models` are materialized into DuckDB tables using the HTTP server extension, and how those tables are used by the app.
+This document explains how explores defined in `semantic-layer/models` are materialized into DuckDB tables using the in-process DuckDB Node API, and how those tables are used by the app.
 
 ### Concepts & Files
 
@@ -11,20 +11,18 @@ This document explains how explores defined in `semantic-layer/models` are mater
   - `ExploreDef`, `DimensionDef`, `MeasureDef`, `DataModel`, etc.
 - **Materializer**: `src/lib/materialization/semantic-layer.ts`
   - Exposes `materializeSemanticLayer`, `listMaterializations`, and `applyMaterializationsToDataModel`.
-- **DuckDB HTTP client**: `src/lib/duckdb/duckdb-http.ts`
-  - `resolveHttpDuckDbConfig`, `executeDuckDbHttpQuery`, and helpers.
+- **DuckDB Node runtime**: `src/lib/duckdb/duckdb-node.ts`
+  - `getDuckDbInstance`, `runSqlAndGetRowObjectsJson`, `getMaterializationDbPath`.
 
-### DuckDB HTTP configuration
+### Runtime storage configuration
 
-The materializer talks to a running DuckDB HTTP server. Configuration is resolved by `resolveHttpDuckDbConfig` from either function parameters or environment variables:
+Materialization uses DuckDB in-process (no external HTTP server required).
 
-- `DUCKDB_HTTP_HOST` – host (optionally with protocol and port, e.g. `http://localhost` or `http://localhost:8080`)
-- `DUCKDB_HTTP_PORT` – port number (1–65535) if not already in the host string
-- `DUCKDB_HTTP_AUTH` – optional auth:
-  - If it contains `user:pass`, it is sent as HTTP Basic auth.
-  - Otherwise it is sent as `X-API-Key` token.
+- `DUCKDB_PERSIST_PATH` (optional): path to a DuckDB file for persistence across process restarts.
+  - Example: `DUCKDB_PERSIST_PATH=./data/materialized.duckdb`
+- If unset, materialization runs against an in-memory DuckDB instance.
 
-You can override these per call via the `duckdb` option passed to `materializeSemanticLayer`.
+MotherDuck credentials for attachments are read from process environment (`MOTHERDUCK_TOKEN`) by DuckDB in-process.
 
 ### What materialization does
 
@@ -37,7 +35,6 @@ await materializeSemanticLayer({
   // optional overrides:
   // modelsDir?: string;
   // exploreName?: string;
-  // duckdb?: HttpDuckDbConfig;
   // targetSchema?: string;
 });
 ```
@@ -96,7 +93,7 @@ Key behavior in `src/lib/materialization/semantic-layer.ts`:
 
 - **Executed SQL statements**
 
-For each explore, the materializer builds and runs a sequence of statements via `executeDuckDbHttpQuery`:
+For each explore, the materializer builds and runs a sequence of statements on a single in-process DuckDB connection:
 
 1. Ensure target schema exists:
 
@@ -140,7 +137,7 @@ For each explore, the materializer builds and runs a sequence of statements via 
 5. **Cleanup**:
    - If an attachment was created, the materializer runs a `DETACH` statement in a `finally` block to clean up.
 
-All statements are run sequentially via `executeStatements`, which simply loops and calls `executeDuckDbHttpQuery` for each SQL string.
+All statements are run sequentially via `executeStatements` on the same connection, so attachment state is preserved naturally.
 
 ### Example: materializing `main.unicorns`
 
@@ -168,7 +165,7 @@ When `materializeSemanticLayer({ exploreName: "unicorns" })` runs:
 
 - It finds the `unicorns` explore whose `base` is the `unicorns` source.
 - It locates the corresponding `SourceEntry` in `sources.yml` (`table: main.unicorns`).
-- It materializes to `semantic_materialized.unicorns` in DuckDB HTTP.
+- It materializes to `semantic_materialized.unicorns` in the materialization DuckDB runtime.
 - The run is recorded in `main.semantic_materialization_runs` with `target_table = 'semantic_materialized.unicorns'`.
 
 ### When materialization is triggered
@@ -179,6 +176,13 @@ Several semantic-layer API routes trigger materialization automatically when mod
 - `src/app/api/semantic-layer/models/[exploreName]/measures/route.ts`
 - `src/app/api/semantic-layer/models/[exploreName]/joins/route.ts`
 - `src/app/api/semantic-layer/models/[exploreName]/segments/route.ts`
+
+Dashboard read routes also trigger targeted materialization-on-read:
+
+- `src/app/api/dashboard/[dashboardId]/data/route.ts`
+- `src/app/api/dashboard/[dashboardId]/dimension-values/route.ts`
+
+These routes call `loadMaterializedModel({ exploreNames })`, which invokes `materializeSemanticLayer` for only the explores needed by the request.
 
 Example (dimensions route, simplified):
 
@@ -193,14 +197,14 @@ So adding/removing a dimension, measure, join, or segment will:
 
 1. Update the YAML file on disk.
 2. Re-run `materializeSemanticLayer` for that explore.
-3. Refresh the corresponding materialized table in DuckDB HTTP.
+3. Refresh the corresponding materialized table in DuckDB runtime.
 
 ### How dashboards and queries use materialized tables
 
 The materializer exposes helpers to wire materialization into the query layer:
 
-- `listMaterializations({ duckdb })`:
-  - Queries `main.semantic_materialization_runs` via HTTP.
+- `listMaterializations()`:
+  - Queries `main.semantic_materialization_runs` in the same materialization runtime.
   - Returns an array of `MaterializationRecord` objects with `exploreName`, `targetTable`, `modelHash`, `rowCount`, and `updatedAt`.
 
 - `applyMaterializationsToDataModel(dataModel, records)`:
@@ -211,9 +215,10 @@ The materializer exposes helpers to wire materialization into the query layer:
 Dashboard APIs (e.g. `src/app/api/dashboard/...`) typically:
 
 1. Load the data model from `semantic-layer/models`.
-2. Call `listMaterializations()` to get current runs.
+2. Trigger targeted materialization via `loadMaterializedModel({ exploreNames })`.
 3. Call `applyMaterializationsToDataModel()` to rewrite explores.
 4. Compile semantic queries against the **materialized** tables instead of the raw sources.
+5. If semantic compile or semantic execution fails, fallback to stored chart SQL so dashboards remain available.
 
 ### Running materialization manually
 
@@ -227,7 +232,6 @@ await materializeSemanticLayer({
   // exploreName: "unicorns",       // only this explore
   // targetSchema: "semantic_materialized",
   // modelsDir: join(process.cwd(), "semantic-layer", "models"),
-  // duckdb: { host, port, auth },  // if you don't want to rely on env vars
 });
 ```
 
@@ -238,8 +242,10 @@ await materializeSemanticLayer({
 ### Summary
 
 - Explores and sources are defined in YAML under `semantic-layer/models`.
-- `materializeSemanticLayer` reads those definitions, connects to DuckDB via HTTP, and creates/refreshes materialized tables (by default `semantic_materialized.<explore>`).
+- `materializeSemanticLayer` reads those definitions and creates/refreshes materialized tables (by default `semantic_materialized.<explore>`) using in-process DuckDB.
 - Materialization is tracked in `main.semantic_materialization_runs` and automatically integrated into the query layer via `applyMaterializationsToDataModel`.
 - The unicorns explore (`base: unicorns` → `main.unicorns`) is materialized to `semantic_materialized.unicorns` when the model changes or when materialization is invoked manually.
+- `DUCKDB_PERSIST_PATH` is optional and enables file-backed persistence; without it, materialized state is in-memory.
+- DuckDB HTTP remains optional for other query paths, but it is not required for materialization.
 
 

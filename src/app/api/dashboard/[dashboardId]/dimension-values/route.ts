@@ -42,9 +42,21 @@ export async function GET(
     }
   }
 
-  // Load semantic models and ensure they are materialized
-  // This checks for changes and materializes explores if needed
-  const dataModel = await loadMaterializedModel();
+  // Parse field to get explore and dimension
+  const parts = field.split(".");
+  if (parts.length !== 2) {
+    return Response.json(
+      { error: "Field must be in format 'explore.dimension'" },
+      { status: 400 }
+    );
+  }
+
+  const [exploreName, dimensionName] = parts;
+
+  // Materialize only the explore needed for this field lookup.
+  const dataModel = await loadMaterializedModel({
+    exploreNames: [exploreName],
+  });
 
   if (!dataModel) {
     return Response.json(
@@ -59,17 +71,6 @@ export async function GET(
     charts.length > 0 && charts[0].dbIdentifier
       ? charts[0].dbIdentifier
       : "md:my_db";
-
-  // Parse field to get explore and dimension
-  const parts = field.split(".");
-  if (parts.length !== 2) {
-    return Response.json(
-      { error: "Field must be in format 'explore.dimension'" },
-      { status: 400 }
-    );
-  }
-
-  const [exploreName, dimensionName] = parts;
 
   // Find the explore and dimension
   const explore = dataModel.explores.find((e) => e.name === exploreName);
@@ -123,10 +124,7 @@ export async function GET(
       );
     }
 
-    // Execute query - the query builder groups by dimension, so we get distinct values
-    // Use HTTP connection for materialized queries (when dataModel is loaded and explore exists)
-    const useHttp = Boolean(dataModel && explore);
-    const rows = await runSqlNormalized(dbIdentifier, sqlToExecute, useHttp);
+    const rows = await runSqlNormalized(dbIdentifier, sqlToExecute);
 
     // Extract values from results
     // The alias will be the simple field name (e.g. "Country" instead of "unicorns_Country")

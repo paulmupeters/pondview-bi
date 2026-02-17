@@ -12,6 +12,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ dashboardId: string }> }
 ) {
+
   const { dashboardId } = await params;
   const { searchParams } = new URL(req.url);
 
@@ -35,62 +36,84 @@ export async function GET(
     }
   }
 
-  // Load semantic models and ensure they are materialized
-  // This checks for changes and materializes explores if needed
-  const dataModel = await loadMaterializedModel();
-
   const charts = await listChartsByDashboard(dashboardId);
+  const semanticExploreNames = collectSemanticExploreNames(charts);
+  const dataModel =
+    semanticExploreNames.length > 0
+      ? await loadMaterializedModel({ exploreNames: semanticExploreNames })
+      : null;
 
   const results = await Promise.all(
     charts.map(async (chart) => {
-      try {
-        let sqlToExecute = chart.sql;
-        let filtersApplied = false;
+      let sqlToExecute = chart.sql;
+      let filtersApplied = false;
+      let semanticAttempted = false;
+      const dbIdentifier = chart.dbIdentifier || "md:my_db";
 
-        if (
-          chart.semanticQueryJson &&
-          dataModel &&
-          dashboardFilters.length > 0
-        ) {
-          try {
-            const queryAST: QueryAST = JSON.parse(chart.semanticQueryJson);
-            const mergedQuery: QueryAST = {
-              ...queryAST,
-              filters: [...(queryAST.filters || []), ...dashboardFilters],
-            };
-            const compiled = compileToDuckdb(dataModel, mergedQuery);
-            sqlToExecute = applyParams(compiled.sql, compiled.params);
-            filtersApplied = true;
-            console.log(
-              `[Dashboard Data] Applied ${
-                dashboardFilters.length
-              } filter(s) to chart ${chart.id}${
-                chart.exploreName ? ` (${chart.exploreName})` : ""
-              }`
-            );
-          } catch (compileError) {
-            console.error(
-              `[Dashboard Data] Failed to compile query for chart ${chart.id}:`,
-              compileError
-            );
-            sqlToExecute = chart.sql;
-            filtersApplied = false;
-          }
+      if (chart.semanticQueryJson && dataModel) {
+        semanticAttempted = true;
+        try {
+          const queryAST: QueryAST = JSON.parse(chart.semanticQueryJson);
+          const mergedQuery: QueryAST = {
+            ...queryAST,
+            filters: [...(queryAST.filters || []), ...dashboardFilters],
+          };
+          const compiled = compileToDuckdb(dataModel, mergedQuery);
+          sqlToExecute = applyParams(compiled.sql, compiled.params);
+          filtersApplied = dashboardFilters.length > 0;
+        } catch (compileError) {
+          console.error(
+            `[Dashboard Data] Failed semantic compile for chart ${chart.id}; falling back to stored SQL:`,
+            compileError,
+          );
+          semanticAttempted = false;
+          sqlToExecute = chart.sql;
+          filtersApplied = false;
         }
+      }
 
-        // Use HTTP connection for materialized queries
-        const useHttp = Boolean(chart.semanticQueryJson && dataModel);
-        console.log("useHttp", useHttp);
+      try {
         const rows = await runSqlNormalized(
-          chart.dbIdentifier || "md:my_db",
+          dbIdentifier,
           sqlToExecute,
-          useHttp
         );
         return { ...chart, rows, filtersApplied };
       } catch (executionError) {
+        if (semanticAttempted) {
+          console.warn(
+            `[Dashboard Data] Semantic execution failed for chart ${chart.id}; retrying with stored SQL.`,
+            executionError,
+          );
+          try {
+            const fallbackRows = await runSqlNormalized(
+              dbIdentifier,
+              chart.sql,
+            );
+            return {
+              ...chart,
+              rows: fallbackRows,
+              filtersApplied: false,
+            };
+          } catch (fallbackError) {
+            console.error(
+              `[Dashboard Data] Fallback execution also failed for chart ${chart.id}:`,
+              fallbackError,
+            );
+            return {
+              ...chart,
+              rows: [] as Result[],
+              filtersApplied: false,
+              error:
+                fallbackError instanceof Error
+                  ? fallbackError.message
+                  : String(fallbackError),
+            };
+          }
+        }
+
         console.error(
           `[Dashboard Data] Error executing chart ${chart.id}:`,
-          executionError
+          executionError,
         );
         return {
           ...chart,
@@ -102,7 +125,7 @@ export async function GET(
               : String(executionError),
         };
       }
-    })
+    }),
   );
 
   return Response.json({ charts: results });
@@ -127,3 +150,30 @@ function sqlLiteral(v: unknown): string {
   // Default: treat as string
   return `'${String(v).replace(/'/g, "''")}'`;
 }
+
+function collectSemanticExploreNames(
+  charts: Array<{
+    exploreName: string | null;
+    semanticQueryJson: string | null;
+  }>,
+): string[] {
+  const names = new Set<string>();
+  for (const chart of charts) {
+    if (chart.exploreName) {
+      names.add(chart.exploreName);
+    }
+    if (!chart.semanticQueryJson) {
+      continue;
+    }
+    try {
+      const ast = JSON.parse(chart.semanticQueryJson) as QueryAST;
+      if (typeof ast.explore === "string" && ast.explore.trim().length > 0) {
+        names.add(ast.explore);
+      }
+    } catch {
+      // Chart can still run with stored SQL; ignore malformed semantic payload here.
+    }
+  }
+  return Array.from(names);
+}
+

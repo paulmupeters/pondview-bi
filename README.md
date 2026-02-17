@@ -82,7 +82,9 @@ npm run dev
 5. Open [http://localhost:3000](http://localhost:3000) in your browser
 
 
-6. dont forget to run duckdb with httpserver plugin: add auth to login
+6. *(Optional)* To persist materialized tables across restarts, set `DUCKDB_PERSIST_PATH=./data/materialized.duckdb` in `.env.local`.
+
+7. *(Optional)* To use the DuckDB HTTP adapter for ad-hoc queries, run a DuckDB instance with the `httpserver` extension and set `DUCKDB_HTTP_HOST` / `DUCKDB_HTTP_PORT` in `.env.local`.
 
 ## Usage
 

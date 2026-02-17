@@ -10,8 +10,10 @@ import {
   buildAttachmentPlan,
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
-import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-http";
-import { runSqlAndGetRowObjectsJsonHttp } from "@/lib/duckdb/duckdb-node";
+import {
+  getDuckDbInstance,
+  getMaterializationDbPath,
+} from "@/lib/duckdb/duckdb-node";
 
 const DEFAULT_MODELS_DIR = join(process.cwd(), "semantic-layer", "models");
 const DEFAULT_TARGET_SCHEMA = "semantic_materialized";
@@ -37,7 +39,6 @@ export interface MaterializationResult {
 export interface SemanticMaterializerOptions {
   modelsDir?: string;
   exploreName?: string;
-  duckdb?: HttpDuckDbConfig;
   targetSchema?: string;
 }
 
@@ -57,7 +58,7 @@ export async function materializeSemanticLayer(
   const dataModel = loadModelsFromDirectory(modelsDir);
   const sources = await loadSources(modelsDir);
 
-  await ensureTrackingTable(options.duckdb);
+  await ensureTrackingTable();
 
   const explores = pickExplores(dataModel.explores, options.exploreName);
   if (explores.length === 0) {
@@ -71,7 +72,6 @@ export async function materializeSemanticLayer(
       const result = await materializeExplore({
         explore,
         sources,
-        config: options.duckdb,
         modelsDir,
         targetSchema,
       });
@@ -88,13 +88,10 @@ export async function materializeSemanticLayer(
   return results;
 }
 
-export async function listMaterializations(
-  options: { duckdb?: HttpDuckDbConfig } = {}
-): Promise<MaterializationRecord[]> {
-  await ensureTrackingTable(options.duckdb);
+export async function listMaterializations(): Promise<MaterializationRecord[]> {
+  await ensureTrackingTable();
 
-  const rows = await runSqlAndGetRowObjectsJsonHttp(
-    options.duckdb,
+  const rows = await runQuery(
     `SELECT explore_name, target_table, model_hash, row_count, updated_at FROM ${trackingTableSql()};`
   );
 
@@ -144,11 +141,10 @@ export function applyMaterializationsToDataModel(
 async function materializeExplore(ctx: {
   explore: ExploreDef;
   sources: SourceEntry[];
-  config: HttpDuckDbConfig | undefined;
   modelsDir: string;
   targetSchema: string;
 }): Promise<MaterializationResult> {
-  const { explore, sources, config, modelsDir, targetSchema } = ctx;
+  const { explore, sources, modelsDir, targetSchema } = ctx;
   const source = sources.find((s) => s.name === explore.base);
 
   if (!source) {
@@ -161,10 +157,11 @@ async function materializeExplore(ctx: {
 
   const modelContent = await readModelContent(modelsDir, explore.name);
   const modelHash = computeModelHash(modelContent, source);
-  const existingHash = await fetchExistingHash(config, explore.name);
+  const existingHash = await fetchExistingHash(explore.name);
   const target = buildTargetTable(explore.name, targetSchema);
-  const attachmentPlan = source.connection
-    ? buildAttachmentPlan(source.connection)
+  const executionSource = source;
+  const attachmentPlan = executionSource.connection
+    ? buildAttachmentPlan(executionSource.connection)
     : undefined;
 
   if (existingHash === modelHash) {
@@ -176,20 +173,22 @@ async function materializeExplore(ctx: {
     };
   }
 
-  const { reference: sourceReference, alias: attachmentAlias } =
-    buildSourceReference(source, attachmentPlan);
+  const { reference: sourceReference } = buildSourceReference(
+    executionSource,
+    attachmentPlan
+  );
 
   const statements: string[] = [
     `CREATE SCHEMA IF NOT EXISTS ${quoteIdent(targetSchema)};`,
   ];
-  const cleanupStatements: string[] = [];
 
   if (attachmentPlan && attachmentPlan.statements.length > 0) {
     statements.push(
       buildDetachStatement(attachmentPlan.alias, { ifExists: true })
     );
+    // MotherDuck auth: the in-process DuckDB Node API reads
+    // `motherduck_token` from process.env automatically.
     statements.push(...attachmentPlan.statements);
-    cleanupStatements.push(buildDetachStatement(attachmentPlan.alias));
   }
 
   statements.push(
@@ -204,24 +203,13 @@ async function materializeExplore(ctx: {
       )}', COUNT(*), CURRENT_TIMESTAMP\n` +
       `FROM ${target.qualified};`
   );
-  await setSearchPath(config, targetSchema);
-  try {
-    await executeStatements(config, statements);
-  } finally {
-    if (cleanupStatements.length > 0) {
-      try {
-        await executeStatements(config, cleanupStatements);
-      } catch (cleanupError) {
-        const detachSql = cleanupStatements.join("; ");
-        console.warn(
-          `[Semantic Layer] Failed to detach source for explore "${
-            explore.name
-          }" (alias: ${attachmentAlias || "none"}). SQL: ${detachSql}`,
-          cleanupError
-        );
-      }
-    }
+
+  if (attachmentPlan) {
+    // Keep source cleanup in the same request/session as ATTACH.
+    statements.push(buildDetachStatement(attachmentPlan.alias, { ifExists: true }));
   }
+
+  await executeStatements(statements);
 
   return {
     explore: explore.name,
@@ -231,9 +219,18 @@ async function materializeExplore(ctx: {
   };
 }
 
-async function ensureTrackingTable(
-  config: HttpDuckDbConfig | undefined
-): Promise<void> {
+/**
+ * Runs a single SQL statement against the materialization DuckDB instance.
+ */
+async function runQuery(sql: string): Promise<Record<string, unknown>[]> {
+  const dbPath = getMaterializationDbPath();
+  const instance = await getDuckDbInstance(dbPath);
+  const connection = await instance.connect();
+  const reader = await connection.runAndReadAll(sql);
+  return reader.getRowObjectsJson();
+}
+
+async function ensureTrackingTable(): Promise<void> {
   const sql = `
 CREATE TABLE IF NOT EXISTS ${trackingTableSql()} (
   explore_name TEXT PRIMARY KEY,
@@ -243,20 +240,28 @@ CREATE TABLE IF NOT EXISTS ${trackingTableSql()} (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );`.trim();
 
-  await runSqlAndGetRowObjectsJsonHttp(config, sql);
+  await runQuery(sql);
 }
 
 async function executeStatements(
-  config: HttpDuckDbConfig | undefined,
   statements: Iterable<string>
 ): Promise<void> {
-  for (const statement of statements) {
-    const sql = statement.trim();
-    if (!sql) {
-      continue;
-    }
-    console.log("sql", sql);
-    await runSqlAndGetRowObjectsJsonHttp(config, sql);
+  const stmts = Array.from(statements)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (stmts.length === 0) {
+    return;
+  }
+
+  // With the Node API we get a persistent connection, so ATTACH state
+  // survives across sequential statements -- no batching needed.
+  const dbPath = getMaterializationDbPath();
+  const instance = await getDuckDbInstance(dbPath);
+  const connection = await instance.connect();
+
+  for (const sql of stmts) {
+    await connection.runAndReadAll(sql);
   }
 }
 
@@ -307,13 +312,12 @@ function computeModelHash(modelContent: string, source: SourceEntry): string {
 }
 
 async function fetchExistingHash(
-  config: HttpDuckDbConfig | undefined,
   exploreName: string
 ): Promise<string | undefined> {
   const sql = `SELECT model_hash FROM ${trackingTableSql()} WHERE explore_name = '${escapeLiteral(
     exploreName
   )}' LIMIT 1;`;
-  const rows = await runSqlAndGetRowObjectsJsonHttp(config, sql);
+  const rows = await runQuery(sql);
   if (rows.length === 0) {
     return undefined;
   }
@@ -359,14 +363,6 @@ function buildTargetTable(
     display: `${schema}.${sanitizedName}`,
     qualified,
   };
-}
-
-async function setSearchPath(
-  config: HttpDuckDbConfig | undefined,
-  schema: string
-): Promise<void> {
-  const sql = `SET search_path = ${schema}, main;`;
-  await runSqlAndGetRowObjectsJsonHttp(config, sql);
 }
 
 function trackingTableSql(): string {
