@@ -38,6 +38,13 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
   const [isChatHistoryPopoverOpen, setIsChatHistoryPopoverOpen] =
     useState(false);
 
+  const handleChatHistoryPopoverChange = (open: boolean) => {
+    setIsChatHistoryPopoverOpen(open);
+    if (open) {
+      void loadChats();
+    }
+  };
+
   // Fetch when opening sidebar or on route change
   useEffect(() => {
     if (!isOpen) return;
@@ -165,7 +172,7 @@ export function AppSidebar({ isOpen, onToggle }: ChatSidebarProps) {
           {/* Chat History - Popover when collapsed */}
           <Popover
             open={isChatHistoryPopoverOpen}
-            onOpenChange={setIsChatHistoryPopoverOpen}
+            onOpenChange={handleChatHistoryPopoverChange}
           >
             <PopoverTrigger asChild>
               <Button

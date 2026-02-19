@@ -49,7 +49,7 @@ export function DynamicChart({
 }: {
   chartData: Result[];
   chartConfig: Config;
-    className?: string;
+  className?: string;
 }) {
   const defaultColors = getChartColors();
 
@@ -120,21 +120,18 @@ export function DynamicChart({
         count: entry.count,
       }));
 
-      const allNumericXValues = chartData.every((item) =>
-        typeof item[chartConfig.xKey] === "number",
+      const allNumericXValues = chartData.every(
+        (item) => typeof item[chartConfig.xKey] === "number",
       );
       if (allNumericXValues) {
         chartData.sort(
           (a, b) =>
-            (a[chartConfig.xKey] as number) -
-            (b[chartConfig.xKey] as number),
+            (a[chartConfig.xKey] as number) - (b[chartConfig.xKey] as number),
         );
       }
     }
 
-    const resolvedYKeys = chartConfig.countMode
-      ? ["count"]
-      : chartConfig.yKeys;
+    const resolvedYKeys = chartConfig.countMode ? ["count"] : chartConfig.yKeys;
 
     switch (chartConfig.type) {
       case "line": {
@@ -149,7 +146,7 @@ export function DynamicChart({
           chartConfig.yKeys.includes(chartConfig.measurementColumn);
 
         const yAxisKey = useTransformedData
-          ? chartConfig.measurementColumn ?? resolvedYKeys[0]
+          ? (chartConfig.measurementColumn ?? resolvedYKeys[0])
           : resolvedYKeys[0];
         const formattedYAxisLabel = (() => {
           const base = toTitleCase(yAxisKey ?? "");
@@ -285,7 +282,11 @@ export function DynamicChart({
             </Pie>
             {showTooltip && <ChartTooltip content={<ChartTooltipContent />} />}
             {chartConfig.legend && (
-              <ChartLegend content={<ChartLegendContent className="translate-y-6 flex-wrap gap-2 *:basis-1/4 *:justify-center" />} />
+              <ChartLegend
+                content={
+                  <ChartLegendContent className="translate-y-6 flex-wrap gap-2 *:basis-1/4 *:justify-center" />
+                }
+              />
             )}
           </PieChart>
         );
@@ -300,7 +301,7 @@ export function DynamicChart({
   return (
     <div
       className={cn(
-        "w-full flex flex-col justify-center items-center",
+        "w-full flex flex-col justify-center items-stretch",
         className,
       )}
     >
@@ -311,17 +312,17 @@ export function DynamicChart({
             chartConfig.countMode
               ? { count: { label: "Count", color: "var(--chart-1)" } }
               : legendEntries.reduce(
-                (acc, key, index) => {
-                  acc[key] = {
-                    label: key,
-                    color: `var(--chart-${(index % 8) + 1})`,
-                  };
-                  return acc;
-                },
-                {} as Record<string, { label: string; color: string }>,
-              )
+                  (acc, key, index) => {
+                    acc[key] = {
+                      label: key,
+                      color: `var(--chart-${(index % 8) + 1})`,
+                    };
+                    return acc;
+                  },
+                  {} as Record<string, { label: string; color: string }>,
+                )
           }
-          className="w-full aspect-square max-h-[400px] overflow-y-auto"
+          className="w-full h-[320px] sm:h-[380px] lg:h-[420px]"
         >
           {renderChart()}
         </ChartContainer>

@@ -23,3 +23,12 @@
 
 - [ ] Decide production policy for semantic charts: strict semantic mode (fail if materialization fails) vs fallback mode.
 - [ ] If fallback mode is kept, add per-chart execution mode visibility (`materialized` vs `raw_fallback`) and alert on fallback usage.
+
+## Context + Joins Migration Notes
+
+- [x] Remove semantic model editor UI and model-edit API routes.
+- [x] Add global `semantic-layer/joins.yml` and join path resolver utilities.
+- [x] Replace explore materialization with table-based materialization into `mat.*`.
+- [x] Implement CTE-based dashboard filter injection over materialized tables.
+- [x] Keep `sources.yml` as the source mapping and attachment metadata file.
+- [ ] Add rollout metric for charts that still execute fallback raw SQL.

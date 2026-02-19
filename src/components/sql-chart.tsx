@@ -41,19 +41,6 @@ export function SqlChart({
 
   return (
     <div className="space-y-4 p-4">
-      {/* Summary */}
-      {summary && (
-        <div className="space-y-2">
-          <h3 className="font-semibold text-lg">Query Results</h3>
-          <div className="flex gap-4 text-sm text-muted-foreground">
-            <span>{summary.totalRows} rows</span>
-            {summary.executionTimeMs && (
-              <span>{summary.executionTimeMs}ms</span>
-            )}
-            {summary.queryType && <span>{summary.queryType}</span>}
-          </div>
-        </div>
-      )}
 
       {/* Chart */}
       <div className="w-full">

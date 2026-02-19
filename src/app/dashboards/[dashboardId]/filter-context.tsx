@@ -7,7 +7,8 @@ import {
 	useState,
 	type ReactNode,
 } from "react";
-import type { SemanticFilter as Filter, AvailableDimension } from "@/lib/types/filters";
+import { normalizeFilterPayload } from "@/lib/filters/normalize-filters";
+import type { AvailableDimension, Filter } from "@/lib/types/filters";
 
 interface FilterContextValue {
 	filters: Filter[];
@@ -75,10 +76,9 @@ export function FilterProvider({
 		if (saved) {
 			try {
 				const parsed = JSON.parse(saved);
-				if (Array.isArray(parsed)) {
-					setFilters(parsed);
-					console.log(`[Filters] Loaded ${parsed.length} saved filter(s)`);
-				}
+				const normalized = normalizeFilterPayload(parsed);
+				setFilters(normalized);
+				console.log(`[Filters] Loaded ${normalized.length} saved filter(s)`);
 			} catch (error) {
 				console.error("[Filters] Failed to parse saved filters:", error);
 				// Clear invalid data

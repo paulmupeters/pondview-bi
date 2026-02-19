@@ -1,4 +1,4 @@
-import type { SourceConnectionConfig } from "@/../semantic-layer/source-updater";
+import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 
 const ATTACH_TYPE_BY_SOURCE: Record<string, string | undefined> = {
   postgres: "postgres",

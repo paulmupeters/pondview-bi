@@ -1,9 +1,12 @@
 import type { NextRequest } from "next/server";
-import { compileToDuckdb } from "@/../semantic-layer/query-builder";
-import type { Filter, QueryAST } from "@/../semantic-layer/types";
+import { applyFiltersToSql } from "@/lib/filters/apply-filters";
+import { normalizeFilterPayload } from "@/lib/filters/normalize-filters";
 import { runSqlNormalized } from "@/lib/db/router";
+import { loadJoinDefs, type JoinDefinition } from "@/lib/joins/loader";
+import { materializeTablesForDashboard } from "@/lib/materialization/table-materializer";
+import { runMaterializedSqlNormalized } from "@/lib/materialization/query";
 import { listChartsByDashboard } from "@/lib/repositories/dashboard";
-import { loadMaterializedModel } from "@/lib/semantic-layer/load-materialized-model";
+import type { Filter } from "@/lib/types/filters";
 import type { Result } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -29,7 +32,7 @@ export async function GET(
           { status: 400 }
         );
       }
-      dashboardFilters = parsed;
+      dashboardFilters = normalizeFilterPayload(parsed);
     } catch (error) {
       console.error("[Dashboard Data] Failed to parse filters:", error);
       return Response.json({ error: "Invalid filters JSON" }, { status: 400 });
@@ -37,51 +40,63 @@ export async function GET(
   }
 
   const charts = await listChartsByDashboard(dashboardId);
-  const semanticExploreNames = collectSemanticExploreNames(charts);
-  const dataModel =
-    semanticExploreNames.length > 0
-      ? await loadMaterializedModel({ exploreNames: semanticExploreNames })
-      : null;
+  let joinDefs: JoinDefinition[] = [];
+  let materializationReady = false;
+  if (dashboardFilters.length > 0) {
+    try {
+      joinDefs = await loadJoinDefs();
+      await materializeTablesForDashboard(dashboardId);
+      materializationReady = true;
+    } catch (error) {
+      console.error(
+        "[Dashboard Data] New filter path setup failed; semantic fallback may be used:",
+        error
+      );
+    }
+  }
 
   const results = await Promise.all(
     charts.map(async (chart) => {
       let sqlToExecute = chart.sql;
       let filtersApplied = false;
-      let semanticAttempted = false;
+      let executeOnMaterializedDb = false;
       const dbIdentifier = chart.dbIdentifier || "md:my_db";
 
-      if (chart.semanticQueryJson && dataModel) {
-        semanticAttempted = true;
+      if (dashboardFilters.length > 0 && materializationReady) {
         try {
-          const queryAST: QueryAST = JSON.parse(chart.semanticQueryJson);
-          const mergedQuery: QueryAST = {
-            ...queryAST,
-            filters: [...(queryAST.filters || []), ...dashboardFilters],
-          };
-          const compiled = compileToDuckdb(dataModel, mergedQuery);
-          sqlToExecute = applyParams(compiled.sql, compiled.params);
-          filtersApplied = dashboardFilters.length > 0;
-        } catch (compileError) {
-          console.error(
-            `[Dashboard Data] Failed semantic compile for chart ${chart.id}; falling back to stored SQL:`,
-            compileError,
+          const filterResult = applyFiltersToSql(
+            chart.sql,
+            dashboardFilters,
+            joinDefs
           );
-          semanticAttempted = false;
-          sqlToExecute = chart.sql;
-          filtersApplied = false;
+          if (filterResult.appliedFilters > 0) {
+            sqlToExecute = filterResult.sql;
+            filtersApplied = true;
+            executeOnMaterializedDb = true;
+          } else {
+            if (filterResult.skippedFilters.length > 0) {
+              console.warn(
+                `[Dashboard Data] Could not apply ${filterResult.skippedFilters.length} filter(s) with new path for chart ${chart.id}.`
+              );
+            }
+          }
+        } catch (newPathError) {
+          console.error(
+            `[Dashboard Data] New filter path failed for chart ${chart.id}; semantic fallback may be used:`,
+            newPathError
+          );
         }
       }
 
       try {
-        const rows = await runSqlNormalized(
-          dbIdentifier,
-          sqlToExecute,
-        );
+        const rows = executeOnMaterializedDb
+          ? await runMaterializedSqlNormalized(sqlToExecute)
+          : await runSqlNormalized(dbIdentifier, sqlToExecute);
         return { ...chart, rows, filtersApplied };
       } catch (executionError) {
-        if (semanticAttempted) {
+        if (executeOnMaterializedDb) {
           console.warn(
-            `[Dashboard Data] Semantic execution failed for chart ${chart.id}; retrying with stored SQL.`,
+            `[Dashboard Data] Filtered execution failed for chart ${chart.id}; retrying with stored SQL.`,
             executionError,
           );
           try {
@@ -129,51 +144,5 @@ export async function GET(
   );
 
   return Response.json({ charts: results });
-}
-
-function applyParams(sql: string, params: unknown[]): string {
-  let out = sql;
-  for (let i = 0; i < params.length; i++) {
-    const placeholder = new RegExp(`\\$${i + 1}(?!\\d)`, "g");
-    out = out.replace(placeholder, sqlLiteral(params[i]));
-  }
-  return out;
-}
-
-function sqlLiteral(v: unknown): string {
-  if (v === null || v === undefined) return "NULL";
-  const t = typeof v;
-  if (t === "number") return Number.isFinite(v as number) ? String(v) : "NULL";
-  if (t === "boolean") return (v as boolean) ? "TRUE" : "FALSE";
-  if (v instanceof Date)
-    return `'${(v as Date).toISOString().replace(/'/g, "''")}'`;
-  // Default: treat as string
-  return `'${String(v).replace(/'/g, "''")}'`;
-}
-
-function collectSemanticExploreNames(
-  charts: Array<{
-    exploreName: string | null;
-    semanticQueryJson: string | null;
-  }>,
-): string[] {
-  const names = new Set<string>();
-  for (const chart of charts) {
-    if (chart.exploreName) {
-      names.add(chart.exploreName);
-    }
-    if (!chart.semanticQueryJson) {
-      continue;
-    }
-    try {
-      const ast = JSON.parse(chart.semanticQueryJson) as QueryAST;
-      if (typeof ast.explore === "string" && ast.explore.trim().length > 0) {
-        names.add(ast.explore);
-      }
-    } catch {
-      // Chart can still run with stored SQL; ignore malformed semantic payload here.
-    }
-  }
-  return Array.from(names);
 }
 

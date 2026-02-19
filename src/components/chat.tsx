@@ -3,6 +3,7 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { TrashIcon } from "@heroicons/react/24/outline";
 import { DefaultChatTransport } from "ai";
+import { ChevronRight } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -25,6 +26,11 @@ import type {
 } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { VisualizationPanel } from "@/components/visualization-panel";
 import type { ArtifactStatus } from "@/hooks/types";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
@@ -39,6 +45,76 @@ const AUTO_SENT_FLAG_PREFIX = "autoSent:";
 const AUTO_SENT_STALE_MS = 5 * 60 * 1000;
 const AUTO_SENT_CLEANUP_DELAY_MS = 3_000;
 type PromptMode = "ai" | "manual";
+
+function formatExecutionTimeLabel(executionTimeMs: number): string {
+  if (executionTimeMs >= 1000) {
+    return `${(executionTimeMs / 1000).toFixed(2)}s`;
+  }
+
+  return `${Math.round(executionTimeMs)}ms`;
+}
+
+function GeneratedSqlBlock({
+  query,
+  executionTimeMs,
+  rowCount,
+  queryType,
+}: {
+  query: string;
+  executionTimeMs?: number;
+  rowCount?: number;
+  queryType?: string;
+}) {
+  const hasExecutionTime =
+    typeof executionTimeMs === "number" && Number.isFinite(executionTimeMs);
+  const hasRowCount = typeof rowCount === "number" && Number.isFinite(rowCount);
+  const statusLabel = queryType?.trim() ? queryType.trim() : "Ran query";
+
+  const metadataItems = [
+    statusLabel,
+    hasExecutionTime ? formatExecutionTimeLabel(executionTimeMs) : null,
+    hasRowCount
+      ? `${rowCount.toLocaleString()} ${rowCount === 1 ? "row" : "rows"}`
+      : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return (
+    <div className="mt-4 w-full">
+      <Collapsible defaultOpen={false} className="w-full">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="group flex w-full items-center justify-between gap-3 rounded-md border border-border/80 bg-card/70 px-3 py-2 text-left shadow-sm transition-colors hover:bg-accent/40"
+          >
+            <span className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Run summary</span>
+              {metadataItems.map((item) => (
+                <span key={item} className="inline-flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="h-1 w-1 rounded-full bg-muted-foreground/60"
+                  />
+                  <span>{item}</span>
+                </span>
+              ))}
+            </span>
+            <span className="shrink-0 font-mono text-xs text-muted-foreground transition-colors group-hover:text-foreground">
+              <span className="inline-flex items-center gap-1">
+                View SQL
+                <ChevronRight className="h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+              </span>
+            </span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-2">
+          <pre className="overflow-x-auto rounded-md border border-border bg-card px-3 py-2 font-mono text-sm leading-6 text-foreground">
+            <code className="whitespace-pre-wrap wrap-break-word">{query}</code>
+          </pre>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
 
 export default function Chat({
   chatId,
@@ -719,22 +795,23 @@ export default function Chat({
                           null) as SqlAnalysisData | null;
 
                         if (payload?.query) {
+                          const executionTimeMs =
+                            payload.summary?.executionTimeMs ??
+                            payload.executionTime;
+                          const rowCount =
+                            payload.summary?.totalRows ??
+                            payload.rowCount ??
+                            payload.rows?.length;
+                          const queryType = payload.summary?.queryType;
+
                           return (
-                            <div
+                            <GeneratedSqlBlock
                               key={`${message.id}-part-${partIndex}`}
-                              className="mt-4 w-full"
-                            >
-                              <div className="flex gap-4">
-                                <div className="bg-sidebar p-4 rounded-2xl rounded-tl-none max-w-[90%]">
-                                  <p className="font-mono text-xs text-muted-foreground mb-2">
-                                    GENERATED SQL
-                                  </p>
-                                  <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-card p-3 rounded border border-border">
-                                    {payload.query}
-                                  </code>
-                                </div>
-                              </div>
-                            </div>
+                              query={payload.query}
+                              executionTimeMs={executionTimeMs}
+                              rowCount={rowCount}
+                              queryType={queryType}
+                            />
                           );
                         }
 
@@ -759,6 +836,14 @@ export default function Chat({
                       }
 
                       if (part.type === "tool-executeSql") {
+                        const executeSqlPart = part as { state?: string };
+                        if (
+                          executeSqlPart.state === "output-available" ||
+                          executeSqlPart.state === "output-error"
+                        ) {
+                          return null;
+                        }
+
                         return (
                           <span key={`${message.id}-part-${partIndex}`}>
                             Processing...
@@ -863,7 +948,12 @@ export default function Chat({
                   transition: isResizing ? "none" : "width 0.2s ease-out",
                 }}
               >
-                <div className="flex-1 min-h-0 flex overflow-hidden">
+                <div
+                  className={cn(
+                    "flex-1 min-h-0 flex overflow-hidden",
+                    isAiMode && "h-full",
+                  )}
+                >
                   <ConnectedDataPanel
                     selectedDb={selectedDb}
                     onSelect={setSelectedDb}
@@ -877,8 +967,9 @@ export default function Chat({
                   />
                   <div className="flex-1 min-h-0 min-w-0 flex flex-col">
                     {promptMode === "ai" ? (
-                      <Conversation className="flex-1 min-h-0 h-full">
-                        <ConversationContent className="max-w-full mx-auto w-full space-y-6 overflow-y-auto">
+                      <>
+                        <Conversation className="flex-1 min-h-0">
+                        <ConversationContent className="max-w-full mx-auto w-full space-y-2 overflow-y-auto">
                           {isConversationEmpty && (
                             <Message from="assistant" key="assistant-ready">
                               <MessageContent>
@@ -925,7 +1016,7 @@ export default function Chat({
 
                             return (
                               <Message from={message.role} key={message.id}>
-                                <MessageContent className="relative w-full group-[.is-user]:bg-card group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
+                                <MessageContent className="relative w-full group-[.is-user]:bg-card group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-3">
                                   <Button
                                     type="button"
                                     variant="ghost"
@@ -952,7 +1043,7 @@ export default function Chat({
                                       return (
                                         <Response
                                           key={`${message.id}-part-${partIndex}`}
-                                          className="p-4 rounded-lg group-[.is-user]:bg-primary/60 group-[.is-user]:shadow-md"
+                                          className="p-1 rounded-lg group-[.is-user]:bg-primary/60 group-[.is-user]:shadow-md"
                                         >
                                           {part.text}
                                         </Response>
@@ -991,22 +1082,24 @@ export default function Chat({
 
                                       // Show SQL query inline in messages
                                       if (payload?.query) {
+                                        const executionTimeMs =
+                                          payload.summary?.executionTimeMs ??
+                                          payload.executionTime;
+                                        const rowCount =
+                                          payload.summary?.totalRows ??
+                                          payload.rowCount ??
+                                          payload.rows?.length;
+                                        const queryType =
+                                          payload.summary?.queryType;
+
                                         return (
-                                          <div
+                                          <GeneratedSqlBlock
                                             key={`${message.id}-part-${partIndex}`}
-                                            className="mt-4 w-full"
-                                          >
-                                            <div className="flex gap-4">
-                                              <div className="bg-sidebar p-4 rounded-2xl rounded-tl-none max-w-[90%]">
-                                                <p className="font-mono text-xs text-muted-foreground mb-2">
-                                                  GENERATED SQL
-                                                </p>
-                                                <code className="font-mono text-sm text-foreground whitespace-pre-wrap block bg-card p-3 rounded border border-border">
-                                                  {payload.query}
-                                                </code>
-                                              </div>
-                                            </div>
-                                          </div>
+                                            query={payload.query}
+                                            executionTimeMs={executionTimeMs}
+                                            rowCount={rowCount}
+                                            queryType={queryType}
+                                          />
                                         );
                                       }
 
@@ -1037,6 +1130,17 @@ export default function Chat({
                                     }
 
                                     if (part.type === "tool-executeSql") {
+                                      const executeSqlPart = part as {
+                                        state?: string;
+                                      };
+                                      if (
+                                        executeSqlPart.state ===
+                                          "output-available" ||
+                                        executeSqlPart.state === "output-error"
+                                      ) {
+                                        return null;
+                                      }
+
                                       return (
                                         <span
                                           key={`${message.id}-part-${partIndex}`}
@@ -1083,35 +1187,33 @@ export default function Chat({
                                 </MessageContent>
                               </Message>
                             )}
-                          {/* empty space to push the input area to the bottom */}
-                          <div className="h-[10vh]" />
                         </ConversationContent>
                         <ConversationScrollButton />
-                      </Conversation>
+                        </Conversation>
+                        <div className="shrink-0 w-full mx-auto max-h-[20vh] overflow-hidden shadow-md z-10 grid transition-[grid-template-rows,opacity,transform] duration-300 ease-out grid-rows-[1fr] opacity-100 translate-y-0">
+                          <PromptInputWrapper
+                            onSubmit={handleSubmit}
+                            showHeader
+                            showAiInput
+                            className="transition delay-150 duration-300 ease-in-out bg-card"
+                            status={status}
+                            onCreateDashboard={handleOpenDashboardBuilder}
+                            onAddVisual={handleAddVisual}
+                            mode={promptMode}
+                            onModeChange={setPromptMode}
+                            pendingMode={promptPendingMode}
+                          />
+                        </div>
+                      </>
                     ) : (
                       manualWorkspace
                     )}
                   </div>
                 </div>
 
-                {/* Input Area - aligned with messages */}
-                {isAiMode ? (
-                  <div className="flex-shrink-0 w-full mx-auto max-h-[20vh] overflow-hidden shadow-md z-10 grid transition-[grid-template-rows,opacity,transform] duration-300 ease-out grid-rows-[1fr] opacity-100 translate-y-0">
-                    <PromptInputWrapper
-                      onSubmit={handleSubmit}
-                      showHeader
-                      showAiInput
-                      className="transition delay-150 duration-300 ease-in-out bg-card"
-                      status={status}
-                      onCreateDashboard={handleOpenDashboardBuilder}
-                      onAddVisual={handleAddVisual}
-                      mode={promptMode}
-                      onModeChange={setPromptMode}
-                      pendingMode={promptPendingMode}
-                    />
-                  </div>
-                ) : (
-                  <div className="flex-shrink-0 w-full mx-auto max-h-[56vh] overflow-hidden shadow-md z-10 transition-[max-height,opacity,transform] duration-300 ease-out opacity-100 translate-y-0">
+                {/* Input Area for manual mode */}
+                {!isAiMode && (
+                  <div className="shrink-0 w-full mx-auto max-h-[56vh] overflow-hidden shadow-md z-10 transition-[max-height,opacity,transform] duration-300 ease-out opacity-100 translate-y-0">
                     <div className="w-full overflow-hidden rounded-lg border border-border bg-card shadow-sm">
                       <PromptInputWrapper
                         onSubmit={handleSubmit}

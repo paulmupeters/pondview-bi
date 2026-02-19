@@ -1,9 +1,9 @@
-import { join } from "node:path";
 import type { NextRequest } from "next/server";
-import { loadModelsFromDirectory } from "@/../semantic-layer/model-loader";
+import { extractTableNamesFromSql } from "@/lib/filters/parse-tables";
+import { runMaterializedSqlRaw } from "@/lib/materialization/query";
+import { materializeTablesForDashboard } from "@/lib/materialization/table-materializer";
 import { listChartsByDashboard } from "@/lib/repositories/dashboard";
 import type { AvailableDimension } from "@/lib/types/filters";
-import type { DataModel } from "@/../semantic-layer/types";
 
 export const runtime = "nodejs";
 
@@ -16,74 +16,35 @@ export async function GET(
 
     // Get charts for this dashboard
     const charts = await listChartsByDashboard(dashboardId);
-
-    // Extract unique explore names where semantic metadata exists
-    const exploreNames = new Set(
-      charts.map((c) => c.exploreName).filter((name): name is string => !!name),
+    const tableNames = Array.from(
+      new Set(charts.flatMap((chart) => extractTableNamesFromSql(chart.sql))),
     );
 
-    if (exploreNames.size === 0) {
+    if (tableNames.length === 0) {
       return Response.json({
         dimensions: [],
         conformGroups: {},
-        message:
-          "No charts with semantic layer metadata found. Charts must use the semantic layer to enable filtering.",
+        message: "No chart source tables found for this dashboard.",
       });
     }
 
-    // Load models
-    const modelsDir = join(process.cwd(), "semantic-layer", "models");
-    let dataModel: DataModel;
     try {
-      dataModel = loadModelsFromDirectory(modelsDir);
+      await materializeTablesForDashboard(dashboardId);
+      const dimensions = await loadDimensionsFromMaterializedTables(tableNames);
+      return Response.json({
+        dimensions,
+        conformGroups: {},
+      });
     } catch (error) {
-      console.error("[Dimensions API] Failed to load models:", error);
+      console.error("[Dimensions API] Failed to introspect materialized tables:", error);
       return Response.json(
         {
-          error: "Failed to load semantic layer models",
+          error: "Failed to load dimensions from materialized tables",
           details: error instanceof Error ? error.message : String(error),
         },
         { status: 500 },
       );
     }
-
-    // Build available dimensions
-    const availableDimensions: AvailableDimension[] = [];
-
-    for (const exploreName of exploreNames) {
-      const explore = dataModel.explores.find((e) => e.name === exploreName);
-      if (!explore) {
-        console.warn(
-          `[Dimensions API] Explore "${exploreName}" not found in models`,
-        );
-        continue;
-      }
-      for (const dim of explore.dimensions) {
-        availableDimensions.push({
-          exploreName: explore.name,
-          field: `${explore.name}.${dim.name}`,
-          displayName: formatDisplayName(dim.name),
-          type: dim.type,
-          conformKey: dim.conformKey,
-        });
-      }
-    }
-
-    // Group by conform key
-    const conformGroups = new Map<string, AvailableDimension[]>();
-    for (const dim of availableDimensions) {
-      if (dim.conformKey) {
-        const group = conformGroups.get(dim.conformKey) || [];
-        group.push(dim);
-        conformGroups.set(dim.conformKey, group);
-      }
-    }
-    const conformGroupsObj = Object.fromEntries(conformGroups);
-
-    return Response.json({
-      dimensions: availableDimensions,
-      conformGroups: conformGroupsObj,
-    });
   } catch (error) {
     console.error("[Dimensions API] Unexpected error:", error);
     return Response.json(
@@ -98,4 +59,57 @@ export async function GET(
 
 function formatDisplayName(fieldName: string): string {
   return fieldName.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+}
+
+async function loadDimensionsFromMaterializedTables(
+  tableNames: string[]
+): Promise<AvailableDimension[]> {
+  const dimensions: AvailableDimension[] = [];
+  const seenFields = new Set<string>();
+
+  for (const tableName of tableNames) {
+    const rows = await runMaterializedSqlRaw(
+      `DESCRIBE "mat"."${tableName.replace(/"/g, '""')}";`
+    );
+    for (const row of rows) {
+      const columnName = String(row.column_name ?? "").trim();
+      if (!columnName) {
+        continue;
+      }
+      const field = `${tableName}.${columnName}`;
+      if (seenFields.has(field)) {
+        continue;
+      }
+      seenFields.add(field);
+      dimensions.push({
+        exploreName: tableName,
+        field,
+        displayName: formatDisplayName(columnName),
+        type: inferDimensionType(row.column_type),
+      });
+    }
+  }
+
+  return dimensions;
+}
+
+function inferDimensionType(rawType: unknown): "string" | "number" | "boolean" | "time" {
+  const t = String(rawType ?? "").toLowerCase();
+  if (
+    t.includes("int") ||
+    t.includes("decimal") ||
+    t.includes("numeric") ||
+    t.includes("double") ||
+    t.includes("real") ||
+    t.includes("float")
+  ) {
+    return "number";
+  }
+  if (t.includes("bool")) {
+    return "boolean";
+  }
+  if (t.includes("date") || t.includes("time")) {
+    return "time";
+  }
+  return "string";
 }

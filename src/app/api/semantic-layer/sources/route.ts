@@ -5,7 +5,7 @@ import type { NextRequest } from "next/server";
 import {
   type SourceEntry,
   updateSourcesFromConnectedTable,
-} from "@/../semantic-layer/source-updater";
+} from "@/lib/sources/source-config";
 
 export const runtime = "nodejs";
 

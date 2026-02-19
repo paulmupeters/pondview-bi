@@ -4,7 +4,6 @@ import { ChevronDown } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
-import DataModelEditor from "@/components/data-model-editor";
 import { DuckdbShellDialog } from "@/components/duckdb-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -264,7 +263,6 @@ export default function ViewDataPage() {
       <Tabs defaultValue="sources" className="flex-1 max-w-5xl mx-auto w-full">
         <TabsList>
           <TabsTrigger value="sources">Sources</TabsTrigger>
-          <TabsTrigger value="model">Data model</TabsTrigger>
         </TabsList>
 
         <TabsContent
@@ -698,9 +696,6 @@ export default function ViewDataPage() {
           </section>
         </TabsContent>
 
-        <TabsContent value="model" className="mt-4 max-w-5xl mx-auto">
-          <DataModelEditor />
-        </TabsContent>
       </Tabs>
 
       <input

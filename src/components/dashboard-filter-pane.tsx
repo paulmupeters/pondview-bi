@@ -12,8 +12,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { useFilters } from "@/app/dashboards/[dashboardId]/filter-context";
-import type { SemanticFilter as Filter } from "@/lib/types/filters";
-import type { Op } from "@/../semantic-layer/types";
+import type { Filter, Op } from "@/lib/types/filters";
 
 const operatorLabels: Record<Op, string> = {
 	eq: "equals",
@@ -124,7 +123,7 @@ export function DashboardFilterPane() {
 			{filters.length > 0 && (
 				<div className="space-y-2">
 					<div className="flex items-center justify-between">
-						<label className="text-sm font-medium">Active Filters</label>
+						<label htmlFor="active-filters" className="text-sm font-medium">Active Filters</label>
 						<Button
 							variant="ghost"
 							size="sm"
@@ -139,7 +138,7 @@ export function DashboardFilterPane() {
 							const dimension = availableDimensions.find((d) => d.field === filter.field);
 							return (
 								<div
-									key={index}
+									key={filter.field}
 									className="flex items-center gap-2 rounded-md bg-muted p-2 text-sm"
 								>
 									<div className="flex-1">

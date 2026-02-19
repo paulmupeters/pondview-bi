@@ -25,8 +25,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import type { Op } from "@/lib/types/filters";
 import { cn } from "@/lib/utils";
-import type { Op } from "@/../semantic-layer/types";
 
 const operatorLabels: Record<Op, string> = {
   eq: "equals",
@@ -368,7 +368,7 @@ export function Slicer({
           {isNumeric ? (
             <div className="space-y-3">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Operator</label>
+                <label htmlFor="operator" className="text-sm font-medium">Operator</label>
                 <Select
                   value={numericOperator}
                   onValueChange={(value) => handleNumericOperatorChange(value as Op)}
@@ -390,7 +390,7 @@ export function Slicer({
                 <>
                   {numericOperator === "between" ? (
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Range</label>
+                      <label htmlFor="range" className="text-sm font-medium">Range</label>
                       <div className="flex items-center gap-2">
                         <Input
                           type="number"
@@ -427,7 +427,7 @@ export function Slicer({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Value</label>
+                      <label htmlFor="value" className="text-sm font-medium">Value</label>
                       <Input
                         type="number"
                         placeholder="Enter value"
