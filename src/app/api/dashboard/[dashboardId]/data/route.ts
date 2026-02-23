@@ -1,21 +1,20 @@
 import type { NextRequest } from "next/server";
+import { runSqlNormalized } from "@/lib/db/router";
 import { applyFiltersToSql } from "@/lib/filters/apply-filters";
 import { normalizeFilterPayload } from "@/lib/filters/normalize-filters";
-import { runSqlNormalized } from "@/lib/db/router";
-import { loadJoinDefs, type JoinDefinition } from "@/lib/joins/loader";
-import { materializeTablesForDashboard } from "@/lib/materialization/table-materializer";
+import { type JoinDefinition, loadJoinDefs } from "@/lib/joins/loader";
 import { runMaterializedSqlNormalized } from "@/lib/materialization/query";
+import { materializeTablesForDashboard } from "@/lib/materialization/table-materializer";
 import { listChartsByDashboard } from "@/lib/repositories/dashboard";
-import type { Filter } from "@/lib/types/filters";
 import type { Result } from "@/lib/types";
+import type { Filter } from "@/lib/types/filters";
 
 export const runtime = "nodejs";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ dashboardId: string }> }
+  { params }: { params: Promise<{ dashboardId: string }> },
 ) {
-
   const { dashboardId } = await params;
   const { searchParams } = new URL(req.url);
 
@@ -29,7 +28,7 @@ export async function GET(
       if (!Array.isArray(parsed)) {
         return Response.json(
           { error: "Filters must be an array" },
-          { status: 400 }
+          { status: 400 },
         );
       }
       dashboardFilters = normalizeFilterPayload(parsed);
@@ -50,7 +49,7 @@ export async function GET(
     } catch (error) {
       console.error(
         "[Dashboard Data] New filter path setup failed; semantic fallback may be used:",
-        error
+        error,
       );
     }
   }
@@ -67,7 +66,7 @@ export async function GET(
           const filterResult = applyFiltersToSql(
             chart.sql,
             dashboardFilters,
-            joinDefs
+            joinDefs,
           );
           if (filterResult.appliedFilters > 0) {
             sqlToExecute = filterResult.sql;
@@ -76,19 +75,21 @@ export async function GET(
           } else {
             if (filterResult.skippedFilters.length > 0) {
               console.warn(
-                `[Dashboard Data] Could not apply ${filterResult.skippedFilters.length} filter(s) with new path for chart ${chart.id}.`
+                `[Dashboard Data] Could not apply ${filterResult.skippedFilters.length} filter(s) with new path for chart ${chart.id}.`,
               );
             }
           }
         } catch (newPathError) {
           console.error(
             `[Dashboard Data] New filter path failed for chart ${chart.id}; semantic fallback may be used:`,
-            newPathError
+            newPathError,
           );
         }
       }
 
       try {
+        console.log("executeOnMaterializedDb", executeOnMaterializedDb);
+        console.log("sqlToExecute", sqlToExecute);
         const rows = executeOnMaterializedDb
           ? await runMaterializedSqlNormalized(sqlToExecute)
           : await runSqlNormalized(dbIdentifier, sqlToExecute);
@@ -145,4 +146,3 @@ export async function GET(
 
   return Response.json({ charts: results });
 }
-

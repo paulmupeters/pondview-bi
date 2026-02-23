@@ -51,6 +51,7 @@ interface PromptInputWrapperProps {
   showHeader?: boolean;
   showAiInput?: boolean;
   onHomePage?: boolean;
+  compact?: boolean;
   onCreateDashboard?: () => void;
   onAddVisual?: () => void;
   mode?: PromptMode;
@@ -264,6 +265,7 @@ export function PromptInputWrapper({
   showHeader = true,
   showAiInput = true,
   onHomePage = false,
+  compact = false,
   onCreateDashboard,
   onAddVisual: _onAddVisual,
   mode,
@@ -349,19 +351,25 @@ export function PromptInputWrapper({
               )}
             >
               <div className="min-h-0 overflow-hidden">
-                <div className="flex items-center gap-2 justify-between w-full">
+                <div className="relative w-full">
                   <PromptInputTextarea
                     placeholder={placeholder}
-                    className="flex-1 min-h-32"
+                    className={cn(
+                      "flex-1 pr-4",
+                      compact ? "min-h-10 pb-10" : "min-h-28 pb-12",
+                    )}
                     tabIndex={isAiMode ? undefined : -1}
                     aria-hidden={!isAiMode}
                   />
-                  <div className="flex flex-col items-center gap-2 h-full justify-center">
+                  <div className={cn(
+                    "absolute right-3",
+                    compact ? "bottom-2" : "bottom-3",
+                  )}>
                     <Button
                       size="sm"
                       variant="outline"
                       type="submit"
-                      className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary mx-2 dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                      className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
                       disabled={pendingMode === "ai" || !isAiMode}
                       tabIndex={isAiMode ? undefined : -1}
                       aria-hidden={!isAiMode}
@@ -372,13 +380,15 @@ export function PromptInputWrapper({
                 </div>
               </div>
             </div>
-            {/* Manual mode input area is hidden, UI is handled by Chat.tsx split layout */}
           </PromptInputBody>
         )}
         {showHeader && (
-          <PromptInputHeader className="p-0 overflow-hidden">
-            <div className="flex items-center gap-2 justify-between w-full">
-              <div className="flex items-center gap-2">
+          <PromptInputHeader className={cn(
+            "p-0 overflow-hidden",
+            compact ? "border-t-0" : "border-t border-border/20",
+          )}>
+            <div className="flex items-center gap-1.5 justify-between w-full">
+              <div className="flex items-center gap-1.5">
                 {onHomePage && promptMode === "ai" && (
                   <ConnectedDataPanel
                     selectedDb={selectedDb}
@@ -407,23 +417,25 @@ export function PromptInputWrapper({
                   </Tooltip>
                 )}
               </div>
-              <ToggleGroup
-                type="single"
-                value={promptMode}
-                onValueChange={(value) =>
-                  handlePromptModeChange(value as PromptMode)
-                }
-                disabled={Boolean(pendingMode)}
-              >
-                <ToggleGroupItem value="ai">
-                  <ChatBubbleLeftRightIcon className="h-4 w-4 group-hover:text-primary-foreground" />
-                  <span>Chat</span>
-                </ToggleGroupItem>
-                <ToggleGroupItem value="manual">
-                  <WrenchScrewdriverIcon className="h-4 w-4 group-hover:text-primary-foreground" />
-                  <span>Manual</span>
-                </ToggleGroupItem>
-              </ToggleGroup>
+              <div className="bg-muted/50 rounded-md p-0.5">
+                <ToggleGroup
+                  type="single"
+                  value={promptMode}
+                  onValueChange={(value) =>
+                    handlePromptModeChange(value as PromptMode)
+                  }
+                  disabled={Boolean(pendingMode)}
+                >
+                  <ToggleGroupItem value="ai">
+                    <ChatBubbleLeftRightIcon className="h-4 w-4 group-hover:text-primary-foreground" />
+                    <span>Chat</span>
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="manual">
+                    <WrenchScrewdriverIcon className="h-4 w-4 group-hover:text-primary-foreground" />
+                    <span>Manual</span>
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
             </div>
           </PromptInputHeader>
         )}

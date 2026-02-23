@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeftIcon } from "@heroicons/react/24/outline";
+import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { Database } from "lucide-react";
 import { useState } from "react";
 import {
@@ -253,11 +253,12 @@ export function ConnectedDataPanel({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 gap-0.5"
             onClick={onToggleCollapse}
             aria-label="Expand explorer"
           >
             <Database className="h-4 w-4" />
+            <ChevronRightIcon className="h-2 w-2 shrink-0" />
           </Button>
         </div>
       );

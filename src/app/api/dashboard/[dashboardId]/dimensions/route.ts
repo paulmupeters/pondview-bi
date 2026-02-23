@@ -1,7 +1,10 @@
 import type { NextRequest } from "next/server";
 import { extractTableNamesFromSql } from "@/lib/filters/parse-tables";
 import { runMaterializedSqlRaw } from "@/lib/materialization/query";
-import { materializeTablesForDashboard } from "@/lib/materialization/table-materializer";
+import {
+  materializeTablesForDashboard,
+  type TableMaterializationResult,
+} from "@/lib/materialization/table-materializer";
 import { listChartsByDashboard } from "@/lib/repositories/dashboard";
 import type { AvailableDimension } from "@/lib/types/filters";
 
@@ -29,11 +32,16 @@ export async function GET(
     }
 
     try {
-      await materializeTablesForDashboard(dashboardId);
-      const dimensions = await loadDimensionsFromMaterializedTables(tableNames);
+      const materializationResults = await materializeTablesForDashboard(dashboardId);
+      const materializedTables = resolveMaterializedTableNames(materializationResults);
+      const { dimensions, skippedTables } = await loadDimensionsFromMaterializedTables(
+        materializedTables.length > 0 ? materializedTables : tableNames
+      );
+      const message = buildDimensionsLoadMessage(materializationResults, skippedTables);
       return Response.json({
         dimensions,
         conformGroups: {},
+        ...(message ? { message } : {}),
       });
     } catch (error) {
       console.error("[Dimensions API] Failed to introspect materialized tables:", error);
@@ -63,14 +71,21 @@ function formatDisplayName(fieldName: string): string {
 
 async function loadDimensionsFromMaterializedTables(
   tableNames: string[]
-): Promise<AvailableDimension[]> {
+): Promise<{ dimensions: AvailableDimension[]; skippedTables: string[] }> {
   const dimensions: AvailableDimension[] = [];
   const seenFields = new Set<string>();
+  const skippedTables: string[] = [];
 
   for (const tableName of tableNames) {
-    const rows = await runMaterializedSqlRaw(
-      `DESCRIBE "mat"."${tableName.replace(/"/g, '""')}";`
-    );
+    let rows: Record<string, unknown>[];
+    try {
+      rows = await runMaterializedSqlRaw(`DESCRIBE "mat"."${tableName.replace(/"/g, '""')}";`);
+    } catch (error) {
+      skippedTables.push(tableName);
+      console.warn(`[Dimensions API] Skipping unavailable table "${tableName}"`, error);
+      continue;
+    }
+
     for (const row of rows) {
       const columnName = String(row.column_name ?? "").trim();
       if (!columnName) {
@@ -90,7 +105,7 @@ async function loadDimensionsFromMaterializedTables(
     }
   }
 
-  return dimensions;
+  return { dimensions, skippedTables };
 }
 
 function inferDimensionType(rawType: unknown): "string" | "number" | "boolean" | "time" {
@@ -112,4 +127,60 @@ function inferDimensionType(rawType: unknown): "string" | "number" | "boolean" |
     return "time";
   }
   return "string";
+}
+
+function resolveMaterializedTableNames(results: TableMaterializationResult[]): string[] {
+  const tables = new Set<string>();
+  for (const result of results) {
+    if ((result.status !== "materialized" && result.status !== "skipped") || !result.targetTable) {
+      continue;
+    }
+    const tableName = parseTableName(result.targetTable);
+    if (tableName) {
+      tables.add(tableName);
+    }
+  }
+  return Array.from(tables);
+}
+
+function buildDimensionsLoadMessage(
+  materializationResults: TableMaterializationResult[],
+  skippedTables: string[]
+): string | undefined {
+  const materializationFailures = materializationResults.filter(
+    (result) => result.status === "missing_source" || result.status === "error"
+  );
+  if (materializationFailures.length === 0 && skippedTables.length === 0) {
+    return undefined;
+  }
+
+  const messages: string[] = [];
+  if (materializationFailures.length > 0) {
+    messages.push(
+      `Some tables could not be materialized: ${summarizeNames(
+        materializationFailures.map((result) => result.tableName)
+      )}`
+    );
+  }
+  if (skippedTables.length > 0) {
+    messages.push(`Skipped unavailable tables during introspection: ${summarizeNames(skippedTables)}`);
+  }
+  return messages.join(". ");
+}
+
+function parseTableName(targetTable: string): string {
+  const parts = targetTable.split(".");
+  const tablePart = parts[parts.length - 1] ?? "";
+  return tablePart.replace(/["`]/g, "").trim();
+}
+
+function summarizeNames(values: string[], max = 5): string {
+  const unique = Array.from(new Set(values.filter(Boolean)));
+  if (unique.length === 0) {
+    return "none";
+  }
+  if (unique.length <= max) {
+    return unique.join(", ");
+  }
+  return `${unique.slice(0, max).join(", ")} (+${unique.length - max} more)`;
 }
