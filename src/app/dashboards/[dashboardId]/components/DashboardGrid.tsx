@@ -32,6 +32,8 @@ type DashboardGridProps = {
   onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
   resizingChart: ResizeState;
   onResizeChange: (chartId: string, tempColSpan: number | null) => void;
+  selectedChartId: string | null;
+  onChartSelect: (chartId: string) => void;
 };
 
 export function DashboardGrid({
@@ -46,6 +48,8 @@ export function DashboardGrid({
   onSqlUpdate,
   resizingChart,
   onResizeChange,
+  selectedChartId,
+  onChartSelect,
 }: DashboardGridProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -118,6 +122,8 @@ export function DashboardGrid({
                         onToggleSql={onToggleSql}
                         onSqlUpdate={onSqlUpdate}
                         totalColumns={row.columns}
+                        selectedChartId={selectedChartId}
+                        onChartSelect={onChartSelect}
                       />
                     );
                   }
@@ -157,6 +163,8 @@ export function DashboardGrid({
                       onResizeChange={(tempColSpan) =>
                         onResizeChange(chart.id, tempColSpan)
                       }
+                      isSelected={selectedChartId === chart.id}
+                      onSelect={onChartSelect}
                     />
                   );
                 })}

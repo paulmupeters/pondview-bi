@@ -1,33 +1,45 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { ChatHistoryEntry } from "@/lib/chat-history";
 
-type ChatHistoryEntry = {
-  id: string;
-  title: string | null;
-  updatedAt: number;
+type LoadChatsOptions = {
+  showLoading?: boolean;
 };
 
-export function useChatHistory() {
-  const [chats, setChats] = useState<ChatHistoryEntry[]>([]);
+export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
+  const [chats, setChats] = useState<ChatHistoryEntry[]>(initialChats);
   const [isLoading, setIsLoading] = useState(false);
 
-  const loadChats = useCallback(async (): Promise<ChatHistoryEntry[]> => {
-    setIsLoading(true);
-    try {
-      const res = await fetch("/api/chats", { cache: "no-store" });
-      if (res.ok) {
-        const data = (await res.json()) as { chats: ChatHistoryEntry[] };
-        const chatList = data.chats ?? [];
-        setChats(chatList);
-        return chatList;
-      }
-    } catch (error) {
-      console.error("Failed to load chats:", error);
-    } finally {
-      setIsLoading(false);
-    }
+  useEffect(() => {
+    setChats(initialChats);
+  }, [initialChats]);
 
-    return [];
-  }, []);
+  const loadChats = useCallback(
+    async (options: LoadChatsOptions = {}): Promise<ChatHistoryEntry[]> => {
+      const { showLoading = false } = options;
+      if (showLoading) {
+        setIsLoading(true);
+      }
+
+      try {
+        const res = await fetch("/api/chats", { cache: "no-store" });
+        if (res.ok) {
+          const data = (await res.json()) as { chats: ChatHistoryEntry[] };
+          const chatList = data.chats ?? [];
+          setChats(chatList);
+          return chatList;
+        }
+      } catch (error) {
+        console.error("Failed to load chats:", error);
+      } finally {
+        if (showLoading) {
+          setIsLoading(false);
+        }
+      }
+
+      return [];
+    },
+    [],
+  );
 
   return { chats, isLoading, loadChats };
 }

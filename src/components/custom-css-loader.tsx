@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import {
   applyCustomCss,
   clearCustomCss,
+  CUSTOM_CSS_KEY,
   getSelectedTheme,
   applyTheme,
 } from "@/lib/custom-css";
@@ -17,7 +18,7 @@ export function CustomCssLoader() {
         applyTheme(selectedTheme);
       } else {
         // Fall back to custom CSS if no theme is selected
-        const savedCss = localStorage.getItem("CUSTOM_CSS") || "";
+        const savedCss = localStorage.getItem(CUSTOM_CSS_KEY) || "";
         if (savedCss) {
           applyCustomCss(savedCss);
         } else {

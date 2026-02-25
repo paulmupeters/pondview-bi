@@ -13,18 +13,23 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useChatHistory } from "@/hooks/use-chat-history";
+import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 
 const railButtonClassName =
   "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-tight";
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  initialChats: ChatHistoryEntry[];
+}
+
+export function AppSidebar({ initialChats }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const activeChatId = pathname?.startsWith("/chat/")
     ? (pathname.split("/")[2] ?? null)
     : null;
-  const { chats, isLoading, loadChats } = useChatHistory();
+  const { chats, isLoading, loadChats } = useChatHistory(initialChats);
   const [isChatHistoryPopoverOpen, setIsChatHistoryPopoverOpen] =
     useState(false);
 
@@ -33,14 +38,14 @@ export function AppSidebar() {
   const isSettingsRoute = pathname === "/settings";
 
   useEffect(() => {
-    void loadChats();
-  }, [loadChats]);
+    void loadChats({ showLoading: initialChats.length === 0 });
+  }, [initialChats.length, loadChats]);
 
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      const latest = await loadChats();
       if (!activeChatId) return;
+      const latest = await loadChats();
       const alreadyListed = latest.some((chat) => chat.id === activeChatId);
 
       if (!alreadyListed) {
@@ -49,7 +54,7 @@ export function AppSidebar() {
           const res = await fetch("/api/chats", { cache: "no-store" });
           if (res.ok) {
             const data = (await res.json()) as {
-              chats: { id: string; title: string | null; updatedAt: number }[];
+              chats: ChatHistoryEntry[];
             };
             if (data.chats?.some((chat) => chat.id === activeChatId)) {
               await loadChats();
@@ -69,7 +74,7 @@ export function AppSidebar() {
   const handleChatHistoryPopoverChange = (open: boolean) => {
     setIsChatHistoryPopoverOpen(open);
     if (open) {
-      void loadChats();
+      void loadChats({ showLoading: chats.length === 0 });
     }
   };
 
@@ -116,10 +121,13 @@ export function AppSidebar() {
     setIsChatHistoryPopoverOpen(false);
   };
 
+  const shouldShowBlockingLoading = isLoading && chats.length === 0;
+
   return (
     <div className="relative flex h-full w-20 flex-col border-r border-border bg-sidebar px-2 py-4">
       <div className="relative flex flex-col items-center gap-2">
         <div className="relative">
+          < Link href="/">
           <svg
             width="60%"
             height="60%"
@@ -199,6 +207,7 @@ export function AppSidebar() {
             {/* <span className="text-primary font-bold text-xs font-mono">POND</span>
             <span className="text-xs font-mono font-semibold text-sidebar-foreground">VIEW</span> */}
           </div>
+          </Link>
         </div>
       </div>
       <div className="flex flex-col items-center gap-2 mt-2">
@@ -238,7 +247,7 @@ export function AppSidebar() {
           </PopoverTrigger>
           <PopoverContent align="start" className="w-80 p-4">
             <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
-              {isLoading ? (
+              {shouldShowBlockingLoading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
               ) : chats.length > 0 ? (
                 chats.map((chat) => (

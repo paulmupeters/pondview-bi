@@ -1,8 +1,18 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
+import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { getDb } from "@/lib/db/client";
 import { chats, messages } from "@/lib/db/schema";
 
 export type DbMessageRow = typeof messages.$inferSelect;
+
+export async function listRecentChats(limit = 12): Promise<ChatHistoryEntry[]> {
+  const db = getDb();
+  return db
+    .select({ id: chats.id, title: chats.title, updatedAt: chats.updatedAt })
+    .from(chats)
+    .orderBy(desc(chats.updatedAt))
+    .limit(limit);
+}
 
 export async function listMessagesByChatId(chatId: string) {
   const db = getDb();
@@ -117,10 +127,7 @@ export async function appendAssistantMessage(
     })
     .onConflictDoNothing();
 
-  await db
-    .update(chats)
-    .set({ updatedAt: now })
-    .where(eq(chats.id, chatId));
+  await db.update(chats).set({ updatedAt: now }).where(eq(chats.id, chatId));
 }
 
 export async function deleteChat(chatId: string) {
@@ -129,17 +136,16 @@ export async function deleteChat(chatId: string) {
 }
 
 // Function to delete a single message and update chat timestamp
-export async function deleteMessageFromChat(chatId: string, messageId: string, now = Date.now()) {
+export async function deleteMessageFromChat(
+  chatId: string,
+  messageId: string,
+  now = Date.now(),
+) {
   const db = getDb();
-  await db
-    .delete(messages)
-    .where(eq(messages.id, messageId));
-  
+  await db.delete(messages).where(eq(messages.id, messageId));
+
   // Update chat's updatedAt timestamp
-  await db
-    .update(chats)
-    .set({ updatedAt: now })
-    .where(eq(chats.id, chatId));
+  await db.update(chats).set({ updatedAt: now }).where(eq(chats.id, chatId));
 }
 
 // Function to update message parts (e.g., for updating artifact config)
@@ -156,10 +162,7 @@ export async function updateMessageParts(
     .where(eq(messages.id, messageId));
 
   // Update chat's updatedAt timestamp
-  await db
-    .update(chats)
-    .set({ updatedAt: now })
-    .where(eq(chats.id, chatId));
+  await db.update(chats).set({ updatedAt: now }).where(eq(chats.id, chatId));
 }
 
 // Function to get a single message by ID
@@ -172,4 +175,3 @@ export async function getMessageById(messageId: string) {
     .limit(1);
   return result[0] ?? null;
 }
-

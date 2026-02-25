@@ -353,30 +353,6 @@ export default function Chat({
 
   const isConversationEmpty = messages.length === 0;
 
-  const manualWorkspace = (
-    <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        <ChatMessageThread
-          messages={messages}
-          status={status}
-          animationFrame={animationFrame}
-          verbAiIsThinking={verbAiIsThinking}
-          executeSqlArtifactType={executeSqlArtifactType}
-          activeVisualizationId={activeVisualizationId}
-          getFirstSelectableVisualizationIdForMessage={
-            getFirstSelectableVisualizationIdForMessage
-          }
-          onSelectVisualization={handleSelectVisualization}
-          onRemoveMessage={handleRemoveMessage}
-          conversationClassName="flex-1 min-h-0 h-full"
-          contentSpacingClassName="space-y-6"
-          messagePaddingClassName="p-4"
-          userResponsePaddingClassName="p-4"
-        />
-      </div>
-    </div>
-  );
-
   const rightPanelContent = (
     <div className="relative h-full w-full overflow-hidden">
       <div
@@ -510,22 +486,8 @@ export default function Chat({
                       </>
                     ) : (
                       <>
-                        {manualWorkspace}
-                        <div className="shrink-0 w-full px-3 pb-2 pt-1 border-t border-border/20 bg-card">
-                          <PromptInputWrapper
-                            onSubmit={handleSubmit}
-                            showHeader
-                            showAiInput={false}
-                            compact
-                            className="transition delay-150 duration-300 ease-in-out"
-                            status={status}
-                            onCreateDashboard={handleOpenDashboardBuilder}
-                            onAddVisual={handleAddVisual}
-                            mode={promptMode}
-                            onModeChange={setPromptMode}
-                            pendingMode={promptPendingMode}
-                          />
-                          <div className="h-[44vh] min-h-[280px] overflow-hidden rounded-md border border-border/30 mt-1">
+                        <div className="flex-1 min-h-0 w-full p-3">
+                          <div className="h-full min-h-0 overflow-hidden rounded-md border border-border/30">
                             <DuckdbRepl
                               className="h-full w-full border-r-0 p-0"
                               selectedDbIdentifier={selectedDb}
@@ -543,6 +505,21 @@ export default function Chat({
                               }}
                             />
                           </div>
+                        </div>
+                        <div className="shrink-0 w-full px-3 pb-2 pt-1 border-t border-border/20 bg-card">
+                          <PromptInputWrapper
+                            onSubmit={handleSubmit}
+                            showHeader
+                            showAiInput={false}
+                            compact
+                            className="transition delay-150 duration-300 ease-in-out"
+                            status={status}
+                            onCreateDashboard={handleOpenDashboardBuilder}
+                            onAddVisual={handleAddVisual}
+                            mode={promptMode}
+                            onModeChange={setPromptMode}
+                            pendingMode={promptPendingMode}
+                          />
                         </div>
                       </>
                     )}

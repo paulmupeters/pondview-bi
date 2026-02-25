@@ -1,11 +1,17 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getDb } from "@/lib/db/client";
-import { dashboardCharts, dashboardSlicers, dashboards } from "@/lib/db/schema";
+import {
+  chartSlicers,
+  dashboardCharts,
+  dashboardSlicers,
+  dashboards,
+} from "@/lib/db/schema";
 
 export type DbDashboard = typeof dashboards.$inferSelect;
 export type DbDashboardChart = typeof dashboardCharts.$inferSelect;
 export type DbDashboardSlicer = typeof dashboardSlicers.$inferSelect;
+export type DbChartSlicer = typeof chartSlicers.$inferSelect;
 
 export async function listDashboards() {
   const db = getDb();
@@ -31,7 +37,7 @@ export async function createDashboard(title: string, now = Date.now()) {
 export async function updateDashboardTitle(
   dashboardId: string,
   title: string,
-  now = Date.now()
+  now = Date.now(),
 ) {
   const db = getDb();
   const [existing] = await db
@@ -125,7 +131,7 @@ export async function addChartToDashboard(input: {
 export async function updateChartConfig(
   chartId: string,
   chartConfigJson: string,
-  now = Date.now()
+  now = Date.now(),
 ) {
   const db = getDb();
   // Fetch chart first to get parent dashboard id
@@ -146,7 +152,7 @@ export async function updateChartConfig(
 export async function updateChartSql(
   chartId: string,
   sql: string,
-  now = Date.now()
+  now = Date.now(),
 ) {
   const db = getDb();
   // Fetch chart first to get parent dashboard id
@@ -167,7 +173,7 @@ export async function updateChartSql(
 export async function reorderDashboardCharts(
   dashboardId: string,
   orderedChartIds: string[],
-  now = Date.now()
+  now = Date.now(),
 ) {
   const db = getDb();
   await db.transaction(async (trx) => {
@@ -191,8 +197,8 @@ export async function reorderDashboardCharts(
         .where(
           and(
             eq(dashboardCharts.id, chartId),
-            eq(dashboardCharts.dashboardId, dashboardId)
-          )
+            eq(dashboardCharts.dashboardId, dashboardId),
+          ),
         );
     }
     await trx
@@ -204,7 +210,7 @@ export async function reorderDashboardCharts(
 
 export async function removeChartFromDashboard(
   chartId: string,
-  now = Date.now()
+  now = Date.now(),
 ) {
   const db = getDb();
   // Fetch chart first to get parent dashboard id
@@ -309,7 +315,7 @@ export async function updateSlicer(input: {
 export async function reorderDashboardSlicers(
   dashboardId: string,
   orderedSlicerIds: string[],
-  now = Date.now()
+  now = Date.now(),
 ) {
   const db = getDb();
   await db.transaction(async (trx) => {
@@ -333,8 +339,8 @@ export async function reorderDashboardSlicers(
         .where(
           and(
             eq(dashboardSlicers.id, slicerId),
-            eq(dashboardSlicers.dashboardId, dashboardId)
-          )
+            eq(dashboardSlicers.dashboardId, dashboardId),
+          ),
         );
     }
     await trx
@@ -346,7 +352,7 @@ export async function reorderDashboardSlicers(
 
 export async function removeSlicerFromDashboard(
   slicerId: string,
-  now = Date.now()
+  now = Date.now(),
 ) {
   const db = getDb();
   const slicer = await db
@@ -361,5 +367,150 @@ export async function removeSlicerFromDashboard(
     .update(dashboards)
     .set({ updatedAt: now })
     .where(eq(dashboards.id, dashboardId));
+  return { removed: true };
+}
+
+// Chart Slicers CRUD
+export async function listSlicersByChart(chartId: string) {
+  const db = getDb();
+  return db
+    .select()
+    .from(chartSlicers)
+    .where(eq(chartSlicers.chartId, chartId))
+    .orderBy(asc(chartSlicers.position));
+}
+
+export async function addSlicerToChart(input: {
+  chartId: string;
+  field: string;
+  title?: string | null;
+  limit?: number;
+  now?: number;
+}) {
+  const db = getDb();
+  const now = input.now ?? Date.now();
+  const chart = await getChartById(input.chartId);
+  if (!chart) {
+    throw new Error("Chart not found");
+  }
+  const id = nanoid();
+  const [{ value: maxPosition } = { value: -1 }] = await db
+    .select({
+      value: sql<number>`coalesce(max(${chartSlicers.position}), -1)`,
+    })
+    .from(chartSlicers)
+    .where(eq(chartSlicers.chartId, input.chartId));
+  const position = (maxPosition ?? -1) + 1;
+  await db.insert(chartSlicers).values({
+    id,
+    chartId: input.chartId,
+    field: input.field,
+    title: input.title ?? null,
+    limit: input.limit ?? 50,
+    position,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db
+    .update(dashboards)
+    .set({ updatedAt: now })
+    .where(eq(dashboards.id, chart.dashboardId));
+  return { id };
+}
+
+export async function updateChartSlicer(input: {
+  slicerId: string;
+  title?: string | null;
+  limit?: number;
+  now?: number;
+}) {
+  const db = getDb();
+  const now = input.now ?? Date.now();
+  const [slicer] = await db
+    .select()
+    .from(chartSlicers)
+    .where(eq(chartSlicers.id, input.slicerId))
+    .limit(1);
+  if (!slicer) return { updated: false };
+  const updates: Partial<typeof chartSlicers.$inferInsert> = {
+    updatedAt: now,
+  };
+  if (input.title !== undefined) updates.title = input.title;
+  if (input.limit !== undefined) updates.limit = input.limit;
+  await db
+    .update(chartSlicers)
+    .set(updates)
+    .where(eq(chartSlicers.id, input.slicerId));
+  const chart = await getChartById(slicer.chartId);
+  if (chart) {
+    await db
+      .update(dashboards)
+      .set({ updatedAt: now })
+      .where(eq(dashboards.id, chart.dashboardId));
+  }
+  return { updated: true };
+}
+
+export async function reorderChartSlicers(
+  chartId: string,
+  orderedSlicerIds: string[],
+  now = Date.now(),
+) {
+  const db = getDb();
+  await db.transaction(async (trx) => {
+    const existing = await trx
+      .select({ id: chartSlicers.id })
+      .from(chartSlicers)
+      .where(eq(chartSlicers.chartId, chartId));
+    const existingIds = new Set(existing.map((row) => row.id));
+    const filteredIds = orderedSlicerIds.filter((id) => existingIds.has(id));
+    const uniqueFilteredSize = new Set(filteredIds).size;
+    if (
+      filteredIds.length !== existing.length ||
+      uniqueFilteredSize !== filteredIds.length
+    ) {
+      throw new Error("Ordered slicer ids do not match chart slicers");
+    }
+    for (const [index, slicerId] of filteredIds.entries()) {
+      await trx
+        .update(chartSlicers)
+        .set({ position: index, updatedAt: now })
+        .where(
+          and(eq(chartSlicers.id, slicerId), eq(chartSlicers.chartId, chartId)),
+        );
+    }
+    const [chart] = await trx
+      .select({ dashboardId: dashboardCharts.dashboardId })
+      .from(dashboardCharts)
+      .where(eq(dashboardCharts.id, chartId))
+      .limit(1);
+    if (chart) {
+      await trx
+        .update(dashboards)
+        .set({ updatedAt: now })
+        .where(eq(dashboards.id, chart.dashboardId));
+    }
+  });
+}
+
+export async function removeSlicerFromChart(
+  slicerId: string,
+  now = Date.now(),
+) {
+  const db = getDb();
+  const [slicer] = await db
+    .select()
+    .from(chartSlicers)
+    .where(eq(chartSlicers.id, slicerId))
+    .limit(1);
+  if (!slicer) return { removed: false };
+  await db.delete(chartSlicers).where(eq(chartSlicers.id, slicerId));
+  const chart = await getChartById(slicer.chartId);
+  if (chart) {
+    await db
+      .update(dashboards)
+      .set({ updatedAt: now })
+      .where(eq(dashboards.id, chart.dashboardId));
+  }
   return { removed: true };
 }

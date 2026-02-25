@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Settings, Trash2 } from "lucide-react";
+import { Funnel, GripVertical, Settings, Trash2 } from "lucide-react";
 import type { CSSProperties } from "react";
 import { CardConfigDialog } from "@/components/card-config-dialog";
 import { MetricCard } from "@/components/metric-card";
@@ -22,6 +22,8 @@ export function MetricCardInGroup({
   onSqlUpdate,
   isFirst,
   isLast: _isLast,
+  isSelected,
+  onSelect,
 }: MetricCardInGroupProps) {
   const { filters } = useFilters();
   const {
@@ -52,7 +54,9 @@ export function MetricCardInGroup({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex-1 flex flex-col p-4 md:p-2 relative group/item"
+      className={`flex-1 flex flex-col p-4 md:p-2 relative group/item transition-colors ${
+        isSelected ? "bg-primary/5 ring-1 ring-primary/40" : ""
+      }`}
     >
       <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-30">
         <button
@@ -64,6 +68,19 @@ export function MetricCardInGroup({
           {...listeners}
         >
           <GripVertical className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label="Filter this visual"
+          title="Filter this visual"
+          onClick={() => onSelect(chart.id)}
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background transition-colors hover:bg-muted ${
+            isSelected
+              ? "text-primary border-primary/50"
+              : "text-muted-foreground"
+          }`}
+        >
+          <Funnel className="h-4 w-4" />
         </button>
       </div>
       {chart.filtersApplied && filters.length > 0 && isFirst && (

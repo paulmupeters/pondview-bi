@@ -18,30 +18,64 @@ export async function GET(
   const { dashboardId } = await params;
   const { searchParams } = new URL(req.url);
 
-  // Parse filters from query params
-  const filtersParam = searchParams.get("filters");
+  // Parse dashboard-level filters from query params.
+  const dashboardFiltersParam =
+    searchParams.get("dashboardFilters") ?? searchParams.get("filters");
   let dashboardFilters: Filter[] = [];
 
-  if (filtersParam) {
+  if (dashboardFiltersParam) {
     try {
-      const parsed = JSON.parse(filtersParam);
+      const parsed = JSON.parse(dashboardFiltersParam);
       if (!Array.isArray(parsed)) {
         return Response.json(
-          { error: "Filters must be an array" },
+          { error: "dashboardFilters must be an array" },
           { status: 400 },
         );
       }
       dashboardFilters = normalizeFilterPayload(parsed);
     } catch (error) {
-      console.error("[Dashboard Data] Failed to parse filters:", error);
-      return Response.json({ error: "Invalid filters JSON" }, { status: 400 });
+      console.error(
+        "[Dashboard Data] Failed to parse dashboard filters:",
+        error,
+      );
+      return Response.json(
+        { error: "Invalid dashboard filters JSON" },
+        { status: 400 },
+      );
+    }
+  }
+
+  // Parse chart-level filters map from query params.
+  const chartFiltersById: Record<string, Filter[]> = {};
+  const chartFiltersParam = searchParams.get("chartFilters");
+  if (chartFiltersParam) {
+    try {
+      const parsed = JSON.parse(chartFiltersParam) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return Response.json(
+          { error: "chartFilters must be an object keyed by chart id" },
+          { status: 400 },
+        );
+      }
+      for (const [chartId, rawFilters] of Object.entries(parsed)) {
+        chartFiltersById[chartId] = normalizeFilterPayload(rawFilters);
+      }
+    } catch (error) {
+      console.error("[Dashboard Data] Failed to parse chart filters:", error);
+      return Response.json(
+        { error: "Invalid chart filters JSON" },
+        { status: 400 },
+      );
     }
   }
 
   const charts = await listChartsByDashboard(dashboardId);
   let joinDefs: JoinDefinition[] = [];
   let materializationReady = false;
-  if (dashboardFilters.length > 0) {
+  const hasAnyFilters =
+    dashboardFilters.length > 0 ||
+    Object.values(chartFiltersById).some((filters) => filters.length > 0);
+  if (hasAnyFilters) {
     try {
       joinDefs = await loadJoinDefs();
       await materializeTablesForDashboard(dashboardId);
@@ -56,18 +90,26 @@ export async function GET(
 
   const results = await Promise.all(
     charts.map(async (chart) => {
+      const effectiveFilters = [
+        ...dashboardFilters,
+        ...(chartFiltersById[chart.id] ?? []),
+      ];
       let sqlToExecute = chart.sql;
       let filtersApplied = false;
+      let appliedFiltersCount = 0;
+      let skippedFilters: Array<{ field: string; reason: string }> = [];
       let executeOnMaterializedDb = false;
       const dbIdentifier = chart.dbIdentifier || "md:my_db";
 
-      if (dashboardFilters.length > 0 && materializationReady) {
+      if (effectiveFilters.length > 0 && materializationReady) {
         try {
           const filterResult = applyFiltersToSql(
             chart.sql,
-            dashboardFilters,
+            effectiveFilters,
             joinDefs,
           );
+          appliedFiltersCount = filterResult.appliedFilters;
+          skippedFilters = filterResult.skippedFilters;
           if (filterResult.appliedFilters > 0) {
             sqlToExecute = filterResult.sql;
             filtersApplied = true;
@@ -75,7 +117,7 @@ export async function GET(
           } else {
             if (filterResult.skippedFilters.length > 0) {
               console.warn(
-                `[Dashboard Data] Could not apply ${filterResult.skippedFilters.length} filter(s) with new path for chart ${chart.id}.`,
+                `[Dashboard Data] Could not apply ${filterResult.skippedFilters.length} filter(s) for chart ${chart.id}.`,
               );
             }
           }
@@ -88,12 +130,16 @@ export async function GET(
       }
 
       try {
-        console.log("executeOnMaterializedDb", executeOnMaterializedDb);
-        console.log("sqlToExecute", sqlToExecute);
         const rows = executeOnMaterializedDb
           ? await runMaterializedSqlNormalized(sqlToExecute)
           : await runSqlNormalized(dbIdentifier, sqlToExecute);
-        return { ...chart, rows, filtersApplied };
+        return {
+          ...chart,
+          rows,
+          filtersApplied,
+          appliedFiltersCount,
+          skippedFilters,
+        };
       } catch (executionError) {
         if (executeOnMaterializedDb) {
           console.warn(
@@ -109,6 +155,8 @@ export async function GET(
               ...chart,
               rows: fallbackRows,
               filtersApplied: false,
+              appliedFiltersCount: 0,
+              skippedFilters,
             };
           } catch (fallbackError) {
             console.error(
@@ -119,6 +167,8 @@ export async function GET(
               ...chart,
               rows: [] as Result[],
               filtersApplied: false,
+              appliedFiltersCount: 0,
+              skippedFilters,
               error:
                 fallbackError instanceof Error
                   ? fallbackError.message
@@ -135,6 +185,8 @@ export async function GET(
           ...chart,
           rows: [] as Result[],
           filtersApplied: false,
+          appliedFiltersCount: 0,
+          skippedFilters,
           error:
             executionError instanceof Error
               ? executionError.message

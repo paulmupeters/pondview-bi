@@ -13,6 +13,8 @@ export function MetricCardGroup({
   onToggleSql,
   onSqlUpdate,
   totalColumns,
+  selectedChartId,
+  onChartSelect,
 }: MetricCardGroupProps) {
   const colSpanClass = getColSpanClass(
     Math.min(charts.length, totalColumns),
@@ -35,6 +37,8 @@ export function MetricCardGroup({
           onSqlUpdate={onSqlUpdate}
           isFirst={index === 0}
           isLast={index === charts.length - 1}
+          isSelected={selectedChartId === chart.id}
+          onSelect={onChartSelect}
         />
       ))}
     </div>

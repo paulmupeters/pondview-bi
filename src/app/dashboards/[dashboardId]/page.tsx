@@ -39,8 +39,21 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     null,
   );
   const [resizingChart, setResizingChart] = useState<ResizeState>(null);
+  const [selectedChartId, setSelectedChartId] = useState<string | null>(null);
   const [isAddingTextCard, setIsAddingTextCard] = useState(false);
-  const { filters } = useFilters();
+  const { dashboardFilters, chartFiltersById } = useFilters();
+
+  const filtersQueryString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (dashboardFilters.length > 0) {
+      params.set("dashboardFilters", JSON.stringify(dashboardFilters));
+    }
+    if (Object.keys(chartFiltersById).length > 0) {
+      params.set("chartFilters", JSON.stringify(chartFiltersById));
+    }
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  }, [dashboardFilters, chartFiltersById]);
 
   // Load saved preferences from localStorage
   useEffect(() => {
@@ -85,13 +98,9 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   // Refresh dashboard data with filters
   const refreshDashboardData = useCallback(
     async (signal?: AbortSignal) => {
-      const filtersParam =
-        filters.length > 0
-          ? `?filters=${encodeURIComponent(JSON.stringify(filters))}`
-          : "";
       try {
         const res = await fetch(
-          `/api/dashboard/${dashboardId}/data${filtersParam}`,
+          `/api/dashboard/${dashboardId}/data${filtersQueryString}`,
           {
             cache: "no-store",
             signal,
@@ -117,7 +126,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
         console.error("Failed to refresh dashboard data:", error);
       }
     },
-    [dashboardId, filters],
+    [dashboardId, filtersQueryString],
   );
 
   useEffect(() => {
@@ -241,6 +250,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
         );
         if (!res.ok) throw new Error("Failed to delete chart");
         setCharts((prev) => prev.filter((chart) => chart.id !== chartId));
+        setSelectedChartId((prev) => (prev === chartId ? null : prev));
         setChartData((prev) => {
           const next = { ...prev };
           delete next[chartId];
@@ -306,12 +316,8 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
         );
 
         // Re-fetch chart data to update the chart with new SQL
-        const filtersParam =
-          filters.length > 0
-            ? `?filters=${encodeURIComponent(JSON.stringify(filters))}`
-            : "";
         const dataRes = await fetch(
-          `/api/dashboard/${dashboardId}/data${filtersParam}`,
+          `/api/dashboard/${dashboardId}/data${filtersQueryString}`,
           {
             cache: "no-store",
           },
@@ -336,8 +342,15 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
         throw error;
       }
     },
-    [dashboardId, filters],
+    [dashboardId, filtersQueryString],
   );
+
+  useEffect(() => {
+    if (!selectedChartId) return;
+    if (!charts.some((chart) => chart.id === selectedChartId)) {
+      setSelectedChartId(null);
+    }
+  }, [charts, selectedChartId]);
 
   const chartGroups = useMemo(
     () => groupConsecutiveMetricCards(charts, chartData),
@@ -349,11 +362,11 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
       autoFitRows
         ? buildRows(chartGroups, columns)
         : [
-          {
-            columns,
-            groups: chartGroups,
-          },
-        ],
+            {
+              columns,
+              groups: chartGroups,
+            },
+          ],
     [chartGroups, columns, autoFitRows],
   );
 
@@ -399,7 +412,11 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
           />
         </div>
       </div>
-      <DashboardSlicersBar dashboardId={dashboardId} />
+      <DashboardSlicersBar
+        dashboardId={dashboardId}
+        selectedChartId={selectedChartId}
+        onClearChartSelection={() => setSelectedChartId(null)}
+      />
 
       <DashboardGrid
         charts={charts}
@@ -413,6 +430,8 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
         onSqlUpdate={handleSqlUpdate}
         resizingChart={resizingChart}
         onResizeChange={handleResizeChange}
+        selectedChartId={selectedChartId}
+        onChartSelect={setSelectedChartId}
       />
     </div>
   );
