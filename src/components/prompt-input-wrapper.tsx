@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ChatBubbleLeftRightIcon,
   GlobeEuropeAfricaIcon,
   PaperClipIcon,
   Squares2X2Icon,
@@ -32,7 +31,6 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { Button } from "@/components/ui/button";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Tooltip,
   TooltipContent,
@@ -296,12 +294,7 @@ export function PromptInputWrapper({
     onModeChange?.(value);
   };
 
-  const handlePromptSubmit = (message: PromptInputMessage) => {
-    if (promptMode !== "ai") {
-      return;
-    }
-    return onSubmit(message);
-  };
+  const handlePromptSubmit = (message: PromptInputMessage) => onSubmit(message);
 
   const aiButtonLabel = useMemo(() => {
     if (
@@ -341,15 +334,7 @@ export function PromptInputWrapper({
             <PromptInputAttachments>
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
-            <div
-              aria-hidden={!isAiMode}
-              className={cn(
-                "w-full grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
-                isAiMode
-                  ? "grid-rows-[1fr] opacity-100 translate-y-0"
-                  : "pointer-events-none grid-rows-[0fr] opacity-0 -translate-y-2",
-              )}
-            >
+            <div className="w-full">
               <div className="min-h-0 overflow-hidden">
                 <div className="relative w-full">
                   <PromptInputTextarea
@@ -358,8 +343,6 @@ export function PromptInputWrapper({
                       "flex-1 pr-4",
                       compact ? "min-h-10 pb-10" : "min-h-28 pb-12",
                     )}
-                    tabIndex={isAiMode ? undefined : -1}
-                    aria-hidden={!isAiMode}
                   />
                   <div className={cn(
                     "absolute right-3",
@@ -370,9 +353,7 @@ export function PromptInputWrapper({
                       variant="outline"
                       type="submit"
                       className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-                      disabled={pendingMode === "ai" || !isAiMode}
-                      tabIndex={isAiMode ? undefined : -1}
-                      aria-hidden={!isAiMode}
+                      disabled={pendingMode === "ai"}
                     >
                       {content}
                     </Button>
@@ -417,25 +398,24 @@ export function PromptInputWrapper({
                   </Tooltip>
                 )}
               </div>
-              <div className="bg-muted/50 rounded-md p-0.5">
-                <ToggleGroup
-                  type="single"
-                  value={promptMode}
-                  onValueChange={(value) =>
-                    handlePromptModeChange(value as PromptMode)
-                  }
-                  disabled={Boolean(pendingMode)}
-                >
-                  <ToggleGroupItem value="ai">
-                    <ChatBubbleLeftRightIcon className="h-4 w-4 group-hover:text-primary-foreground" />
-                    <span>Chat</span>
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="manual">
-                    <WrenchScrewdriverIcon className="h-4 w-4 group-hover:text-primary-foreground" />
-                    <span>Manual</span>
-                  </ToggleGroupItem>
-                </ToggleGroup>
-              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant={!isAiMode ? "default" : "outline"}
+                className={cn(
+                  "gap-1.5",
+                  !isAiMode &&
+                    "bg-primary text-primary-foreground hover:bg-primary/90 border-primary",
+                )}
+                onClick={() =>
+                  handlePromptModeChange(isAiMode ? "manual" : "ai")
+                }
+                disabled={Boolean(pendingMode)}
+                aria-pressed={!isAiMode}
+              >
+                <WrenchScrewdriverIcon className="h-4 w-4" />
+                <span>Manual</span>
+              </Button>
             </div>
           </PromptInputHeader>
         )}

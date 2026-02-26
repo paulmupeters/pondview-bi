@@ -2,7 +2,7 @@
 
 import { PostgreSQL, sql } from "@codemirror/lang-sql";
 import { Prec } from "@codemirror/state";
-import { type KeyBinding, keymap } from "@codemirror/view";
+import { EditorView, type KeyBinding, keymap } from "@codemirror/view";
 import CodeMirror, {
   type Extension,
   type ReactCodeMirrorRef,
@@ -194,6 +194,7 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
     const extensions: Extension[] = [
       customKeymap(),
       sql({ dialect: PostgreSQL }),
+      EditorView.lineWrapping,
     ];
 
     return (
@@ -231,7 +232,7 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
           "[&_.cm-selectionBackground]:!bg-primary/20",
           "[&_.cm-cursor]:!border-l-2 [&_.cm-cursor]:!border-primary",
           "[&_.cm-placeholder]:!text-muted-foreground",
-          "[&_.cm-scroller]:!overflow-auto",
+          "[&_.cm-scroller]:!overflow-y-auto [&_.cm-scroller]:!overflow-x-hidden",
           "[&_.cm-focused]:!outline-none",
           "[&_.cm-editor.cm-focused]:!outline-none",
           className,

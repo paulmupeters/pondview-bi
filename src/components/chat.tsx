@@ -451,78 +451,59 @@ export default function Chat({
                   />
                   <div className="flex-1 min-h-0 min-w-0 flex flex-col">
                     {promptMode === "ai" ? (
-                      <>
-                        <ChatMessageThread
-                          messages={messages}
-                          status={status}
-                          animationFrame={animationFrame}
-                          verbAiIsThinking={verbAiIsThinking}
-                          executeSqlArtifactType={executeSqlArtifactType}
-                          activeVisualizationId={activeVisualizationId}
-                          getFirstSelectableVisualizationIdForMessage={
-                            getFirstSelectableVisualizationIdForMessage
-                          }
-                          onSelectVisualization={handleSelectVisualization}
-                          onRemoveMessage={handleRemoveMessage}
-                          conversationClassName="flex-1 min-h-0"
-                          contentSpacingClassName="space-y-2"
-                          messagePaddingClassName="p-3"
-                          userResponsePaddingClassName="p-1"
-                        />
-                        <div className="shrink-0 w-full px-3 pb-2 pt-1 border-t border-border/20 bg-card">
-                          <PromptInputWrapper
-                            onSubmit={handleSubmit}
-                            showHeader
-                            showAiInput
-                            className="transition delay-150 duration-300 ease-in-out"
-                            status={status}
-                            onCreateDashboard={handleOpenDashboardBuilder}
-                            onAddVisual={handleAddVisual}
-                            mode={promptMode}
-                            onModeChange={setPromptMode}
-                            pendingMode={promptPendingMode}
-                          />
-                        </div>
-                      </>
+                      <ChatMessageThread
+                        messages={messages}
+                        status={status}
+                        animationFrame={animationFrame}
+                        verbAiIsThinking={verbAiIsThinking}
+                        executeSqlArtifactType={executeSqlArtifactType}
+                        activeVisualizationId={activeVisualizationId}
+                        getFirstSelectableVisualizationIdForMessage={
+                          getFirstSelectableVisualizationIdForMessage
+                        }
+                        onSelectVisualization={handleSelectVisualization}
+                        onRemoveMessage={handleRemoveMessage}
+                        conversationClassName="flex-1 min-h-0"
+                        contentSpacingClassName="space-y-2"
+                        messagePaddingClassName="p-3"
+                        userResponsePaddingClassName="p-1"
+                      />
                     ) : (
-                      <>
-                        <div className="flex-1 min-h-0 w-full p-3">
-                          <div className="h-full min-h-0 overflow-hidden rounded-md border border-border/30">
-                            <DuckdbRepl
-                              className="h-full w-full border-r-0 p-0"
-                              selectedDbIdentifier={selectedDb}
-                              onConsoleApiChangeAction={setSqlConsoleApi}
-                              inlineResults={false}
-                              showRunControls={false}
-                              chartConfig={manualChartConfig}
-                              onResultChangeAction={(result) => {
-                                setSqlResult(result);
-                                const newSql = result?.sql ?? null;
-                                if (newSql !== prevSqlRef.current) {
-                                  setManualChartConfig(null);
-                                  prevSqlRef.current = newSql;
-                                }
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <div className="shrink-0 w-full px-3 pb-2 pt-1 border-t border-border/20 bg-card">
-                          <PromptInputWrapper
-                            onSubmit={handleSubmit}
-                            showHeader
-                            showAiInput={false}
-                            compact
-                            className="transition delay-150 duration-300 ease-in-out"
-                            status={status}
-                            onCreateDashboard={handleOpenDashboardBuilder}
-                            onAddVisual={handleAddVisual}
-                            mode={promptMode}
-                            onModeChange={setPromptMode}
-                            pendingMode={promptPendingMode}
+                      <div className="flex-1 min-h-0 w-full p-3">
+                        <div className="h-full min-h-0 overflow-hidden rounded-md border border-border/30">
+                          <DuckdbRepl
+                            className="h-full w-full border-r-0 p-0"
+                            selectedDbIdentifier={selectedDb}
+                            onConsoleApiChangeAction={setSqlConsoleApi}
+                            inlineResults={false}
+                            showRunControls={false}
+                            chartConfig={manualChartConfig}
+                            onResultChangeAction={(result) => {
+                              setSqlResult(result);
+                              const newSql = result?.sql ?? null;
+                              if (newSql !== prevSqlRef.current) {
+                                setManualChartConfig(null);
+                                prevSqlRef.current = newSql;
+                              }
+                            }}
                           />
                         </div>
-                      </>
+                      </div>
                     )}
+                    <div className="shrink-0 w-full px-3 pb-2 pt-1 border-t border-border/20 bg-card">
+                      <PromptInputWrapper
+                        onSubmit={handleSubmit}
+                        showHeader
+                        showAiInput
+                        className="transition delay-150 duration-300 ease-in-out"
+                        status={status}
+                        onCreateDashboard={handleOpenDashboardBuilder}
+                        onAddVisual={handleAddVisual}
+                        mode={promptMode}
+                        onModeChange={setPromptMode}
+                        pendingMode={promptPendingMode}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
