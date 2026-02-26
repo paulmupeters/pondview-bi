@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "build": "next build",
+    "build:static": "next build",
     "start": "next start",
+    "serve:extension": "bun run src/extension-server/server.ts",
     "lint": "biome check",
     "format": "biome format --write",
     "drizzle:generate": "drizzle-kit generate",

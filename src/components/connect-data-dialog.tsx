@@ -10,6 +10,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { apiFetch } from "@/lib/api/client";
 import { appendConnectedTable } from "@/lib/connected-tables";
 import {
   buildPostgresConnectionString,
@@ -126,7 +127,7 @@ const resolveDuckdbExtension = (dbType: DatabaseType): string | undefined => {
 // Removed unused DuckDB preview constants
 
 async function fetchSchemas(dbIdentifier: string): Promise<string[]> {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/tables?id=${encodeURIComponent(dbIdentifier)}`,
     { cache: "no-store" },
   );
@@ -145,7 +146,7 @@ async function fetchTablesForSchema(
   schema: string,
   limit = 20,
 ): Promise<string[]> {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/tables?id=${encodeURIComponent(dbIdentifier)}&schema=${encodeURIComponent(schema)}&limit=${limit}`,
     { cache: "no-store" },
   );

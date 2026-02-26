@@ -1,36 +1,162 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { getDb } from "@/lib/db/client";
+import { promises as fs } from "node:fs";
 import {
-  chartSlicers,
-  dashboardCharts,
-  dashboardSlicers,
-  dashboards,
-} from "@/lib/db/schema";
+  readJsonFile,
+  resolveSidecarPath,
+  writeJsonFileAtomic,
+} from "@/lib/sidecar/json-store";
 
-export type DbDashboard = typeof dashboards.$inferSelect;
-export type DbDashboardChart = typeof dashboardCharts.$inferSelect;
-export type DbDashboardSlicer = typeof dashboardSlicers.$inferSelect;
-export type DbChartSlicer = typeof chartSlicers.$inferSelect;
+export type DbDashboard = {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type DbDashboardChart = {
+  id: string;
+  dashboardId: string;
+  title: string | null;
+  description: string | null;
+  sql: string;
+  dbIdentifier: string | null;
+  chartConfigJson: string;
+  semanticQueryJson: string | null;
+  exploreName: string | null;
+  position: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type DbDashboardSlicer = {
+  id: string;
+  dashboardId: string;
+  field: string;
+  title: string | null;
+  limit: number;
+  position: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type DbChartSlicer = {
+  id: string;
+  chartId: string;
+  field: string;
+  title: string | null;
+  limit: number;
+  position: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type DashboardsIndexFile = {
+  version: 1;
+  dashboards: DbDashboard[];
+};
+
+type DashboardFile = {
+  version: 1;
+  dashboard: DbDashboard;
+  charts: DbDashboardChart[];
+  dashboardSlicers: DbDashboardSlicer[];
+  chartSlicers: DbChartSlicer[];
+};
+
+const DASHBOARDS_INDEX_PATH = resolveSidecarPath(
+  "config",
+  "dashboards",
+  "index.json",
+);
+
+function dashboardFilePath(dashboardId: string): string {
+  return resolveSidecarPath(
+    "config",
+    "dashboards",
+    `${encodeURIComponent(dashboardId)}.json`,
+  );
+}
+
+async function loadDashboardsIndex(): Promise<DashboardsIndexFile> {
+  return readJsonFile(DASHBOARDS_INDEX_PATH, { version: 1, dashboards: [] });
+}
+
+async function saveDashboardsIndex(index: DashboardsIndexFile): Promise<void> {
+  await writeJsonFileAtomic(DASHBOARDS_INDEX_PATH, index);
+}
+
+async function loadDashboardFile(dashboardId: string): Promise<DashboardFile | null> {
+  const fallback = null as DashboardFile | null;
+  return readJsonFile(dashboardFilePath(dashboardId), fallback);
+}
+
+async function saveDashboardFile(file: DashboardFile): Promise<void> {
+  await writeJsonFileAtomic(dashboardFilePath(file.dashboard.id), file);
+}
+
+async function upsertDashboardIndex(dashboard: DbDashboard): Promise<void> {
+  const index = await loadDashboardsIndex();
+  const existingIndex = index.dashboards.findIndex((d) => d.id === dashboard.id);
+  if (existingIndex >= 0) {
+    index.dashboards[existingIndex] = dashboard;
+  } else {
+    index.dashboards.push(dashboard);
+  }
+  await saveDashboardsIndex(index);
+}
+
+async function findChartLocation(chartId: string): Promise<{
+  file: DashboardFile;
+  chartIndex: number;
+} | null> {
+  const index = await loadDashboardsIndex();
+  for (const dashboard of index.dashboards) {
+    const file = await loadDashboardFile(dashboard.id);
+    if (!file) continue;
+    const chartIndex = file.charts.findIndex((chart) => chart.id === chartId);
+    if (chartIndex >= 0) {
+      return { file, chartIndex };
+    }
+  }
+  return null;
+}
+
+function touchDashboard(file: DashboardFile, now: number): void {
+  file.dashboard.updatedAt = now;
+}
+
+function sortByPosition<T extends { position: number }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => a.position - b.position);
+}
 
 export async function listDashboards() {
-  const db = getDb();
-  return db
-    .select({
-      id: dashboards.id,
-      title: dashboards.title,
-      updatedAt: dashboards.updatedAt,
-    })
-    .from(dashboards)
-    .orderBy(desc(dashboards.updatedAt));
+  const index = await loadDashboardsIndex();
+  return [...index.dashboards]
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map((d) => ({
+      id: d.id,
+      title: d.title,
+      updatedAt: d.updatedAt,
+    }));
 }
 
 export async function createDashboard(title: string, now = Date.now()) {
-  const db = getDb();
   const id = nanoid();
-  await db
-    .insert(dashboards)
-    .values({ id, title, createdAt: now, updatedAt: now });
+  const dashboard: DbDashboard = {
+    id,
+    title,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const file: DashboardFile = {
+    version: 1,
+    dashboard,
+    charts: [],
+    dashboardSlicers: [],
+    chartSlicers: [],
+  };
+  await saveDashboardFile(file);
+  await upsertDashboardIndex(dashboard);
   return { id };
 }
 
@@ -39,51 +165,34 @@ export async function updateDashboardTitle(
   title: string,
   now = Date.now(),
 ) {
-  const db = getDb();
-  const [existing] = await db
-    .select({ id: dashboards.id })
-    .from(dashboards)
-    .where(eq(dashboards.id, dashboardId))
-    .limit(1);
-  if (!existing) return { updated: false };
-  await db
-    .update(dashboards)
-    .set({ title, updatedAt: now })
-    .where(eq(dashboards.id, dashboardId));
+  const file = await loadDashboardFile(dashboardId);
+  if (!file) return { updated: false };
+  file.dashboard.title = title;
+  file.dashboard.updatedAt = now;
+  await saveDashboardFile(file);
+  await upsertDashboardIndex(file.dashboard);
   return { updated: true };
 }
 
 export async function getDashboardWithCharts(dashboardId: string) {
-  const db = getDb();
-  const [d] = await db
-    .select()
-    .from(dashboards)
-    .where(eq(dashboards.id, dashboardId));
-  if (!d) return null;
-  const charts = await db
-    .select()
-    .from(dashboardCharts)
-    .where(eq(dashboardCharts.dashboardId, dashboardId))
-    .orderBy(asc(dashboardCharts.position));
-  return { dashboard: d, charts };
+  const file = await loadDashboardFile(dashboardId);
+  if (!file) return null;
+  return {
+    dashboard: file.dashboard,
+    charts: sortByPosition(file.charts),
+  };
 }
 
 export async function listChartsByDashboard(dashboardId: string) {
-  const db = getDb();
-  return db
-    .select()
-    .from(dashboardCharts)
-    .where(eq(dashboardCharts.dashboardId, dashboardId))
-    .orderBy(asc(dashboardCharts.position));
+  const file = await loadDashboardFile(dashboardId);
+  if (!file) return [];
+  return sortByPosition(file.charts);
 }
 
 export async function getChartById(chartId: string) {
-  const db = getDb();
-  const [row] = await db
-    .select()
-    .from(dashboardCharts)
-    .where(eq(dashboardCharts.id, chartId));
-  return row ?? null;
+  const location = await findChartLocation(chartId);
+  if (!location) return null;
+  return location.file.charts[location.chartIndex] ?? null;
 }
 
 export async function addChartToDashboard(input: {
@@ -97,17 +206,17 @@ export async function addChartToDashboard(input: {
   exploreName?: string | null;
   now?: number;
 }) {
-  const db = getDb();
+  const file = await loadDashboardFile(input.dashboardId);
+  if (!file) {
+    throw new Error("Dashboard not found");
+  }
   const now = input.now ?? Date.now();
   const id = nanoid();
-  const [{ value: maxPosition } = { value: -1 }] = await db
-    .select({
-      value: sql<number>`coalesce(max(${dashboardCharts.position}), -1)`,
-    })
-    .from(dashboardCharts)
-    .where(eq(dashboardCharts.dashboardId, input.dashboardId));
-  const position = (maxPosition ?? -1) + 1;
-  await db.insert(dashboardCharts).values({
+  const maxPosition = file.charts.reduce(
+    (max, chart) => Math.max(max, chart.position),
+    -1,
+  );
+  const nextChart: DbDashboardChart = {
     id,
     dashboardId: input.dashboardId,
     title: input.title ?? null,
@@ -117,14 +226,14 @@ export async function addChartToDashboard(input: {
     chartConfigJson: input.chartConfigJson,
     semanticQueryJson: input.semanticQueryJson ?? null,
     exploreName: input.exploreName ?? null,
-    position,
+    position: maxPosition + 1,
     createdAt: now,
     updatedAt: now,
-  });
-  await db
-    .update(dashboards)
-    .set({ updatedAt: now })
-    .where(eq(dashboards.id, input.dashboardId));
+  };
+  file.charts.push(nextChart);
+  touchDashboard(file, now);
+  await saveDashboardFile(file);
+  await upsertDashboardIndex(file.dashboard);
   return { id };
 }
 
@@ -133,40 +242,28 @@ export async function updateChartConfig(
   chartConfigJson: string,
   now = Date.now(),
 ) {
-  const db = getDb();
-  // Fetch chart first to get parent dashboard id
-  const chart = await getChartById(chartId);
+  const location = await findChartLocation(chartId);
+  if (!location) return { updated: false };
+  const chart = location.file.charts[location.chartIndex];
   if (!chart) return { updated: false };
-  await db
-    .update(dashboardCharts)
-    .set({ chartConfigJson, updatedAt: now })
-    .where(eq(dashboardCharts.id, chartId));
-  // bump dashboard updatedAt
-  await db
-    .update(dashboards)
-    .set({ updatedAt: now })
-    .where(eq(dashboards.id, chart.dashboardId));
+  chart.chartConfigJson = chartConfigJson;
+  chart.updatedAt = now;
+  touchDashboard(location.file, now);
+  await saveDashboardFile(location.file);
+  await upsertDashboardIndex(location.file.dashboard);
   return { updated: true };
 }
 
-export async function updateChartSql(
-  chartId: string,
-  sql: string,
-  now = Date.now(),
-) {
-  const db = getDb();
-  // Fetch chart first to get parent dashboard id
-  const chart = await getChartById(chartId);
+export async function updateChartSql(chartId: string, sql: string, now = Date.now()) {
+  const location = await findChartLocation(chartId);
+  if (!location) return { updated: false };
+  const chart = location.file.charts[location.chartIndex];
   if (!chart) return { updated: false };
-  await db
-    .update(dashboardCharts)
-    .set({ sql, updatedAt: now })
-    .where(eq(dashboardCharts.id, chartId));
-  // bump dashboard updatedAt
-  await db
-    .update(dashboards)
-    .set({ updatedAt: now })
-    .where(eq(dashboards.id, chart.dashboardId));
+  chart.sql = sql;
+  chart.updatedAt = now;
+  touchDashboard(location.file, now);
+  await saveDashboardFile(location.file);
+  await upsertDashboardIndex(location.file.dashboard);
   return { updated: true };
 }
 
@@ -175,77 +272,71 @@ export async function reorderDashboardCharts(
   orderedChartIds: string[],
   now = Date.now(),
 ) {
-  const db = getDb();
-  await db.transaction(async (trx) => {
-    const existing = await trx
-      .select({ id: dashboardCharts.id })
-      .from(dashboardCharts)
-      .where(eq(dashboardCharts.dashboardId, dashboardId));
-    const existingIds = new Set(existing.map((row) => row.id));
-    const filteredIds = orderedChartIds.filter((id) => existingIds.has(id));
-    const uniqueFilteredSize = new Set(filteredIds).size;
-    if (
-      filteredIds.length !== existing.length ||
-      uniqueFilteredSize !== filteredIds.length
-    ) {
-      throw new Error("Ordered chart ids do not match dashboard charts");
+  const file = await loadDashboardFile(dashboardId);
+  if (!file) {
+    throw new Error("Dashboard not found");
+  }
+  const existingIds = file.charts.map((chart) => chart.id);
+  if (
+    existingIds.length !== orderedChartIds.length ||
+    new Set(orderedChartIds).size !== orderedChartIds.length ||
+    orderedChartIds.some((id) => !existingIds.includes(id))
+  ) {
+    throw new Error("Ordered chart ids do not match dashboard charts");
+  }
+  const indexByChartId = new Map(
+    orderedChartIds.map((chartId, index) => [chartId, index] as const),
+  );
+  for (const chart of file.charts) {
+    const position = indexByChartId.get(chart.id);
+    if (position === undefined) {
+      throw new Error("Invalid chart ordering");
     }
-    for (const [index, chartId] of filteredIds.entries()) {
-      await trx
-        .update(dashboardCharts)
-        .set({ position: index, updatedAt: now })
-        .where(
-          and(
-            eq(dashboardCharts.id, chartId),
-            eq(dashboardCharts.dashboardId, dashboardId),
-          ),
-        );
-    }
-    await trx
-      .update(dashboards)
-      .set({ updatedAt: now })
-      .where(eq(dashboards.id, dashboardId));
-  });
+    chart.position = position;
+    chart.updatedAt = now;
+  }
+  touchDashboard(file, now);
+  await saveDashboardFile(file);
+  await upsertDashboardIndex(file.dashboard);
 }
 
-export async function removeChartFromDashboard(
-  chartId: string,
-  now = Date.now(),
-) {
-  const db = getDb();
-  // Fetch chart first to get parent dashboard id
-  const chart = await getChartById(chartId);
-  if (!chart) return { removed: false };
-  await db.delete(dashboardCharts).where(eq(dashboardCharts.id, chartId));
-  // bump dashboard updatedAt
-  await db
-    .update(dashboards)
-    .set({ updatedAt: now })
-    .where(eq(dashboards.id, chart.dashboardId));
+export async function removeChartFromDashboard(chartId: string, now = Date.now()) {
+  const location = await findChartLocation(chartId);
+  if (!location) return { removed: false };
+  const [removed] = location.file.charts.splice(location.chartIndex, 1);
+  if (!removed) return { removed: false };
+  location.file.chartSlicers = location.file.chartSlicers.filter(
+    (slicer) => slicer.chartId !== chartId,
+  );
+  touchDashboard(location.file, now);
+  await saveDashboardFile(location.file);
+  await upsertDashboardIndex(location.file.dashboard);
   return { removed: true };
 }
 
 export async function deleteDashboard(dashboardId: string) {
-  const db = getDb();
-  // Check if dashboard exists
-  const [dashboard] = await db
-    .select()
-    .from(dashboards)
-    .where(eq(dashboards.id, dashboardId));
-  if (!dashboard) return { deleted: false };
-  // Delete dashboard (cascade will delete charts)
-  await db.delete(dashboards).where(eq(dashboards.id, dashboardId));
+  const file = await loadDashboardFile(dashboardId);
+  if (!file) return { deleted: false };
+
+  const index = await loadDashboardsIndex();
+  index.dashboards = index.dashboards.filter((d) => d.id !== dashboardId);
+  await saveDashboardsIndex(index);
+
+  try {
+    await fs.unlink(dashboardFilePath(dashboardId));
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      throw error;
+    }
+  }
   return { deleted: true };
 }
 
-// Dashboard Slicers CRUD
 export async function listSlicersByDashboard(dashboardId: string) {
-  const db = getDb();
-  return db
-    .select()
-    .from(dashboardSlicers)
-    .where(eq(dashboardSlicers.dashboardId, dashboardId))
-    .orderBy(asc(dashboardSlicers.position));
+  const file = await loadDashboardFile(dashboardId);
+  if (!file) return [];
+  return sortByPosition(file.dashboardSlicers);
 }
 
 export async function addSlicerToDashboard(input: {
@@ -255,30 +346,29 @@ export async function addSlicerToDashboard(input: {
   limit?: number;
   now?: number;
 }) {
-  const db = getDb();
+  const file = await loadDashboardFile(input.dashboardId);
+  if (!file) {
+    throw new Error("Dashboard not found");
+  }
   const now = input.now ?? Date.now();
   const id = nanoid();
-  const [{ value: maxPosition } = { value: -1 }] = await db
-    .select({
-      value: sql<number>`coalesce(max(${dashboardSlicers.position}), -1)`,
-    })
-    .from(dashboardSlicers)
-    .where(eq(dashboardSlicers.dashboardId, input.dashboardId));
-  const position = (maxPosition ?? -1) + 1;
-  await db.insert(dashboardSlicers).values({
+  const maxPosition = file.dashboardSlicers.reduce(
+    (max, slicer) => Math.max(max, slicer.position),
+    -1,
+  );
+  file.dashboardSlicers.push({
     id,
     dashboardId: input.dashboardId,
     field: input.field,
     title: input.title ?? null,
     limit: input.limit ?? 50,
-    position,
+    position: maxPosition + 1,
     createdAt: now,
     updatedAt: now,
   });
-  await db
-    .update(dashboards)
-    .set({ updatedAt: now })
-    .where(eq(dashboards.id, input.dashboardId));
+  touchDashboard(file, now);
+  await saveDashboardFile(file);
+  await upsertDashboardIndex(file.dashboard);
   return { id };
 }
 
@@ -288,28 +378,22 @@ export async function updateSlicer(input: {
   limit?: number;
   now?: number;
 }) {
-  const db = getDb();
-  const now = input.now ?? Date.now();
-  const slicer = await db
-    .select()
-    .from(dashboardSlicers)
-    .where(eq(dashboardSlicers.id, input.slicerId))
-    .limit(1);
-  if (!slicer[0]) return { updated: false };
-  const updates: Partial<typeof dashboardSlicers.$inferInsert> = {
-    updatedAt: now,
-  };
-  if (input.title !== undefined) updates.title = input.title;
-  if (input.limit !== undefined) updates.limit = input.limit;
-  await db
-    .update(dashboardSlicers)
-    .set(updates)
-    .where(eq(dashboardSlicers.id, input.slicerId));
-  await db
-    .update(dashboards)
-    .set({ updatedAt: now })
-    .where(eq(dashboards.id, slicer[0].dashboardId));
-  return { updated: true };
+  const index = await loadDashboardsIndex();
+  for (const dashboard of index.dashboards) {
+    const file = await loadDashboardFile(dashboard.id);
+    if (!file) continue;
+    const slicer = file.dashboardSlicers.find((s) => s.id === input.slicerId);
+    if (!slicer) continue;
+    const now = input.now ?? Date.now();
+    if (input.title !== undefined) slicer.title = input.title;
+    if (input.limit !== undefined) slicer.limit = input.limit;
+    slicer.updatedAt = now;
+    touchDashboard(file, now);
+    await saveDashboardFile(file);
+    await upsertDashboardIndex(file.dashboard);
+    return { updated: true };
+  }
+  return { updated: false };
 }
 
 export async function reorderDashboardSlicers(
@@ -317,67 +401,59 @@ export async function reorderDashboardSlicers(
   orderedSlicerIds: string[],
   now = Date.now(),
 ) {
-  const db = getDb();
-  await db.transaction(async (trx) => {
-    const existing = await trx
-      .select({ id: dashboardSlicers.id })
-      .from(dashboardSlicers)
-      .where(eq(dashboardSlicers.dashboardId, dashboardId));
-    const existingIds = new Set(existing.map((row) => row.id));
-    const filteredIds = orderedSlicerIds.filter((id) => existingIds.has(id));
-    const uniqueFilteredSize = new Set(filteredIds).size;
-    if (
-      filteredIds.length !== existing.length ||
-      uniqueFilteredSize !== filteredIds.length
-    ) {
-      throw new Error("Ordered slicer ids do not match dashboard slicers");
+  const file = await loadDashboardFile(dashboardId);
+  if (!file) {
+    throw new Error("Dashboard not found");
+  }
+  const existingIds = file.dashboardSlicers.map((slicer) => slicer.id);
+  if (
+    existingIds.length !== orderedSlicerIds.length ||
+    new Set(orderedSlicerIds).size !== orderedSlicerIds.length ||
+    orderedSlicerIds.some((id) => !existingIds.includes(id))
+  ) {
+    throw new Error("Ordered slicer ids do not match dashboard slicers");
+  }
+  const indexBySlicerId = new Map(
+    orderedSlicerIds.map((slicerId, index) => [slicerId, index] as const),
+  );
+  for (const slicer of file.dashboardSlicers) {
+    const position = indexBySlicerId.get(slicer.id);
+    if (position === undefined) {
+      throw new Error("Invalid slicer ordering");
     }
-    for (const [index, slicerId] of filteredIds.entries()) {
-      await trx
-        .update(dashboardSlicers)
-        .set({ position: index, updatedAt: now })
-        .where(
-          and(
-            eq(dashboardSlicers.id, slicerId),
-            eq(dashboardSlicers.dashboardId, dashboardId),
-          ),
-        );
-    }
-    await trx
-      .update(dashboards)
-      .set({ updatedAt: now })
-      .where(eq(dashboards.id, dashboardId));
-  });
+    slicer.position = position;
+    slicer.updatedAt = now;
+  }
+  touchDashboard(file, now);
+  await saveDashboardFile(file);
+  await upsertDashboardIndex(file.dashboard);
 }
 
 export async function removeSlicerFromDashboard(
   slicerId: string,
   now = Date.now(),
 ) {
-  const db = getDb();
-  const slicer = await db
-    .select()
-    .from(dashboardSlicers)
-    .where(eq(dashboardSlicers.id, slicerId))
-    .limit(1);
-  if (!slicer[0]) return { removed: false };
-  const dashboardId = slicer[0].dashboardId;
-  await db.delete(dashboardSlicers).where(eq(dashboardSlicers.id, slicerId));
-  await db
-    .update(dashboards)
-    .set({ updatedAt: now })
-    .where(eq(dashboards.id, dashboardId));
-  return { removed: true };
+  const index = await loadDashboardsIndex();
+  for (const dashboard of index.dashboards) {
+    const file = await loadDashboardFile(dashboard.id);
+    if (!file) continue;
+    const slicerIndex = file.dashboardSlicers.findIndex((s) => s.id === slicerId);
+    if (slicerIndex < 0) continue;
+    file.dashboardSlicers.splice(slicerIndex, 1);
+    touchDashboard(file, now);
+    await saveDashboardFile(file);
+    await upsertDashboardIndex(file.dashboard);
+    return { removed: true };
+  }
+  return { removed: false };
 }
 
-// Chart Slicers CRUD
 export async function listSlicersByChart(chartId: string) {
-  const db = getDb();
-  return db
-    .select()
-    .from(chartSlicers)
-    .where(eq(chartSlicers.chartId, chartId))
-    .orderBy(asc(chartSlicers.position));
+  const location = await findChartLocation(chartId);
+  if (!location) return [];
+  return sortByPosition(
+    location.file.chartSlicers.filter((slicer) => slicer.chartId === chartId),
+  );
 }
 
 export async function addSlicerToChart(input: {
@@ -387,34 +463,28 @@ export async function addSlicerToChart(input: {
   limit?: number;
   now?: number;
 }) {
-  const db = getDb();
-  const now = input.now ?? Date.now();
-  const chart = await getChartById(input.chartId);
-  if (!chart) {
+  const location = await findChartLocation(input.chartId);
+  if (!location) {
     throw new Error("Chart not found");
   }
+  const now = input.now ?? Date.now();
   const id = nanoid();
-  const [{ value: maxPosition } = { value: -1 }] = await db
-    .select({
-      value: sql<number>`coalesce(max(${chartSlicers.position}), -1)`,
-    })
-    .from(chartSlicers)
-    .where(eq(chartSlicers.chartId, input.chartId));
-  const position = (maxPosition ?? -1) + 1;
-  await db.insert(chartSlicers).values({
+  const maxPosition = location.file.chartSlicers
+    .filter((slicer) => slicer.chartId === input.chartId)
+    .reduce((max, slicer) => Math.max(max, slicer.position), -1);
+  location.file.chartSlicers.push({
     id,
     chartId: input.chartId,
     field: input.field,
     title: input.title ?? null,
     limit: input.limit ?? 50,
-    position,
+    position: maxPosition + 1,
     createdAt: now,
     updatedAt: now,
   });
-  await db
-    .update(dashboards)
-    .set({ updatedAt: now })
-    .where(eq(dashboards.id, chart.dashboardId));
+  touchDashboard(location.file, now);
+  await saveDashboardFile(location.file);
+  await upsertDashboardIndex(location.file.dashboard);
   return { id };
 }
 
@@ -424,31 +494,22 @@ export async function updateChartSlicer(input: {
   limit?: number;
   now?: number;
 }) {
-  const db = getDb();
-  const now = input.now ?? Date.now();
-  const [slicer] = await db
-    .select()
-    .from(chartSlicers)
-    .where(eq(chartSlicers.id, input.slicerId))
-    .limit(1);
-  if (!slicer) return { updated: false };
-  const updates: Partial<typeof chartSlicers.$inferInsert> = {
-    updatedAt: now,
-  };
-  if (input.title !== undefined) updates.title = input.title;
-  if (input.limit !== undefined) updates.limit = input.limit;
-  await db
-    .update(chartSlicers)
-    .set(updates)
-    .where(eq(chartSlicers.id, input.slicerId));
-  const chart = await getChartById(slicer.chartId);
-  if (chart) {
-    await db
-      .update(dashboards)
-      .set({ updatedAt: now })
-      .where(eq(dashboards.id, chart.dashboardId));
+  const index = await loadDashboardsIndex();
+  for (const dashboard of index.dashboards) {
+    const file = await loadDashboardFile(dashboard.id);
+    if (!file) continue;
+    const slicer = file.chartSlicers.find((s) => s.id === input.slicerId);
+    if (!slicer) continue;
+    const now = input.now ?? Date.now();
+    if (input.title !== undefined) slicer.title = input.title;
+    if (input.limit !== undefined) slicer.limit = input.limit;
+    slicer.updatedAt = now;
+    touchDashboard(file, now);
+    await saveDashboardFile(file);
+    await upsertDashboardIndex(file.dashboard);
+    return { updated: true };
   }
-  return { updated: true };
+  return { updated: false };
 }
 
 export async function reorderChartSlicers(
@@ -456,61 +517,50 @@ export async function reorderChartSlicers(
   orderedSlicerIds: string[],
   now = Date.now(),
 ) {
-  const db = getDb();
-  await db.transaction(async (trx) => {
-    const existing = await trx
-      .select({ id: chartSlicers.id })
-      .from(chartSlicers)
-      .where(eq(chartSlicers.chartId, chartId));
-    const existingIds = new Set(existing.map((row) => row.id));
-    const filteredIds = orderedSlicerIds.filter((id) => existingIds.has(id));
-    const uniqueFilteredSize = new Set(filteredIds).size;
-    if (
-      filteredIds.length !== existing.length ||
-      uniqueFilteredSize !== filteredIds.length
-    ) {
-      throw new Error("Ordered slicer ids do not match chart slicers");
+  const location = await findChartLocation(chartId);
+  if (!location) {
+    throw new Error("Chart not found");
+  }
+  const chartSlicers = location.file.chartSlicers.filter(
+    (slicer) => slicer.chartId === chartId,
+  );
+  const existingIds = chartSlicers.map((slicer) => slicer.id);
+  if (
+    existingIds.length !== orderedSlicerIds.length ||
+    new Set(orderedSlicerIds).size !== orderedSlicerIds.length ||
+    orderedSlicerIds.some((id) => !existingIds.includes(id))
+  ) {
+    throw new Error("Ordered slicer ids do not match chart slicers");
+  }
+  const indexBySlicerId = new Map(
+    orderedSlicerIds.map((slicerId, index) => [slicerId, index] as const),
+  );
+  for (const slicer of location.file.chartSlicers) {
+    if (slicer.chartId !== chartId) continue;
+    const position = indexBySlicerId.get(slicer.id);
+    if (position === undefined) {
+      throw new Error("Invalid slicer ordering");
     }
-    for (const [index, slicerId] of filteredIds.entries()) {
-      await trx
-        .update(chartSlicers)
-        .set({ position: index, updatedAt: now })
-        .where(
-          and(eq(chartSlicers.id, slicerId), eq(chartSlicers.chartId, chartId)),
-        );
-    }
-    const [chart] = await trx
-      .select({ dashboardId: dashboardCharts.dashboardId })
-      .from(dashboardCharts)
-      .where(eq(dashboardCharts.id, chartId))
-      .limit(1);
-    if (chart) {
-      await trx
-        .update(dashboards)
-        .set({ updatedAt: now })
-        .where(eq(dashboards.id, chart.dashboardId));
-    }
-  });
+    slicer.position = position;
+    slicer.updatedAt = now;
+  }
+  touchDashboard(location.file, now);
+  await saveDashboardFile(location.file);
+  await upsertDashboardIndex(location.file.dashboard);
 }
 
-export async function removeSlicerFromChart(
-  slicerId: string,
-  now = Date.now(),
-) {
-  const db = getDb();
-  const [slicer] = await db
-    .select()
-    .from(chartSlicers)
-    .where(eq(chartSlicers.id, slicerId))
-    .limit(1);
-  if (!slicer) return { removed: false };
-  await db.delete(chartSlicers).where(eq(chartSlicers.id, slicerId));
-  const chart = await getChartById(slicer.chartId);
-  if (chart) {
-    await db
-      .update(dashboards)
-      .set({ updatedAt: now })
-      .where(eq(dashboards.id, chart.dashboardId));
+export async function removeSlicerFromChart(slicerId: string, now = Date.now()) {
+  const index = await loadDashboardsIndex();
+  for (const dashboard of index.dashboards) {
+    const file = await loadDashboardFile(dashboard.id);
+    if (!file) continue;
+    const slicerIndex = file.chartSlicers.findIndex((s) => s.id === slicerId);
+    if (slicerIndex < 0) continue;
+    file.chartSlicers.splice(slicerIndex, 1);
+    touchDashboard(file, now);
+    await saveDashboardFile(file);
+    await upsertDashboardIndex(file.dashboard);
+    return { removed: true };
   }
-  return { removed: true };
+  return { removed: false };
 }

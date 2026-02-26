@@ -19,6 +19,7 @@ import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
 import { VisualizationPanel } from "@/components/visualization-panel";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
+import { apiFetch } from "@/lib/api/client";
 import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
@@ -58,6 +59,7 @@ export default function Chat({
     null,
   );
   const prevSqlRef = useRef<string | null>(null);
+  const loadedInitialMessagesForChatRef = useRef<string | null>(null);
   const {
     rightPanelWidth,
     isResizing,
@@ -115,6 +117,39 @@ export default function Chat({
     messages: initialMessages.length > 0 ? initialMessages : undefined,
     transport,
   });
+
+  useEffect(() => {
+    if (initialMessages.length > 0) {
+      return;
+    }
+    if (loadedInitialMessagesForChatRef.current === chatId) {
+      return;
+    }
+    loadedInitialMessagesForChatRef.current = chatId;
+
+    let cancelled = false;
+    const loadInitialMessages = async () => {
+      try {
+        const res = await apiFetch(`/api/chat/${chatId}`, { cache: "no-store" });
+        if (!res.ok || cancelled) {
+          return;
+        }
+        const data = (await res.json()) as { messages?: UIMessage[] };
+        if (!cancelled && Array.isArray(data.messages)) {
+          setMessages(data.messages);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load initial messages:", error);
+        }
+      }
+    };
+
+    void loadInitialMessages();
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId, initialMessages.length, setMessages]);
   const [animationFrame, setAnimationFrame] = useState("");
   const [verbAiIsThinking, setVerbAiIsThinking] = useState("is thinking");
   const [isDashboardBuilderOpen, setIsDashboardBuilderOpen] = useState(false);
@@ -212,7 +247,7 @@ export default function Chat({
 
     // Persist to database
     try {
-      await fetch(`/api/chat/${chatId}/message`, {
+      await apiFetch(`/api/chat/${chatId}/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -279,7 +314,7 @@ export default function Chat({
 
       // Persist to database
       try {
-        await fetch(`/api/chat/${chatId}/message`, {
+        await apiFetch(`/api/chat/${chatId}/message`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -303,14 +338,14 @@ export default function Chat({
 
       // Attempt to delete, then always reload from server to avoid rehydration
       try {
-        await fetch(`/api/chat/${chatId}/message/${messageId}`, {
+        await apiFetch(`/api/chat/${chatId}/message/${messageId}`, {
           method: "DELETE",
         });
       } catch (error) {
         console.error("Failed to delete message:", error);
       } finally {
         try {
-          const reload = await fetch(`/api/chat/${chatId}`, {
+          const reload = await apiFetch(`/api/chat/${chatId}`, {
             cache: "no-store",
           });
           if (reload.ok) {

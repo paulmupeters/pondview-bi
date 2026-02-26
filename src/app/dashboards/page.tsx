@@ -4,6 +4,7 @@ import { LayoutDashboard, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api/client";
 import {
   Card,
   CardDescription,
@@ -36,7 +37,7 @@ export default function DashboardsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/dashboards", { cache: "no-store" });
+      const res = await apiFetch("/api/dashboards", { cache: "no-store" });
       if (res.ok) {
         const data = (await res.json()) as { dashboards: DashboardLite[] };
         setDashboards(data.dashboards ?? []);
@@ -55,7 +56,7 @@ export default function DashboardsPage() {
     try {
       const title = prompt("New dashboard title")?.trim();
       if (!title) return;
-      const res = await fetch("/api/dashboards", {
+      const res = await apiFetch("/api/dashboards", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
@@ -80,7 +81,7 @@ export default function DashboardsPage() {
     try {
       // Optimistically remove from UI
       setDashboards((prev) => prev.filter((d) => d.id !== dashboardId));
-      const res = await fetch(`/api/dashboards/${dashboardId}`, {
+      const res = await apiFetch(`/api/dashboards/${dashboardId}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -154,7 +155,9 @@ export default function DashboardsPage() {
               key={dashboard.id}
               className="group relative overflow-hidden transition-all hover:shadow-md"
             >
-              <Link href={`/dashboards/${dashboard.id}`}>
+              <Link
+                href={`/dashboards/view?id=${encodeURIComponent(dashboard.id)}`}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">

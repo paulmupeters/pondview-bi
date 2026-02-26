@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type {
   DuckdbTableEntry,
   DuckdbTablesResponse,
-} from "@/app/api/duckdb/tables/route";
+} from "@/lib/api/types/duckdb";
 
 export interface DuckdbHttpConnectionInfo {
   host: string;
