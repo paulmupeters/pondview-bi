@@ -325,7 +325,7 @@ export function DashboardBuilderPanel({
       }
 
       onOpenChange(false);
-      router.push(`/dashboards/${dashboardId}`);
+      router.push(`/dashboards/view?id=${encodeURIComponent(dashboardId)}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unexpected error";
       setError(message);

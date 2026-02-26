@@ -2,24 +2,46 @@
 
 import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
 import { TextConfigDialog } from "@/components/text-config-dialog";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api/client";
 import type { Result, TextConfig } from "@/lib/types";
 import {
   DashboardGrid,
   DashboardHeader,
   DashboardSettingsDialog,
-} from "./components";
-import { FilterProvider, useFilters } from "./filter-context";
-import type { Dashboard, DashboardChart, ResizeState } from "./types";
-import { buildRows, groupConsecutiveMetricCards } from "./utils";
+} from "../[dashboardId]/components";
+import { FilterProvider, useFilters } from "../[dashboardId]/filter-context";
+import type {
+  Dashboard,
+  DashboardChart,
+  ResizeState,
+} from "../[dashboardId]/types";
+import { buildRows, groupConsecutiveMetricCards } from "../[dashboardId]/utils";
 
-export default function DashboardDetailPage() {
-  const params = useParams<{ dashboardId: string }>();
-  const dashboardId = params.dashboardId;
+export default function DashboardViewPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading...</div>}>
+      <DashboardViewPageContent />
+    </Suspense>
+  );
+}
+
+function DashboardViewPageContent() {
+  const searchParams = useSearchParams();
+  const dashboardId = searchParams.get("id");
+
+  if (!dashboardId) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        Missing dashboard id
+      </div>
+    );
+  }
+
   return (
     <FilterProvider dashboardId={dashboardId}>
       <DashboardDetailPageContent dashboardId={dashboardId} />
@@ -57,9 +79,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
 
   // Load saved preferences from localStorage
   useEffect(() => {
-    const savedColumns = localStorage.getItem(
-      `dashboard_${dashboardId}_columns`,
-    );
+    const savedColumns = localStorage.getItem(`dashboard_${dashboardId}_columns`);
     const savedAutoFit = localStorage.getItem(
       `dashboard_${dashboardId}_auto_fit_rows`,
     );
@@ -80,7 +100,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/dashboards`);
+        const res = await apiFetch(`/api/dashboards`);
         if (res.ok) {
           const list = (await res.json()) as { dashboards: Dashboard[] };
           const d = list.dashboards.find((x) => x.id === dashboardId) || null;
@@ -99,7 +119,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   const refreshDashboardData = useCallback(
     async (signal?: AbortSignal) => {
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/dashboard/${dashboardId}/data${filtersQueryString}`,
           {
             cache: "no-store",
@@ -138,7 +158,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   // Title update handler
   const handleTitleUpdate = useCallback(
     async (newTitle: string) => {
-      const res = await fetch(`/api/dashboards/${dashboardId}`, {
+      const res = await apiFetch(`/api/dashboards/${dashboardId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: newTitle }),
@@ -157,7 +177,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   const persistOrder = useCallback(
     async (previousOrder: DashboardChart[], nextOrder: DashboardChart[]) => {
       try {
-        const res = await fetch(`/api/dashboard/${dashboardId}/charts`, {
+        const res = await apiFetch(`/api/dashboard/${dashboardId}/charts`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -204,7 +224,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
           chart.id === chartId ? { ...chart, chartConfigJson: newJson } : chart,
         ),
       );
-      await fetch(`/api/charts/${chartId}`, {
+      await apiFetch(`/api/charts/${chartId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chartConfigJson: newJson }),
@@ -217,7 +237,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     async (textConfig: TextConfig) => {
       setIsAddingTextCard(true);
       try {
-        const res = await fetch(`/api/dashboard/${dashboardId}/charts`, {
+        const res = await apiFetch(`/api/dashboard/${dashboardId}/charts`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -242,7 +262,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   const handleChartDelete = useCallback(
     async (chartId: string) => {
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/dashboard/${dashboardId}/charts?chartId=${chartId}`,
           {
             method: "DELETE",
@@ -302,7 +322,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   const handleSqlUpdate = useCallback(
     async (chartId: string, newSql: string) => {
       try {
-        const res = await fetch(`/api/charts/${chartId}`, {
+        const res = await apiFetch(`/api/charts/${chartId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sql: newSql }),
@@ -316,7 +336,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
         );
 
         // Re-fetch chart data to update the chart with new SQL
-        const dataRes = await fetch(
+        const dataRes = await apiFetch(
           `/api/dashboard/${dashboardId}/data${filtersQueryString}`,
           {
             cache: "no-store",
@@ -371,7 +391,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   );
 
   if (loading)
-    return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
+    return <div className="p-6 text-sm text-muted-foreground">Loading...</div>;
   if (!dashboard)
     return (
       <div className="p-6 text-sm text-muted-foreground">

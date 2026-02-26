@@ -2,7 +2,7 @@
 
 import { ClockIcon, Database, LayoutGrid, Plus, Settings } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { MouseEvent } from "react";
 import { useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -20,15 +20,15 @@ const railButtonClassName =
   "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-tight";
 
 interface AppSidebarProps {
-  initialChats: ChatHistoryEntry[];
+  initialChats?: ChatHistoryEntry[];
 }
 
-export function AppSidebar({ initialChats }: AppSidebarProps) {
+export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const activeChatId = pathname?.startsWith("/chat/")
-    ? (pathname.split("/")[2] ?? null)
-    : null;
+  const activeChatId =
+    pathname === "/chat" ? (searchParams.get("id") ?? null) : null;
   const { chats, isLoading, loadChats } = useChatHistory(initialChats);
   const [isChatHistoryPopoverOpen, setIsChatHistoryPopoverOpen] =
     useState(false);
@@ -117,7 +117,7 @@ export function AppSidebar({ initialChats }: AppSidebarProps) {
   };
 
   const handleChatClick = (chatId: string) => {
-    router.push(`/chat/${chatId}`);
+    router.push(`/chat?id=${encodeURIComponent(chatId)}`);
     setIsChatHistoryPopoverOpen(false);
   };
 

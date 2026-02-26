@@ -1,3 +1,5 @@
+import { apiFetch } from "@/lib/api/client";
+
 export const CONNECTED_TABLES_STORAGE_KEY = "connectedTables";
 
 export const CONNECTED_TABLES_UPDATED_EVENT = "connectedTablesUpdated";
@@ -100,7 +102,7 @@ export async function updateSemanticLayerSources(
   }
 
   try {
-    const response = await fetch("/api/semantic-layer/sources", {
+    const response = await apiFetch("/api/semantic-layer/sources", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -142,7 +144,7 @@ export async function appendConnectedTable(
 
   // Update semantic layer sources.yml
   try {
-    const response = await fetch("/api/semantic-layer/sources", {
+    const response = await apiFetch("/api/semantic-layer/sources", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

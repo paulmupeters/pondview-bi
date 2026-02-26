@@ -1,17 +1,23 @@
 "use client";
 
 import type { ChatHistoryEntry } from "@/lib/chat-history";
+import { Suspense } from "react";
 import { AppSidebar } from "./app-sidebar";
 
 interface SidebarLayoutProps {
   children: React.ReactNode;
-  initialChats: ChatHistoryEntry[];
+  initialChats?: ChatHistoryEntry[];
 }
 
-export function SidebarLayout({ children, initialChats }: SidebarLayoutProps) {
+export function SidebarLayout({
+  children,
+  initialChats = [],
+}: SidebarLayoutProps) {
   return (
     <div className="flex h-full w-full">
-      <AppSidebar initialChats={initialChats} />
+      <Suspense fallback={null}>
+        <AppSidebar initialChats={initialChats} />
+      </Suspense>
       <div className="flex-1 overflow-hidden">
         <div className="h-full bg-background/80 backdrop-blur-sm">
           {children}

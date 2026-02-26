@@ -11,7 +11,6 @@ import {
   SELECTED_THEME_KEY,
   THEME_STYLE_ID,
 } from "@/lib/custom-css";
-import { listRecentChats } from "@/lib/repositories/chat";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { themes } from "@/themes";
 
@@ -67,13 +66,11 @@ const THEME_BOOTSTRAP_SCRIPT = `(() => {
     // no-op
   }
 })();`;
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const initialChats = await listRecentChats().catch(() => []);
-
   return (
     <html lang="en" className="h-full">
       <head>
@@ -86,7 +83,7 @@ export default async function RootLayout({
           <TooltipProvider>
             <CustomCssLoader />
             <CommandPalette />
-            <SidebarLayout initialChats={initialChats}>
+            <SidebarLayout>
               {children}
             </SidebarLayout>
           </TooltipProvider>

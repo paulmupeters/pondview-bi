@@ -30,7 +30,7 @@ export default function Home() {
 
       const chatId = nanoid();
       const encodedQuery = encodeURIComponent(message.text.trim());
-      router.push(`/chat/${chatId}?q=${encodedQuery}`);
+      router.push(`/chat?id=${chatId}&q=${encodedQuery}`);
     },
     [router],
   );
@@ -90,7 +90,7 @@ export default function Home() {
           }),
         });
         // Navigate to the new chat after persisting
-        router.push(`/chat/${chatId}`);
+        router.push(`/chat?id=${chatId}`);
       } catch (error) {
         console.error("Failed to persist message:", error);
       }
@@ -102,7 +102,7 @@ export default function Home() {
     (newMode: PromptMode) => {
       if (newMode === "manual") {
         const chatId = nanoid();
-        router.push(`/chat/${chatId}?mode=manual`);
+        router.push(`/chat?id=${chatId}&mode=manual`);
       } else {
         setMode(newMode);
       }

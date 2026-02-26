@@ -104,7 +104,7 @@ export function useChatUrlParams({
       }
 
       // Drop the query param to avoid duplicate sends on remounts.
-      router.replace(`/chat/${chatId}`);
+      router.replace(`/chat?id=${encodeURIComponent(chatId)}`);
       window.localStorage.setItem(
         flagKey,
         JSON.stringify({ timestamp: Date.now() }),
@@ -119,7 +119,7 @@ export function useChatUrlParams({
     if (manual === "1" && !manualVisualHandled) {
       void handleAddVisual();
       setManualVisualHandled(true);
-      router.replace(`/chat/${chatId}`);
+      router.replace(`/chat?id=${encodeURIComponent(chatId)}`);
     }
   }, [searchParams, manualVisualHandled, handleAddVisual, router, chatId]);
 
@@ -127,7 +127,7 @@ export function useChatUrlParams({
     const modeParam = searchParams?.get("mode");
     if (modeParam === "manual") {
       setPromptMode("manual");
-      router.replace(`/chat/${chatId}`);
+      router.replace(`/chat?id=${encodeURIComponent(chatId)}`);
     }
   }, [searchParams, router, chatId, setPromptMode]);
 

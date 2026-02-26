@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api/client";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
 
 type LoadChatsOptions = {
@@ -21,7 +22,7 @@ export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
       }
 
       try {
-        const res = await fetch("/api/chats", { cache: "no-store" });
+        const res = await apiFetch("/api/chats", { cache: "no-store" });
         if (res.ok) {
           const data = (await res.json()) as { chats: ChatHistoryEntry[] };
           const chatList = data.chats ?? [];
