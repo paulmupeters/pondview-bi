@@ -1,5 +1,3 @@
-"use client";
-
 import { Pencil } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";

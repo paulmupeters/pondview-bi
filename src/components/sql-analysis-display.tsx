@@ -1,5 +1,3 @@
-"use client";
-
 import {
   ChatBubbleBottomCenterTextIcon,
   PlusCircleIcon,

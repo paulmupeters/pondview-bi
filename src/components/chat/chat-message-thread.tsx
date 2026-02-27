@@ -1,5 +1,3 @@
-"use client";
-
 import type { UIMessage } from "@ai-sdk/react";
 import { TrashIcon } from "@heroicons/react/24/outline";
 import {

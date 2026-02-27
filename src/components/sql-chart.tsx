@@ -1,5 +1,3 @@
-"use client";
-
 import { DynamicChart } from "@/components/dynamic-chart";
 import type { Config, Result } from "@/lib/types";
 

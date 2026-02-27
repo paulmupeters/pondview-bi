@@ -1,5 +1,3 @@
-"use client";
-
 import type { MetricCardGroupProps } from "../types";
 import { getColSpanClass } from "../utils";
 import { MetricCardInGroup } from "./MetricCardInGroup";

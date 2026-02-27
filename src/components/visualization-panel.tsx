@@ -1,5 +1,3 @@
-"use client";
-
 import { useMemo } from "react";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import type {

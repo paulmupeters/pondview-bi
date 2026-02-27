@@ -1,5 +1,3 @@
-"use client";
-
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import type { UIMessage } from "ai";
 import { nanoid } from "nanoid";

@@ -1,5 +1,3 @@
-"use client";
-
 import { useArtifact } from "@ai-sdk-tools/artifacts/client";
 import { ExecuteSqlArtifact } from "@/ai/artifacts/execute-sql";
 

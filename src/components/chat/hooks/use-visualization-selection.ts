@@ -1,5 +1,3 @@
-"use client";
-
 import type { UIMessage } from "@ai-sdk/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
