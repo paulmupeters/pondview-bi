@@ -1,5 +1,3 @@
-"use client";
-
 import type { ReadonlyURLSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 

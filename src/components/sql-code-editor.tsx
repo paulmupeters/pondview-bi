@@ -1,5 +1,3 @@
-"use client";
-
 import { PostgreSQL, sql } from "@codemirror/lang-sql";
 import { Prec } from "@codemirror/state";
 import { EditorView, type KeyBinding, keymap } from "@codemirror/view";

@@ -1,5 +1,3 @@
-"use client";
-
 import { ClockIcon, Database, LayoutGrid, Plus, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";

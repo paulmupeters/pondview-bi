@@ -1,5 +1,3 @@
-"use client";
-
 import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { Suspense } from "react";
 import { AppSidebar } from "./app-sidebar";

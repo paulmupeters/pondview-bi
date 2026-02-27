@@ -30,7 +30,7 @@ import * as uploadRoute from "../app/api/upload/route";
 import * as uploadFileRoute from "../app/api/upload/[fileId]/route";
 
 const PORT = Number(process.env.EXTENSION_SERVER_PORT || 4318);
-const STATIC_ROOT = process.env.STATIC_OUT_DIR || join(process.cwd(), "out");
+const STATIC_ROOT = process.env.STATIC_OUT_DIR || join(process.cwd(), "dist");
 
 type Handler = (
   request: Request,
@@ -438,6 +438,12 @@ function contentTypeFor(filePath: string): string {
       return "image/webp";
     case ".ico":
       return "image/x-icon";
+    case ".woff":
+      return "font/woff";
+    case ".woff2":
+      return "font/woff2";
+    case ".ttf":
+      return "font/ttf";
     default:
       return "application/octet-stream";
   }

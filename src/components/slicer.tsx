@@ -1,5 +1,3 @@
-"use client";
-
 import { Check, ChevronDown, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFilters } from "@/app/dashboards/[dashboardId]/filter-context";
