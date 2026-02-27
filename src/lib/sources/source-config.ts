@@ -4,7 +4,10 @@ import yaml from "js-yaml";
 
 export interface SourceConnectionConfig {
   type: string;
-  identifier: string;
+  /** @deprecated Use `connectionId` for new connections. Kept for backward compatibility. */
+  identifier?: string;
+  /** Opaque key that maps to a credential stored in `.env.local`. */
+  connectionId?: string;
   alias?: string;
   readOnly?: boolean;
   duckdbExtension?: string;
@@ -32,7 +35,10 @@ export interface ConnectedTableInput {
   schema?: string;
   tables?: string[];
   type?: string;
+  /** Raw credential string – only used transiently, never persisted to YAML. */
   databasePath?: string;
+  /** Opaque key referencing a credential in `.env.local`. */
+  connectionId?: string;
   attachAs?: string;
   readOnly?: boolean;
   duckdbExtension?: string;
@@ -40,7 +46,7 @@ export interface ConnectedTableInput {
 
 export function updateSources(
   modelsDir: string,
-  sources: SourceEntry[]
+  sources: SourceEntry[],
 ): { created: boolean; addedSources: number } {
   const filePath = join(modelsDir, "sources.yml");
   const fileExists = existsSync(filePath);
@@ -61,21 +67,29 @@ export function updateSources(
 
   let addedSources = 0;
   const existingSourceNames = new Map(
-    yamlData.sources.map((source) => [source.name.toLowerCase(), source] as const)
+    yamlData.sources.map(
+      (source) => [source.name.toLowerCase(), source] as const,
+    ),
   );
 
   for (const source of sources) {
     const key = source.name.toLowerCase();
-    const connection =
-      source.connection?.identifier
-        ? {
-            type: source.connection.type,
-            identifier: source.connection.identifier,
-            alias: source.connection.alias,
-            readOnly: source.connection.readOnly,
-            duckdbExtension: source.connection.duckdbExtension,
-          }
-        : undefined;
+    const hasConnectionInfo =
+      source.connection?.connectionId || source.connection?.identifier;
+    const connection = hasConnectionInfo
+      ? {
+          type: source.connection!.type,
+          ...(source.connection!.connectionId
+            ? { connectionId: source.connection!.connectionId }
+            : {}),
+          ...(source.connection!.identifier
+            ? { identifier: source.connection!.identifier }
+            : {}),
+          alias: source.connection!.alias,
+          readOnly: source.connection!.readOnly,
+          duckdbExtension: source.connection!.duckdbExtension,
+        }
+      : undefined;
 
     if (!existingSourceNames.has(key)) {
       yamlData.sources.push({
@@ -83,7 +97,10 @@ export function updateSources(
         table: source.table,
         connection,
       });
-      existingSourceNames.set(key, yamlData.sources[yamlData.sources.length - 1]);
+      existingSourceNames.set(
+        key,
+        yamlData.sources[yamlData.sources.length - 1],
+      );
       addedSources++;
     } else {
       const existing = existingSourceNames.get(key);
@@ -108,7 +125,9 @@ export function updateSources(
   };
 }
 
-export function connectedTableToSources(input: ConnectedTableInput): SourceEntry[] {
+export function connectedTableToSources(
+  input: ConnectedTableInput,
+): SourceEntry[] {
   const sources: SourceEntry[] = [];
 
   if (input.table) {
@@ -134,7 +153,7 @@ export function connectedTableToSources(input: ConnectedTableInput): SourceEntry
 
 export function updateSourcesFromConnectedTable(
   modelsDir: string,
-  input: ConnectedTableInput
+  input: ConnectedTableInput,
 ): { created: boolean; addedSources: number } {
   const sources = connectedTableToSources(input);
   return updateSources(modelsDir, sources);
@@ -142,14 +161,22 @@ export function updateSourcesFromConnectedTable(
 
 function buildConnectionConfig(
   input: ConnectedTableInput,
-  defaultAlias: string
+  defaultAlias: string,
 ): SourceConnectionConfig | undefined {
-  if (!input.type || !input.databasePath) {
+  if (!input.type) {
+    return undefined;
+  }
+  // Prefer connectionId (new path) over raw databasePath (legacy path)
+  if (!input.connectionId && !input.databasePath) {
     return undefined;
   }
   return {
     type: input.type,
-    identifier: input.databasePath,
+    ...(input.connectionId ? { connectionId: input.connectionId } : {}),
+    // Only write identifier when there is no connectionId (legacy fallback)
+    ...(!input.connectionId && input.databasePath
+      ? { identifier: input.databasePath }
+      : {}),
     alias: input.attachAs || defaultAlias,
     readOnly: input.readOnly,
     duckdbExtension: input.duckdbExtension,

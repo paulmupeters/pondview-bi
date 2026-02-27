@@ -45,13 +45,15 @@ export function ConnectedDataPanel({
   const [isOpen, setIsOpen] = useState(false);
 
   const getDbIdentifier = (entry: (typeof connectedTables)[0]): string => {
-    // Use databasePath as the identifier for queries, not attachAs
-    // attachAs is only for display and SQL table references
-    return entry.databasePath;
+    // Prefer connectionId (new) over databasePath (legacy) for identification
+    // databasePath may be absent when credentials are stored server-side
+    return entry.connectionId ?? entry.databasePath ?? entry.attachAs ?? "";
   };
 
   const getDbKey = (entry: (typeof connectedTables)[0]): string => {
-    return `${entry.type}-${entry.databasePath}-${entry.schema || entry.table || ""}`;
+    const dbId =
+      entry.connectionId ?? entry.databasePath ?? entry.attachAs ?? "";
+    return `${entry.type}-${dbId}-${entry.schema || entry.table || ""}`;
   };
 
   const getDbDisplayName = (entry: (typeof connectedTables)[0]): string => {
@@ -59,7 +61,9 @@ export function ConnectedDataPanel({
     if (entry.schema) parts.push(entry.schema);
     if (entry.table) parts.push(entry.table);
     if (parts.length === 0) {
-      parts.push(entry.databasePath);
+      parts.push(
+        entry.attachAs ?? entry.connectionId ?? entry.databasePath ?? "unknown",
+      );
     }
     return `${parts.join(".")} (${entry.type})`;
   };
@@ -123,22 +127,20 @@ export function ConnectedDataPanel({
             const dbKey = getDbKey(entry);
             const dbIdentifier = getDbIdentifier(entry);
             const dbDisplayName = getDbDisplayName(entry);
-        // Check both databasePath and attachAs for backward compatibility
+            // Check both databasePath and attachAs for backward compatibility
             const isSelected =
               selectedDb === dbIdentifier || selectedDb === entry.attachAs;
             const hasTables =
               (entry.tables && entry.tables.length > 0) || entry.table;
 
             return (
-              <div
-                key={dbKey}
-                className="space-y-1"
-              >
+              <div key={dbKey} className="space-y-1">
                 <div
                   className={cn(
                     "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
-                    isSelected && "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
-                    mode === "sidebar" && "hover:bg-sidebar-accent/50"
+                    isSelected &&
+                      "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
+                    mode === "sidebar" && "hover:bg-sidebar-accent/50",
                   )}
                 >
                   <button
@@ -150,37 +152,47 @@ export function ConnectedDataPanel({
                     <span className="truncate">{dbDisplayName}</span>
                   </button>
                 </div>
-                {
-                  hasTables && (
-                    <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
+                {hasTables && (
+                  <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
                     {entry.tables && entry.tables.length > 0
-                        ? entry.tables.map((tableName, idx) => {
-                          const colors = ['bg-blue-400', 'bg-purple-400', 'bg-amber-400'];
+                      ? entry.tables.map((tableName, idx) => {
+                          const colors = [
+                            "bg-blue-400",
+                            "bg-purple-400",
+                            "bg-amber-400",
+                          ];
                           const color = colors[idx % colors.length];
                           return (
                             <button
                               key={tableName}
                               type="button"
                               className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-                              onClick={() => handleInsertTable(entry, tableName)}
+                              onClick={() =>
+                                handleInsertTable(entry, tableName)
+                              }
                             >
-                              <span className={cn("w-1.5 h-1.5 rounded-full", color)}></span>
+                              <span
+                                className={cn(
+                                  "w-1.5 h-1.5 rounded-full",
+                                  color,
+                                )}
+                              ></span>
                               <span className="truncate">{tableName}</span>
                             </button>
                           );
                         })
                       : entry.table && (
-                        <button
-                          type="button"
+                          <button
+                            type="button"
                             className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-                          onClick={() =>
-                            handleInsertTable(entry, entry.table as string)
-                          }
-                        >
+                            onClick={() =>
+                              handleInsertTable(entry, entry.table as string)
+                            }
+                          >
                             <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
-                          <span className="truncate">{entry.table}</span>
-                        </button>
-                      )}
+                            <span className="truncate">{entry.table}</span>
+                          </button>
+                        )}
                   </div>
                 )}
               </div>
@@ -195,26 +207,30 @@ export function ConnectedDataPanel({
                 className={cn(
                   "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
                   selectedDb &&
-                  isMaterializedTableIdentifier(selectedDb) &&
-                  "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
-                  mode === "sidebar" && "hover:bg-sidebar-accent/50"
+                    isMaterializedTableIdentifier(selectedDb) &&
+                    "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
+                  mode === "sidebar" && "hover:bg-sidebar-accent/50",
                 )}
               >
                 <button
                   type="button"
                   className="flex items-center gap-2 flex-1 text-left cursor-pointer"
-                onClick={handleSelectMaterialized}
-              >
+                  onClick={handleSelectMaterialized}
+                >
                   <Database className="h-4 w-4 shrink-0 text-sidebar-primary" />
                   <span className="truncate">
-                  Materialized ({materializedTables.length})
-                </span>
+                    Materialized ({materializedTables.length})
+                  </span>
                 </button>
-            </div>
+              </div>
 
               <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
                 {materializedTables.map((tableName, idx) => {
-                  const colors = ['bg-blue-400', 'bg-purple-400', 'bg-amber-400'];
+                  const colors = [
+                    "bg-blue-400",
+                    "bg-purple-400",
+                    "bg-amber-400",
+                  ];
                   const color = colors[idx % colors.length];
                   return (
                     <button
@@ -223,16 +239,17 @@ export function ConnectedDataPanel({
                       className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
                       onClick={() => handleInsertMaterializedTable(tableName)}
                     >
-                      <span className={cn("w-1.5 h-1.5 rounded-full", color)}></span>
+                      <span
+                        className={cn("w-1.5 h-1.5 rounded-full", color)}
+                      ></span>
                       <span className="truncate">{tableName}</span>
                     </button>
                   );
                 })}
               </div>
-          </div>
+            </div>
           </>
         )}
-
       </div>
     );
   };
