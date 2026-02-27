@@ -88,11 +88,13 @@ export default function ViewDataPage() {
     >();
 
     for (const table of tables) {
-      const existing = grouped.get(table.databasePath);
+      const groupKey =
+        table.connectionId ?? table.databasePath ?? table.attachAs ?? "";
+      const existing = grouped.get(groupKey);
       if (existing) {
         existing.entries.push(table);
       } else {
-        grouped.set(table.databasePath, {
+        grouped.set(groupKey, {
           type: table.type,
           entries: [table],
         });

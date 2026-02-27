@@ -2,15 +2,19 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
 import yaml from "js-yaml";
-import { listChartsByDashboard } from "@/lib/repositories/dashboard";
+import { resolveCredential } from "@/lib/credentials";
 import {
   type AttachmentPlan,
   buildAttachmentPlan,
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
-import { getDuckDbInstance, getMaterializationDbPath } from "@/lib/duckdb/duckdb-node";
+import {
+  getDuckDbInstance,
+  getMaterializationDbPath,
+} from "@/lib/duckdb/duckdb-node";
 import { extractTableNamesFromSql } from "@/lib/filters/parse-tables";
 import { canonicalTable, loadJoinDefs } from "@/lib/joins/loader";
+import { listChartsByDashboard } from "@/lib/repositories/dashboard";
 import type { SourceEntry } from "@/lib/sources/source-config";
 
 const DEFAULT_MODELS_DIR = join(process.cwd(), "semantic-layer", "models");
@@ -22,7 +26,11 @@ type YamlSourcesFile = {
   sources?: SourceEntry[];
 };
 
-export type TableMaterializationStatus = "skipped" | "materialized" | "missing_source" | "error";
+export type TableMaterializationStatus =
+  | "skipped"
+  | "materialized"
+  | "missing_source"
+  | "error";
 
 export interface TableMaterializationResult {
   tableName: string;
@@ -50,7 +58,7 @@ export interface TableMaterializationOptions {
 }
 
 export async function materializeTables(
-  options: TableMaterializationOptions = {}
+  options: TableMaterializationOptions = {},
 ): Promise<TableMaterializationResult[]> {
   const modelsDir = options.modelsDir ?? DEFAULT_MODELS_DIR;
   const targetSchema = options.targetSchema ?? DEFAULT_TARGET_SCHEMA;
@@ -61,7 +69,9 @@ export async function materializeTables(
 
   const requestedTables =
     options.tableNames && options.tableNames.length > 0
-      ? Array.from(new Set(options.tableNames.map(canonicalTable).filter(Boolean)))
+      ? Array.from(
+          new Set(options.tableNames.map(canonicalTable).filter(Boolean)),
+        )
       : Array.from(sourceByName.keys());
 
   const results: TableMaterializationResult[] = [];
@@ -94,7 +104,7 @@ export async function materializeTables(
 
 export async function materializeTablesForDashboard(
   dashboardId: string,
-  options: Omit<TableMaterializationOptions, "tableNames"> = {}
+  options: Omit<TableMaterializationOptions, "tableNames"> = {},
 ): Promise<TableMaterializationResult[]> {
   const charts = await listChartsByDashboard(dashboardId);
   const tableNames = new Set<string>();
@@ -127,10 +137,12 @@ export async function materializeTablesForDashboard(
   });
 }
 
-export async function listTableMaterializations(): Promise<TableMaterializationRecord[]> {
+export async function listTableMaterializations(): Promise<
+  TableMaterializationRecord[]
+> {
   await ensureTrackingTable();
   const rows = await runQuery(
-    `SELECT table_name, source_name, source_hash, target_table, row_count, updated_at FROM ${TRACKING_TABLE};`
+    `SELECT table_name, source_name, source_hash, target_table, row_count, updated_at FROM ${TRACKING_TABLE};`,
   );
   return rows.map((row) => ({
     tableName: String(row.table_name),
@@ -163,17 +175,33 @@ function buildSourceLookup(sources: SourceEntry[]): Map<string, SourceEntry> {
 
 async function materializeSingleTable(
   source: SourceEntry,
-  targetSchema: string
+  targetSchema: string,
 ): Promise<TableMaterializationResult> {
   const tableName = canonicalTable(source.name);
   const sourceHash = computeSourceHash(source);
   const existingHash = await fetchExistingHash(tableName);
   const targetTable = `${targetSchema}.${sanitizeIdentifier(tableName)}`;
   const targetQualified = `${quoteIdent(targetSchema)}.${quoteIdent(
-    sanitizeIdentifier(tableName)
+    sanitizeIdentifier(tableName),
   )}`;
-  const attachmentPlan = source.connection
-    ? buildAttachmentPlan(source.connection)
+
+  // Resolve connectionId → identifier before building the attachment plan
+  let resolvedConnection = source.connection;
+  if (source.connection?.connectionId && !source.connection.identifier) {
+    const credential = resolveCredential(source.connection.connectionId);
+    if (!credential) {
+      return {
+        tableName,
+        sourceName: source.name,
+        status: "error",
+        reason: `No credential found for connectionId "${source.connection.connectionId}". Check .env.local.`,
+      };
+    }
+    resolvedConnection = { ...source.connection, identifier: credential };
+  }
+
+  const attachmentPlan = resolvedConnection
+    ? buildAttachmentPlan(resolvedConnection)
     : undefined;
   const sourceReference = buildSourceReference(source, attachmentPlan);
 
@@ -191,22 +219,26 @@ async function materializeSingleTable(
     `CREATE SCHEMA IF NOT EXISTS ${quoteIdent(targetSchema)};`,
   ];
   if (attachmentPlan) {
-    statements.push(buildDetachStatement(attachmentPlan.alias, { ifExists: true }));
+    statements.push(
+      buildDetachStatement(attachmentPlan.alias, { ifExists: true }),
+    );
     statements.push(...attachmentPlan.statements);
   }
 
   statements.push(
-    `CREATE OR REPLACE TABLE ${targetQualified} AS SELECT * FROM ${sourceReference};`
+    `CREATE OR REPLACE TABLE ${targetQualified} AS SELECT * FROM ${sourceReference};`,
   );
   statements.push(
     `INSERT OR REPLACE INTO ${TRACKING_TABLE} (table_name, source_name, source_hash, target_table, row_count, updated_at)\n` +
       `SELECT '${escapeLiteral(tableName)}', '${escapeLiteral(
-        source.name
+        source.name,
       )}', '${sourceHash}', '${escapeLiteral(targetTable)}', COUNT(*), CURRENT_TIMESTAMP\n` +
-      `FROM ${targetQualified};`
+      `FROM ${targetQualified};`,
   );
   if (attachmentPlan) {
-    statements.push(buildDetachStatement(attachmentPlan.alias, { ifExists: true }));
+    statements.push(
+      buildDetachStatement(attachmentPlan.alias, { ifExists: true }),
+    );
   }
 
   await executeStatements(statements);
@@ -225,17 +257,22 @@ function computeSourceHash(source: SourceEntry): string {
   return hash.digest("hex");
 }
 
-async function fetchExistingHash(tableName: string): Promise<string | undefined> {
+async function fetchExistingHash(
+  tableName: string,
+): Promise<string | undefined> {
   const rows = await runQuery(
     `SELECT source_hash FROM ${TRACKING_TABLE} WHERE table_name = '${escapeLiteral(
-      tableName
-    )}' LIMIT 1;`
+      tableName,
+    )}' LIMIT 1;`,
   );
   const hash = rows[0]?.source_hash;
   return typeof hash === "string" ? hash : undefined;
 }
 
-function buildSourceReference(source: SourceEntry, attachmentPlan?: AttachmentPlan): string {
+function buildSourceReference(
+  source: SourceEntry,
+  attachmentPlan?: AttachmentPlan,
+): string {
   const tableParts = source.table
     .split(".")
     .map((part) => part.trim())
@@ -268,7 +305,8 @@ async function loadSources(modelsDir: string): Promise<SourceEntry[]> {
 }
 
 async function ensureTrackingTable(): Promise<void> {
-  await runQuery(`
+  await runQuery(
+    `
 CREATE TABLE IF NOT EXISTS ${TRACKING_TABLE} (
   table_name TEXT PRIMARY KEY,
   source_name TEXT NOT NULL,
@@ -276,7 +314,8 @@ CREATE TABLE IF NOT EXISTS ${TRACKING_TABLE} (
   target_table TEXT NOT NULL,
   row_count BIGINT,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);`.trim());
+);`.trim(),
+  );
 }
 
 async function executeStatements(statements: Iterable<string>): Promise<void> {

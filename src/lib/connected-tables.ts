@@ -6,7 +6,10 @@ export const CONNECTED_TABLES_UPDATED_EVENT = "connectedTablesUpdated";
 
 export type ConnectedTable = {
   type: string;
-  databasePath: string;
+  /** @deprecated Kept for backward compatibility. New entries use `connectionId` instead. */
+  databasePath?: string;
+  /** Opaque key referencing a credential stored server-side in `.env.local`. */
+  connectionId?: string;
   // Friendly name for the database (e.g., "my_db" for MotherDuck, database name for Postgres)
   databaseName?: string;
   // For backward compatibility keep `table` optional now
@@ -42,7 +45,10 @@ export function readConnectedTablesFromStorage(): ConnectedTable[] {
     return parsed.filter((entry): entry is ConnectedTable => {
       if (typeof entry !== "object" || entry === null) return false;
       if (typeof (entry as any).type !== "string") return false;
-      if (typeof (entry as any).databasePath !== "string") return false;
+      // Accept entries with either databasePath (legacy) or connectionId (new)
+      const hasDatabasePath = typeof (entry as any).databasePath === "string";
+      const hasConnectionId = typeof (entry as any).connectionId === "string";
+      if (!hasDatabasePath && !hasConnectionId) return false;
       // Accept either table or schema for compatibility
       const hasTable = typeof (entry as any).table === "string";
       const hasSchema = typeof (entry as any).schema === "string";
@@ -86,7 +92,7 @@ export function writeConnectedTablesToStorage(tables: ConnectedTable[]) {
   try {
     window.localStorage.setItem(
       CONNECTED_TABLES_STORAGE_KEY,
-      JSON.stringify(tables)
+      JSON.stringify(tables),
     );
     window.dispatchEvent(new Event(CONNECTED_TABLES_UPDATED_EVENT));
   } catch (error) {
@@ -95,7 +101,7 @@ export function writeConnectedTablesToStorage(tables: ConnectedTable[]) {
 }
 
 export async function updateSemanticLayerSources(
-  entry: ConnectedTable
+  entry: ConnectedTable,
 ): Promise<void> {
   if (!isClient) {
     return;
@@ -124,7 +130,7 @@ export async function updateSemanticLayerSources(
       const errorData = await response.json();
       console.error(
         "[Semantic Layer] Failed to update sources:",
-        errorData.error || response.statusText
+        errorData.error || response.statusText,
       );
     }
   } catch (error) {
@@ -133,16 +139,14 @@ export async function updateSemanticLayerSources(
 }
 
 export async function appendConnectedTable(
-  entry: ConnectedTable
+  entry: ConnectedTable,
 ): Promise<void> {
   if (!isClient) {
     return;
   }
 
-  const existing = readConnectedTablesFromStorage();
-  writeConnectedTablesToStorage([...existing, entry]);
-
-  // Update semantic layer sources.yml
+  // Update semantic layer sources.yml and retrieve a connectionId from the server
+  let connectionId: string | undefined;
   try {
     const response = await apiFetch("/api/semantic-layer/sources", {
       method: "POST",
@@ -166,13 +170,14 @@ export async function appendConnectedTable(
       const errorData = await response.json();
       console.error(
         "[Semantic Layer] Failed to update sources:",
-        errorData.error || response.statusText
+        errorData.error || response.statusText,
       );
     } else {
       const result = await response.json();
+      connectionId = result.connectionId;
       if (result.success && result.addedSources > 0) {
         console.log(
-          `[Semantic Layer] Added ${result.addedSources} source(s) to sources.yml`
+          `[Semantic Layer] Added ${result.addedSources} source(s) to sources.yml`,
         );
       }
     }
@@ -180,10 +185,28 @@ export async function appendConnectedTable(
     // Don't fail the connection if semantic layer update fails
     console.error("[Semantic Layer] Error updating sources:", error);
   }
+
+  // Store in localStorage with connectionId and WITHOUT raw credentials
+  const storageEntry: ConnectedTable = {
+    type: entry.type,
+    connectionId: connectionId ?? entry.connectionId,
+    databaseName: entry.databaseName,
+    table: entry.table,
+    schema: entry.schema,
+    tables: entry.tables,
+    description: entry.description,
+    attachAs: entry.attachAs,
+    readOnly: entry.readOnly,
+    duckdbExtension: entry.duckdbExtension,
+    // Intentionally omit databasePath – credentials stay server-side only
+  };
+
+  const existing = readConnectedTablesFromStorage();
+  writeConnectedTablesToStorage([...existing, storageEntry]);
 }
 
 export async function removeConnectedTable(
-  entry: ConnectedTable
+  entry: ConnectedTable,
 ): Promise<void> {
   if (!isClient) {
     return;
@@ -207,7 +230,7 @@ export async function removeConnectedTable(
             } catch (error) {
               console.error(
                 `Failed to drop table ${entry.schema}.${tableName}:`,
-                error
+                error,
               );
             }
           }
@@ -220,7 +243,7 @@ export async function removeConnectedTable(
           } catch (error) {
             console.error(
               `Failed to drop table ${schema}.${entry.table}:`,
-              error
+              error,
             );
           }
         }
@@ -233,13 +256,18 @@ export async function removeConnectedTable(
 
   const existing = readConnectedTablesFromStorage();
   const filtered = existing.filter((table) => {
-    // Match by type and databasePath
-    if (
-      table.type !== entry.type ||
-      table.databasePath !== entry.databasePath
-    ) {
-      return true;
-    }
+    // Match by type first
+    if (table.type !== entry.type) return true;
+
+    // Match by connectionId (new path) or databasePath (legacy)
+    const connectionMatch =
+      (table.connectionId &&
+        entry.connectionId &&
+        table.connectionId === entry.connectionId) ||
+      (table.databasePath &&
+        entry.databasePath &&
+        table.databasePath === entry.databasePath);
+    if (!connectionMatch) return true;
     // Match by schema if both have schema
     if (table.schema && entry.schema) {
       if (table.schema !== entry.schema) {

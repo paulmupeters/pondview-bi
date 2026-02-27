@@ -39,7 +39,9 @@ export async function POST(req: Request) {
         model: LEGACY_CHAT_MODEL,
         system: analysisPrompt.replace(
           "{connectedTables}",
-          JSON.stringify(connectedTables),
+          JSON.stringify(
+            connectedTables.map(({ databasePath, ...rest }) => rest),
+          ),
         ),
         messages: convertToModelMessages(messages),
         tools,
