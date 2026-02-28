@@ -1,8 +1,9 @@
 import { getTheme } from "@/themes";
 
-const THEME_STYLE_ID = "theme-style";
-const CUSTOM_CSS_STYLE_ID = "custom-css-style";
-const SELECTED_THEME_KEY = "SELECTED_THEME";
+export const THEME_STYLE_ID = "theme-style";
+export const CUSTOM_CSS_STYLE_ID = "custom-css-style";
+export const SELECTED_THEME_KEY = "SELECTED_THEME";
+export const CUSTOM_CSS_KEY = "CUSTOM_CSS";
 
 export function applyCustomCss(css: string) {
   if (typeof document === "undefined") return;

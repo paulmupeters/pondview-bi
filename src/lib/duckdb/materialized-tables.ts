@@ -6,7 +6,7 @@ export const MATERIALIZED_TABLE_PREFIX = "materialized:";
 /**
  * Schema name for materialized tables
  */
-export const MATERIALIZED_SCHEMA = "semantic_materialized";
+export const MATERIALIZED_SCHEMA = "mat";
 
 /**
  * Checks if a database identifier represents a materialized table
@@ -22,7 +22,7 @@ export function isMaterializedTableIdentifier(
 
 /**
  * Extracts the table name from a materialized table identifier
- * Format: materialized:semantic_materialized.<table_name>
+ * Format: materialized:mat.<table_name>
  */
 export function extractMaterializedTableName(
   dbIdentifier: string

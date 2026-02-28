@@ -1,13 +1,9 @@
-"use client";
-
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import type {
   SqlAnalysisData,
   SqlAnalysisStage,
 } from "@/components/sql-analysis-display.types";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export interface VisualizationPanelProps {
@@ -17,38 +13,31 @@ export interface VisualizationPanelProps {
     stage?: SqlAnalysisStage;
     progress?: number;
   }>;
+  selectedVisualizationId?: string | null;
   className?: string;
 }
 
 export function VisualizationPanel({
   visualizations,
+  selectedVisualizationId,
   className,
 }: VisualizationPanelProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  // Reset to latest visualization when new ones are added
-  useEffect(() => {
-    if (visualizations.length > 0) {
-      setCurrentIndex(visualizations.length - 1);
+  const currentViz = useMemo(() => {
+    if (visualizations.length === 0) {
+      return null;
     }
-  }, [visualizations.length]);
 
-  const currentViz = visualizations[currentIndex];
-  const hasMultiple = visualizations.length > 1;
-  const canGoPrev = currentIndex > 0;
-  const canGoNext = currentIndex < visualizations.length - 1;
-
-  const handlePrev = () => {
-    if (canGoPrev) {
-      setCurrentIndex((prev) => prev - 1);
+    if (selectedVisualizationId) {
+      const selectedVisualization = visualizations.find(
+        (visualization) => visualization.id === selectedVisualizationId,
+      );
+      if (selectedVisualization) {
+        return selectedVisualization;
+      }
     }
-  };
 
-  const handleNext = () => {
-    if (canGoNext) {
-      setCurrentIndex((prev) => prev + 1);
-    }
-  };
+    return visualizations[visualizations.length - 1] ?? null;
+  }, [selectedVisualizationId, visualizations]);
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
@@ -80,35 +69,6 @@ export function VisualizationPanel({
       {/* Visualization Content */}
       {currentViz && (
         <div className="flex-1 flex flex-col min-h-0 bg-background border border-border shadow-xl">
-          {/* Navigation Header */}
-          {hasMultiple && (
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handlePrev}
-                  disabled={!canGoPrev}
-                  className="h-8 w-8 p-0"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-xs text-muted-foreground min-w-[60px] text-center font-mono">
-                  {currentIndex + 1} / {visualizations.length}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleNext}
-                  disabled={!canGoNext}
-                  className="h-8 w-8 p-0"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
           {/* Visualization Display */}
           <div className="flex-1 overflow-y-auto p-0 min-h-0">
             <SqlAnalysisDisplay

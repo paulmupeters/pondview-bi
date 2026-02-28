@@ -1,8 +1,8 @@
+import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import duckdb, { DuckDBInstance } from "@duckdb/node-api";
 
 import {
   executeDuckDbHttpQuery,
-  type HttpDuckDbConfig,
   resolveHttpDuckDbConfig,
 } from "./duckdb-http";
 import { RequestQueue } from "./request-queue";
@@ -35,6 +35,21 @@ function normalizeDbPath(dbPath: string): string {
   // Default to in-memory if empty/undefined
   const trimmed = (dbPath ?? "").trim();
   return trimmed.length > 0 ? trimmed : ":memory:";
+}
+
+/**
+ * Returns the DuckDB database path used for materialization.
+ * When DUCKDB_PERSIST_PATH is set, materialized tables are stored in a file on
+ * disk and survive process restarts. Otherwise, an in-memory instance is used.
+ */
+export function getMaterializationDbPath(): string {
+  return (
+    process.env.DUCKDB_PERSIST_PATH?.trim() ||
+    process.env.DUCKDB_RUNTIME_DB?.trim() ||
+    process.env.DUCKDB_PATH?.trim() ||
+    process.env.DUCKDB_DATABASE_PATH?.trim() ||
+    ":memory:"
+  );
 }
 
 export async function getDuckDbInstance(
@@ -72,7 +87,7 @@ export function getDuckDbVersion(): string {
 // exported functions from server-only contexts.
 
 // Re-export HTTP types for convenience
-export type { HttpDuckDbConfig } from "./duckdb-http";
+export type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 
 /**
  * Executes a SQL query against a DuckDB instance via HTTP (httpserver extension).

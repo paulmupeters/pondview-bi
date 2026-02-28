@@ -1,16 +1,15 @@
-"use client";
-
 import { ChevronDown } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
-import DataModelEditor from "@/components/data-model-editor";
 import { DuckdbShellDialog } from "@/components/duckdb-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
+import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
+import { useMaterializedTableDetails } from "@/hooks/use-materialized-table-details";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { removeConnectedTable } from "@/lib/connected-tables";
@@ -24,6 +23,13 @@ import {
 export default function ViewDataPage() {
   const tables = useConnectedTables();
   const uploadedFiles = useUploadedFiles();
+  const {
+    tables: duckdbTables,
+    isLoading: isDuckdbTablesLoading,
+    error: duckdbTablesError,
+    isConfigured: isDuckdbHttpConfigured,
+    connectionInfo: duckdbHttpConnectionInfo,
+  } = useDuckdbHttpTables();
   const { theme } = useTheme();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const hasTables = tables.length > 0;
@@ -33,6 +39,10 @@ export default function ViewDataPage() {
   );
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [isShellDialogOpen, setIsShellDialogOpen] = useState(false);
+  const [showMaterializedTables, setShowMaterializedTables] = useState(false);
+  const [expandedMaterializedTables, setExpandedMaterializedTables] = useState<
+    Set<string>
+  >(new Set());
   const [prefillDbType, setPrefillDbType] = useState<
     "motherduck" | "postgres" | "mysql" | null
   >(null);
@@ -41,6 +51,12 @@ export default function ViewDataPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const {
+    details: materializedTableDetails,
+    isLoading: isMaterializedDetailsLoading,
+    error: materializedDetailsError,
+    refresh: refreshMaterializedDetails,
+  } = useMaterializedTableDetails(showMaterializedTables);
 
   useEffect(() => {
     const updateDarkMode = () => {
@@ -72,11 +88,13 @@ export default function ViewDataPage() {
     >();
 
     for (const table of tables) {
-      const existing = grouped.get(table.databasePath);
+      const groupKey =
+        table.connectionId ?? table.databasePath ?? table.attachAs ?? "";
+      const existing = grouped.get(groupKey);
       if (existing) {
         existing.entries.push(table);
       } else {
-        grouped.set(table.databasePath, {
+        grouped.set(groupKey, {
           type: table.type,
           entries: [table],
         });
@@ -111,6 +129,37 @@ export default function ViewDataPage() {
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [tables]);
 
+  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const tablesBySchema = useMemo(() => {
+    const grouped = new Map<string, { name: string; type: string }[]>();
+    for (const t of duckdbTables) {
+      const existing = grouped.get(t.schema);
+      if (existing) {
+        existing.push({ name: t.name, type: t.type });
+      } else {
+        grouped.set(t.schema, [{ name: t.name, type: t.type }]);
+      }
+    }
+    return Array.from(grouped.entries())
+      .map(([schema, entries]) => ({ schema, tables: entries }))
+      .sort((a, b) => a.schema.localeCompare(b.schema));
+  }, [duckdbTables]);
+
+  const toggleSchema = (schema: string) => {
+    setExpandedSchemas((prev) => {
+      const next = new Set(prev);
+      if (next.has(schema)) {
+        next.delete(schema);
+      } else {
+        next.add(schema);
+      }
+      return next;
+    });
+  };
+
   const toggleDatabase = (dbPath: string) => {
     setExpandedDatabases((prev) => {
       const next = new Set(prev);
@@ -121,6 +170,25 @@ export default function ViewDataPage() {
       }
       return next;
     });
+  };
+
+  const toggleMaterializedTable = (tableName: string) => {
+    setExpandedMaterializedTables((prev) => {
+      const next = new Set(prev);
+      if (next.has(tableName)) {
+        next.delete(tableName);
+      } else {
+        next.add(tableName);
+      }
+      return next;
+    });
+  };
+
+  const formatRowCount = (rowCount?: number) => {
+    if (typeof rowCount !== "number" || Number.isNaN(rowCount)) {
+      return "Unknown";
+    }
+    return rowCount.toLocaleString();
   };
 
   const getEntryKey = (table: ConnectedTable) => {
@@ -210,6 +278,23 @@ export default function ViewDataPage() {
           </Button>
           <Button
             type="button"
+            variant="outline"
+            onClick={() => {
+              setShowMaterializedTables((prev) => {
+                const next = !prev;
+                if (!next) {
+                  setExpandedMaterializedTables(new Set());
+                }
+                return next;
+              });
+            }}
+          >
+            {showMaterializedTables
+              ? "Hide Materialized Tables"
+              : "Show Materialized Tables"}
+          </Button>
+          <Button
+            type="button"
             onClick={() => {
               setPrefillDbType(null);
               setPrefillDbPath("");
@@ -225,8 +310,6 @@ export default function ViewDataPage() {
       <Tabs defaultValue="sources" className="flex-1 max-w-5xl mx-auto w-full">
         <TabsList>
           <TabsTrigger value="sources">Sources</TabsTrigger>
-          <TabsTrigger value="model">Data model</TabsTrigger>
-          <TabsTrigger value="datasets">Datasets</TabsTrigger>
         </TabsList>
 
         <TabsContent
@@ -243,7 +326,7 @@ export default function ViewDataPage() {
                 environment.
               </p>
             </div>
-            {!hasTables ? (
+            {!hasTables && !isDuckdbHttpConfigured ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl bg-muted/30 p-10 text-center">
                 <div className="space-y-2">
                   <h3 className="text-lg font-medium text-foreground">
@@ -266,6 +349,138 @@ export default function ViewDataPage() {
             ) : (
               <div className="space-y-6">
                 <div className="grid gap-4">
+                  {isDuckdbHttpConfigured &&
+                    (() => {
+                      const isDuckdbHttpExpanded =
+                        expandedDatabases.has("__duckdb_http__");
+                      return (
+                        <Card className="gap-0 rounded-2xl border border-border/60 bg-card/60 py-0 shadow-sm">
+                          <button
+                            type="button"
+                            onClick={() => toggleDatabase("__duckdb_http__")}
+                            className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                            aria-expanded={isDuckdbHttpExpanded}
+                          >
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-3">
+                                <Image
+                                  src={
+                                    isDarkMode
+                                      ? "/DuckDB_icon-darkmode.svg"
+                                      : "/DuckDB_icon-lightmode.svg"
+                                  }
+                                  alt="DuckDB"
+                                  width={24}
+                                  height={24}
+                                  className="shrink-0"
+                                />
+                                <span className="truncate text-sm font-semibold text-foreground">
+                                  DuckDB HTTP
+                                </span>
+                                {isDuckdbTablesLoading ? (
+                                  <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                                ) : duckdbTablesError &&
+                                  duckdbTables.length === 0 ? (
+                                  <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                                    Unreachable
+                                  </span>
+                                ) : (
+                                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                                    Connected
+                                  </span>
+                                )}
+                              </div>
+                              {duckdbHttpConnectionInfo && (
+                                <code className="text-xs text-muted-foreground">
+                                  {duckdbHttpConnectionInfo.host}:
+                                  {duckdbHttpConnectionInfo.port}
+                                </code>
+                              )}
+                              <span className="text-xs text-muted-foreground">
+                                {isDuckdbTablesLoading
+                                  ? "Loading tables..."
+                                  : duckdbTablesError &&
+                                      duckdbTables.length === 0
+                                    ? "Could not reach the DuckDB HTTP server"
+                                    : `${duckdbTables.length} ${duckdbTables.length === 1 ? "table" : "tables"} available`}
+                              </span>
+                            </div>
+                            <ChevronDown
+                              className={`h-4 w-4 shrink-0 transition-transform ${isDuckdbHttpExpanded ? "rotate-180" : ""}`}
+                            />
+                          </button>
+                          {isDuckdbHttpExpanded && (
+                            <CardContent className="space-y-4 pb-6 pt-0">
+                              {tablesBySchema.length === 0 &&
+                                !isDuckdbTablesLoading && (
+                                  <p className="text-sm italic text-muted-foreground/80 px-1">
+                                    No tables found in this instance.
+                                  </p>
+                                )}
+                              {tablesBySchema.map((group) => {
+                                const isSchemaExpanded = expandedSchemas.has(
+                                  group.schema,
+                                );
+                                return (
+                                  <div
+                                    key={group.schema}
+                                    className="rounded-xl border border-border/50 bg-background/60"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleSchema(group.schema);
+                                      }}
+                                      className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-muted/30"
+                                    >
+                                      <div>
+                                        <p className="text-xs font-medium uppercase text-muted-foreground">
+                                          Schema
+                                        </p>
+                                        <p className="text-sm font-semibold text-foreground">
+                                          {group.schema}
+                                        </p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground">
+                                          {group.tables.length}{" "}
+                                          {group.tables.length === 1
+                                            ? "table"
+                                            : "tables"}
+                                        </span>
+                                        <ChevronDown
+                                          className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${isSchemaExpanded ? "rotate-180" : ""}`}
+                                        />
+                                      </div>
+                                    </button>
+                                    {isSchemaExpanded && (
+                                      <div className="divide-y divide-border/40 border-t border-border/40 px-4">
+                                        {group.tables.map((t) => (
+                                          <div
+                                            key={`${group.schema}.${t.name}`}
+                                            className="flex items-center justify-between gap-3 py-2.5 px-1"
+                                          >
+                                            <span className="text-sm text-foreground">
+                                              {t.name}
+                                            </span>
+                                            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground uppercase">
+                                              {t.type === "BASE TABLE"
+                                                ? "table"
+                                                : t.type.toLowerCase()}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </CardContent>
+                          )}
+                        </Card>
+                      );
+                    })()}
                   {databaseEntries.map((database) => {
                     const normalizedType = database.type
                       ? database.type.toUpperCase()
@@ -286,7 +501,10 @@ export default function ViewDataPage() {
                           <div className="flex flex-col gap-2">
                             <div className="flex items-center gap-3">
                               {(() => {
-                                const logoPath = getDatabaseLogo(database.type, database.dbPath);
+                                const logoPath = getDatabaseLogo(
+                                  database.type,
+                                  database.dbPath,
+                                );
                                 return logoPath ? (
                                   <Image
                                     src={logoPath}
@@ -398,10 +616,20 @@ export default function ViewDataPage() {
                             size="sm"
                             onClick={(event) => {
                               event.stopPropagation();
-                              let type: "motherduck" | "postgres" | "mysql" | null = null;
-                              if (database.type === "duckdb" || database.type === "motherduck") {
+                              let type:
+                                | "motherduck"
+                                | "postgres"
+                                | "mysql"
+                                | null = null;
+                              if (
+                                database.type === "duckdb" ||
+                                database.type === "motherduck"
+                              ) {
                                 type = "motherduck";
-                              } else if (database.type === "postgres" || database.type === "mysql") {
+                              } else if (
+                                database.type === "postgres" ||
+                                database.type === "mysql"
+                              ) {
                                 type = database.type;
                               }
                               setPrefillDbType(type);
@@ -428,6 +656,171 @@ export default function ViewDataPage() {
               </div>
             )}
           </section>
+
+          {showMaterializedTables && (
+            <section className="space-y-4">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-foreground">
+                  Materialized Tables Explorer
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Inspect materialized tables in the <code>mat</code> schema,
+                  including row counts, source metadata, and column definitions.
+                </p>
+              </div>
+              <div className="space-y-4">
+                {isMaterializedDetailsLoading ? (
+                  <Card className="rounded-2xl border border-border/60 bg-card/60 py-0 shadow-sm">
+                    <CardContent className="flex items-center gap-3 p-6">
+                      <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                      <span className="text-sm text-muted-foreground">
+                        Loading materialized table metadata...
+                      </span>
+                    </CardContent>
+                  </Card>
+                ) : materializedDetailsError ? (
+                  <Card className="rounded-2xl border border-destructive/40 bg-destructive/5 py-0 shadow-sm">
+                    <CardContent className="space-y-3 p-6">
+                      <p className="text-sm text-destructive">
+                        Failed to load materialized table details:{" "}
+                        {materializedDetailsError}
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void refreshMaterializedDetails()}
+                      >
+                        Retry
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : materializedTableDetails.length === 0 ? (
+                  <Card className="rounded-2xl border border-border/60 bg-card/60 py-0 shadow-sm">
+                    <CardContent className="p-6">
+                      <p className="text-sm italic text-muted-foreground">
+                        No materialized tables found yet.
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="grid gap-4">
+                    {materializedTableDetails.map((table) => {
+                      const isExpanded = expandedMaterializedTables.has(
+                        table.tableName,
+                      );
+                      return (
+                        <Card
+                          key={table.tableName}
+                          className="gap-0 rounded-2xl border border-border/60 bg-card/60 py-0 shadow-sm"
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleMaterializedTable(table.tableName)
+                            }
+                            className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                            aria-expanded={isExpanded}
+                          >
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold text-foreground">
+                                mat.{table.tableName}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span className="rounded-full bg-muted px-2 py-0.5 font-medium">
+                                  {formatRowCount(table.rowCount)} rows
+                                </span>
+                                <span className="rounded-full bg-muted px-2 py-0.5 font-medium">
+                                  {table.columnCount}{" "}
+                                  {table.columnCount === 1
+                                    ? "column"
+                                    : "columns"}
+                                </span>
+                                {table.updatedAt ? (
+                                  <span>
+                                    Updated{" "}
+                                    {new Date(table.updatedAt).toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <span>Updated time unknown</span>
+                                )}
+                              </div>
+                            </div>
+                            <ChevronDown
+                              className={`h-4 w-4 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                            />
+                          </button>
+                          {isExpanded && (
+                            <CardContent className="space-y-4 border-t border-border/40 bg-background/30 px-6 py-5">
+                              <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+                                <p>
+                                  <span className="font-medium text-foreground">
+                                    Source:
+                                  </span>{" "}
+                                  {table.sourceName ?? "Unknown"}
+                                </p>
+                                <p>
+                                  <span className="font-medium text-foreground">
+                                    Target:
+                                  </span>{" "}
+                                  {table.targetTable ??
+                                    `mat.${table.tableName}`}
+                                </p>
+                                <p className="md:col-span-2">
+                                  <span className="font-medium text-foreground">
+                                    Source Hash:
+                                  </span>{" "}
+                                  <span className="break-all">
+                                    {table.sourceHash ?? "Unknown"}
+                                  </span>
+                                </p>
+                              </div>
+
+                              {table.introspectionError ? (
+                                <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                                  Column introspection error:{" "}
+                                  {table.introspectionError}
+                                </p>
+                              ) : null}
+
+                              <div className="rounded-xl border border-border/50 bg-background/70">
+                                <div className="border-b border-border/50 px-4 py-2">
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Columns
+                                  </p>
+                                </div>
+                                {table.columns.length > 0 ? (
+                                  <div className="divide-y divide-border/40">
+                                    {table.columns.map((column) => (
+                                      <div
+                                        key={`${table.tableName}-${column.name}`}
+                                        className="flex items-center justify-between gap-3 px-4 py-2.5"
+                                      >
+                                        <span className="text-sm text-foreground">
+                                          {column.name}
+                                        </span>
+                                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+                                          {column.type || "unknown"}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="px-4 py-3 text-xs italic text-muted-foreground">
+                                    No columns available.
+                                  </p>
+                                )}
+                              </div>
+                            </CardContent>
+                          )}
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
           <Separator />
 
@@ -538,60 +931,6 @@ export default function ViewDataPage() {
               </div>
             )}
           </section>
-        </TabsContent>
-
-        <TabsContent value="datasets" className="max-w-7xl w-full mx-auto">
-          <div className="container">
-            <h2>Datasets for your visuals in your dashboards</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="border rounded-lg bg-card p-4">
-                <h3>Dataset 1</h3>
-                <p>Description of dataset 1</p>
-                <ul>
-                  <li>id: int</li>
-                  <li>name: string</li>
-                  <li>age: int</li>
-                  <li>email: string</li>
-                  <li>created_at: datetime</li>
-                  <li>updated_at: datetime</li>
-                  <li>is_active: boolean</li>
-                  <li>is_deleted: boolean</li>
-                  <li>is_archived: boolean</li>
-                  <li>is_archived: boolean</li>
-                </ul>
-              </div>
-
-              <div className="border rounded-lg bg-card p-4">
-                <h3>Dataset 2</h3>
-                <p>Description of dataset 2</p>
-                <ul>
-                  <li>id: int</li>
-                  <li>name: string</li>
-                  <li>value: int</li>
-                </ul>
-              </div>
-
-              <div className="border rounded-lg bg-card p-4">
-                <h3>Dataset 3</h3>
-                <p>Description of dataset 3</p>
-                <ul>
-                  <li>id:int</li>
-                  <li>country: string</li>
-                  <li>value: int</li>
-                  <li>created_at: datetime</li>
-                  <li>updated_at: datetime</li>
-                  <li>is_active: boolean</li>
-                  <li>is_deleted: boolean</li>
-                  <li>is_archived: boolean</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="model" className="mt-4 max-w-5xl mx-auto">
-          <DataModelEditor />
         </TabsContent>
       </Tabs>
 

@@ -1,5 +1,9 @@
 import type { NextRequest } from "next/server";
-import { runSqlNormalized } from "@/lib/db/router";
+import {
+  getSchemas,
+  getTablesForSchema,
+  runSqlNormalized,
+} from "@/lib/db/router";
 
 export const runtime = "nodejs";
 
@@ -15,21 +19,44 @@ export async function GET(req: NextRequest) {
   const table = searchParams.get("table");
   const limit = searchParams.get("limit");
 
-  if (!id || !schema || !table) {
+  if (!id) {
     return new Response(
-      JSON.stringify({ error: "Missing required query params: id, schema, table" }),
+      JSON.stringify({ error: "Missing required query param: id" }),
       { status: 400, headers: { "content-type": "application/json" } },
     );
   }
 
-  const qSchema = quoteIdent(schema);
-  const qTable = quoteIdent(table);
-  const lim = limit ? Math.max(0, Number(limit) || 0) : 0;
-  const sql = lim > 0
-    ? `select * from ${qSchema}.${qTable} limit ${lim}`
-    : `select * from ${qSchema}.${qTable}`;
-
   try {
+    // Metadata mode: list schemas for a database.
+    if (!schema && !table) {
+      const schemas = await getSchemas(id);
+      return Response.json({ schemas });
+    }
+
+    // Metadata mode: list tables for a schema.
+    if (schema && !table) {
+      const schemaTablesLimit = limit ? Math.max(1, Number(limit) || 20) : 20;
+      const tables = await getTablesForSchema(id, schema, schemaTablesLimit);
+      return Response.json({ schema, tables });
+    }
+
+    if (!schema || !table) {
+      return new Response(
+        JSON.stringify({
+          error: "When table is provided, schema is required.",
+        }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    }
+
+    const qSchema = quoteIdent(schema);
+    const qTable = quoteIdent(table);
+    const lim = limit ? Math.max(0, Number(limit) || 0) : 0;
+    const sql =
+      lim > 0
+        ? `select * from ${qSchema}.${qTable} limit ${lim}`
+        : `select * from ${qSchema}.${qTable}`;
+
     const rows = await runSqlNormalized(id, sql);
     console.log("GET request completed");
     // Return row-major JSON array suitable for DuckDB-Wasm insertJSONFromPath

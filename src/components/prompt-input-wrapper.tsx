@@ -1,7 +1,4 @@
-"use client";
-
 import {
-  ChatBubbleLeftRightIcon,
   GlobeEuropeAfricaIcon,
   PaperClipIcon,
   Squares2X2Icon,
@@ -32,7 +29,6 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { Button } from "@/components/ui/button";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Tooltip,
   TooltipContent,
@@ -48,7 +44,10 @@ interface PromptInputWrapperProps {
   placeholder?: string;
   className?: string;
   status?: ChatStatus;
+  showHeader?: boolean;
+  showAiInput?: boolean;
   onHomePage?: boolean;
+  compact?: boolean;
   onCreateDashboard?: () => void;
   onAddVisual?: () => void;
   mode?: PromptMode;
@@ -259,7 +258,10 @@ export function PromptInputWrapper({
   placeholder = "Ask a question about your data...",
   className,
   status,
+  showHeader = true,
+  showAiInput = true,
   onHomePage = false,
+  compact = false,
   onCreateDashboard,
   onAddVisual: _onAddVisual,
   mode,
@@ -290,12 +292,7 @@ export function PromptInputWrapper({
     onModeChange?.(value);
   };
 
-  const handlePromptSubmit = (message: PromptInputMessage) => {
-    if (promptMode !== "ai") {
-      return;
-    }
-    return onSubmit(message);
-  };
+  const handlePromptSubmit = (message: PromptInputMessage) => onSubmit(message);
 
   const aiButtonLabel = useMemo(() => {
     if (
@@ -318,102 +315,108 @@ export function PromptInputWrapper({
 
   const content = aiButtonLabel;
 
-  // Get display name for selected database - matches ConnectedDataPanel logic
+  if (!showHeader && !showAiInput) {
+    return null;
+  }
+
   return (
-    <div className="flex mx-auto">
+    <div className="flex w-full mx-auto">
       <PromptInput
         onSubmit={handlePromptSubmit}
-        className={cn("flex-1 flex flex-row", className)}
+        className={cn("flex-1 w-full flex flex-row", className)}
         globalDrop
         multiple
       >
-        <PromptInputBody>
-          <PromptInputAttachments>
-            {(attachment) => <PromptInputAttachment data={attachment} />}
-          </PromptInputAttachments>
-          <div
-            aria-hidden={!isAiMode}
-            className={cn(
-              "w-full overflow-hidden transition-all duration-300 ease-out",
-              isAiMode
-                ? "max-h-[420px] opacity-100 translate-y-0"
-                : "pointer-events-none max-h-0 opacity-0 -translate-y-2",
-            )}
-          >
-            <div className="flex items-center gap-2 justify-between w-full">
-              <PromptInputTextarea
-                placeholder={placeholder}
-                className="flex-1 min-h-32"
-                tabIndex={isAiMode ? undefined : -1}
-                aria-hidden={!isAiMode}
-              />
-              <div className="flex flex-col items-center gap-2 h-full justify-center">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  type="submit"
-                  className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary mx-2 dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-                  disabled={pendingMode === "ai" || !isAiMode}
-                  tabIndex={isAiMode ? undefined : -1}
-                  aria-hidden={!isAiMode}
-                >
-                  {content}
-                </Button>
-              </div>
-            </div>
-          </div>
-          {/* Manual mode input area is hidden, UI is handled by Chat.tsx split layout */}
-        </PromptInputBody>
-        <PromptInputHeader className="p-0 overflow-hidden">
-          <div className="flex items-center gap-2 justify-between w-full">
-            <div className="flex items-center gap-2">
-              {promptMode === "ai" && (
-                <ConnectedDataPanel
-                  selectedDb={selectedDb}
-                  onSelect={(db) => onSelectDb?.(db)}
-                  className="h-full"
-                  onInsertTable={onInsertTable}
-                />
-              )}
-              <FileAttachmentHoverCard />
-              {!onHomePage && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <PromptInputButton
+        {showAiInput && (
+          <PromptInputBody>
+            <PromptInputAttachments>
+              {(attachment) => <PromptInputAttachment data={attachment} />}
+            </PromptInputAttachments>
+            <div className="w-full">
+              <div className="min-h-0 overflow-hidden">
+                <div className="relative w-full">
+                  <PromptInputTextarea
+                    placeholder={placeholder}
+                    className={cn(
+                      "flex-1 pr-4",
+                      compact ? "min-h-10 pb-10" : "min-h-28 pb-12",
+                    )}
+                  />
+                  <div className={cn(
+                    "absolute right-3",
+                    compact ? "bottom-2" : "bottom-3",
+                  )}>
+                    <Button
                       size="sm"
                       variant="outline"
-                      className="group dark:hover:bg-accent"
-                      onClick={() => onCreateDashboard?.()}
+                      type="submit"
+                      className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                      disabled={pendingMode === "ai"}
                     >
-                      <Squares2X2Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
-                      <span>Create dashboard</span>
-                    </PromptInputButton>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>generate dashboard from chat visuals</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
+                      {content}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <ToggleGroup
-              type="single"
-              value={promptMode}
-              onValueChange={(value) =>
-                handlePromptModeChange(value as PromptMode)
-              }
-              disabled={Boolean(pendingMode)}
-            >
-              <ToggleGroupItem value="ai">
-                <ChatBubbleLeftRightIcon className="h-4 w-4 group-hover:text-primary-foreground" />
-                <span>AI mode</span>
-              </ToggleGroupItem>
-              <ToggleGroupItem value="manual">
-                <WrenchScrewdriverIcon className="h-4 w-4 group-hover:text-primary-foreground" />
-                <span>Manual mode</span>
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-        </PromptInputHeader>
+          </PromptInputBody>
+        )}
+        {showHeader && (
+          <PromptInputHeader className={cn(
+            "p-0 overflow-hidden",
+            compact ? "border-t-0" : "border-t border-border/20",
+          )}>
+            <div className="flex items-center gap-1.5 justify-between w-full">
+              <div className="flex items-center gap-1.5">
+                {onHomePage && promptMode === "ai" && (
+                  <ConnectedDataPanel
+                    selectedDb={selectedDb}
+                    onSelect={(db) => onSelectDb?.(db)}
+                    className="h-full"
+                    onInsertTable={onInsertTable}
+                  />
+                )}
+                <FileAttachmentHoverCard />
+                {!onHomePage && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <PromptInputButton
+                        size="sm"
+                        variant="outline"
+                        className="group dark:hover:bg-accent"
+                        onClick={() => onCreateDashboard?.()}
+                      >
+                        <Squares2X2Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
+                        <span>Create dashboard</span>
+                      </PromptInputButton>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>generate dashboard from chat visuals</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant={!isAiMode ? "default" : "outline"}
+                className={cn(
+                  "gap-1.5",
+                  !isAiMode &&
+                    "bg-primary text-primary-foreground hover:bg-primary/90 border-primary",
+                )}
+                onClick={() =>
+                  handlePromptModeChange(isAiMode ? "manual" : "ai")
+                }
+                disabled={Boolean(pendingMode)}
+                aria-pressed={!isAiMode}
+              >
+                <WrenchScrewdriverIcon className="h-4 w-4" />
+                <span>Manual</span>
+              </Button>
+            </div>
+          </PromptInputHeader>
+        )}
       </PromptInput>
     </div>
   );

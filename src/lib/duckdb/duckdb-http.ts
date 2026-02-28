@@ -1,11 +1,4 @@
-/**
- * HTTP connection configuration for DuckDB httpserver extension
- */
-export interface HttpDuckDbConfig {
-  host?: string;
-  port?: number;
-  auth?: string;
-}
+import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 
 /**
  * Resolved HTTP DuckDB connection configuration

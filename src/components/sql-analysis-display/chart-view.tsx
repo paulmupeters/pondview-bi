@@ -1,6 +1,6 @@
 import { Squares2X2Icon } from "@heroicons/react/24/outline";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AddToDashboardDialog,
   type AddToDashboardVisualOption,
@@ -9,6 +9,7 @@ import { InlineChartConfig } from "@/components/inline-chart-config";
 import { MetricCard } from "@/components/metric-card";
 import { SqlChart } from "@/components/sql-chart";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import type { CardConfig, Config, TableConfig } from "@/lib/types";
 import type {
   SelectedForCard,
@@ -27,6 +28,8 @@ interface ChartViewProps {
   columnsForDialog: { name: string }[];
   onChartConfigChange: (config: Config | null) => void;
   onCardConfigChange: (config: CardConfig | null) => void;
+  showVisualOptions: boolean;
+  onShowVisualOptionsChange: (open: boolean) => void;
   renderSqlControls: (
     extraControls?: ReactNode,
     editorId?: string,
@@ -44,10 +47,18 @@ export function ChartView({
   columnsForDialog,
   onChartConfigChange,
   onCardConfigChange,
+  showVisualOptions,
+  onShowVisualOptionsChange,
   renderSqlControls,
   renderSqlEditor,
 }: ChartViewProps) {
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
+
+  useEffect(() => {
+    if (!showVisualOptions) {
+      setShowAdvancedConfig(false);
+    }
+  }, [showVisualOptions]);
 
   const defaultChartConfig = useMemo<Config>(() => {
     const xKey = columnsForDialog[0]?.name ?? "";
@@ -177,7 +188,7 @@ export function ChartView({
   ]);
 
   return (
-    <div className="group relative flex flex-col bg-card border border-border">
+    <div className="group relative flex flex-col bg-background">
       {selectedForCard ? (
         <>
           {renderSqlControls(
@@ -207,7 +218,7 @@ export function ChartView({
             <InlineChartConfig
               chartConfig={null}
               defaultChartConfig={defaultChartConfig}
-              onChartConfigChange={() => { }}
+              onChartConfigChange={() => {}}
               columns={columnsForDialog}
               rows={selectedForChart?.rows}
               cardConfig={cardConfig}
@@ -233,64 +244,69 @@ export function ChartView({
       ) : (
         <>
           {renderSqlControls(
-            <>
-              {columnsForDialog.length > 0 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-xs font-mono"
-                  onClick={() => setShowAdvancedConfig(!showAdvancedConfig)}
-                >
-                  Advanced config
-                </Button>
-              )}
-              {visualOptions.length > 0 && (
-                <AddToDashboardDialog
-                  trigger={
-                    <button
-                      type="button"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label="Add to dashboard"
-                      title="Add to dashboard"
-                    >
-                      <Squares2X2Icon className="h-4 w-4" />
-                    </button>
-                  }
-                  sql={data.query ?? ""}
-                  defaultTitle={effectiveChartConfig.title}
-                  tooltip="Add to dashboard"
-                  dbIdentifier={data.dbIdentifier}
-                  visualOptions={visualOptions}
-                  defaultVisualType="chart"
-                />
-              )}
-            </>,
+            visualOptions.length > 0 && (
+              <AddToDashboardDialog
+                trigger={
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label="Add to dashboard"
+                    title="Add to dashboard"
+                  >
+                    <Squares2X2Icon className="h-4 w-4" />
+                  </button>
+                }
+                sql={data.query ?? ""}
+                defaultTitle={effectiveChartConfig.title}
+                tooltip="Add to dashboard"
+                dbIdentifier={data.dbIdentifier}
+                visualOptions={visualOptions}
+                defaultVisualType="chart"
+              />
+            ),
             "sql-editor-analysis-chart",
           )}
-            {columnsForDialog.length > 0 && (
-              <InlineChartConfig
-                chartConfig={chartConfig}
-                defaultChartConfig={defaultChartConfig}
-                onChartConfigChange={onChartConfigChange}
-                columns={columnsForDialog}
-                rows={selectedForChart?.rows}
-                showAdvancedConfig={showAdvancedConfig}
-                onToggleAdvancedConfig={() =>
-                  setShowAdvancedConfig(!showAdvancedConfig)
-                }
-              />
-            )}
-            {selectedForChart && selectedForChart.rows.length > 0 ? (
-              <SqlChart
-                customChartConfig={effectiveChartConfig}
-                dataOverride={selectedForChart}
-              />
-            ) : !selectedForChart && !selectedForCard ? (
-              // When there's no data, the SQL editor will be shown via renderSqlEditor
-              // This empty div ensures the layout is maintained
-              <div className="min-h-[200px]" />
-            ) : null}
+          {columnsForDialog.length > 0 && (
+            <Collapsible
+              open={showVisualOptions}
+              onOpenChange={onShowVisualOptionsChange}
+            >
+              <CollapsibleContent
+                id="chart-visual-options"
+                className="px-4 pt-4"
+              >
+                <div className="pb-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs font-mono"
+                    onClick={() => setShowAdvancedConfig(!showAdvancedConfig)}
+                  >
+                    Advanced config
+                  </Button>
+                </div>
+                <InlineChartConfig
+                  chartConfig={chartConfig}
+                  defaultChartConfig={defaultChartConfig}
+                  onChartConfigChange={onChartConfigChange}
+                  columns={columnsForDialog}
+                  rows={selectedForChart?.rows}
+                  showAdvancedConfig={showAdvancedConfig}
+                />
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+          {selectedForChart && selectedForChart.rows.length > 0 ? (
+            <SqlChart
+              customChartConfig={effectiveChartConfig}
+              dataOverride={selectedForChart}
+            />
+          ) : !selectedForChart && !selectedForCard ? (
+            // When there's no data, the SQL editor will be shown via renderSqlEditor
+            // This empty div ensures the layout is maintained
+            <div className="min-h-[200px]" />
+          ) : null}
           {renderSqlEditor("sql-editor-analysis-chart")}
         </>
       )}

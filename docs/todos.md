@@ -1,4 +1,4 @@
-## todos
+# todos
 - semantic model
     - yaml structure
     - charts bind to dataset not table.column
@@ -17,3 +17,18 @@
 
 - handling multiple charts, when second chart is generated in same chat it keeps old title, description etc in the chart config. also only the last chart is available when we reopen a chat, so we might need to store all chartconfigs as well
 - imporve prompt: sometimes it doesnt generate a chart/card
+
+
+## Semantic Materialization Reliability
+
+- [ ] Decide production policy for semantic charts: strict semantic mode (fail if materialization fails) vs fallback mode.
+- [ ] If fallback mode is kept, add per-chart execution mode visibility (`materialized` vs `raw_fallback`) and alert on fallback usage.
+
+## Context + Joins Migration Notes
+
+- [x] Remove semantic model editor UI and model-edit API routes.
+- [x] Add global `semantic-layer/joins.yml` and join path resolver utilities.
+- [x] Replace explore materialization with table-based materialization into `mat.*`.
+- [x] Implement CTE-based dashboard filter injection over materialized tables.
+- [x] Keep `sources.yml` as the source mapping and attachment metadata file.
+- [ ] Add rollout metric for charts that still execute fallback raw SQL.

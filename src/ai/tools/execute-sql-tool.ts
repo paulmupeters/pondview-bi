@@ -173,7 +173,7 @@ export const executeSqlTool = tool({
     const isSingleValue = rowCount === 1 && columns.length === 1;
 
     const isChartWorthy =
-      rowCount > 0 && rowCount <= 50 && queryType === "SELECT";
+      rowCount > 0 && rowCount <= 500 && queryType === "SELECT";
     const hasNumericData = columns.some((col) => {
       const sampleValue = parsedResults[0]?.[col.name];
       return (
@@ -198,7 +198,7 @@ export const executeSqlTool = tool({
         const cardResult = await generateCardConfig(
           singleValue,
           columns[0].name,
-          userQuery,
+          userQuery
         );
         cardConfig = cardResult.config;
         visualType = "card";
@@ -220,6 +220,17 @@ export const executeSqlTool = tool({
         console.error("Failed to generate chart config:", error);
         insights.push("Chart generation failed, showing table view");
       }
+    } else {
+      visualType = "table";
+      insights.push(
+        "Table view enabled, no chart or card visualization generated"
+      );
+      console.debug(
+        "[executeSqlTool] Table view enabled, no chart or card visualization generated",
+        {
+          ...debugContext,
+        }
+      );
     }
 
     console.debug("[executeSqlTool] Step 4 (visualizing) finished", {

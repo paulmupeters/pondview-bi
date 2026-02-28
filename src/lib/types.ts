@@ -178,6 +178,19 @@ export const tableConfigSchema = z
 
 export type TableConfig = z.infer<typeof tableConfigSchema>;
 
+export const textConfigSchema = z
+  .object({
+    configType: z
+      .literal("text")
+      .describe("Discriminator field for text card")
+      .default("text"),
+    title: z.string().optional(),
+    content: z.string().describe("Markdown content to display"),
+  })
+  .describe("Text card configuration for markdown content");
+
+export type TextConfig = z.infer<typeof textConfigSchema>;
+
 // Data model types
 export type RelationshipType =
   | "one-to-one"

@@ -1,5 +1,4 @@
-"use client";
-
+import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import type { UIMessage } from "ai";
 import { nanoid } from "nanoid";
 import { useRouter } from "next/navigation";
@@ -29,7 +28,7 @@ export default function Home() {
 
       const chatId = nanoid();
       const encodedQuery = encodeURIComponent(message.text.trim());
-      router.push(`/${chatId}?q=${encodedQuery}`);
+      router.push(`/chat?id=${chatId}&q=${encodedQuery}`);
     },
     [router],
   );
@@ -89,19 +88,19 @@ export default function Home() {
           }),
         });
         // Navigate to the new chat after persisting
-        router.push(`/${chatId}`);
+        router.push(`/chat?id=${chatId}`);
       } catch (error) {
         console.error("Failed to persist message:", error);
       }
     },
-    [router, executeSqlArtifactType],
+    [router],
   );
 
   const handleModeChange = useCallback(
     (newMode: PromptMode) => {
       if (newMode === "manual") {
         const chatId = nanoid();
-        router.push(`/${chatId}?mode=manual`);
+        router.push(`/chat?id=${chatId}&mode=manual`);
       } else {
         setMode(newMode);
       }
@@ -121,14 +120,7 @@ export default function Home() {
       <div className="w-full max-w-7xl h-full flex flex-col font-mono justify-between py-4">
         <div className="p-2 flex gap-2 py-2 justify-center">
           <div className="flex flex-col items-center justify-center gap-2">
-            <div>
-              <span className="text-primary font-bold text-4xl font-mono">
-                POND
-              </span>
-              <span className="text-4xl font-mono font-semibold text-sidebar-foreground">
-                VIEW
-              </span>
-            </div>
+            <div className="relative">
             <svg
               width="100%"
               height="100%"
@@ -143,7 +135,7 @@ export default function Home() {
                 strokeLinejoin: "round",
                 strokeMiterlimit: 1.5,
               }}
-              className="h-32 w-32 -mt-16 ml-1"
+                className="h-44 w-44"
               aria-label="DataChat"
             >
               <title>Pondview</title>
@@ -151,8 +143,8 @@ export default function Home() {
                 <path
                   d="M804.167,291.667l87.5,0l0,16.667l62.5,0l0,16.667l33.333,0l0,20.833l29.167,0l0,12.5l33.333,0l0,16.667l16.667,0l0,20.833l16.667,0l0,83.333l-16.667,0l0,16.667l-12.5,0l0,16.667l-20.833,0l0,16.667l-16.667,0l0,12.5l-29.167,0l0,16.667l-50,0l0,12.5l-50,0l0,12.5l-100,0l0,20.833l-316.667,0l0,-20.833l-95.833,0l0,-16.667l-50,0l0,-16.667l-50,0l0,-16.667l-29.167,0l0,-16.667l-20.833,0l0,-12.5l-12.5,0l0,-16.667l-16.667,0l0,-16.667l-16.667,0l0,-79.167l16.667,0l0,-16.667l16.667,0l0,-16.667l33.333,0l0,-16.667l29.167,0l0,-16.667l33.333,0l0,-16.667l66.667,0l0,-16.667l75,0l0,16.667l-62.5,0l0,12.5l-54.167,0l0,16.667l-45.833,0l0,16.667l-12.5,0l0,16.667l-16.667,0l0,16.667l-16.667,0l0,66.667l12.5,0l0,20.833l33.333,0l0,20.833l33.333,0l0,16.667l45.833,0l0,16.667l66.667,0l0,20.833l387.5,0l0,-20.833l62.5,0l0,-16.667l50,0l0,-16.667l33.333,0l0,-20.833l33.333,0l0,-16.667l16.667,0l0,-62.5l-16.667,0l0,-16.667l-12.5,0l0,-12.5l-20.833,0l0,-20.833l-37.5,0l0,-16.667l-54.167,0l0,-20.833l-70.833,0l0,-16.667Z"
                   style={{
-                    fill: "var(--primary)",
-                    stroke: "var(--primary)",
+                    fill: "var(--accent)",
+                    stroke: "var(--accent)",
                     strokeWidth: "4.17px",
                   }}
                 />
@@ -161,8 +153,8 @@ export default function Home() {
                 <path
                   d="M550,325c0.218,35.525 0,-50 0,-50l0,-4.167l16.667,0l0,-45.833l16.667,0l0,-25l16.667,0l0,-33.333l20.833,0l0,-16.667l20.833,0l0,16.667l16.667,0l0,33.333l20.833,0l0,29.167l16.667,0l0,45.833l16.667,0l0,83.333l-16.667,0l0,33.333l-16.667,0l0,16.667l-37.5,0l0,4.167l-29.167,0l0,-4.167l-25,0l0,-16.667l-20.833,0l0,-33.333l-16.667,0c0,0 -0.218,-68.858 0,-33.333Z"
                   style={{
-                    fill: "var(--primary)",
-                    stroke: "var(--primary)",
+                    fill: "var(--accent)",
+                    stroke: "var(--accent)",
                     strokeWidth: "4.17px",
                   }}
                 />
@@ -175,8 +167,8 @@ export default function Home() {
                 <path
                   d="M450,358.333l-45.833,0l0,16.667l-29.167,0l0,16.667l-20.833,0l0,45.833l20.833,0l0,16.667l29.167,0l0,16.667l33.333,0l0,16.667l66.667,0l0,20.833l254.167,0l0,-20.833l62.5,0l0,-12.5l37.5,0l0,-20.833l25,0l0,-12.5l20.833,0l0,-45.833l-20.833,0l0,-16.667l-29.167,0l0,-16.667l-45.833,0l0,16.667l33.333,0l0,12.5l16.667,0l0,33.333l-16.667,0l0,16.667l-33.333,0l0,16.667l-66.667,0l0,20.833l-225,0l0,-20.833l-66.667,0l0,-16.667l-33.333,0l0,-16.667l-16.667,0l0,-37.5l16.667,0l0,-12.5l33.333,0l0,-16.667"
                   style={{
-                    fill: "var(--primary)",
-                    stroke: "var(--primary)",
+                    fill: "var(--accent)",
+                    stroke: "var(--accent)",
                     strokeWidth: "4.17px",
                   }}
                 />
@@ -186,8 +178,8 @@ export default function Home() {
                   width="45.833"
                   height="16.667"
                   style={{
-                    fill: "var(--primary)",
-                    stroke: "var(--primary)",
+                    fill: "var(--accent)",
+                    stroke: "var(--accent)",
                     strokeWidth: "4.17px",
                   }}
                 />
@@ -197,13 +189,18 @@ export default function Home() {
                   width="45.833"
                   height="16.667"
                   style={{
-                    fill: "var(--primary)",
-                    stroke: "var(--primary)",
+                    fill: "var(--accent)",
+                    stroke: "var(--accent)",
                     strokeWidth: "4.17px",
                   }}
                 />
               </g>
             </svg>
+              <div className="absolute inset-x-0 top-[30%] flex justify-center pointer-events-none z-10">
+                <span className="text-primary font-bold text-3xl font-mono">POND</span>
+                <span className="text-3xl font-mono font-semibold text-sidebar-foreground">VIEW</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -218,28 +215,22 @@ export default function Home() {
                 mode={mode}
                 onModeChange={handleModeChange}
               />
-              {/* Example Commands - Only show in AI mode */}
               {mode === "ai" && (
-                <div className="flex flex-col items-center justify-start gap-0 mt-12 animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both">
-                  <div className="text-sm opacity-70" aria-hidden="true">
-                    ═══════════════════════════════════════════════════════════════
-                  </div>
-                  <div className="text-sm opacity-70">AVAILABLE COMMANDS:</div>
-                  <div className="text-sm opacity-70" aria-hidden="true">
-                    ═══════════════════════════════════════════════════════════════
-                  </div>
-                  <div className="pl-4 space-y-1 font-mono mt-2">
-                    {EXAMPLE_COMMANDS.map((command) => (
+                <div className="mt-8 animate-in fade-in duration-500 fill-mode-both">
+                  <p className="text-xs text-muted-foreground mb-3 text-center">Try asking...</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {EXAMPLE_COMMANDS.map((command, i) => (
                       <button
                         key={command}
                         type="button"
                         onClick={() => handleExampleClick(command)}
-                        className="hover:text-primary cursor-pointer transition-colors text-left w-full block group"
+                        className="group text-left px-4 py-3 rounded-md border border-border/30 bg-card/40 text-sm text-foreground/80 transition-all duration-200 hover:border-primary/50 hover:bg-primary/5 hover:text-foreground cursor-pointer animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
+                        style={{ animationDelay: `${150 + i * 75}ms`, animationDuration: "400ms" }}
                       >
-                        <span className="opacity-50 group-hover:opacity-100 transition-opacity mr-2">
-                          {">"}
+                        <span className="flex items-center justify-between gap-3">
+                          <span>{command}</span>
+                          <ArrowRightIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-primary" />
                         </span>
-                        {command}
                       </button>
                     ))}
                   </div>

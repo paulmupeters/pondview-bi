@@ -1,7 +1,7 @@
-import type { DbAdapter } from "@/lib/db/driver";
+import type { DbAdapter, TableRow } from "@/lib/db/driver";
 import * as duckMeta from "@/lib/duckdb/metadata";
 import * as duckQuery from "@/lib/duckdb/query";
-import * as duckQueryHttp from "@/lib/duckdb/query-http";
+import { runSqlAndGetRowObjectsJsonHttp } from "@/lib/duckdb/duckdb-node";
 
 // All queries now go through DuckDB, which handles postgres URIs via the postgres extension
 const duckdbAdapter: DbAdapter = {
@@ -11,10 +11,31 @@ const duckdbAdapter: DbAdapter = {
   getTables: duckMeta.getTables,
 };
 
+function normalizeValue(value: unknown): string | number | boolean | Date {
+  if (value instanceof Date) return value;
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (value === null || value === undefined) return "";
+  return JSON.stringify(value);
+}
+
 // HTTP adapter for DuckDB - only supports queries, not metadata operations
 const httpDuckdbAdapter: DbAdapter = {
-  runSqlNormalized: (id: string, sql: string) =>
-    duckQueryHttp.runSqlNormalizedHttp(id, sql),
+  runSqlNormalized: async (_id: string, sql: string): Promise<TableRow[]> => {
+    const rawRows = await runSqlAndGetRowObjectsJsonHttp(undefined, sql);
+    return rawRows.map((row) => {
+      const out: TableRow = {};
+      for (const [key, value] of Object.entries(row)) {
+        out[key] = normalizeValue(value);
+      }
+      return out;
+    });
+  },
   getSchemas: async () => {
     throw new Error("HTTP adapter does not support schema introspection");
   },

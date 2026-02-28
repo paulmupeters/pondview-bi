@@ -1,14 +1,16 @@
-import type { SourceConnectionConfig } from "@/../semantic-layer/source-updater";
+import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 
 const ATTACH_TYPE_BY_SOURCE: Record<string, string | undefined> = {
   postgres: "postgres",
   mysql: "mysql",
+  sqlite: "sqlite",
 };
 
 const DEFAULT_EXTENSION_BY_SOURCE: Record<string, string | undefined> = {
   motherduck: "motherduck",
   postgres: "postgres",
   mysql: "mysql",
+  sqlite: "sqlite",
 };
 
 function sanitizeExtensionName(extension: string): string {
@@ -39,7 +41,7 @@ function deriveAlias(connection: SourceConnectionConfig): string {
     return withoutLeadingUnderscore || "source";
   }
 
-  const identifier = connection.identifier;
+  const identifier = connection.identifier ?? "";
   const segments = identifier.split(/[/:]/).filter(Boolean);
   const candidate = segments[segments.length - 1] || "source";
   const sanitized = candidate.replace(/[^A-Za-z0-9_]/g, "_");
@@ -47,7 +49,16 @@ function deriveAlias(connection: SourceConnectionConfig): string {
   return withoutLeadingUnderscore || "source";
 }
 
-function buildAttachStatement(connection: SourceConnectionConfig, alias: string): string {
+function buildAttachStatement(
+  connection: SourceConnectionConfig,
+  alias: string,
+): string {
+  if (!connection.identifier) {
+    throw new Error(
+      `Cannot build ATTACH statement: no identifier resolved for connection (type=${connection.type}, connectionId=${connection.connectionId ?? "none"}).`,
+    );
+  }
+
   const attachParts: string[] = [];
   const attachType = ATTACH_TYPE_BY_SOURCE[connection.type];
 
@@ -58,7 +69,8 @@ function buildAttachStatement(connection: SourceConnectionConfig, alias: string)
     attachParts.push("READ_ONLY");
   }
 
-  const optionsClause = attachParts.length > 0 ? ` (${attachParts.join(", ")})` : "";
+  const optionsClause =
+    attachParts.length > 0 ? ` (${attachParts.join(", ")})` : "";
   return `ATTACH ${quoteString(connection.identifier)} AS ${quoteIdentifier(alias)}${optionsClause};`;
 }
 
@@ -67,7 +79,9 @@ export interface AttachmentPlan {
   statements: string[];
 }
 
-export function buildAttachmentPlan(connection: SourceConnectionConfig): AttachmentPlan {
+export function buildAttachmentPlan(
+  connection: SourceConnectionConfig,
+): AttachmentPlan {
   const alias = deriveAlias(connection);
   const statements: string[] = [];
 
@@ -89,11 +103,10 @@ export function buildAttachmentPlan(connection: SourceConnectionConfig): Attachm
 
 export function buildDetachStatement(
   alias: string,
-  options: { ifExists?: boolean } = {}
+  options: { ifExists?: boolean } = {},
 ): string {
   const keyword = options.ifExists
     ? "DETACH DATABASE IF EXISTS"
     : "DETACH DATABASE";
   return `${keyword} ${quoteIdentifier(alias)};`;
 }
-
