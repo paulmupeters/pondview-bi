@@ -32,11 +32,13 @@ export function useVisualizationSelection({
   const [hasPinnedVisualizationSelection, setHasPinnedVisualizationSelection] =
     useState(false);
 
-  const getFirstSelectableVisualizationIdForMessage = useCallback(
+  const getLastSelectableVisualizationIdForMessage = useCallback(
     (message: UIMessage) => {
       if (!message.parts) {
         return null;
       }
+
+      let lastVisualizationId: string | null = null;
 
       for (
         let partIndex = 0;
@@ -75,14 +77,14 @@ export function useVisualizationSelection({
           continue;
         }
 
-        return getVisualizationIdForArtifact({
+        lastVisualizationId = getVisualizationIdForArtifact({
           artifactId: artifactData.id,
           messageId: message.id,
           partIndex,
         });
       }
 
-      return null;
+      return lastVisualizationId;
     },
     [executeSqlArtifactType],
   );
@@ -186,6 +188,6 @@ export function useVisualizationSelection({
     visualizations,
     activeVisualizationId,
     handleSelectVisualization,
-    getFirstSelectableVisualizationIdForMessage,
+    getLastSelectableVisualizationIdForMessage,
   };
 }

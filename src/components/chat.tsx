@@ -17,11 +17,11 @@ import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
 import { VisualizationPanel } from "@/components/visualization-panel";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
-import { apiFetch } from "@/lib/api/client";
 import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
+import { apiFetch } from "@/lib/api/client";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -128,7 +128,9 @@ export default function Chat({
     let cancelled = false;
     const loadInitialMessages = async () => {
       try {
-        const res = await apiFetch(`/api/chat/${chatId}`, { cache: "no-store" });
+        const res = await apiFetch(`/api/chat/${chatId}`, {
+          cache: "no-store",
+        });
         if (!res.ok || cancelled) {
           return;
         }
@@ -156,7 +158,7 @@ export default function Chat({
     visualizations,
     activeVisualizationId,
     handleSelectVisualization,
-    getFirstSelectableVisualizationIdForMessage,
+    getLastSelectableVisualizationIdForMessage,
   } = useVisualizationSelection({
     messages,
     executeSqlArtifactType,
@@ -491,8 +493,8 @@ export default function Chat({
                         verbAiIsThinking={verbAiIsThinking}
                         executeSqlArtifactType={executeSqlArtifactType}
                         activeVisualizationId={activeVisualizationId}
-                        getFirstSelectableVisualizationIdForMessage={
-                          getFirstSelectableVisualizationIdForMessage
+                        getLastSelectableVisualizationIdForMessage={
+                          getLastSelectableVisualizationIdForMessage
                         }
                         onSelectVisualization={handleSelectVisualization}
                         onRemoveMessage={handleRemoveMessage}
