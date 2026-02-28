@@ -21,7 +21,7 @@ type ChatMessageThreadProps = {
   verbAiIsThinking: string;
   executeSqlArtifactType: string;
   activeVisualizationId: string | null;
-  getFirstSelectableVisualizationIdForMessage: (
+  getLastSelectableVisualizationIdForMessage: (
     message: UIMessage,
   ) => string | null;
   onSelectVisualization: (visualizationId: string) => void;
@@ -39,7 +39,7 @@ export function ChatMessageThread({
   verbAiIsThinking,
   executeSqlArtifactType,
   activeVisualizationId,
-  getFirstSelectableVisualizationIdForMessage,
+  getLastSelectableVisualizationIdForMessage,
   onSelectVisualization,
   onRemoveMessage,
   conversationClassName,
@@ -83,7 +83,7 @@ export function ChatMessageThread({
                     !(part as { data?: unknown }).data),
               ));
           const messageVisualizationId =
-            getFirstSelectableVisualizationIdForMessage(message);
+            getLastSelectableVisualizationIdForMessage(message);
           const isSelectableMessage =
             message.role === "assistant" && Boolean(messageVisualizationId);
           const isSelectedMessage =
