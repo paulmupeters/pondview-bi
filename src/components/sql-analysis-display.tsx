@@ -1,11 +1,15 @@
-"use client";
-
 import {
   ChatBubbleBottomCenterTextIcon,
   PlusCircleIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
-import { ChartBar, ChevronLeft, ChevronRight, Table } from "lucide-react";
+import {
+  ChartBar,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Table,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useArtifactMutation } from "@/components/artifact-mutation-context";
 import { SqlResultsTable } from "@/components/sql-results-table";
@@ -49,6 +53,7 @@ export function SqlAnalysisDisplay({
       ? "chart"
       : "table",
   );
+
   const [chartConfig, setChartConfig] = useState<Config | null>(
     () => data?.chartConfig ?? null,
   );
@@ -66,6 +71,7 @@ export function SqlAnalysisDisplay({
   const [isSqlExpanded, setIsSqlExpanded] = useState(
     data?.isSqlExpandedInitial ?? false,
   );
+  const [showVisualOptions, setShowVisualOptions] = useState(false);
 
   const toggleSqlExpanded = () => {
     setIsSqlExpanded((prev) => !prev);
@@ -97,6 +103,7 @@ export function SqlAnalysisDisplay({
     setExecutedColumns(null);
     setChartConfig(null);
     setCardConfig(null);
+    setShowVisualOptions(false);
     lastAutoSwitchQueryRef.current = null;
   };
 
@@ -146,6 +153,7 @@ export function SqlAnalysisDisplay({
       // Query changed - full reset to data's config
       setChartConfig(data?.chartConfig ?? null);
       setCardConfig(data?.cardConfig ?? null);
+      setShowVisualOptions(false);
       setExecutedRows(null);
       setExecutedColumns(null);
       setQuery(null);
@@ -182,6 +190,12 @@ export function SqlAnalysisDisplay({
     chartConfig,
     cardConfig,
   ]);
+
+  useEffect(() => {
+    if (activeView !== "chart") {
+      setShowVisualOptions(false);
+    }
+  }, [activeView]);
 
   const columnsForDialog = useMemo(
     () =>
@@ -251,13 +265,13 @@ export function SqlAnalysisDisplay({
 
   const selectedForCard: SelectedForCard | undefined =
     cardSourceRows &&
-      cardSourceRows.length === 1 &&
-      cardSourceColumns &&
-      cardSourceColumns.length === 1
+    cardSourceRows.length === 1 &&
+    cardSourceColumns &&
+    cardSourceColumns.length === 1
       ? {
-        stage: "complete",
-        columnName: cardSourceColumns[0].name,
-        value: cardSourceRows[0][cardSourceColumns[0].name],
+          stage: "complete",
+          columnName: cardSourceColumns[0].name,
+          value: cardSourceRows[0][cardSourceColumns[0].name],
         }
       : undefined;
 
@@ -269,6 +283,8 @@ export function SqlAnalysisDisplay({
     showStageIndicator && effectiveStage !== "complete";
 
   const canShowTable = Boolean(selectedForTable);
+  const canShowVisualOptionsToggle =
+    activeView === "chart" && columnsForDialog.length > 0 && !selectedForCard;
 
   const payloadForAddToChat = useMemo(() => {
     if (!data && executedRows === null && executedColumns === null) {
@@ -325,12 +341,12 @@ export function SqlAnalysisDisplay({
         data?.summary ??
         (typeof totalRows === "number"
           ? {
-            totalRows,
-            executionTimeMs:
-              data?.summary?.executionTimeMs ?? data?.executionTime,
-            insights: data?.summary?.insights ?? [],
-            queryType: data?.summary?.queryType,
-          }
+              totalRows,
+              executionTimeMs:
+                data?.summary?.executionTimeMs ?? data?.executionTime,
+              insights: data?.summary?.insights ?? [],
+              queryType: data?.summary?.queryType,
+            }
           : undefined),
     };
   }, [
@@ -406,6 +422,25 @@ export function SqlAnalysisDisplay({
               <ChartBar className="w-4 h-4" />
               Visual
             </Button>
+            {canShowVisualOptionsToggle && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 text-xs font-mono"
+                onClick={() => setShowVisualOptions((prev) => !prev)}
+                aria-expanded={showVisualOptions}
+                aria-controls="chart-visual-options"
+              >
+                Visual options
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 transition-transform",
+                    showVisualOptions && "rotate-180",
+                  )}
+                />
+              </Button>
+            )}
             {showAddToChatButton && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -515,6 +550,8 @@ export function SqlAnalysisDisplay({
               onCardConfigChange={handleCardConfigChange}
               renderSqlControls={renderControls}
               renderSqlEditor={renderEditor}
+              showVisualOptions={showVisualOptions}
+              onShowVisualOptionsChange={setShowVisualOptions}
             />
           );
         })()}

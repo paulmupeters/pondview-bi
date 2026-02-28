@@ -6,7 +6,7 @@ import {
   getDuckDbInstance,
   runSqlAndGetRowObjectsJson,
 } from "@/lib/duckdb/duckdb-node";
-import { detectPostgresConnection, resolveDbPath } from "@/lib/duckdb/path";
+import { detectExternalConnection, resolveDbPath } from "@/lib/duckdb/path";
 
 /**
  * Extracts the database name (table_catalog) from a DuckDB identifier.
@@ -30,12 +30,12 @@ function extractDatabaseName(dbIdentifier: string): string | null {
 }
 
 export async function getSchemas(dbIdentifier: string): Promise<string[]> {
-  const postgresConfig = detectPostgresConnection(dbIdentifier);
+  const externalConnection = detectExternalConnection(dbIdentifier);
   const dbPath = resolveDbPath(dbIdentifier);
 
-  // If it's a postgres URI, query through the attached database
-  if (postgresConfig) {
-    const attachmentPlan = buildAttachmentPlan(postgresConfig);
+  // If it's an external URI (postgres/mysql), query through the attached database
+  if (externalConnection) {
+    const attachmentPlan = buildAttachmentPlan(externalConnection);
     const instance = await getDuckDbInstance(dbPath);
     const connection = await instance.connect();
 
@@ -95,16 +95,16 @@ export async function getTablesForSchema(
   schema: string,
   limit = 20
 ): Promise<string[]> {
-  const postgresConfig = detectPostgresConnection(dbIdentifier);
+  const externalConnection = detectExternalConnection(dbIdentifier);
   const dbPath = resolveDbPath(dbIdentifier);
   const safeSchema = schema.replace(/'/g, "''");
   const lim = Number.isFinite(limit as unknown as number)
     ? Math.max(1, Math.min(1000, limit))
     : 20;
 
-  // If it's a postgres URI, query through the attached database
-  if (postgresConfig) {
-    const attachmentPlan = buildAttachmentPlan(postgresConfig);
+  // If it's an external URI (postgres/mysql), query through the attached database
+  if (externalConnection) {
+    const attachmentPlan = buildAttachmentPlan(externalConnection);
     const instance = await getDuckDbInstance(dbPath);
     const connection = await instance.connect();
 
@@ -166,12 +166,12 @@ export async function getTables(
 ): Promise<
   Array<{ table_schema: string; table_name: string; table_type: string }>
 > {
-  const postgresConfig = detectPostgresConnection(dbIdentifier);
+  const externalConnection = detectExternalConnection(dbIdentifier);
   const dbPath = resolveDbPath(dbIdentifier);
 
-  // If it's a postgres URI, query through the attached database
-  if (postgresConfig) {
-    const attachmentPlan = buildAttachmentPlan(postgresConfig);
+  // If it's an external URI (postgres/mysql), query through the attached database
+  if (externalConnection) {
+    const attachmentPlan = buildAttachmentPlan(externalConnection);
     const instance = await getDuckDbInstance(dbPath);
     const connection = await instance.connect();
 

@@ -1,5 +1,3 @@
-"use client";
-
 import { DynamicChart } from "@/components/dynamic-chart";
 import type { Config, Result } from "@/lib/types";
 
@@ -29,6 +27,13 @@ export function SqlChart({
   const { rows, chartConfig, summary } = payload;
 
   const effectiveChartConfig = customChartConfig || chartConfig;
+  const takeaway = effectiveChartConfig?.takeaway?.trim();
+  const insights = (summary?.insights ?? []).filter(Boolean);
+  const additionalInsights = takeaway
+    ? insights.filter(
+      (insight) => insight.trim().toLowerCase() !== takeaway.toLowerCase(),
+    )
+    : insights;
 
 
   if (!effectiveChartConfig || !rows.length) {
@@ -41,19 +46,6 @@ export function SqlChart({
 
   return (
     <div className="space-y-4 p-4">
-      {/* Summary */}
-      {summary && (
-        <div className="space-y-2">
-          <h3 className="font-semibold text-lg">Query Results</h3>
-          <div className="flex gap-4 text-sm text-muted-foreground">
-            <span>{summary.totalRows} rows</span>
-            {summary.executionTimeMs && (
-              <span>{summary.executionTimeMs}ms</span>
-            )}
-            {summary.queryType && <span>{summary.queryType}</span>}
-          </div>
-        </div>
-      )}
 
       {/* Chart */}
       <div className="w-full">
@@ -63,19 +55,31 @@ export function SqlChart({
         />
       </div>
 
-      {/* Insights */}
-      {summary?.insights && summary.insights.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="font-medium">Insights</h4>
-          <ul className="space-y-1 text-sm text-muted-foreground">
-            {summary.insights.map((insight, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
-              <li key={index} className="flex items-start gap-2">
-                <span className="w-1 h-1 rounded-full bg-primary mt-2 flex-shrink-0" />
-                {insight}
-              </li>
-            ))}
-          </ul>
+      {/* Takeaway + insights */}
+      {(takeaway || additionalInsights.length > 0) && (
+        <div className="space-y-3">
+          {takeaway && (
+            <div className="rounded-md border bg-muted/20 p-3">
+              <h4 className="font-medium">Takeaway</h4>
+              <p className="mt-1 text-sm text-muted-foreground">{takeaway}</p>
+            </div>
+          )}
+          {additionalInsights.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="font-medium">
+                {takeaway ? "" : "Insights"}
+              </h4>
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                {additionalInsights.map((insight, index) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
+                  <li key={index} className="flex items-start gap-2">
+                    <span className="w-1 h-1 rounded-full bg-primary mt-2 shrink-0" />
+                    {insight}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>

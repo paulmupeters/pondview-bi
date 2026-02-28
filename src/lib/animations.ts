@@ -102,10 +102,10 @@ export function getRandomVerbAiIsThinking() {
 }
 
 export const animations = {
-  star2: {
-    interval: 70,
-    frames: ["✶", "✸", "✹", "✺", "✹", "✷"],
-  },
+  // star2: {
+  //   interval: 70,
+  //   frames: ["✶", "✸", "✹", "✺", "✹", "✷"],
+  // },
   sand: {
     interval: 80,
     frames: [
@@ -270,70 +270,70 @@ export const animations = {
       "⠂",
     ],
   },
-  line: {
-    interval: 130,
-    frames: ["-", "\\", "|", "/"],
-  },
-  line2: {
-    interval: 100,
-    frames: ["⠂", "⠂", "⠉", "⠉", "⠒", "⠒", "⠐", "⠐", "⠒", "⠒", "⠉", "⠉"],
-  },
-  pipe: {
-    interval: 100,
-    frames: ["┤", "┘", "┴", "└", "├", "┌", "┬", "┐"],
-  },
+  // line: {
+  //   interval: 130,
+  //   frames: ["-", "\\", "|", "/"],
+  // },
+  // line2: {
+  //   interval: 100,
+  //   frames: ["⠂", "⠂", "⠉", "⠉", "⠒", "⠒", "⠐", "⠐", "⠒", "⠒", "⠉", "⠉"],
+  // },
+  // pipe: {
+  //   interval: 100,
+  //   frames: ["┤", "┘", "┴", "└", "├", "┌", "┬", "┐"],
+  // },
   simpleDots: {
     interval: 400,
     frames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
   },
-  simpleDotsScrolling: {
-    interval: 200,
-    frames: ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"],
-  },
-  star: {
-    interval: 70,
-    frames: ["✶", "✸", "✹", "✺", "✹", "✷"],
-  },
-  toggle: {
-    interval: 250,
-    frames: ["⊶", "⊷"],
-  },
-  toggle2: {
-    interval: 80,
-    frames: ["▫", "▪"],
-  },
-  toggle3: {
-    interval: 120,
-    frames: ["□", "■"],
-  },
-  toggle4: {
-    interval: 100,
-    frames: ["▫", "▪", "▫", "▪"],
-  },
+  // simpleDotsScrolling: {
+  //   interval: 200,
+  //   frames: ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"],
+  // },
+  // star: {
+  //   interval: 70,
+  //   frames: ["✶", "✸", "✹", "✺", "✹", "✷"],
+  // },
+  // toggle: {
+  //   interval: 250,
+  //   frames: ["⊶", "⊷"],
+  // },
+  // toggle2: {
+  //   interval: 80,
+  //   frames: ["▫", "▪"],
+  // },
+  // toggle3: {
+  //   interval: 120,
+  //   frames: ["□", "■"],
+  // },
+  // toggle4: {
+  //   interval: 100,
+  //   frames: ["▫", "▪", "▫", "▪"],
+  // },
   toggle5: {
     interval: 100,
     frames: ["□", "■", "□", "■"],
   },
-  triangle: {
-    interval: 50,
-    frames: ["◢", "◣", "◤", "◥"],
-  },
-  arc: {
-    interval: 100,
-    frames: ["◜", "◠", "◝", "◞", "◡", "◟"],
-  },
-  arrow: {
-    interval: 100,
-    frames: ["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"],
-  },
-  arrow2: {
-    interval: 80,
-    frames: ["◐", "◓", "◑", "◒"],
-  },
-  arrow3: {
-    interval: 120,
-    frames: ["◜", "◠", "◝", "◞", "◡", "◟"],
-  },
+  // triangle: {
+  //   interval: 50,
+  //   frames: ["◢", "◣", "◤", "◥"],
+  // },
+  // arc: {
+  //   interval: 100,
+  //   frames: ["◜", "◠", "◝", "◞", "◡", "◟"],
+  // },
+  // arrow: {
+  //   interval: 100,
+  //   frames: ["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"],
+  // },
+  // arrow2: {
+  //   interval: 80,
+  //   frames: ["◐", "◓", "◑", "◒"],
+  // },
+  // arrow3: {
+  //   interval: 120,
+  //   frames: ["◜", "◠", "◝", "◞", "◡", "◟"],
+  // },
   bouncingBar: {
     interval: 80,
     frames: [
@@ -367,18 +367,18 @@ export const animations = {
       "(  ●   )",
     ],
   },
-  smiley: {
-    interval: 200,
-    frames: ["😊", "😄", "😁", "😃", "😀", "😆", "😅", "😂"],
-  },
-  monkey: {
-    interval: 300,
-    frames: ["🙈", "🙉", "🙊"],
-  },
-  hearts: {
-    interval: 100,
-    frames: ["💛", "💙", "💜", "💚", "❤️"],
-  },
+  // smiley: {
+  //   interval: 200,
+  //   frames: ["😊", "😄", "😁", "😃", "😀", "😆", "😅", "😂"],
+  // },
+  // monkey: {
+  //   interval: 300,
+  //   frames: ["🙈", "🙉", "🙊"],
+  // },
+  // hearts: {
+  //   interval: 100,
+  //   frames: ["💛", "💙", "💜", "💚", "❤️"],
+  // },
   clock: {
     interval: 100,
     frames: [
@@ -474,18 +474,18 @@ export const animations = {
       "▐/|____________▌",
     ],
   },
-  dqpb: {
-    interval: 100,
-    frames: ["d", "q", "p", "b"],
-  },
-  weather: {
-    interval: 100,
-    frames: ["☀️", "☁️", "⛅", "🌦️", "🌧️", "⛈️", "🌩️", "🌨️"],
-  },
-  christmas: {
-    interval: 400,
-    frames: ["🌲", "🎄"],
-  },
+  // dqpb: {
+  //   interval: 100,
+  //   frames: ["d", "q", "p", "b"],
+  // },
+  // weather: {
+  //   interval: 100,
+  //   frames: ["☀️", "☁️", "⛅", "🌦️", "🌧️", "⛈️", "🌩️", "🌨️"],
+  // },
+  // christmas: {
+  //   interval: 400,
+  //   frames: ["🌲", "🎄"],
+  // },
   wave: {
     interval: 100,
     frames: [
@@ -505,34 +505,34 @@ export const animations = {
       "▂",
     ],
   },
-  wavyLine: {
-    interval: 80,
-    frames: ["~~~", "~^~", "^~^", "~^~", "~~~"],
-  },
-  expand: {
-    interval: 100,
-    frames: ["◯", "◰", "◱", "◲", "◳", "◴", "◵", "◶"],
-  },
-  pulse: {
-    interval: 150,
-    frames: ["●", "◐", "◑", "◒", "◓", "◒", "◑", "◐"],
-  },
-  dots13: {
-    interval: 80,
-    frames: ["∙∙∙", "●∙∙", "∙●∙", "∙∙●", "∙●∙", "●∙∙"],
-  },
-  growVertical: {
-    interval: 100,
-    frames: ["▖", "▘", "▝", "▗"],
-  },
-  spiral: {
-    interval: 80,
-    frames: ["╱", "─", "╲", "│"],
-  },
-  sparkle: {
-    interval: 100,
-    frames: ["✨", "⭐", "✨", "🌟", "✨", "⭐"],
-  },
+  // wavyLine: {
+  //   interval: 80,
+  //   frames: ["~~~", "~^~", "^~^", "~^~", "~~~"],
+  // },
+  // expand: {
+  //   interval: 100,
+  //   frames: ["◯", "◰", "◱", "◲", "◳", "◴", "◵", "◶"],
+  // },
+  // pulse: {
+  //   interval: 150,
+  //   frames: ["●", "◐", "◑", "◒", "◓", "◒", "◑", "◐"],
+  // },
+  // dots13: {
+  //   interval: 80,
+  //   frames: ["∙∙∙", "●∙∙", "∙●∙", "∙∙●", "∙●∙", "●∙∙"],
+  // },
+  // growVertical: {
+  //   interval: 100,
+  //   frames: ["▖", "▘", "▝", "▗"],
+  // },
+  // spiral: {
+  //   interval: 80,
+  //   frames: ["╱", "─", "╲", "│"],
+  // },
+  // sparkle: {
+  //   interval: 100,
+  //   frames: ["✨", "⭐", "✨", "🌟", "✨", "⭐"],
+  // },
   bars: {
     interval: 100,
     frames: ["▐░░▌", "▐▌░▌", "▐─░▌", "▐─▐▌", "▐─▌░", "▐░▌─", "▐░░▌"],
@@ -541,26 +541,26 @@ export const animations = {
     interval: 100,
     frames: ["□□□", "■□□", "■■□", "■■■", "□■■", "□□■"],
   },
-  flow: {
-    interval: 100,
-    frames: ["◁", "◄", "◅", "→", "▶", "▷"],
-  },
+  // flow: {
+  //   interval: 100,
+  //   frames: ["◁", "◄", "◅", "→", "▶", "▷"],
+  // },
   dots14: {
     interval: 100,
     frames: ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠤", "⠠", "⠠", "⠤", "⠦", "⠖"],
   },
-  rocket: {
-    interval: 150,
-    frames: ["🚀", "🚀 ", "🚀  ", "🚀   ", "🚀    ", "🚀     "],
-  },
+  // rocket: {
+  //   interval: 150,
+  //   frames: ["🚀", "🚀 ", "🚀  ", "🚀   ", "🚀    ", "🚀     "],
+  // },
   loading: {
     interval: 100,
     frames: ["█░░", "█░░", "██░", "██░", "███", "███"],
   },
-  orbit: {
-    interval: 80,
-    frames: ["◴", "◷", "◶", "◵"],
-  },
+  // orbit: {
+  //   interval: 80,
+  //   frames: ["◴", "◷", "◶", "◵"],
+  // },
 };
 
 const aiVerbs = [

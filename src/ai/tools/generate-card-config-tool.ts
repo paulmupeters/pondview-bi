@@ -1,16 +1,18 @@
 import { generateObject } from "ai";
+import { VISUALIZATION_MODEL } from "@/ai/models";
 import { cardConfigSchema, type Result } from "@/lib/types";
 
 export const generateCardConfig = async (
   value: string | number | boolean | Date,
   columnName: string,
-  userQuery: string
+  userQuery: string,
 ) => {
   "use server";
 
   const { object: config } = await generateObject({
-    model: "openai/gpt-5-nano",
-    system: "You are a data visualization expert specializing in KPI cards and metrics.",
+    model: VISUALIZATION_MODEL,
+    system:
+      "You are a data visualization expert specializing in KPI cards and metrics.",
     prompt: `Given a single value from a SQL query result, generate a card configuration that best presents this value to answer the user's query.
 
       The card should:
@@ -31,4 +33,3 @@ export const generateCardConfig = async (
 
   return { config };
 };
-

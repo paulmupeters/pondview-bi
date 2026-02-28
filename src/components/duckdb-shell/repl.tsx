@@ -1,5 +1,3 @@
-"use client";
-
 import {
   ClipboardDocumentIcon,
   PlayIcon,
@@ -16,7 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
+import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import { runQuery } from "@/lib/sql/run-query";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";

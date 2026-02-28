@@ -1,6 +1,4 @@
-"use client";
-
-import { ChevronDownIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { Database } from "lucide-react";
 import { useState } from "react";
 import {
@@ -29,6 +27,8 @@ interface ConnectedDataPanelProps {
   className?: string;
   onInsertTable?: (tableName: string) => void;
   mode?: "popover" | "sidebar";
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function ConnectedDataPanel({
@@ -37,19 +37,23 @@ export function ConnectedDataPanel({
   className,
   onInsertTable,
   mode = "popover",
+  collapsed = false,
+  onToggleCollapse,
 }: ConnectedDataPanelProps) {
   const connectedTables = useConnectedTables();
   const { tables: materializedTables } = useMaterializedTables();
   const [isOpen, setIsOpen] = useState(false);
 
   const getDbIdentifier = (entry: (typeof connectedTables)[0]): string => {
-    // Use databasePath as the identifier for queries, not attachAs
-    // attachAs is only for display and SQL table references
-    return entry.databasePath;
+    // Prefer connectionId (new) over databasePath (legacy) for identification
+    // databasePath may be absent when credentials are stored server-side
+    return entry.connectionId ?? entry.databasePath ?? entry.attachAs ?? "";
   };
 
   const getDbKey = (entry: (typeof connectedTables)[0]): string => {
-    return `${entry.type}-${entry.databasePath}-${entry.schema || entry.table || ""}`;
+    const dbId =
+      entry.connectionId ?? entry.databasePath ?? entry.attachAs ?? "";
+    return `${entry.type}-${dbId}-${entry.schema || entry.table || ""}`;
   };
 
   const getDbDisplayName = (entry: (typeof connectedTables)[0]): string => {
@@ -57,7 +61,9 @@ export function ConnectedDataPanel({
     if (entry.schema) parts.push(entry.schema);
     if (entry.table) parts.push(entry.table);
     if (parts.length === 0) {
-      parts.push(entry.databasePath);
+      parts.push(
+        entry.attachAs ?? entry.connectionId ?? entry.databasePath ?? "unknown",
+      );
     }
     return `${parts.join(".")} (${entry.type})`;
   };
@@ -121,22 +127,20 @@ export function ConnectedDataPanel({
             const dbKey = getDbKey(entry);
             const dbIdentifier = getDbIdentifier(entry);
             const dbDisplayName = getDbDisplayName(entry);
-        // Check both databasePath and attachAs for backward compatibility
+            // Check both databasePath and attachAs for backward compatibility
             const isSelected =
               selectedDb === dbIdentifier || selectedDb === entry.attachAs;
             const hasTables =
               (entry.tables && entry.tables.length > 0) || entry.table;
 
             return (
-              <div
-                key={dbKey}
-                className="space-y-1"
-              >
+              <div key={dbKey} className="space-y-1">
                 <div
                   className={cn(
                     "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
-                    isSelected && "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
-                    mode === "sidebar" && "hover:bg-sidebar-accent/50"
+                    isSelected &&
+                      "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
+                    mode === "sidebar" && "hover:bg-sidebar-accent/50",
                   )}
                 >
                   <button
@@ -148,37 +152,47 @@ export function ConnectedDataPanel({
                     <span className="truncate">{dbDisplayName}</span>
                   </button>
                 </div>
-                {
-                  hasTables && (
-                    <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
+                {hasTables && (
+                  <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
                     {entry.tables && entry.tables.length > 0
-                        ? entry.tables.map((tableName, idx) => {
-                          const colors = ['bg-blue-400', 'bg-purple-400', 'bg-amber-400'];
+                      ? entry.tables.map((tableName, idx) => {
+                          const colors = [
+                            "bg-blue-400",
+                            "bg-purple-400",
+                            "bg-amber-400",
+                          ];
                           const color = colors[idx % colors.length];
                           return (
                             <button
                               key={tableName}
                               type="button"
                               className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-                              onClick={() => handleInsertTable(entry, tableName)}
+                              onClick={() =>
+                                handleInsertTable(entry, tableName)
+                              }
                             >
-                              <span className={cn("w-1.5 h-1.5 rounded-full", color)}></span>
+                              <span
+                                className={cn(
+                                  "w-1.5 h-1.5 rounded-full",
+                                  color,
+                                )}
+                              ></span>
                               <span className="truncate">{tableName}</span>
                             </button>
                           );
                         })
                       : entry.table && (
-                        <button
-                          type="button"
+                          <button
+                            type="button"
                             className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-                          onClick={() =>
-                            handleInsertTable(entry, entry.table as string)
-                          }
-                        >
+                            onClick={() =>
+                              handleInsertTable(entry, entry.table as string)
+                            }
+                          >
                             <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
-                          <span className="truncate">{entry.table}</span>
-                        </button>
-                      )}
+                            <span className="truncate">{entry.table}</span>
+                          </button>
+                        )}
                   </div>
                 )}
               </div>
@@ -193,26 +207,30 @@ export function ConnectedDataPanel({
                 className={cn(
                   "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
                   selectedDb &&
-                  isMaterializedTableIdentifier(selectedDb) &&
-                  "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
-                  mode === "sidebar" && "hover:bg-sidebar-accent/50"
+                    isMaterializedTableIdentifier(selectedDb) &&
+                    "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
+                  mode === "sidebar" && "hover:bg-sidebar-accent/50",
                 )}
               >
                 <button
                   type="button"
                   className="flex items-center gap-2 flex-1 text-left cursor-pointer"
-                onClick={handleSelectMaterialized}
-              >
+                  onClick={handleSelectMaterialized}
+                >
                   <Database className="h-4 w-4 shrink-0 text-sidebar-primary" />
                   <span className="truncate">
-                  Materialized ({materializedTables.length})
-                </span>
+                    Materialized ({materializedTables.length})
+                  </span>
                 </button>
-            </div>
+              </div>
 
               <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
                 {materializedTables.map((tableName, idx) => {
-                  const colors = ['bg-blue-400', 'bg-purple-400', 'bg-amber-400'];
+                  const colors = [
+                    "bg-blue-400",
+                    "bg-purple-400",
+                    "bg-amber-400",
+                  ];
                   const color = colors[idx % colors.length];
                   return (
                     <button
@@ -221,30 +239,68 @@ export function ConnectedDataPanel({
                       className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
                       onClick={() => handleInsertMaterializedTable(tableName)}
                     >
-                      <span className={cn("w-1.5 h-1.5 rounded-full", color)}></span>
+                      <span
+                        className={cn("w-1.5 h-1.5 rounded-full", color)}
+                      ></span>
                       <span className="truncate">{tableName}</span>
                     </button>
                   );
                 })}
               </div>
-          </div>
+            </div>
           </>
         )}
-
       </div>
     );
   };
 
   // Sidebar mode: render directly without hover card
   if (mode === "sidebar") {
+    if (collapsed) {
+      return (
+        <div
+          className={cn(
+            "flex h-full w-11 flex-col items-center border-r border-border bg-background p-2 transition-all duration-200 ease-out",
+            className,
+          )}
+        >
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 gap-0.5"
+            onClick={onToggleCollapse}
+            aria-label="Expand explorer"
+          >
+            <Database className="h-4 w-4" />
+            <ChevronRightIcon className="h-2 w-2 shrink-0" />
+          </Button>
+        </div>
+      );
+    }
+
     return (
       <div
         className={cn(
-          "flex flex-col border-r border-border",
+          "flex h-full w-64 flex-col border-r border-border transition-all duration-200 ease-out",
           className,
         )}
       >
-        <div className="p-4 border-b border-slate-200 text-xs text-[#5C6658] font-bold tracking-widest uppercase">Explorer</div>
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 p-4">
+          <span className="text-xs font-bold tracking-widest text-[#5C6658] uppercase">
+            Explorer
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={onToggleCollapse}
+            aria-label="Collapse explorer"
+          >
+            <ChevronLeftIcon className="h-4 w-4" />
+          </Button>
+        </div>
         <div className="flex-1 overflow-y-auto min-h-0 p-2">
           {renderDatabaseList()}
         </div>

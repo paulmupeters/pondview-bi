@@ -1,5 +1,3 @@
-"use client";
-
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useFilters } from "@/app/dashboards/[dashboardId]/filter-context";
@@ -21,7 +19,8 @@ import {
 
 interface DashboardSlicer {
   id: string;
-  dashboardId: string;
+  dashboardId?: string;
+  chartId?: string;
   field: string;
   title: string | null;
   limit: number;
@@ -30,14 +29,33 @@ interface DashboardSlicer {
 
 interface DashboardSlicersBarProps {
   dashboardId: string;
+  selectedChartId?: string | null;
+  onClearChartSelection?: () => void;
 }
 
-export function DashboardSlicersBar({ dashboardId }: DashboardSlicersBarProps) {
-  const { availableDimensions, filters, removeFilter } = useFilters();
+export function DashboardSlicersBar({
+  dashboardId,
+  selectedChartId = null,
+  onClearChartSelection,
+}: DashboardSlicersBarProps) {
+  const { availableDimensions, filters, removeFilter, setActiveScope } =
+    useFilters();
   const [slicers, setSlicers] = useState<DashboardSlicer[]>([]);
   const [loading, setLoading] = useState(true);
   const [addSlicerOpen, setAddSlicerOpen] = useState(false);
   const [addSlicerSearch, setAddSlicerSearch] = useState("");
+
+  const slicersEndpoint = selectedChartId
+    ? `/api/charts/${selectedChartId}/slicers`
+    : `/api/dashboard/${dashboardId}/slicers`;
+
+  useEffect(() => {
+    if (selectedChartId) {
+      setActiveScope({ kind: "chart", chartId: selectedChartId });
+    } else {
+      setActiveScope({ kind: "dashboard" });
+    }
+  }, [selectedChartId, setActiveScope]);
 
   // Load slicers from API
   useEffect(() => {
@@ -45,7 +63,7 @@ export function DashboardSlicersBar({ dashboardId }: DashboardSlicersBarProps) {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/dashboard/${dashboardId}/slicers`);
+        const res = await fetch(slicersEndpoint);
         if (!res.ok) {
           throw new Error(`Failed to load slicers: ${res.statusText}`);
         }
@@ -67,7 +85,7 @@ export function DashboardSlicersBar({ dashboardId }: DashboardSlicersBarProps) {
     return () => {
       cancelled = true;
     };
-  }, [dashboardId]);
+  }, [slicersEndpoint]);
 
   // Filter available dimensions to exclude those already used as slicers
   const usedFields = new Set(slicers.map((s) => s.field));
@@ -77,7 +95,7 @@ export function DashboardSlicersBar({ dashboardId }: DashboardSlicersBarProps) {
 
   const handleAddSlicer = async (field: string) => {
     try {
-      const res = await fetch(`/api/dashboard/${dashboardId}/slicers`, {
+      const res = await fetch(slicersEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ field }),
@@ -88,7 +106,7 @@ export function DashboardSlicersBar({ dashboardId }: DashboardSlicersBarProps) {
       await res.json();
 
       // Reload slicers
-      const listRes = await fetch(`/api/dashboard/${dashboardId}/slicers`);
+      const listRes = await fetch(slicersEndpoint);
       if (listRes.ok) {
         const listData = (await listRes.json()) as {
           slicers: DashboardSlicer[];
@@ -118,7 +136,7 @@ export function DashboardSlicersBar({ dashboardId }: DashboardSlicersBarProps) {
 
       // Remove slicer from database
       const res = await fetch(
-        `/api/dashboard/${dashboardId}/slicers?id=${encodeURIComponent(slicerId)}`,
+        `${slicersEndpoint}?id=${encodeURIComponent(slicerId)}`,
         { method: "DELETE" },
       );
       if (!res.ok) {
@@ -126,7 +144,7 @@ export function DashboardSlicersBar({ dashboardId }: DashboardSlicersBarProps) {
       }
 
       // Reload slicers
-      const listRes = await fetch(`/api/dashboard/${dashboardId}/slicers`);
+      const listRes = await fetch(slicersEndpoint);
       if (listRes.ok) {
         const listData = (await listRes.json()) as {
           slicers: DashboardSlicer[];
@@ -146,12 +164,36 @@ export function DashboardSlicersBar({ dashboardId }: DashboardSlicersBarProps) {
     );
   }
 
-  if (slicers.length === 0 && availableForSlicers.length === 0) {
+  if (
+    slicers.length === 0 &&
+    availableForSlicers.length === 0 &&
+    !selectedChartId
+  ) {
     return null;
   }
 
   return (
     <div className="flex items-center gap-2 flex-wrap py-2">
+      {selectedChartId ? (
+        <div className="inline-flex items-center gap-2 rounded-md border bg-muted/40 px-2 py-1 text-xs">
+          <span className="font-medium">Filtering selected visual</span>
+          {onClearChartSelection ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={onClearChartSelection}
+            >
+              Back to all visuals
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <div className="text-xs text-muted-foreground px-1">
+          Filtering all visuals
+        </div>
+      )}
+
       {slicers.map((slicer) => (
         <Slicer
           key={slicer.id}

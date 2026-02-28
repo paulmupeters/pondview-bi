@@ -9,6 +9,7 @@ import {
 import { nanoid } from "nanoid";
 import type { NextRequest } from "next/server";
 import { setContext } from "@/ai/context";
+import { CHAT_MODEL } from "@/ai/models";
 import { analysisPrompt } from "@/ai/prompts";
 import { tools } from "@/ai/tools";
 import type { ConnectedTable } from "@/lib/connected-tables";
@@ -28,22 +29,19 @@ export const maxDuration = 30;
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ chatId: string }> }
+  { params }: { params: Promise<{ chatId: string }> },
 ) {
   const { chatId } = await params;
   const rows = await listMessagesByChatId(chatId);
 
   const uiMessages: UIMessage[] = rows.map(
     (row: typeof messages.$inferSelect) => {
-      const parsedParts = row.parts ? safeJsonParse(row.parts) : undefined;
       return {
         id: row.id,
         role: row.role as UIMessage["role"],
-        parts: (Array.isArray(parsedParts) && parsedParts.length > 0
-          ? parsedParts
-          : [{ type: "text", text: row.content }]) as UIMessage["parts"],
+        parts: parsePartsOrFallback(row.parts, row.content),
       } satisfies UIMessage;
-    }
+    },
   );
 
   return Response.json({ messages: uiMessages });
@@ -51,7 +49,7 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ chatId: string }> }
+  { params }: { params: Promise<{ chatId: string }> },
 ) {
   const body = await req.json();
   const {
@@ -90,7 +88,7 @@ export async function POST(
       // Persist assistant message when stream finishes
       const textPart = Array.isArray(responseMessage.parts)
         ? responseMessage.parts.find(
-            (p) => (p as { type?: string })?.type === "text"
+            (p) => (p as { type?: string })?.type === "text",
           )
         : undefined;
       const text = (textPart as { text?: string } | undefined)?.text ?? "";
@@ -99,7 +97,7 @@ export async function POST(
         chatId,
         responseMessage.id || nanoid(),
         text,
-        JSON.stringify(responseMessage.parts ?? [{ type: "text", text }])
+        JSON.stringify(responseMessage.parts ?? [{ type: "text", text }]),
       );
     },
     execute: ({ writer }) => {
@@ -111,10 +109,12 @@ export async function POST(
       });
 
       const result = streamText({
-        model: "xai/grok-4-fast-reasoning",
+        model: CHAT_MODEL,
         system: analysisPrompt.replace(
           "{connectedTables}",
-          JSON.stringify(connectedTables)
+          JSON.stringify(
+            connectedTables.map(({ databasePath, ...rest }) => rest),
+          ),
         ),
         messages: convertToModelMessages(uiMessages),
         tools,
@@ -130,7 +130,7 @@ export async function POST(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ chatId: string }> }
+  { params }: { params: Promise<{ chatId: string }> },
 ) {
   const { chatId } = await params;
   await deleteChat(chatId);
@@ -143,4 +143,24 @@ function safeJsonParse(value: string) {
   } catch {
     return undefined;
   }
+}
+
+function parsePartsOrFallback(
+  partsJson: string | null | undefined,
+  content: string,
+): UIMessage["parts"] {
+  const parsed = partsJson ? safeJsonParse(partsJson) : undefined;
+
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    return parsed as UIMessage["parts"];
+  }
+
+  if (parsed && typeof parsed === "object") {
+    const maybeParts = (parsed as { parts?: unknown }).parts;
+    if (Array.isArray(maybeParts) && maybeParts.length > 0) {
+      return maybeParts as UIMessage["parts"];
+    }
+  }
+
+  return [{ type: "text", text: content }] as UIMessage["parts"];
 }

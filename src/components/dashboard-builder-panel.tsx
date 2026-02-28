@@ -1,5 +1,3 @@
-"use client";
-
 import type { UIMessage } from "@ai-sdk/react";
 import { MinusCircleIcon, PlusCircleIcon, XIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -12,14 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ArtifactData } from "@/hooks/types";
-import { type UseArtifactsOptions, useArtifacts } from "@/hooks/use-artifacts";
+import { useArtifacts } from "@/hooks/use-artifacts";
 import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
-import type { ChartConfig } from "./ui/chart";
 
 type DashboardBuilderPanelProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   messages: UIMessage[];
+  embedded?: boolean;
 };
 
 type VisualSnapshot = {
@@ -30,6 +28,41 @@ type VisualSnapshot = {
   rows: Result[];
   type: "chart" | "card" | "table";
 };
+
+function buildFallbackChartConfig(payload: SqlAnalysisData): Config | null {
+  const columns = payload.columns ?? [];
+  const xKey = columns[0]?.name ?? "";
+  const yKey = columns[1]?.name;
+
+  if (!xKey) {
+    return null;
+  }
+
+  const querySnippet = payload.query ?? "";
+  const truncatedQuery =
+    querySnippet.length > 50
+      ? `${querySnippet.slice(0, 50)}...`
+      : querySnippet;
+
+  return {
+    visualType: "chart",
+    title: truncatedQuery ? `Chart: ${truncatedQuery}` : "Generated chart",
+    description: payload.summary?.insights?.[0] ?? "",
+    type: "line",
+    xKey,
+    yKeys: yKey ? [yKey] : [],
+    multipleLines: false,
+    legend: false,
+    countMode: false,
+    showGrid: true,
+    showXAxis: true,
+    showYAxis: true,
+    showDots: true,
+    showTooltip: true,
+    lineSize: 2,
+    labelYAngle: -90,
+  };
+}
 
 function normalizeVisualArtifact(
   artifact: ArtifactData<SqlAnalysisData>,
@@ -43,7 +76,9 @@ function normalizeVisualArtifact(
 
   // Handle chart artifacts
   if (visualType === "chart") {
-    if (!payload.chartConfig) return null;
+    const resolvedChartConfig =
+      payload.chartConfig ?? buildFallbackChartConfig(payload);
+    if (!resolvedChartConfig) return null;
 
     const rows = Array.isArray(payload.rows)
       ? (payload.rows as Result[]).map((row) => ({ ...row }))
@@ -55,6 +90,7 @@ function normalizeVisualArtifact(
       artifact,
       payload: {
         ...payload,
+        chartConfig: resolvedChartConfig,
         columns: (payload.columns ?? []).map(
           (column: { name: string; type?: string }) => ({ ...column }),
         ),
@@ -133,6 +169,7 @@ export function DashboardBuilderPanel({
   open,
   onOpenChange,
   messages,
+  embedded = false,
 }: DashboardBuilderPanelProps) {
   const router = useRouter();
   const [dashboardTitle, setDashboardTitle] = useState("New dashboard");
@@ -286,7 +323,7 @@ export function DashboardBuilderPanel({
       }
 
       onOpenChange(false);
-      router.push(`/dashboards/${dashboardId}`);
+      router.push(`/dashboards/view?id=${encodeURIComponent(dashboardId)}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unexpected error";
       setError(message);
@@ -295,13 +332,17 @@ export function DashboardBuilderPanel({
     }
   };
 
-  return (
-    <div
-      className={`fixed inset-y-0 right-0 z-50 w-1/2 bg-background border-l shadow-lg transform transition-transform duration-300 ease-in-out ${
+  const panelClasses = embedded
+    ? "h-full flex flex-col gap-4 p-6 bg-sidebar overflow-hidden"
+    : `fixed inset-y-0 right-0 z-50 w-1/2 bg-background border-l shadow-lg transform transition-transform duration-300 ease-in-out ${
         open ? "translate-x-0" : "translate-x-full"
-      }`}
-    >
-      <div className="h-full flex flex-col gap-4 p-6 bg-sidebar">
+      }`;
+
+  return (
+    <div className={panelClasses}>
+      <div
+        className={embedded ? "h-full flex flex-col gap-4 min-h-0" : "h-full flex flex-col gap-4 p-6 bg-sidebar"}
+      >
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-semibold">Generate dashboard</h2>

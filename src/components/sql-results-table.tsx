@@ -1,7 +1,6 @@
-"use client";
-
 import {
   type ColumnDef,
+  type ColumnSizingState,
   flexRender,
   getCoreRowModel,
   getPaginationRowModel,
@@ -9,11 +8,14 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
+const DEFAULT_COLUMN_SIZE = 180;
+const MIN_COLUMN_SIZE = 120;
+const MAX_COLUMN_SIZE = 640;
 
 export function SqlResultsTable({
   dataOverride,
@@ -30,7 +32,7 @@ export function SqlResultsTable({
       queryType?: string;
     };
   };
-    className?: string;
+  className?: string;
 }) {
   const payload = dataOverride; // parent supplies data; avoid extra subscription
 
@@ -65,6 +67,8 @@ export function SqlResultsTable({
     pageIndex: 0,
     pageSize: shouldPaginate ? PAGE_SIZE : Math.max(rows.length, 1),
   });
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const previousColumnNamesSignature = useRef<string>("");
 
   // Update pageSize when rows change
   useEffect(() => {
@@ -76,15 +80,38 @@ export function SqlResultsTable({
     });
   }, [rows.length]);
 
+  // Reset custom widths when result columns change.
+  useEffect(() => {
+    const nextColumnNamesSignature = columns
+      .map((column) => column.name)
+      .join("||");
+
+    if (nextColumnNamesSignature === previousColumnNamesSignature.current) {
+      return;
+    }
+
+    previousColumnNamesSignature.current = nextColumnNamesSignature;
+    setColumnSizing({});
+  }, [columns]);
+
   const table = useReactTable({
     data: rows,
     columns: tableColumns,
+    defaultColumn: {
+      size: DEFAULT_COLUMN_SIZE,
+      minSize: MIN_COLUMN_SIZE,
+      maxSize: MAX_COLUMN_SIZE,
+    },
+    enableColumnResizing: true,
+    columnResizeMode: "onEnd",
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     state: {
       pagination,
+      columnSizing,
     },
     onPaginationChange: setPagination,
+    onColumnSizingChange: setColumnSizing,
   });
 
   if (!payload || payload.stage !== "complete") {
@@ -100,7 +127,7 @@ export function SqlResultsTable({
   }
 
   return (
-    <div className="flex flex-col h-full w-full min-w-0 gap-4">
+    <div className="flex flex-col h-full w-full min-w-0 gap-4 p-4">
       {/* Summary */}
       {summary && (
         <div className="shrink-0 space-y-2">
@@ -121,17 +148,21 @@ export function SqlResultsTable({
           className,
         )}
       >
-        <table className="w-full table-fixed caption-bottom text-sm">
-          <thead className="bg-muted/50 sticky top-0">
+        <table
+          className="caption-bottom text-sm table-fixed"
+          style={{ width: table.getTotalSize(), minWidth: "100%" }}
+        >
+          <thead className="bg-muted/50 sticky top-0 z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b">
                 {headerGroup.headers.map((header) => {
                   return (
                     <th
                       key={header.id}
-                      className="h-10 max-w-0 px-2 text-left align-middle font-medium text-foreground"
+                      className="h-10 px-2 text-left align-middle font-medium text-foreground relative"
+                      style={{ width: header.getSize() }}
                     >
-                      <div className="truncate">
+                      <div className="truncate pr-3">
                         {header.isPlaceholder
                           ? null
                           : flexRender(
@@ -139,6 +170,30 @@ export function SqlResultsTable({
                             header.getContext(),
                           )}
                       </div>
+                      {header.column.getCanResize() && (
+                        <button
+                          type="button"
+                          onDoubleClick={() => header.column.resetSize()}
+                          onMouseDown={header.getResizeHandler()}
+                          onTouchStart={header.getResizeHandler()}
+                          className={cn(
+                            "absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none",
+                            header.column.getIsResizing()
+                              ? "bg-primary/60"
+                              : "bg-transparent hover:bg-border",
+                          )}
+                          aria-label={`Resize column ${header.id}`}
+                          title="Drag to resize column"
+                        />
+                      )}
+                      {header.column.getIsResizing() && (
+                        <div
+                          className="absolute right-0 top-0 z-20 h-full w-px bg-primary pointer-events-none"
+                          style={{
+                            transform: `translateX(${table.getState().columnSizingInfo.deltaOffset ?? 0}px)`,
+                          }}
+                        />
+                      )}
                     </th>
                   );
                 })}
@@ -154,8 +209,12 @@ export function SqlResultsTable({
                   className="border-b hover:bg-muted/50 data-[state=selected]:bg-muted"
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="max-w-0 p-2 align-middle">
-                      <div className="truncate whitespace-nowrap">
+                    <td
+                      key={cell.id}
+                      className="p-2 align-middle"
+                      style={{ width: cell.column.getSize() }}
+                    >
+                      <div className="w-full overflow-hidden whitespace-nowrap">
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext(),
@@ -224,7 +283,7 @@ export function SqlResultsTable({
           <ul className="space-y-1 text-sm text-muted-foreground">
             {summary.insights.map((insight) => (
               <li key={insight} className="flex items-start gap-2">
-                <span className="w-1 h-1 rounded-full bg-primary mt-2 flex-shrink-0" />
+                <span className="w-1 h-1 rounded-full bg-primary mt-2 shrink-0" />
                 {insight}
               </li>
             ))}

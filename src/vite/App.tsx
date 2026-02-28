@@ -1,0 +1,54 @@
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import HomePage from "@/app/page";
+import ChatPage from "@/app/chat/page";
+import DataPage from "@/app/data/page";
+import DashboardsPage from "@/app/dashboards/page";
+import DashboardViewPage from "@/app/dashboards/view/page";
+import SettingsPage from "@/app/settings/page";
+import ShellPage from "@/app/shell/page";
+import { CommandPalette } from "@/components/CommandPalette";
+import { CustomCssLoader } from "@/components/custom-css-loader";
+import { SidebarLayout } from "@/components/sidebar-layout";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/lib/theme-provider";
+
+function LegacyDashboardDeepLinkRedirect() {
+  const params = useParams<{ dashboardId: string }>();
+  const dashboardId = params.dashboardId;
+  if (!dashboardId) {
+    return <Navigate to="/dashboards" replace />;
+  }
+  return (
+    <Navigate
+      to={`/dashboards/view?id=${encodeURIComponent(dashboardId)}`}
+      replace
+    />
+  );
+}
+
+export function App() {
+  return (
+    <ThemeProvider defaultTheme="system" storageKey="bi-chat-theme">
+      <TooltipProvider>
+        <CustomCssLoader />
+        <CommandPalette />
+        <SidebarLayout>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/dashboards" element={<DashboardsPage />} />
+            <Route path="/dashboards/view" element={<DashboardViewPage />} />
+            <Route
+              path="/dashboards/:dashboardId"
+              element={<LegacyDashboardDeepLinkRedirect />}
+            />
+            <Route path="/data" element={<DataPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/shell" element={<ShellPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </SidebarLayout>
+      </TooltipProvider>
+    </ThemeProvider>
+  );
+}

@@ -1,22 +1,21 @@
-"use client";
-
-import { useState } from "react";
-import { AppSidebar } from "@/components/app-sidebar";
+import type { ChatHistoryEntry } from "@/lib/chat-history";
+import { Suspense } from "react";
+import { AppSidebar } from "./app-sidebar";
 
 interface SidebarLayoutProps {
   children: React.ReactNode;
+  initialChats?: ChatHistoryEntry[];
 }
 
-export function SidebarLayout({ children }: SidebarLayoutProps) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
-  };
-
+export function SidebarLayout({
+  children,
+  initialChats = [],
+}: SidebarLayoutProps) {
   return (
     <div className="flex h-full w-full">
-      <AppSidebar isOpen={isSidebarOpen} onToggle={toggleSidebar} />
+      <Suspense fallback={null}>
+        <AppSidebar initialChats={initialChats} />
+      </Suspense>
       <div className="flex-1 overflow-hidden">
         <div className="h-full bg-background/80 backdrop-blur-sm">
           {children}

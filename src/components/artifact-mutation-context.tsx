@@ -1,5 +1,3 @@
-"use client";
-
 import { createContext, useContext, useCallback, type ReactNode } from "react";
 import type { UIMessage } from "ai";
 import type { CardConfig, Config } from "@/lib/types";

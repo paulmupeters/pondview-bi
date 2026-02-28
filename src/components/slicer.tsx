@@ -1,5 +1,3 @@
-"use client";
-
 import { Check, ChevronDown, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFilters } from "@/app/dashboards/[dashboardId]/filter-context";
@@ -12,6 +10,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -24,9 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
+import type { Op } from "@/lib/types/filters";
 import { cn } from "@/lib/utils";
-import type { Op } from "@/../semantic-layer/types";
 
 const operatorLabels: Record<Op, string> = {
   eq: "equals",
@@ -64,7 +62,15 @@ export function Slicer({
   limit = 50,
   onRemove,
 }: SlicerProps) {
-  const { filters, addFilter, updateFilter, removeFilter, availableDimensions } = useFilters();
+  const {
+    filters,
+    dashboardFilters,
+    activeScope,
+    addFilter,
+    updateFilter,
+    removeFilter,
+    availableDimensions,
+  } = useFilters();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [values, setValues] = useState<DimensionValue[]>([]);
@@ -84,7 +90,7 @@ export function Slicer({
   const existingFilterIndex = filters.findIndex((f) => f.field === field);
   const existingFilter =
     existingFilterIndex >= 0 ? filters[existingFilterIndex] : null;
-  
+
   // For non-numeric: track selected values for multi-select
   const selectedValues =
     !isNumeric && existingFilter?.op === "in" && existingFilter.values
@@ -95,7 +101,11 @@ export function Slicer({
   useEffect(() => {
     if (isNumeric && existingFilter) {
       setNumericOperator(existingFilter.op);
-      if (existingFilter.op === "between" && existingFilter.values && existingFilter.values.length >= 2) {
+      if (
+        existingFilter.op === "between" &&
+        existingFilter.values &&
+        existingFilter.values.length >= 2
+      ) {
         setNumericValue1(String(existingFilter.values[0] ?? ""));
         setNumericValue2(String(existingFilter.values[1] ?? ""));
       } else if (existingFilter.values && existingFilter.values.length > 0) {
@@ -119,7 +129,11 @@ export function Slicer({
       setLoading(true);
       try {
         // Exclude the current field's filter to avoid self-filter lockout
-        const otherFilters = filters.filter((f) => f.field !== field);
+        const effectiveFilters =
+          activeScope.kind === "chart"
+            ? [...dashboardFilters, ...filters]
+            : filters;
+        const otherFilters = effectiveFilters.filter((f) => f.field !== field);
         const filtersParam =
           otherFilters.length > 0
             ? `&filters=${encodeURIComponent(JSON.stringify(otherFilters))}`
@@ -144,7 +158,7 @@ export function Slicer({
         setLoading(false);
       }
     },
-    [dashboardId, field, limit, filters],
+    [activeScope.kind, dashboardFilters, dashboardId, field, limit, filters],
   );
 
   // Debounced search
@@ -181,7 +195,17 @@ export function Slicer({
 
   // Get available operators for numeric dimensions
   const getNumericOperators = (): Op[] => {
-    return ["eq", "neq", "gt", "gte", "lt", "lte", "between", "is_null", "is_not_null"];
+    return [
+      "eq",
+      "neq",
+      "gt",
+      "gte",
+      "lt",
+      "lte",
+      "between",
+      "is_null",
+      "is_not_null",
+    ];
   };
 
   // Handle numeric filter changes
@@ -204,7 +228,7 @@ export function Slicer({
     if (numericOperator === "between") {
       const val1 = numericValue1.trim();
       const val2 = numericValue2.trim();
-      
+
       if (!val1 || !val2) {
         // Remove filter if inputs are empty
         if (existingFilterIndex >= 0) {
@@ -216,7 +240,7 @@ export function Slicer({
       const num1 = parseFloat(val1);
       const num2 = parseFloat(val2);
 
-      if (isNaN(num1) || isNaN(num2)) {
+      if (Number.isNaN(num1) || Number.isNaN(num2)) {
         return; // Invalid numbers, don't update filter
       }
 
@@ -237,7 +261,7 @@ export function Slicer({
     } else {
       // Single value operators
       const val1 = numericValue1.trim();
-      
+
       if (!val1) {
         // Remove filter if input is empty
         if (existingFilterIndex >= 0) {
@@ -247,7 +271,7 @@ export function Slicer({
       }
 
       const num1 = parseFloat(val1);
-      if (isNaN(num1)) {
+      if (Number.isNaN(num1)) {
         return; // Invalid number, don't update filter
       }
 
@@ -270,7 +294,7 @@ export function Slicer({
     // Clear values when switching operators
     setNumericValue1("");
     setNumericValue2("");
-    
+
     // If switching to null checks, apply immediately
     if (op === "is_null" || op === "is_not_null") {
       const filter = {
@@ -368,10 +392,14 @@ export function Slicer({
           {isNumeric ? (
             <div className="space-y-3">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Operator</label>
+                <label htmlFor="operator" className="text-sm font-medium">
+                  Operator
+                </label>
                 <Select
                   value={numericOperator}
-                  onValueChange={(value) => handleNumericOperatorChange(value as Op)}
+                  onValueChange={(value) =>
+                    handleNumericOperatorChange(value as Op)
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -386,51 +414,17 @@ export function Slicer({
                 </Select>
               </div>
 
-              {numericOperator !== "is_null" && numericOperator !== "is_not_null" && (
-                <>
-                  {numericOperator === "between" ? (
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Range</label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          placeholder="Min"
-                          value={numericValue1}
-                          onChange={(e) => {
-                            setNumericValue1(e.target.value);
-                          }}
-                          onBlur={handleNumericFilterChange}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              handleNumericFilterChange();
-                            }
-                          }}
-                          className="flex-1"
-                        />
-                        <span className="text-sm text-muted-foreground">to</span>
-                        <Input
-                          type="number"
-                          placeholder="Max"
-                          value={numericValue2}
-                          onChange={(e) => {
-                            setNumericValue2(e.target.value);
-                          }}
-                          onBlur={handleNumericFilterChange}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              handleNumericFilterChange();
-                            }
-                          }}
-                          className="flex-1"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Value</label>
+              {numericOperator !== "is_null" &&
+                numericOperator !== "is_not_null" &&
+                (numericOperator === "between" ? (
+                  <div className="space-y-2">
+                    <label htmlFor="range" className="text-sm font-medium">
+                      Range
+                    </label>
+                    <div className="flex items-center gap-2">
                       <Input
                         type="number"
-                        placeholder="Enter value"
+                        placeholder="Min"
                         value={numericValue1}
                         onChange={(e) => {
                           setNumericValue1(e.target.value);
@@ -441,11 +435,47 @@ export function Slicer({
                             handleNumericFilterChange();
                           }
                         }}
+                        className="flex-1"
+                      />
+                      <span className="text-sm text-muted-foreground">to</span>
+                      <Input
+                        type="number"
+                        placeholder="Max"
+                        value={numericValue2}
+                        onChange={(e) => {
+                          setNumericValue2(e.target.value);
+                        }}
+                        onBlur={handleNumericFilterChange}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            handleNumericFilterChange();
+                          }
+                        }}
+                        className="flex-1"
                       />
                     </div>
-                  )}
-                </>
-              )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label htmlFor="value" className="text-sm font-medium">
+                      Value
+                    </label>
+                    <Input
+                      type="number"
+                      placeholder="Enter value"
+                      value={numericValue1}
+                      onChange={(e) => {
+                        setNumericValue1(e.target.value);
+                      }}
+                      onBlur={handleNumericFilterChange}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleNumericFilterChange();
+                        }
+                      }}
+                    />
+                  </div>
+                ))}
             </div>
           ) : (
             <Command shouldFilter={false}>

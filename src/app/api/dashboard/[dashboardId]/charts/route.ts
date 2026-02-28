@@ -6,9 +6,7 @@ import {
   removeChartFromDashboard,
   reorderDashboardCharts,
 } from "@/lib/repositories/dashboard";
-import { updateModelFromSQL, extractSemanticLayerFromSQL } from "@/../semantic-layer";
-import type { QueryAST } from "@/../semantic-layer/types";
-import { join } from "node:path";
+import { findBaseTableReference } from "@/lib/filters/parse-tables";
 
 export const runtime = "nodejs";
 
@@ -39,51 +37,8 @@ export async function POST(
     });
   }
 
-  let semanticQueryJson: string | null = null;
-  let exploreName: string | null = null;
-
-  // Update semantic layer models based on SQL
-  try {
-    const modelsDir = join(process.cwd(), "semantic-layer", "models");
-    const updateResult = updateModelFromSQL(body.sql, modelsDir);
-
-    if (updateResult.success) {
-      console.log(
-        `[Semantic Layer] Updated model ${updateResult.exploreName}:`,
-        `created=${updateResult.created},`,
-        `dimensions=${updateResult.addedDimensions},`,
-        `measures=${updateResult.addedMeasures}`
-      );
-    } else {
-      console.error(
-        `[Semantic Layer] Failed to update model:`,
-        updateResult.error
-      );
-    }
-
-    // Build QueryAST based on extracted metadata (independent of model update)
-    try {
-      const metadata = extractSemanticLayerFromSQL(body.sql);
-      const queryAST: QueryAST = {
-        explore: metadata.exploreName,
-        fields: [
-          ...metadata.dimensions.map((d) => `${metadata.exploreName}.${d.name}`),
-          ...metadata.measures.map((m) => `${metadata.exploreName}.${m.name}`),
-        ],
-        filters: [],
-        orderBy: [],
-        limit: undefined,
-      };
-      semanticQueryJson = JSON.stringify(queryAST);
-      exploreName = metadata.exploreName;
-    } catch (error) {
-      console.error("[Semantic Layer] Failed to extract semantic metadata:", error);
-      // Leave semanticQueryJson/exploreName as null; proceed to create chart
-    }
-  } catch (error) {
-    // Log error but don't fail the chart creation
-    console.error("[Semantic Layer] Error updating model:", error);
-  }
+  const baseTableRef = findBaseTableReference(body.sql);
+  const sourceTable = baseTableRef?.tableName ?? null;
 
   const { id } = await addChartToDashboard({
     dashboardId,
@@ -92,15 +47,11 @@ export async function POST(
     sql: body.sql,
     dbIdentifier: body.dbIdentifier ?? null,
     chartConfigJson: body.chartConfigJson,
-    semanticQueryJson,
-    exploreName,
+    // New charts no longer store semantic query payloads.
+    semanticQueryJson: null,
+    // Temporary compatibility reuse of legacy column as source-table hint.
+    exploreName: sourceTable,
   });
-
-  if (exploreName && semanticQueryJson) {
-    console.log(
-      `[Semantic Layer] Stored semantic query for chart ${id}, explore: ${exploreName}`
-    );
-  }
 
   return Response.json({ id });
 }
