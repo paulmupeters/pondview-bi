@@ -1,8 +1,8 @@
+import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import duckdb, { DuckDBInstance } from "@duckdb/node-api";
 
 import {
   executeDuckDbHttpQuery,
-  type HttpDuckDbConfig,
   resolveHttpDuckDbConfig,
 } from "./duckdb-http";
 import { RequestQueue } from "./request-queue";
@@ -87,7 +87,7 @@ export function getDuckDbVersion(): string {
 // exported functions from server-only contexts.
 
 // Re-export HTTP types for convenience
-export type { HttpDuckDbConfig } from "./duckdb-http";
+export type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 
 /**
  * Executes a SQL query against a DuckDB instance via HTTP (httpserver extension).

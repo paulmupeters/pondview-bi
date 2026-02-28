@@ -1,9 +1,10 @@
 import type { NextRequest } from "next/server";
-import { compileToDuckdb } from "@/../semantic-layer/query-builder";
-import type { Filter, QueryAST } from "@/../semantic-layer/types";
-import { runSqlNormalized } from "@/lib/db/router";
-import { listChartsByDashboard } from "@/lib/repositories/dashboard";
-import { loadMaterializedModel } from "@/lib/semantic-layer/load-materialized-model";
+import { applyFiltersToSql } from "@/lib/filters/apply-filters";
+import { normalizeFilterPayload } from "@/lib/filters/normalize-filters";
+import { canonicalTable, loadJoinDefs } from "@/lib/joins/loader";
+import { runMaterializedSqlRaw } from "@/lib/materialization/query";
+import { materializeTablesForDashboard } from "@/lib/materialization/table-materializer";
+import type { Filter } from "@/lib/types/filters";
 
 export const runtime = "nodejs";
 
@@ -35,138 +36,102 @@ export async function GET(
     try {
       const parsed = JSON.parse(filtersParam);
       if (Array.isArray(parsed)) {
-        dashboardFilters = parsed.filter((f: Filter) => f.field !== field);
+        dashboardFilters = normalizeFilterPayload(parsed).filter(
+          (f) => f.field !== field
+        );
       }
     } catch (error) {
       console.error("[Dimension Values] Failed to parse filters:", error);
     }
   }
 
-  // Parse field to get explore and dimension
-  const parts = field.split(".");
-  if (parts.length !== 2) {
+  const parsedField = parseField(field);
+  if (!parsedField) {
     return Response.json(
-      { error: "Field must be in format 'explore.dimension'" },
+      { error: "Field must be in format 'table.column'" },
       { status: 400 }
     );
   }
 
-  const [exploreName, dimensionName] = parts;
-
-  // Materialize only the explore needed for this field lookup.
-  const dataModel = await loadMaterializedModel({
-    exploreNames: [exploreName],
-  });
-
-  if (!dataModel) {
-    return Response.json(
-      { error: "Semantic layer models not available" },
-      { status: 500 }
-    );
-  }
-
-  // Get database identifier from dashboard charts
-  const charts = await listChartsByDashboard(dashboardId);
-  const dbIdentifier =
-    charts.length > 0 && charts[0].dbIdentifier
-      ? charts[0].dbIdentifier
-      : "md:my_db";
-
-  // Find the explore and dimension
-  const explore = dataModel.explores.find((e) => e.name === exploreName);
-  if (!explore) {
-    return Response.json(
-      { error: `Explore "${exploreName}" not found` },
-      { status: 404 }
-    );
-  }
-
-  const dimension = explore.dimensions.find((d) => d.name === dimensionName);
-  if (!dimension) {
-    return Response.json(
-      {
-        error: `Dimension "${dimensionName}" not found in explore "${exploreName}"`,
-      },
-      { status: 404 }
-    );
-  }
-
-  // Build QueryAST to fetch distinct values
-  const filters: Filter[] = [...dashboardFilters];
-
-  // Add search filter for string dimensions
-  if (search && dimension.type === "string") {
-    filters.push({
-      field,
-      op: "contains",
-      values: [search],
-    });
-  }
-
-  const ast: QueryAST = {
-    explore: exploreName,
-    fields: [field],
-    filters,
-    orderBy: [{ field, dir: "asc" }],
-    limit,
-  };
+  const { tableName, columnName } = parsedField;
 
   try {
-    const compiled = compileToDuckdb(dataModel, ast);
+    await materializeTablesForDashboard(dashboardId);
+    const joinDefs = await loadJoinDefs();
+    const filters = [...dashboardFilters];
 
-    // Apply params to SQL
-    let sqlToExecute = compiled.sql;
-    for (let i = 0; i < compiled.params.length; i++) {
-      const placeholder = new RegExp(`\\$${i + 1}(?!\\d)`, "g");
-      sqlToExecute = sqlToExecute.replace(
-        placeholder,
-        sqlLiteral(compiled.params[i])
-      );
+    if (search) {
+      filters.push({
+        field,
+        op: "contains",
+        values: [search],
+      });
     }
 
-    const rows = await runSqlNormalized(dbIdentifier, sqlToExecute);
+    const baseSql =
+      `SELECT ${quoteIdent(columnName)} AS "value"\n` +
+      `FROM "mat"."${tableName.replace(/"/g, '""')}"`;
+    const filtered = applyFiltersToSql(baseSql, filters, joinDefs);
+    const materializedSql =
+      `SELECT DISTINCT "value"\n` +
+      `FROM (\n${indentSql(filtered.sql, 2)}\n) AS "values_src"\n` +
+      `WHERE "value" IS NOT NULL AND CAST("value" AS VARCHAR) <> ''\n` +
+      `ORDER BY "value" ASC\n` +
+      `LIMIT ${limit};`;
 
-    // Extract values from results
-    // The alias will be the simple field name (e.g. "Country" instead of "unicorns_Country")
-    const alias = dimensionName;
+    const rows = await runMaterializedSqlRaw(materializedSql);
     const values = rows
-      .map((row) => row[alias])
+      .map((row) => row.value)
       .filter((v) => v !== null && v !== undefined && v !== "")
       .map((v) => ({
         value: v,
         label: String(v),
       }));
 
-    // Remove duplicates (in case of any edge cases)
-    const uniqueValues = Array.from(
-      new Map(values.map((v) => [String(v.value), v])).values()
-    );
-
     return Response.json({
-      values: uniqueValues,
+      values,
       field,
       limit,
-      count: uniqueValues.length,
+      count: values.length,
     });
-  } catch (error) {
-    console.error("[Dimension Values] Error executing query:", error);
+  } catch (newPathError) {
+    console.error("[Dimension Values] Materialized query path failed.", newPathError);
     return Response.json(
       {
         error: "Failed to fetch dimension values",
-        details: error instanceof Error ? error.message : String(error),
+        details:
+          newPathError instanceof Error ? newPathError.message : String(newPathError),
       },
       { status: 500 }
     );
   }
 }
 
-function sqlLiteral(v: unknown): string {
-  if (v === null || v === undefined) return "NULL";
-  const t = typeof v;
-  if (t === "number") return Number.isFinite(v as number) ? String(v) : "NULL";
-  if (t === "boolean") return (v as boolean) ? "TRUE" : "FALSE";
-  if (v instanceof Date)
-    return `'${(v as Date).toISOString().replace(/'/g, "''")}'`;
-  // Default: treat as string
-  return `'${String(v).replace(/'/g, "''")}'`;
+function parseField(field: string): { tableName: string; columnName: string } | null {
+  const parts = field
+    .split(".")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 2) {
+    return null;
+  }
+  const tablePart = parts.length === 2 ? parts[0] : parts[parts.length - 2];
+  const columnPart = parts[parts.length - 1];
+  const tableName = canonicalTable(tablePart);
+  if (!tableName || !columnPart) {
+    return null;
+  }
+  return { tableName, columnName: columnPart };
+}
+
+function quoteIdent(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function indentSql(sql: string, spaces: number): string {
+  const pad = " ".repeat(spaces);
+  return sql
+    .split("\n")
+    .map((line) => `${pad}${line}`)
+    .join("\n");
 }

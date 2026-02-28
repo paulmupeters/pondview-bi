@@ -1,5 +1,3 @@
-"use client";
-
 import {
   CheckCircleIcon,
   LinkIcon,
@@ -10,6 +8,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { apiFetch } from "@/lib/api/client";
 import { appendConnectedTable } from "@/lib/connected-tables";
 import {
   buildPostgresConnectionString,
@@ -17,7 +16,6 @@ import {
 } from "@/lib/duckdb/path";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
-
 
 type DatabaseType =
   | "duckdb"
@@ -56,48 +54,48 @@ const DATABASE_OPTIONS: Array<{
   {
     label: "Postgres",
     value: "postgres",
-      description: "Connect with a Postgres database",
-    },
-    {
-      label: "MotherDuck",
-      value: "motherduck",
-      description: "Connect with a MotherDuck database",
-    },
-    {
-      label: "MySQL",
-      value: "mysql",
-      description: "Connect with a MySQL database",
-    },
-    {
-      label: "SQLite",
-      value: "sqlite",
-      description: "Attach a SQLite database file",
-    },
+    description: "Connect with a Postgres database",
+  },
+  {
+    label: "MotherDuck",
+    value: "motherduck",
+    description: "Connect with a MotherDuck database",
+  },
+  {
+    label: "MySQL",
+    value: "mysql",
+    description: "Connect with a MySQL database",
+  },
+  {
+    label: "SQLite",
+    value: "sqlite",
+    description: "Attach a SQLite database file",
+  },
   {
     label: "Apache Iceberg",
     value: "iceberg",
     description: "Connect to Iceberg tables or REST catalogs",
-    },
-    {
-      label: "Delta Lake",
-      value: "delta_lake",
-      description: "Query Delta Lake tables",
-    },
-    {
-      label: "DuckLake",
-      value: "ducklake",
-      description: "Connect to a DuckLake catalog",
-    },
-    {
-      label: "HTTP/HTTPS (httpfs)",
-      value: "httpfs",
-      description: "Query remote files over HTTP/S via httpfs",
-    },
-    {
-      label: "Custom Extension",
-      value: "extension",
-      description: "Install + attach a DuckDB extension (advanced)",
-    }
+  },
+  {
+    label: "Delta Lake",
+    value: "delta_lake",
+    description: "Query Delta Lake tables",
+  },
+  {
+    label: "DuckLake",
+    value: "ducklake",
+    description: "Connect to a DuckLake catalog",
+  },
+  {
+    label: "HTTP/HTTPS (httpfs)",
+    value: "httpfs",
+    description: "Query remote files over HTTP/S via httpfs",
+  },
+  {
+    label: "Custom Extension",
+    value: "extension",
+    description: "Install + attach a DuckDB extension (advanced)",
+  },
 ];
 
 const resolveDuckdbExtension = (dbType: DatabaseType): string | undefined => {
@@ -126,7 +124,7 @@ const resolveDuckdbExtension = (dbType: DatabaseType): string | undefined => {
 // Removed unused DuckDB preview constants
 
 async function fetchSchemas(dbIdentifier: string): Promise<string[]> {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/tables?id=${encodeURIComponent(dbIdentifier)}`,
     { cache: "no-store" },
   );
@@ -145,7 +143,7 @@ async function fetchTablesForSchema(
   schema: string,
   limit = 20,
 ): Promise<string[]> {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/tables?id=${encodeURIComponent(dbIdentifier)}&schema=${encodeURIComponent(schema)}&limit=${limit}`,
     { cache: "no-store" },
   );
@@ -266,7 +264,10 @@ export function ConnectDataDialog({
     if (open) {
       if (initialSelectedDatabase) {
         // Convert "duckdb" to "motherduck" for backward compatibility
-        const dbType = initialSelectedDatabase === "duckdb" ? "motherduck" : initialSelectedDatabase;
+        const dbType =
+          initialSelectedDatabase === "duckdb"
+            ? "motherduck"
+            : initialSelectedDatabase;
         setSelectedDatabase(dbType);
       }
       if (initialDatabasePath) {
@@ -336,7 +337,14 @@ export function ConnectDataDialog({
       sslmode: postgresSslMode.trim() || undefined,
     };
     return buildPostgresConnectionString(components);
-  }, [postgresHost, postgresPort, postgresUser, postgresPassword, postgresDatabase, postgresSslMode]);
+  }, [
+    postgresHost,
+    postgresPort,
+    postgresUser,
+    postgresPassword,
+    postgresDatabase,
+    postgresSslMode,
+  ]);
 
   const buildMysqlConnectionStringFromFields = useCallback((): string => {
     const host = mysqlHost.trim() || "localhost";
@@ -353,35 +361,50 @@ export function ConnectDataDialog({
   }, [mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase]);
 
   // Extract a friendly database name from the database path
-  const extractDatabaseName = useCallback((dbType: DatabaseType, dbPath: string): string => {
-    if (dbType === "postgres") {
-      // For Postgres, use the database name from the connection string
-      return postgresDatabase.trim() || "postgres";
-    } else if (dbType === "mysql") {
-      return mysqlDatabase.trim() || "mysql";
-    } else if (dbType === "extension") {
-      return customAttachAlias.trim() || customExtensionName.trim() || "extension";
-    } else if (dbType === "motherduck") {
-      // For MotherDuck, remove "md:" prefix and query parameters
-      const withoutPrefix = dbPath.startsWith("md:") ? dbPath.slice(3) : dbPath;
-      const withoutQuery = withoutPrefix.split("?")[0];
-      return withoutQuery.trim() || "motherduck";
-    } else {
-      // For other types, use the path or a default name
-      return dbPath.trim() || dbType || "database";
-    }
-  }, [postgresDatabase, mysqlDatabase, customAttachAlias, customExtensionName]);
+  const extractDatabaseName = useCallback(
+    (dbType: DatabaseType, dbPath: string): string => {
+      if (dbType === "postgres") {
+        // For Postgres, use the database name from the connection string
+        return postgresDatabase.trim() || "postgres";
+      } else if (dbType === "mysql") {
+        return mysqlDatabase.trim() || "mysql";
+      } else if (dbType === "extension") {
+        return (
+          customAttachAlias.trim() || customExtensionName.trim() || "extension"
+        );
+      } else if (dbType === "motherduck") {
+        // For MotherDuck, remove "md:" prefix and query parameters
+        const withoutPrefix = dbPath.startsWith("md:")
+          ? dbPath.slice(3)
+          : dbPath;
+        const withoutQuery = withoutPrefix.split("?")[0];
+        return withoutQuery.trim() || "motherduck";
+      } else {
+        // For other types, use the path or a default name
+        return dbPath.trim() || dbType || "database";
+      }
+    },
+    [postgresDatabase, mysqlDatabase, customAttachAlias, customExtensionName],
+  );
 
   const handleConnectClick = useCallback(async () => {
     // For Postgres, validate required fields
     if (selectedDatabase === "postgres") {
-      if (!postgresHost.trim() || !postgresUser.trim() || !postgresDatabase.trim()) {
-        setErrorMessage("Please fill in all required Postgres connection fields (Host, Username, Database).");
+      if (
+        !postgresHost.trim() ||
+        !postgresUser.trim() ||
+        !postgresDatabase.trim()
+      ) {
+        setErrorMessage(
+          "Please fill in all required Postgres connection fields (Host, Username, Database).",
+        );
         return;
       }
     } else if (selectedDatabase === "mysql") {
       if (!mysqlHost.trim() || !mysqlUser.trim() || !mysqlDatabase.trim()) {
-        setErrorMessage("Please fill in all required MySQL connection fields (Host, Username, Database).");
+        setErrorMessage(
+          "Please fill in all required MySQL connection fields (Host, Username, Database).",
+        );
         return;
       }
     } else if (selectedDatabase === "sqlite") {
@@ -394,7 +417,9 @@ export function ConnectDataDialog({
         (!icebergEndpoint.trim() || !icebergWarehouse.trim()) &&
         !icebergPath.trim()
       ) {
-        setErrorMessage("Provide either Iceberg endpoint + warehouse or a direct Iceberg path.");
+        setErrorMessage(
+          "Provide either Iceberg endpoint + warehouse or a direct Iceberg path.",
+        );
         return;
       }
     } else if (selectedDatabase === "delta_lake") {
@@ -413,8 +438,14 @@ export function ConnectDataDialog({
         return;
       }
     } else if (selectedDatabase === "extension") {
-      if (!customExtensionName.trim() || !customAttachStatement.trim() || !customAttachAlias.trim()) {
-        setErrorMessage("Provide extension name, ATTACH statement, and AS alias.");
+      if (
+        !customExtensionName.trim() ||
+        !customAttachStatement.trim() ||
+        !customAttachAlias.trim()
+      ) {
+        setErrorMessage(
+          "Provide extension name, ATTACH statement, and AS alias.",
+        );
         return;
       }
     } else if (!databasePath.trim()) {
@@ -505,48 +536,51 @@ export function ConnectDataDialog({
     ducklakeMetadataPath,
   ]);
 
-  const handleSchemaSelect = useCallback(async (schema: string) => {
-    setSelectedSchema(schema);
-    setSelectedTables(new Set());
-    try {
-      setIsLoadingTables(true);
-      // Build database path - prepend "md:" for MotherDuck and add token if provided
-      // For Postgres, build connection string from individual fields
-      // For MySQL, build connection string from individual fields
-      let dbPath: string;
-      if (selectedDatabase === "postgres") {
-        dbPath = buildPostgresConnectionStringFromFields();
-      } else if (selectedDatabase === "mysql") {
-        dbPath = buildMysqlConnectionStringFromFields();
-      } else if (selectedDatabase === "motherduck") {
-        dbPath = databasePath.trim();
-        dbPath = `md:${dbPath}`;
-        if (motherduckToken.trim()) {
-          const encodedToken = encodeURIComponent(motherduckToken.trim());
-          dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
+  const handleSchemaSelect = useCallback(
+    async (schema: string) => {
+      setSelectedSchema(schema);
+      setSelectedTables(new Set());
+      try {
+        setIsLoadingTables(true);
+        // Build database path - prepend "md:" for MotherDuck and add token if provided
+        // For Postgres, build connection string from individual fields
+        // For MySQL, build connection string from individual fields
+        let dbPath: string;
+        if (selectedDatabase === "postgres") {
+          dbPath = buildPostgresConnectionStringFromFields();
+        } else if (selectedDatabase === "mysql") {
+          dbPath = buildMysqlConnectionStringFromFields();
+        } else if (selectedDatabase === "motherduck") {
+          dbPath = databasePath.trim();
+          dbPath = `md:${dbPath}`;
+          if (motherduckToken.trim()) {
+            const encodedToken = encodeURIComponent(motherduckToken.trim());
+            dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
+          }
+        } else {
+          dbPath = databasePath.trim();
         }
-      } else {
-        dbPath = databasePath.trim();
+        console.log("Calling getTablesForSchema with:", { dbPath, schema });
+        const tables = await fetchTablesForSchema(dbPath, schema, 20);
+        console.log("getTablesForSchema returned:", tables);
+        setSchemaTablesPreview(tables);
+      } catch (e: unknown) {
+        console.error("Error in handleSchemaSelect:", e);
+        setSchemaTablesPreview([]);
+        const msg = e instanceof Error ? e.message : String(e ?? "");
+        setErrorMessage(`Failed to load tables: ${msg}`);
+      } finally {
+        setIsLoadingTables(false);
       }
-      console.log("Calling getTablesForSchema with:", { dbPath, schema });
-      const tables = await fetchTablesForSchema(dbPath, schema, 20);
-      console.log("getTablesForSchema returned:", tables);
-      setSchemaTablesPreview(tables);
-    } catch (e: unknown) {
-      console.error("Error in handleSchemaSelect:", e);
-      setSchemaTablesPreview([]);
-      const msg = e instanceof Error ? e.message : String(e ?? "");
-      setErrorMessage(`Failed to load tables: ${msg}`);
-    } finally {
-      setIsLoadingTables(false);
-    }
-  }, [
-    databasePath,
-    motherduckToken,
-    selectedDatabase,
-    buildPostgresConnectionStringFromFields,
-    buildMysqlConnectionStringFromFields,
-  ]);
+    },
+    [
+      databasePath,
+      motherduckToken,
+      selectedDatabase,
+      buildPostgresConnectionStringFromFields,
+      buildMysqlConnectionStringFromFields,
+    ],
+  );
 
   const handleAddTable = useCallback(async () => {
     const requiresSchema =
@@ -664,7 +698,13 @@ export function ConnectDataDialog({
                 ? ducklakeAlias.trim()
                 : selectedDatabase === "iceberg"
                   ? icebergWarehouse.trim() || dbPath
-                  : dbPath;
+                  : selectedDatabase === "motherduck"
+                    ? databasePath.trim() || "motherduck"
+                    : selectedDatabase === "postgres"
+                      ? postgresDatabase.trim() || "postgres"
+                      : selectedDatabase === "mysql"
+                        ? mysqlDatabase.trim() || "mysql"
+                        : databasePath.trim() || "source";
       // .trim()
       // .replace(/[^A-Za-z0-9_]/g, "_")
       // .replace(/^_+/g, "")
@@ -681,9 +721,12 @@ export function ConnectDataDialog({
           ? customExtensionName.trim()
           : resolveDuckdbExtension(connectionType);
       const databaseName = extractDatabaseName(selectedDatabase, dbPath);
-      const entrySchema = connectionType === "extension" || !requiresSchema ? "" : selectedSchema;
+      const entrySchema =
+        connectionType === "extension" || !requiresSchema ? "" : selectedSchema;
       const entryTables =
-        connectionType === "extension" || !requiresSchema ? [] : Array.from(selectedTables);
+        connectionType === "extension" || !requiresSchema
+          ? []
+          : Array.from(selectedTables);
       const newEntry = {
         type: connectionType,
         databasePath: dbPath,
@@ -748,7 +791,9 @@ export function ConnectDataDialog({
     }
     // For Postgres, check individual fields
     if (selectedDatabase === "postgres") {
-      return !postgresHost.trim() || !postgresUser.trim() || !postgresDatabase.trim();
+      return (
+        !postgresHost.trim() || !postgresUser.trim() || !postgresDatabase.trim()
+      );
     }
     if (selectedDatabase === "mysql") {
       return !mysqlHost.trim() || !mysqlUser.trim() || !mysqlDatabase.trim();
@@ -837,7 +882,8 @@ export function ConnectDataDialog({
                     Database Type
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Select a data source to connect. Some options are coming soon.
+                    Select a data source to connect. Some options are coming
+                    soon.
                   </p>
                 </header>
                 <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4">
@@ -994,18 +1040,26 @@ export function ConnectDataDialog({
                     <div className="space-y-3">
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <label htmlFor="postgres-host" className="text-xs font-medium text-foreground">
+                          <label
+                            htmlFor="postgres-host"
+                            className="text-xs font-medium text-foreground"
+                          >
                             Host <span className="text-destructive">*</span>
                           </label>
                           <Input
                             id="postgres-host"
                             placeholder="localhost"
                             value={postgresHost}
-                            onChange={(event) => setPostgresHost(event.target.value)}
+                            onChange={(event) =>
+                              setPostgresHost(event.target.value)
+                            }
                           />
                         </div>
                         <div className="space-y-1">
-                          <label htmlFor="postgres-port" className="text-xs font-medium text-foreground">
+                          <label
+                            htmlFor="postgres-port"
+                            className="text-xs font-medium text-foreground"
+                          >
                             Port
                           </label>
                           <Input
@@ -1013,24 +1067,34 @@ export function ConnectDataDialog({
                             type="number"
                             placeholder="5432"
                             value={postgresPort}
-                            onChange={(event) => setPostgresPort(event.target.value)}
+                            onChange={(event) =>
+                              setPostgresPort(event.target.value)
+                            }
                           />
                         </div>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <label htmlFor="postgres-user" className="text-xs font-medium text-foreground">
+                          <label
+                            htmlFor="postgres-user"
+                            className="text-xs font-medium text-foreground"
+                          >
                             Username <span className="text-destructive">*</span>
                           </label>
                           <Input
                             id="postgres-user"
                             placeholder="postgres"
                             value={postgresUser}
-                            onChange={(event) => setPostgresUser(event.target.value)}
+                            onChange={(event) =>
+                              setPostgresUser(event.target.value)
+                            }
                           />
                         </div>
                         <div className="space-y-1">
-                          <label htmlFor="postgres-password" className="text-xs font-medium text-foreground">
+                          <label
+                            htmlFor="postgres-password"
+                            className="text-xs font-medium text-foreground"
+                          >
                             Password
                           </label>
                           <Input
@@ -1038,19 +1102,26 @@ export function ConnectDataDialog({
                             type="password"
                             placeholder="password"
                             value={postgresPassword}
-                            onChange={(event) => setPostgresPassword(event.target.value)}
+                            onChange={(event) =>
+                              setPostgresPassword(event.target.value)
+                            }
                           />
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="postgres-database" className="text-xs font-medium text-foreground">
+                        <label
+                          htmlFor="postgres-database"
+                          className="text-xs font-medium text-foreground"
+                        >
                           Database <span className="text-destructive">*</span>
                         </label>
                         <Input
                           id="postgres-database"
                           placeholder="postgres"
                           value={postgresDatabase}
-                          onChange={(event) => setPostgresDatabase(event.target.value)}
+                          onChange={(event) =>
+                            setPostgresDatabase(event.target.value)
+                          }
                         />
                       </div>
                       <Button
@@ -1076,18 +1147,26 @@ export function ConnectDataDialog({
                     <div className="space-y-3">
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <label htmlFor="mysql-host" className="text-xs font-medium text-foreground">
+                          <label
+                            htmlFor="mysql-host"
+                            className="text-xs font-medium text-foreground"
+                          >
                             Host <span className="text-destructive">*</span>
                           </label>
                           <Input
                             id="mysql-host"
                             placeholder="localhost"
                             value={mysqlHost}
-                            onChange={(event) => setMysqlHost(event.target.value)}
+                            onChange={(event) =>
+                              setMysqlHost(event.target.value)
+                            }
                           />
                         </div>
                         <div className="space-y-1">
-                          <label htmlFor="mysql-port" className="text-xs font-medium text-foreground">
+                          <label
+                            htmlFor="mysql-port"
+                            className="text-xs font-medium text-foreground"
+                          >
                             Port
                           </label>
                           <Input
@@ -1095,24 +1174,34 @@ export function ConnectDataDialog({
                             type="number"
                             placeholder="3306"
                             value={mysqlPort}
-                            onChange={(event) => setMysqlPort(event.target.value)}
+                            onChange={(event) =>
+                              setMysqlPort(event.target.value)
+                            }
                           />
                         </div>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <label htmlFor="mysql-user" className="text-xs font-medium text-foreground">
+                          <label
+                            htmlFor="mysql-user"
+                            className="text-xs font-medium text-foreground"
+                          >
                             Username <span className="text-destructive">*</span>
                           </label>
                           <Input
                             id="mysql-user"
                             placeholder="root"
                             value={mysqlUser}
-                            onChange={(event) => setMysqlUser(event.target.value)}
+                            onChange={(event) =>
+                              setMysqlUser(event.target.value)
+                            }
                           />
                         </div>
                         <div className="space-y-1">
-                          <label htmlFor="mysql-password" className="text-xs font-medium text-foreground">
+                          <label
+                            htmlFor="mysql-password"
+                            className="text-xs font-medium text-foreground"
+                          >
                             Password
                           </label>
                           <Input
@@ -1120,19 +1209,26 @@ export function ConnectDataDialog({
                             type="password"
                             placeholder="password"
                             value={mysqlPassword}
-                            onChange={(event) => setMysqlPassword(event.target.value)}
+                            onChange={(event) =>
+                              setMysqlPassword(event.target.value)
+                            }
                           />
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="mysql-database" className="text-xs font-medium text-foreground">
+                        <label
+                          htmlFor="mysql-database"
+                          className="text-xs font-medium text-foreground"
+                        >
                           Database <span className="text-destructive">*</span>
                         </label>
                         <Input
                           id="mysql-database"
                           placeholder="mysql"
                           value={mysqlDatabase}
-                          onChange={(event) => setMysqlDatabase(event.target.value)}
+                          onChange={(event) =>
+                            setMysqlDatabase(event.target.value)
+                          }
                         />
                       </div>
                       <Button
@@ -1157,25 +1253,37 @@ export function ConnectDataDialog({
                   ) : selectedDatabase === "sqlite" ? (
                     <div className="space-y-3">
                       <div className="space-y-1">
-                        <label htmlFor="sqlite-path" className="text-xs font-medium text-foreground">
-                          Database file path <span className="text-destructive">*</span>
+                        <label
+                          htmlFor="sqlite-path"
+                          className="text-xs font-medium text-foreground"
+                        >
+                          Database file path{" "}
+                          <span className="text-destructive">*</span>
                         </label>
                         <Input
                           id="sqlite-path"
                           placeholder="/path/to/db.sqlite"
                           value={sqlitePath}
-                          onChange={(event) => setSqlitePath(event.target.value)}
+                          onChange={(event) =>
+                            setSqlitePath(event.target.value)
+                          }
                         />
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="sqlite-alias" className="text-xs font-medium text-foreground">
-                          Attach alias (AS) <span className="text-destructive">*</span>
+                        <label
+                          htmlFor="sqlite-alias"
+                          className="text-xs font-medium text-foreground"
+                        >
+                          Attach alias (AS){" "}
+                          <span className="text-destructive">*</span>
                         </label>
                         <Input
                           id="sqlite-alias"
                           placeholder="sqlite_db"
                           value={sqliteAlias}
-                          onChange={(event) => setSqliteAlias(event.target.value)}
+                          onChange={(event) =>
+                            setSqliteAlias(event.target.value)
+                          }
                         />
                       </div>
                       <Button
@@ -1200,39 +1308,54 @@ export function ConnectDataDialog({
                   ) : selectedDatabase === "iceberg" ? (
                     <div className="space-y-3">
                       <div className="space-y-1">
-                        <label htmlFor="iceberg-endpoint" className="text-xs font-medium text-foreground">
+                        <label
+                          htmlFor="iceberg-endpoint"
+                          className="text-xs font-medium text-foreground"
+                        >
                           REST catalog endpoint
                         </label>
                         <Input
                           id="iceberg-endpoint"
                           placeholder="https://example.com"
                           value={icebergEndpoint}
-                          onChange={(event) => setIcebergEndpoint(event.target.value)}
+                          onChange={(event) =>
+                            setIcebergEndpoint(event.target.value)
+                          }
                         />
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="iceberg-warehouse" className="text-xs font-medium text-foreground">
+                        <label
+                          htmlFor="iceberg-warehouse"
+                          className="text-xs font-medium text-foreground"
+                        >
                           Warehouse (alias)
                         </label>
                         <Input
                           id="iceberg-warehouse"
                           placeholder="warehouse"
                           value={icebergWarehouse}
-                          onChange={(event) => setIcebergWarehouse(event.target.value)}
+                          onChange={(event) =>
+                            setIcebergWarehouse(event.target.value)
+                          }
                         />
                         <p className="text-xs text-muted-foreground">
                           Alternatively, provide a direct Iceberg path below.
                         </p>
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="iceberg-path" className="text-xs font-medium text-foreground">
+                        <label
+                          htmlFor="iceberg-path"
+                          className="text-xs font-medium text-foreground"
+                        >
                           Direct Iceberg path (optional)
                         </label>
                         <Input
                           id="iceberg-path"
                           placeholder="s3://bucket/db/table/metadata/v2.metadata.json"
                           value={icebergPath}
-                          onChange={(event) => setIcebergPath(event.target.value)}
+                          onChange={(event) =>
+                            setIcebergPath(event.target.value)
+                          }
                         />
                       </div>
                       <Button
@@ -1250,8 +1373,12 @@ export function ConnectDataDialog({
                   ) : selectedDatabase === "delta_lake" ? (
                     <div className="space-y-3">
                       <div className="space-y-1">
-                        <label htmlFor="delta-path" className="text-xs font-medium text-foreground">
-                          Delta Lake path <span className="text-destructive">*</span>
+                        <label
+                          htmlFor="delta-path"
+                          className="text-xs font-medium text-foreground"
+                        >
+                          Delta Lake path{" "}
+                          <span className="text-destructive">*</span>
                         </label>
                         <Input
                           id="delta-path"
@@ -1261,14 +1388,20 @@ export function ConnectDataDialog({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="delta-alias" className="text-xs font-medium text-foreground">
-                          Attach alias (AS) <span className="text-destructive">*</span>
+                        <label
+                          htmlFor="delta-alias"
+                          className="text-xs font-medium text-foreground"
+                        >
+                          Attach alias (AS){" "}
+                          <span className="text-destructive">*</span>
                         </label>
                         <Input
                           id="delta-alias"
                           placeholder="delta_source"
                           value={deltaAlias}
-                          onChange={(event) => setDeltaAlias(event.target.value)}
+                          onChange={(event) =>
+                            setDeltaAlias(event.target.value)
+                          }
                         />
                       </div>
                       <Button
@@ -1286,36 +1419,53 @@ export function ConnectDataDialog({
                   ) : selectedDatabase === "ducklake" ? (
                     <div className="space-y-3">
                       <div className="space-y-1">
-                        <label htmlFor="ducklake-metadata" className="text-xs font-medium text-foreground">
-                          Metadata path <span className="text-destructive">*</span>
+                        <label
+                          htmlFor="ducklake-metadata"
+                          className="text-xs font-medium text-foreground"
+                        >
+                          Metadata path{" "}
+                          <span className="text-destructive">*</span>
                         </label>
                         <Input
                           id="ducklake-metadata"
                           placeholder="ducklake:metadata.ducklake"
                           value={ducklakeMetadataPath}
-                          onChange={(event) => setDucklakeMetadataPath(event.target.value)}
+                          onChange={(event) =>
+                            setDucklakeMetadataPath(event.target.value)
+                          }
                         />
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="ducklake-data" className="text-xs font-medium text-foreground">
+                        <label
+                          htmlFor="ducklake-data"
+                          className="text-xs font-medium text-foreground"
+                        >
                           Data path (optional)
                         </label>
                         <Input
                           id="ducklake-data"
                           placeholder="s3://bucket/data"
                           value={ducklakeDataPath}
-                          onChange={(event) => setDucklakeDataPath(event.target.value)}
+                          onChange={(event) =>
+                            setDucklakeDataPath(event.target.value)
+                          }
                         />
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="ducklake-alias" className="text-xs font-medium text-foreground">
-                          Attach alias (AS) <span className="text-destructive">*</span>
+                        <label
+                          htmlFor="ducklake-alias"
+                          className="text-xs font-medium text-foreground"
+                        >
+                          Attach alias (AS){" "}
+                          <span className="text-destructive">*</span>
                         </label>
                         <Input
                           id="ducklake-alias"
                           placeholder="ducklake_source"
                           value={ducklakeAlias}
-                          onChange={(event) => setDucklakeAlias(event.target.value)}
+                          onChange={(event) =>
+                            setDucklakeAlias(event.target.value)
+                          }
                         />
                       </div>
                       <Button
@@ -1334,40 +1484,61 @@ export function ConnectDataDialog({
                     <div className="space-y-3">
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
-                          <label htmlFor="extension-name" className="text-xs font-medium text-foreground">
-                            Extension name <span className="text-destructive">*</span>
+                          <label
+                            htmlFor="extension-name"
+                            className="text-xs font-medium text-foreground"
+                          >
+                            Extension name{" "}
+                            <span className="text-destructive">*</span>
                           </label>
                           <Input
                             id="extension-name"
                             placeholder="spatial, parquet, etc."
                             value={customExtensionName}
-                            onChange={(event) => setCustomExtensionName(event.target.value)}
+                            onChange={(event) =>
+                              setCustomExtensionName(event.target.value)
+                            }
                           />
                         </div>
                         <div className="space-y-1">
-                          <label htmlFor="extension-alias" className="text-xs font-medium text-foreground">
-                            Attach alias (AS) <span className="text-destructive">*</span>
+                          <label
+                            htmlFor="extension-alias"
+                            className="text-xs font-medium text-foreground"
+                          >
+                            Attach alias (AS){" "}
+                            <span className="text-destructive">*</span>
                           </label>
                           <Input
                             id="extension-alias"
                             placeholder="my_ext"
                             value={customAttachAlias}
-                            onChange={(event) => setCustomAttachAlias(event.target.value)}
+                            onChange={(event) =>
+                              setCustomAttachAlias(event.target.value)
+                            }
                           />
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="extension-attach" className="text-xs font-medium text-foreground">
-                          ATTACH statement (without AS) <span className="text-destructive">*</span>
+                        <label
+                          htmlFor="extension-attach"
+                          className="text-xs font-medium text-foreground"
+                        >
+                          ATTACH statement (without AS){" "}
+                          <span className="text-destructive">*</span>
                         </label>
                         <Input
                           id="extension-attach"
                           placeholder="postgresql://... or s3://... etc."
                           value={customAttachStatement}
-                          onChange={(event) => setCustomAttachStatement(event.target.value)}
+                          onChange={(event) =>
+                            setCustomAttachStatement(event.target.value)
+                          }
                         />
                         <p className="text-xs text-muted-foreground">
-                          We will run: INSTALL/LOAD {customExtensionName || "<extension>"} and ATTACH {"<your statement>"} AS {customAttachAlias || "<alias>"}.
+                          We will run: INSTALL/LOAD{" "}
+                          {customExtensionName || "<extension>"} and ATTACH{" "}
+                          {"<your statement>"} AS{" "}
+                          {customAttachAlias || "<alias>"}.
                         </p>
                       </div>
                       <Button
@@ -1383,47 +1554,50 @@ export function ConnectDataDialog({
                       </Button>
                     </div>
                   ) : (
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                        <Input
-                          placeholder={
-                            selectedDatabase === "motherduck"
-                              ? "my_db"
-                            : ""
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <Input
+                        placeholder={
+                          selectedDatabase === "motherduck" ? "my_db" : ""
                         }
-                          value={databasePath}
-                          onChange={(event) => setDatabasePath(event.target.value)}
-                        />
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="sm:w-fit"
-                          onClick={handleConnectClick}
-                        >
-                          {isLoadingSchemas ? (
-                            <span className="flex items-center gap-2">
-                              <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                              Connecting...
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-2">
-                              <LinkIcon className="size-4" />
-                              Connect
-                            </span>
-                          )}
-                        </Button>
-                      </div>
+                        value={databasePath}
+                        onChange={(event) =>
+                          setDatabasePath(event.target.value)
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="sm:w-fit"
+                        onClick={handleConnectClick}
+                      >
+                        {isLoadingSchemas ? (
+                          <span className="flex items-center gap-2">
+                            <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                            Connecting...
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            <LinkIcon className="size-4" />
+                            Connect
+                          </span>
+                        )}
+                      </Button>
+                    </div>
                   )}
                   {selectedDatabase === "motherduck" && (
                     <div>
                       <Input
                         type="password"
-                        placeholder="MotherDuck token (optional, uses .env.local if not provided)"
+                        placeholder="MotherDuck token"
                         value={motherduckToken}
-                        onChange={(event) => setMotherduckToken(event.target.value)}
+                        onChange={(event) =>
+                          setMotherduckToken(event.target.value)
+                        }
                         className="w-full"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Enter your MotherDuck token to connect to a different account
+                        Enter your MotherDuck token to connect to a different
+                        account
                       </p>
                     </div>
                   )}

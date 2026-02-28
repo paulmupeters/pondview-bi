@@ -1,4 +1,4 @@
-import type { SourceConnectionConfig } from "@/../semantic-layer/source-updater";
+import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 
 const DEFAULT_RUNTIME_DUCKDB_PATH =
   process.env.DUCKDB_RUNTIME_DB?.trim() ||

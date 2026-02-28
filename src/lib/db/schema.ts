@@ -31,7 +31,6 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   }),
 }));
 
-
 // Dashboards and Charts
 export const dashboards = sqliteTable("dashboards", {
   id: text("id").primaryKey(),
@@ -91,6 +90,25 @@ export const dashboardSlicersRelations = relations(
       fields: [dashboardSlicers.dashboardId],
       references: [dashboards.id],
     }),
-  })
+  }),
 );
 
+export const chartSlicers = sqliteTable("chart_slicers", {
+  id: text("id").primaryKey(),
+  chartId: text("chart_id")
+    .notNull()
+    .references(() => dashboardCharts.id, { onDelete: "cascade" }),
+  field: text("field").notNull(), // e.g., "orders.country"
+  title: text("title"), // optional display override
+  limit: integer("limit").notNull().default(50),
+  position: integer("position").notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const chartSlicersRelations = relations(chartSlicers, ({ one }) => ({
+  chart: one(dashboardCharts, {
+    fields: [chartSlicers.chartId],
+    references: [dashboardCharts.id],
+  }),
+}));

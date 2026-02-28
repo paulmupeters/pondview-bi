@@ -29,7 +29,7 @@ export const maxDuration = 30;
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ chatId: string }> }
+  { params }: { params: Promise<{ chatId: string }> },
 ) {
   const { chatId } = await params;
   const rows = await listMessagesByChatId(chatId);
@@ -41,7 +41,7 @@ export async function GET(
         role: row.role as UIMessage["role"],
         parts: parsePartsOrFallback(row.parts, row.content),
       } satisfies UIMessage;
-    }
+    },
   );
 
   return Response.json({ messages: uiMessages });
@@ -49,7 +49,7 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ chatId: string }> }
+  { params }: { params: Promise<{ chatId: string }> },
 ) {
   const body = await req.json();
   const {
@@ -88,7 +88,7 @@ export async function POST(
       // Persist assistant message when stream finishes
       const textPart = Array.isArray(responseMessage.parts)
         ? responseMessage.parts.find(
-            (p) => (p as { type?: string })?.type === "text"
+            (p) => (p as { type?: string })?.type === "text",
           )
         : undefined;
       const text = (textPart as { text?: string } | undefined)?.text ?? "";
@@ -97,7 +97,7 @@ export async function POST(
         chatId,
         responseMessage.id || nanoid(),
         text,
-        JSON.stringify(responseMessage.parts ?? [{ type: "text", text }])
+        JSON.stringify(responseMessage.parts ?? [{ type: "text", text }]),
       );
     },
     execute: ({ writer }) => {
@@ -112,7 +112,9 @@ export async function POST(
         model: CHAT_MODEL,
         system: analysisPrompt.replace(
           "{connectedTables}",
-          JSON.stringify(connectedTables)
+          JSON.stringify(
+            connectedTables.map(({ databasePath, ...rest }) => rest),
+          ),
         ),
         messages: convertToModelMessages(uiMessages),
         tools,
@@ -128,7 +130,7 @@ export async function POST(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ chatId: string }> }
+  { params }: { params: Promise<{ chatId: string }> },
 ) {
   const { chatId } = await params;
   await deleteChat(chatId);
@@ -145,7 +147,7 @@ function safeJsonParse(value: string) {
 
 function parsePartsOrFallback(
   partsJson: string | null | undefined,
-  content: string
+  content: string,
 ): UIMessage["parts"] {
   const parsed = partsJson ? safeJsonParse(partsJson) : undefined;
 

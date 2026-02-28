@@ -1,4 +1,4 @@
-import type { HttpDuckDbConfig } from "@/lib/duckdb/duckdb-node";
+import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import { isMaterializedTableIdentifier } from "@/lib/duckdb/materialized-tables";
 
 export type RunQueryOptions = {

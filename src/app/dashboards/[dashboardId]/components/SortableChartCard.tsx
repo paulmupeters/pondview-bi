@@ -1,9 +1,8 @@
-"use client";
-
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import {
+  Funnel,
   GripVertical,
   MoveDiagonal2,
   Settings,
@@ -25,12 +24,7 @@ import { SqlResultsTable } from "@/components/sql-results-table";
 import { TableConfigDialog } from "@/components/table-config-dialog";
 import { TextConfigDialog } from "@/components/text-config-dialog";
 import { Button } from "@/components/ui/button";
-import type {
-  CardConfig,
-  Config,
-  TableConfig,
-  TextConfig,
-} from "@/lib/types";
+import type { CardConfig, Config, TableConfig, TextConfig } from "@/lib/types";
 import { useFilters } from "../filter-context";
 import type { SortableChartCardProps } from "../types";
 import {
@@ -52,6 +46,8 @@ export function SortableChartCard({
   totalColumns,
   isInGroup: _isInGroup = false,
   onResizeChange,
+  isSelected = false,
+  onSelect,
 }: SortableChartCardProps) {
   const { filters } = useFilters();
   const [editedSql, setEditedSql] = useState(chart.sql);
@@ -232,7 +228,7 @@ export function SortableChartCard({
         }
       }}
       style={style}
-      className={`group relative flex flex-col rounded-xl bg-card border border-border shadow-md p-4 md:p-2 ${colSpanClass} ${isResizing ? "ring-2 ring-primary/50" : ""}`}
+      className={`group relative flex flex-col rounded-xl bg-card border border-border shadow-md p-4 md:p-2 ${colSpanClass} ${isResizing ? "ring-2 ring-primary/50" : ""} ${isSelected ? "ring-1 ring-primary/50 bg-primary/5" : ""}`}
     >
       <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
         <button
@@ -255,6 +251,19 @@ export function SortableChartCard({
           title="View chart"
         >
           <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onSelect?.(chart.id)}
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background transition-colors hover:bg-muted hover:text-foreground ${
+            isSelected
+              ? "text-primary border-primary/50"
+              : "text-muted-foreground"
+          }`}
+          aria-label="Filter this visual"
+          title="Filter this visual"
+        >
+          <Funnel className="h-4 w-4" />
         </button>
       </div>
       {chart.filtersApplied && filters.length > 0 && (
