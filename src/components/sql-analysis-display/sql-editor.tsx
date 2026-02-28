@@ -1,5 +1,3 @@
-"use client";
-
 import { createDuckDbExecuteQuery, SqlConsole } from "@/components/sql-console";
 import type { Result } from "@/lib/types";
 

@@ -1,5 +1,3 @@
-"use client";
-
 import { Settings } from "lucide-react";
 import { DashboardFilterPane } from "@/components/dashboard-filter-pane";
 import { Button } from "@/components/ui/button";

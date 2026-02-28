@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import {
   CONNECTED_TABLES_UPDATED_EVENT,

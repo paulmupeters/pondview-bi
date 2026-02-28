@@ -18,6 +18,7 @@
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
@@ -54,3 +55,4 @@ semantic-layer/models
 
 landing/
 docs/
+semantic-layer/models/sources.yml

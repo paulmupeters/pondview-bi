@@ -1,88 +1,125 @@
 import type { NextRequest } from "next/server";
-import { resolveHttpDuckDbConfig } from "@/lib/duckdb/duckdb-http";
-import { runSqlAndGetRowObjectsJsonHttp } from "@/lib/duckdb/duckdb-node";
+import { runMaterializedSqlRaw } from "@/lib/materialization/query";
+import { listTableMaterializations } from "@/lib/materialization/table-materializer";
 
 export const runtime = "nodejs";
 
+export type MaterializedTableColumn = {
+  name: string;
+  type: string;
+};
+
+export type MaterializedTableDetail = {
+  tableName: string;
+  sourceName?: string;
+  targetTable?: string;
+  sourceHash?: string;
+  rowCount?: number;
+  updatedAt?: string;
+  columns: MaterializedTableColumn[];
+  columnCount: number;
+  introspectionError?: string;
+};
+
 export async function GET(_req: NextRequest) {
   try {
-    // Resolve HTTP config from environment variables
-    const config = resolveHttpDuckDbConfig();
+    const { searchParams } = new URL(_req.url);
+    const includeDetails = isTruthy(searchParams.get("details"));
 
-    // First, try to detach any problematic postgres attachments that might be lingering
-    // This prevents information_schema queries from failing when scanning attached databases
-    try {
-      // Try to detach common postgres attachment aliases
-      // These are common aliases that might have been used
-      const commonPostgresAliases = [
-        "postgres",
-        "pg",
-        "postgresql",
-        "postgres_source",
-      ];
-      for (const alias of commonPostgresAliases) {
-        try {
-          await runSqlAndGetRowObjectsJsonHttp(
-            config,
-            `DETACH DATABASE IF EXISTS "${alias}";`
-          );
-        } catch {
-          // Ignore errors - database might not exist or already detached
-        }
-      }
-    } catch {
-      // Ignore errors during cleanup - continue with the query
-    }
-
-    // Query DuckDB HTTP for tables in semantic_materialized schema
-    // Use SHOW TABLES which queries only the specified schema directly
-    // This avoids scanning attached databases that might be unavailable
-    let sql = `SHOW TABLES FROM semantic_materialized;`;
-    let rows: Record<string, unknown>[];
-
-    try {
-      rows = await runSqlAndGetRowObjectsJsonHttp(config, sql);
-      // SHOW TABLES returns a column named 'name' (not 'table_name')
-      const tableNames = rows.map((row) =>
-        String(row.name ?? row.table_name ?? "")
-      );
-      return Response.json({ tables: tableNames.filter(Boolean) });
-    } catch {
-      // If SHOW TABLES fails, fall back to information_schema query
-      // This might still fail if there are attached databases, but we'll handle it
-      sql = `
+    const rows = await runMaterializedSqlRaw(
+      `
         SELECT table_name
         FROM information_schema.tables
-        WHERE table_schema = 'semantic_materialized'
+        WHERE table_schema = 'mat'
           AND table_type = 'BASE TABLE'
         ORDER BY table_name
-      `;
-      rows = await runSqlAndGetRowObjectsJsonHttp(config, sql);
-      const tableNames = rows.map((row) => String(row.table_name));
-      return Response.json({ tables: tableNames });
+      `,
+    );
+    const tableNames = rows.map((row) => String(row.table_name ?? ""));
+    const tables = tableNames.filter(Boolean);
+
+    if (!includeDetails) {
+      return Response.json({ tables });
     }
+
+    const trackingRows = await listTableMaterializations();
+    const trackingByTargetTable = new Map<
+      string,
+      (typeof trackingRows)[number]
+    >();
+    for (const row of trackingRows) {
+      const targetTableName = extractTargetTableName(row.targetTable);
+      if (targetTableName) {
+        trackingByTargetTable.set(targetTableName, row);
+      }
+    }
+
+    const details = await Promise.all(
+      tables.map(async (tableName): Promise<MaterializedTableDetail> => {
+        const tracking = trackingByTargetTable.get(tableName);
+        try {
+          const columnRows = await runMaterializedSqlRaw(
+            `DESCRIBE "mat"."${tableName.replace(/"/g, '""')}";`,
+          );
+          const columns = columnRows
+            .map((row) => ({
+              name: String(row.column_name ?? "").trim(),
+              type: String(row.column_type ?? "").trim(),
+            }))
+            .filter((column) => column.name.length > 0);
+
+          return {
+            tableName,
+            sourceName: tracking?.sourceName,
+            targetTable: tracking?.targetTable,
+            sourceHash: tracking?.sourceHash,
+            rowCount: tracking?.rowCount,
+            updatedAt: tracking?.updatedAt,
+            columns,
+            columnCount: columns.length,
+          };
+        } catch (error) {
+          return {
+            tableName,
+            sourceName: tracking?.sourceName,
+            targetTable: tracking?.targetTable,
+            sourceHash: tracking?.sourceHash,
+            rowCount: tracking?.rowCount,
+            updatedAt: tracking?.updatedAt,
+            columns: [],
+            columnCount: 0,
+            introspectionError:
+              error instanceof Error ? error.message : String(error),
+          };
+        }
+      }),
+    );
+
+    return Response.json({ tables, details });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : String(error ?? "");
-
-    // Check if this is a connection error to an external database
-    const isConnectionError =
-      message.includes("Connection refused") ||
-      message.includes("Unable to connect") ||
-      message.includes("connection to server");
-
-    if (isConnectionError) {
-      // Log the error but return empty list instead of failing
-      // This allows the UI to continue working even if some attached databases are unavailable
-      console.warn(
-        "[Materialized Tables API] Connection error (likely from attached database):",
-        message,
-        "\nTip: Restart the DuckDB HTTP server to clear lingering attachments."
-      );
-      return Response.json({ tables: [] });
-    }
-
     console.error("[Materialized Tables API] Error:", message);
-    return Response.json({ error: message, tables: [] }, { status: 500 });
+    return Response.json(
+      { error: message, tables: [], details: [] },
+      { status: 500 },
+    );
   }
+}
+
+function extractTargetTableName(targetTable: string | undefined): string {
+  if (!targetTable) {
+    return "";
+  }
+  const parts = targetTable.split(".");
+  const tableName = parts[parts.length - 1] ?? "";
+  return tableName.replace(/["`]/g, "").trim();
+}
+
+function isTruthy(value: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
 }

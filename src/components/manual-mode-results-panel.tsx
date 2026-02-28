@@ -1,5 +1,3 @@
-"use client";
-
 import {
   ChatBubbleLeftRightIcon,
   PlusCircleIcon,
@@ -137,6 +135,30 @@ export function ManualModeResultsPanel({
       }
     }
 
+    const fallbackChartConfig: Config | undefined =
+      visualType === "chart"
+        ? {
+            visualType: "chart",
+            description: "",
+            title: "Manual chart",
+            type: "line",
+            xKey: sqlResult.columns[0]?.name ?? "",
+            yKeys: sqlResult.columns[1]?.name
+              ? [sqlResult.columns[1].name]
+              : [],
+            legend: false,
+            multipleLines: false,
+            countMode: false,
+            showGrid: true,
+            showXAxis: true,
+            showYAxis: true,
+            showDots: true,
+            showTooltip: true,
+            lineSize: 2,
+            labelYAngle: -90,
+          }
+        : undefined;
+
     const payload: SqlAnalysisData = {
       stage: "complete",
       progress: 1,
@@ -147,7 +169,10 @@ export function ManualModeResultsPanel({
       columns: sqlResult.columns,
       rows: sqlResult.rows as Result[],
       visualType,
-      chartConfig: chartConfig ?? undefined,
+      chartConfig:
+        visualType === "chart"
+          ? (chartConfig ?? fallbackChartConfig)
+          : undefined,
       cardConfig: cardConfig ?? undefined,
       summary: {
         totalRows: sqlResult.rows.length,
@@ -199,7 +224,7 @@ export function ManualModeResultsPanel({
 
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-y-auto max-h-screen">
-      <div className="flex items-center justify-between px-4 py-4 pt-8 border-b border-border flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-4 pt-8 border-b border-border shrink-0">
         <ToggleGroup
           type="single"
           value={manualViewMode}

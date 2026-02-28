@@ -24,6 +24,8 @@ export type DashboardChart = {
   createdAt: number;
   updatedAt: number;
   filtersApplied?: boolean;
+  appliedFiltersCount?: number;
+  skippedFilters?: Array<{ field: string; reason: string }>;
 };
 
 export type ChartGroup = {
@@ -53,6 +55,8 @@ export type SortableChartCardProps = {
   totalColumns: number;
   isInGroup?: boolean;
   onResizeChange?: (tempColSpan: number | null) => void;
+  isSelected?: boolean;
+  onSelect?: (chartId: string) => void;
 };
 
 export type MetricCardGroupProps = {
@@ -64,6 +68,8 @@ export type MetricCardGroupProps = {
   onToggleSql: (chartId: string) => void;
   onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
   totalColumns: number;
+  selectedChartId: string | null;
+  onChartSelect: (chartId: string) => void;
 };
 
 export type MetricCardInGroupProps = {
@@ -76,6 +82,8 @@ export type MetricCardInGroupProps = {
   onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
   isFirst: boolean;
   isLast: boolean;
+  isSelected: boolean;
+  onSelect: (chartId: string) => void;
 };
 
 export type MetricCardSqlEditorProps = {
