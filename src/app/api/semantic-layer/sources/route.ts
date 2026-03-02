@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import yaml from "js-yaml";
-import type { NextRequest } from "next/server";
 import { generateConnectionId, storeCredential } from "@/lib/credentials";
 import {
   type SourceEntry,
@@ -10,7 +9,7 @@ import {
 
 export const runtime = "nodejs";
 
-export async function GET(_req: NextRequest) {
+export async function GET(_req: Request) {
   try {
     const modelsDir = join(process.cwd(), "semantic-layer", "models");
     const filePath = join(modelsDir, "sources.yml");
@@ -35,7 +34,7 @@ export async function GET(_req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   const body = (await req.json()) as {
     table?: string;
     schema?: string;

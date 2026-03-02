@@ -1,6 +1,5 @@
 import { writeFile } from "fs/promises";
 import { join } from "path";
-import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 
 export const runtime = "nodejs";
@@ -11,13 +10,13 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ALLOWED_EXTENSIONS = [".csv", ".xlsx", ".xls", ".parquet"];
 const UPLOAD_DIR = join(process.cwd(), "uploads");
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File;
 
     if (!file) {
-      return NextResponse.json(
+      return Response.json(
         { error: "No file provided" },
         { status: 400 }
       );
@@ -28,7 +27,7 @@ export async function POST(req: NextRequest) {
       .toLowerCase()
       .substring(file.name.lastIndexOf("."));
     if (!ALLOWED_EXTENSIONS.includes(fileExtension)) {
-      return NextResponse.json(
+      return Response.json(
         { error: "Invalid file type. Only CSV, XLSX, and Parquet files are allowed." },
         { status: 400 }
       );
@@ -36,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
+      return Response.json(
         { error: `File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit.` },
         { status: 400 }
       );
@@ -64,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     // Return file path that DuckDB can use
     // Return the relative path from project root
-    return NextResponse.json({
+    return Response.json({
       fileId,
       fileName: sanitizedOriginalName,
       filePath: `uploads/${fileName}`,
@@ -73,7 +72,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("File upload error:", error);
-    return NextResponse.json(
+    return Response.json(
       { error: "Failed to upload file" },
       { status: 500 }
     );

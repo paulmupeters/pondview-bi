@@ -1,4 +1,3 @@
-import type { NextRequest } from "next/server";
 import { resolveHttpDuckDbConfig } from "@/lib/duckdb/duckdb-http";
 import { runSqlAndGetRowObjectsJsonHttp } from "@/lib/duckdb/duckdb-node";
 
@@ -18,7 +17,7 @@ export type DuckdbTablesResponse = {
   error?: string;
 };
 
-export async function GET(_req: NextRequest) {
+export async function GET(_req: Request) {
   try {
     // Resolve HTTP config from environment variables
     let config: ReturnType<typeof resolveHttpDuckDbConfig>;

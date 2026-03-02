@@ -1,6 +1,5 @@
 import { readFile, readdir } from "fs/promises";
 import { join } from "path";
-import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -8,7 +7,7 @@ export const maxDuration = 30;
 const UPLOAD_DIR = join(process.cwd(), "uploads");
 
 export async function GET(
-  req: NextRequest,
+  req: Request,
   { params }: { params: Promise<{ fileId: string }> }
 ) {
   try {
@@ -20,7 +19,7 @@ export async function GET(
       files = await readdir(UPLOAD_DIR);
     } catch (error) {
       // Directory doesn't exist or can't be read
-      return NextResponse.json(
+      return Response.json(
         { error: "File not found" },
         { status: 404 }
       );
@@ -30,7 +29,7 @@ export async function GET(
     const matchingFile = files.find((file) => file.startsWith(fileId + "_"));
     
     if (!matchingFile) {
-      return NextResponse.json(
+      return Response.json(
         { error: "File not found" },
         { status: 404 }
       );
@@ -54,7 +53,7 @@ export async function GET(
         ".parquet": "application/octet-stream",
       };
       
-      return new NextResponse(fileBuffer as any, {
+      return new Response(fileBuffer as any, {
         headers: {
           "Content-Type": contentTypeMap[extension] || "application/octet-stream",
           "Content-Disposition": `attachment; filename="${originalName}"`,
@@ -62,14 +61,14 @@ export async function GET(
       });
     } catch (error) {
       console.error("Failed to read file:", error);
-      return NextResponse.json(
+      return Response.json(
         { error: "Failed to read file from disk" },
         { status: 500 }
       );
     }
   } catch (error) {
     console.error("File fetch error:", error);
-    return NextResponse.json(
+    return Response.json(
       { error: "Failed to fetch file" },
       { status: 500 }
     );

@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import Image from "next/image";
+import Image from '@/vite/next-image';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import { DuckdbShellDialog } from "@/components/duckdb-shell";

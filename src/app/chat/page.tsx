@@ -1,4 +1,4 @@
-import { useSearchParams } from "next/navigation";
+import { useSearchParams } from '@/vite/next-navigation';
 import { Suspense } from "react";
 import Chat from "@/components/chat";
 

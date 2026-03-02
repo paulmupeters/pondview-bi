@@ -1,4 +1,3 @@
-import type { NextRequest } from "next/server";
 import {
   addSlicerToChart,
   getChartById,
@@ -11,7 +10,7 @@ import {
 export const runtime = "nodejs";
 
 export async function GET(
-  _req: NextRequest,
+  _req: Request,
   { params }: { params: Promise<{ chartId: string }> },
 ) {
   const { chartId } = await params;
@@ -24,7 +23,7 @@ export async function GET(
 }
 
 export async function POST(
-  req: NextRequest,
+  req: Request,
   { params }: { params: Promise<{ chartId: string }> },
 ) {
   const { chartId } = await params;
@@ -50,7 +49,7 @@ export async function POST(
 }
 
 export async function PATCH(
-  req: NextRequest,
+  req: Request,
   { params }: { params: Promise<{ chartId: string }> },
 ) {
   const { chartId } = await params;
@@ -95,7 +94,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  req: NextRequest,
+  req: Request,
   { params }: { params: Promise<{ chartId: string }> },
 ) {
   const { chartId } = await params;

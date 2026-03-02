@@ -1,4 +1,3 @@
-import type { NextRequest } from "next/server";
 import { extractTableNamesFromSql } from "@/lib/filters/parse-tables";
 import { runMaterializedSqlRaw } from "@/lib/materialization/query";
 import {
@@ -11,7 +10,7 @@ import type { AvailableDimension } from "@/lib/types/filters";
 export const runtime = "nodejs";
 
 export async function GET(
-  _req: NextRequest,
+  _req: Request,
   { params }: { params: Promise<{ dashboardId: string }> },
 ) {
   try {

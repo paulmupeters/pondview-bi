@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { getMessageById, updateMessageParts } from "@/lib/repositories/chat";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +15,7 @@ export async function PUT(
     const { artifactId, payload } = body;
 
     if (!messageId || !chatId || !artifactId) {
-      return NextResponse.json(
+      return Response.json(
         { error: "Missing required fields" },
         { status: 400 },
       );
@@ -25,7 +24,7 @@ export async function PUT(
     // Get the existing message
     const message = await getMessageById(messageId);
     if (!message) {
-      return NextResponse.json({ error: "Message not found" }, { status: 404 });
+      return Response.json({ error: "Message not found" }, { status: 404 });
     }
 
     // Parse existing parts
@@ -62,10 +61,10 @@ export async function PUT(
     // Save updated parts
     await updateMessageParts(chatId, messageId, JSON.stringify(updatedParts));
 
-    return NextResponse.json({ success: true });
+    return Response.json({ success: true });
   } catch (error) {
     console.error("Error updating artifact:", error);
-    return NextResponse.json(
+    return Response.json(
       { error: "Failed to update artifact" },
       { status: 500 },
     );

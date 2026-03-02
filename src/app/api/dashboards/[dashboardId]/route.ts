@@ -1,4 +1,3 @@
-import type { NextRequest } from "next/server";
 import {
   deleteDashboard,
   updateDashboardTitle,
@@ -7,7 +6,7 @@ import {
 export const runtime = "nodejs";
 
 export async function DELETE(
-  _req: NextRequest,
+  _req: Request,
   { params }: { params: Promise<{ dashboardId: string }> },
 ) {
   const { dashboardId } = await params;
@@ -19,7 +18,7 @@ export async function DELETE(
 }
 
 export async function PATCH(
-  req: NextRequest,
+  req: Request,
   { params }: { params: Promise<{ dashboardId: string }> },
 ) {
   const { dashboardId } = await params;

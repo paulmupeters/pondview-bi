@@ -1,6 +1,6 @@
 import { ClockIcon, Database, LayoutGrid, Plus, Settings } from "lucide-react";
-import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Link from '@/vite/next-link';
+import { usePathname, useRouter, useSearchParams } from '@/vite/next-navigation';
 import type { MouseEvent } from "react";
 import { useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";

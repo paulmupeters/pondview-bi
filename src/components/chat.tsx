@@ -1,6 +1,6 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from '@/vite/next-navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ArtifactMutationProvider } from "@/components/artifact-mutation-context";

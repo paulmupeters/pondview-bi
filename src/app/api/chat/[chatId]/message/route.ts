@@ -1,5 +1,4 @@
 import { appendAssistantMessage, ensureChat } from "@/lib/repositories/chat";
-import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,7 +14,7 @@ export async function POST(
     const { messageId, content, parts, createdAt } = body;
 
     if (!messageId || !chatId) {
-      return NextResponse.json(
+      return Response.json(
         { error: "Missing required fields" },
         { status: 400 },
       );
@@ -39,10 +38,10 @@ export async function POST(
       now,
     );
 
-    return NextResponse.json({ success: true });
+    return Response.json({ success: true });
   } catch (error) {
     console.error("Error saving message:", error);
-    return NextResponse.json(
+    return Response.json(
       { error: "Failed to save message" },
       { status: 500 },
     );

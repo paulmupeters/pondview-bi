@@ -1,4 +1,4 @@
-import type { ReadonlyURLSearchParams } from "next/navigation";
+import type { ReadonlyURLSearchParams } from '@/vite/next-navigation';
 import { useEffect, useState } from "react";
 
 const AUTO_SENT_FLAG_PREFIX = "autoSent:";
