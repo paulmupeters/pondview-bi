@@ -28,19 +28,27 @@ export interface HttpDuckDbResponse {
  * Throws an error if neither parameters nor environment variables are available.
  */
 export function resolveHttpDuckDbConfig(config?: HttpDuckDbConfig): ResolvedHttpDuckDbConfig {
-  const host = config?.host ?? process.env.DUCKDB_HTTP_HOST;
-  const port = config?.port ?? (process.env.DUCKDB_HTTP_PORT ? Number.parseInt(process.env.DUCKDB_HTTP_PORT, 10) : undefined);
-  const auth = config?.auth ?? process.env.DUCKDB_HTTP_AUTH;
+  const parseEnvPort = (value: string | undefined): number | undefined => {
+    if (!value) {
+      return undefined;
+    }
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  const host = config?.host ?? process.env.PONDVIEW_HOST ?? process.env.DUCKDB_HTTP_HOST;
+  const port = config?.port ?? parseEnvPort(process.env.PONDVIEW_PORT) ?? parseEnvPort(process.env.DUCKDB_HTTP_PORT);
+  const auth = config?.auth ?? process.env.PONDVIEW_AUTH ?? process.env.DUCKDB_HTTP_AUTH;
 
   if (!host) {
     throw new Error(
-      'DuckDB HTTP host is required. Provide it via function parameter (host) or environment variable (DUCKDB_HTTP_HOST)',
+      'DuckDB HTTP host is required. Provide it via function parameter (host) or environment variable (PONDVIEW_HOST or DUCKDB_HTTP_HOST)',
     );
   }
 
   if (!port || !Number.isFinite(port) || port < 1 || port > 65535) {
     throw new Error(
-      'DuckDB HTTP port is required and must be a valid port number (1-65535). Provide it via function parameter (port) or environment variable (DUCKDB_HTTP_PORT)',
+      'DuckDB HTTP port is required and must be a valid port number (1-65535). Provide it via function parameter (port) or environment variable (PONDVIEW_PORT or DUCKDB_HTTP_PORT)',
     );
   }
 
@@ -168,4 +176,3 @@ export async function executeDuckDbHttpQuery(
   const result = (await response.json()) as HttpDuckDbResponse;
   return convertHttpResponseToRowObjects(result);
 }
-

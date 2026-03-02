@@ -1,10 +1,32 @@
 import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 
+function readEnv(key: string): string | undefined {
+  if (typeof process !== "undefined" && process?.env) {
+    const value = process.env[key];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+
+  // Vite/ESM fallback for browser builds (typically only exposes prefixed vars).
+  if (
+    typeof import.meta !== "undefined" &&
+    typeof (import.meta as { env?: Record<string, string | undefined> }).env ===
+      "object"
+  ) {
+    return (import.meta as { env?: Record<string, string | undefined> }).env?.[
+      key
+    ];
+  }
+
+  return undefined;
+}
+
 const DEFAULT_RUNTIME_DUCKDB_PATH =
-  process.env.DUCKDB_RUNTIME_DB?.trim() ||
-  process.env.DUCKDB_PATH?.trim() ||
-  process.env.DUCKDB_DATABASE_PATH?.trim() ||
-  process.env.DUCKDB_PERSIST_PATH?.trim() ||
+  readEnv("DUCKDB_RUNTIME_DB")?.trim() ||
+  readEnv("DUCKDB_PATH")?.trim() ||
+  readEnv("DUCKDB_DATABASE_PATH")?.trim() ||
+  readEnv("DUCKDB_PERSIST_PATH")?.trim() ||
   ":memory:";
 
 /**
@@ -128,9 +150,9 @@ export function detectMysqlConnection(
     const name = id.slice(6).trim() || "DEFAULT";
     const upper = name.toUpperCase();
     const candidates = [
-      process.env[`MYSQL_${upper}_URL`],
-      process.env[`MYSQL_${upper}`],
-      process.env.DATABASE_URL,
+      readEnv(`MYSQL_${upper}_URL`),
+      readEnv(`MYSQL_${upper}`),
+      readEnv("DATABASE_URL"),
     ].filter(Boolean) as string[];
 
     const uri = candidates[0];
@@ -198,11 +220,11 @@ export function detectPostgresConnection(
     const name = id.slice(3).trim() || "DEFAULT";
     const upper = name.toUpperCase();
     const candidates = [
-      process.env[`PG_${upper}_URL`],
-      process.env[`POSTGRES_${upper}_URL`],
-      process.env[`PG_${upper}`],
-      process.env[`POSTGRES_${upper}`],
-      process.env.DATABASE_URL,
+      readEnv(`PG_${upper}_URL`),
+      readEnv(`POSTGRES_${upper}_URL`),
+      readEnv(`PG_${upper}`),
+      readEnv(`POSTGRES_${upper}`),
+      readEnv("DATABASE_URL"),
     ].filter(Boolean) as string[];
 
     const uri = candidates[0];
@@ -272,7 +294,7 @@ export function resolveDbPath(dbIdentifier: string, token?: string): string {
     if (hasToken) return id;
 
     // Prefer user-provided token over environment variable
-    const finalToken = token?.trim() || process.env.MOTHERDUCK_TOKEN || "";
+    const finalToken = token?.trim() || readEnv("MOTHERDUCK_TOKEN") || "";
     if (!finalToken) {
       // Return as-is if no token available (will likely fail, but preserves original behavior)
       return id;

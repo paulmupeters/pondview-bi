@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Streamdown } from "streamdown";
+import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -88,9 +88,7 @@ export function TextConfigDialog({
         {showPreview ? (
           <div className="min-h-[200px] rounded-md border border-input bg-background p-3 text-sm">
             {content.trim().length ? (
-              <Streamdown className="prose prose-sm dark:prose-invert">
-                {content}
-              </Streamdown>
+              <MarkdownRenderer>{content}</MarkdownRenderer>
             ) : (
               <span className="text-muted-foreground">Nothing to preview</span>
             )}
