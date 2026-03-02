@@ -1,12 +1,12 @@
 import { cn } from "@/lib/utils";
 import { type ComponentProps, memo } from "react";
-import { Streamdown } from "streamdown";
+import { MarkdownRenderer } from "@/components/markdown-renderer";
 
-type ResponseProps = ComponentProps<typeof Streamdown>;
+type ResponseProps = ComponentProps<typeof MarkdownRenderer>;
 
 export const Response = memo(
   ({ className, ...props }: ResponseProps) => (
-    <Streamdown
+    <MarkdownRenderer
       className={cn(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className

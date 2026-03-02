@@ -15,10 +15,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { Streamdown } from "streamdown";
 import { CardConfigDialog } from "@/components/card-config-dialog";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { DynamicChart } from "@/components/dynamic-chart";
+import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { MetricCard } from "@/components/metric-card";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { TableConfigDialog } from "@/components/table-config-dialog";
@@ -427,9 +427,7 @@ export function SortableChartCard({
                 {config.title}
               </h3>
             ) : null}
-            <div className="prose prose-sm max-w-none dark:prose-invert">
-              <Streamdown>{config.content}</Streamdown>
-            </div>
+            <MarkdownRenderer>{config.content}</MarkdownRenderer>
           </div>
         ) : rows.length > 0 ? (
           <DynamicChart
