@@ -1,10 +1,9 @@
-import type { NextRequest } from "next/server";
 import { getChartById, updateChartConfig, updateChartSql } from "@/lib/repositories/dashboard";
 
 export const runtime = "nodejs";
 
 export async function PUT(
-  req: NextRequest,
+  req: Request,
   { params }: { params: Promise<{ chartId: string }> },
 ) {
   const { chartId } = await params;

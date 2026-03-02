@@ -4,7 +4,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import * as Dialog from "@radix-ui/react-dialog";
-import Image from "next/image";
+import Image from '@/vite/next-image';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -1,4 +1,3 @@
-import type { NextRequest } from "next/server";
 import { resolveHttpDuckDbConfig } from "@/lib/duckdb/duckdb-http";
 
 export const runtime = "nodejs";
@@ -7,7 +6,7 @@ export const runtime = "nodejs";
  * API endpoint to get DuckDB HTTP configuration
  * This allows client-side code to access HTTP config without exposing env vars
  */
-export async function GET(_req: NextRequest) {
+export async function GET(_req: Request) {
   try {
     const config = resolveHttpDuckDbConfig();
     // Return only the config object, not the resolved version

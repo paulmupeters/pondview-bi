@@ -1,4 +1,3 @@
-import type { NextRequest } from "next/server";
 import { runSqlNormalized } from "@/lib/db/router";
 import { applyFiltersToSql } from "@/lib/filters/apply-filters";
 import { normalizeFilterPayload } from "@/lib/filters/normalize-filters";
@@ -12,7 +11,7 @@ import type { Filter } from "@/lib/types/filters";
 export const runtime = "nodejs";
 
 export async function GET(
-  req: NextRequest,
+  req: Request,
   { params }: { params: Promise<{ dashboardId: string }> },
 ) {
   const { dashboardId } = await params;

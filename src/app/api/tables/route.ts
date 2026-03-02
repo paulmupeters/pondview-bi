@@ -1,4 +1,3 @@
-import type { NextRequest } from "next/server";
 import {
   getSchemas,
   getTablesForSchema,
@@ -11,7 +10,7 @@ function quoteIdent(id: string): string {
   return '"' + id.replace(/"/g, '""') + '"';
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   console.log("GET request received");
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");

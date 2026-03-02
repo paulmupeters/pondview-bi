@@ -1,4 +1,3 @@
-import type { NextRequest } from "next/server";
 import { runMaterializedSqlRaw } from "@/lib/materialization/query";
 import { listTableMaterializations } from "@/lib/materialization/table-materializer";
 
@@ -21,7 +20,7 @@ export type MaterializedTableDetail = {
   introspectionError?: string;
 };
 
-export async function GET(_req: NextRequest) {
+export async function GET(_req: Request) {
   try {
     const { searchParams } = new URL(_req.url);
     const includeDetails = isTruthy(searchParams.get("details"));

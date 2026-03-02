@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import Link from '@/vite/next-link';
 import { DuckdbRepl } from "@/components/duckdb-shell";
 import { Button } from "@/components/ui/button";
 

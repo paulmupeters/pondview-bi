@@ -1,11 +1,10 @@
-import type { NextRequest } from "next/server";
 
 const repoPromise = import("@/lib/repositories/dashboard");
 
 export const runtime = "nodejs";
 
 export async function GET(
-  _req: NextRequest,
+  _req: Request,
   { params }: { params: Promise<{ dashboardId: string }> },
 ) {
   const { dashboardId } = await params;
@@ -15,7 +14,7 @@ export async function GET(
 }
 
 export async function POST(
-  req: NextRequest,
+  req: Request,
   { params }: { params: Promise<{ dashboardId: string }> },
 ) {
   const { dashboardId } = await params;
@@ -38,7 +37,7 @@ export async function POST(
 }
 
 export async function PATCH(
-  req: NextRequest,
+  req: Request,
   { params }: { params: Promise<{ dashboardId: string }> },
 ) {
   const { dashboardId } = await params;
@@ -81,7 +80,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  req: NextRequest,
+  req: Request,
   { params }: { params: Promise<{ dashboardId: string }> },
 ) {
   const { dashboardId: _dashboardId } = await params;

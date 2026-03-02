@@ -1,6 +1,6 @@
 import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams } from '@/vite/next-navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
 import { TextConfigDialog } from "@/components/text-config-dialog";

@@ -1,7 +1,7 @@
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import type { UIMessage } from "ai";
 import { nanoid } from "nanoid";
-import { useRouter } from "next/navigation";
+import { useRouter } from '@/vite/next-navigation';
 import { useCallback, useState } from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import {

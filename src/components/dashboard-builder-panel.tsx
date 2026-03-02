@@ -1,6 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { MinusCircleIcon, PlusCircleIcon, XIcon } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter } from '@/vite/next-navigation';
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import { SqlChart } from "@/components/sql-chart";

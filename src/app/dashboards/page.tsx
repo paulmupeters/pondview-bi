@@ -1,5 +1,5 @@
 import { LayoutDashboard, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
+import Link from '@/vite/next-link';
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api/client";

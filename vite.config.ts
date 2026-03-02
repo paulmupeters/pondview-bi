@@ -7,15 +7,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
-      "next/navigation": fileURLToPath(
-        new URL("./src/vite/next-navigation.ts", import.meta.url),
-      ),
-      "next/link": fileURLToPath(
-        new URL("./src/vite/next-link.tsx", import.meta.url),
-      ),
-      "next/image": fileURLToPath(
-        new URL("./src/vite/next-image.tsx", import.meta.url),
-      ),
     },
   },
   build: {

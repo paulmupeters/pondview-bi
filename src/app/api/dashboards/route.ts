@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { createDashboard, listDashboards } from "@/lib/repositories/dashboard";
 
 export const runtime = "nodejs";
@@ -8,7 +7,7 @@ export async function GET() {
   return Response.json({ dashboards: rows });
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   const { title } = (await req.json()) as { title?: string };
   if (!title || title.trim().length === 0) {
     return new Response("Title is required", { status: 400 });

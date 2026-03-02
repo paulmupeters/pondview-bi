@@ -7,7 +7,7 @@ import {
   Palette,
   Settings,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter } from '@/vite/next-navigation';
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
