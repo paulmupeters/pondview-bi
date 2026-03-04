@@ -34,9 +34,7 @@ function nowMs(): number {
 
 function getAuthHeaders(): Record<string, string> {
   if (!sessionSecret) {
-    throw new Error(
-      "Bridge authentication required. Set your Pondview session secret in Settings before running queries.",
-    );
+    return {};
   }
 
   return {
