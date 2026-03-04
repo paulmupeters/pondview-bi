@@ -1,12 +1,16 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
-import { type ChatTransport, DirectChatTransport } from "ai";
+import {
+  type ChatTransport,
+  DirectChatTransport,
+} from "ai";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPondviewAgent } from "@/ai/client/agent";
-import { hasBrowserGatewayApiKey } from "@/ai/gateway-model";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ArtifactMutationProvider } from "@/components/artifact-mutation-context";
+import { ChatMessageThread } from "@/components/chat/chat-message-thread";
 import { useChatUrlParams } from "@/components/chat/hooks/use-chat-url-params";
+import { useVisualizationSelection } from "@/components/chat/hooks/use-visualization-selection";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
@@ -17,7 +21,12 @@ import {
 } from "@/components/prompt-input-wrapper";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
+import { VisualizationPanel } from "@/components/visualization-panel";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
+import {
+  getRandomVerbAiIsThinking,
+  showRandomAnimation,
+} from "@/lib/animations";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
@@ -72,6 +81,34 @@ function deriveTitleFromInput(input: string): string | null {
   return trimmed.length > 20 ? `${trimmed.slice(0, 20)}...` : trimmed;
 }
 
+function toPromptErrorMessage(error: Error): string {
+  const message = error.message?.trim() || "Unknown AI chat error.";
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("missing ai gateway api key")) {
+    return "Missing AI Gateway API key. Open Settings and set AI_GATEWAY_API_KEY.";
+  }
+
+  if (
+    normalized.includes("networkerror when attempting to fetch resource") ||
+    normalized.includes("failed to fetch") ||
+    normalized.includes("load failed") ||
+    normalized.includes("network request failed")
+  ) {
+    return "Cannot reach AI Gateway from browser. Check network, ad blocker/proxy, and AI_GATEWAY_API_KEY.";
+  }
+
+  if (normalized.includes("authentication")) {
+    return "AI Gateway authentication failed. Verify AI_GATEWAY_API_KEY in Settings.";
+  }
+
+  if (normalized.includes("gateway request failed")) {
+    return "AI Gateway request failed. Check network access and AI_GATEWAY_API_KEY.";
+  }
+
+  return message;
+}
+
 const EMPTY_INITIAL_MESSAGES: UIMessage[] = [];
 
 export default function Chat({
@@ -88,12 +125,13 @@ export default function Chat({
   const [promptMode, setPromptMode] = useState<PromptMode>("manual");
   const [promptError, setPromptError] = useState<string | null>(null);
   const hydratedMessagesRef = useRef(resolvedInitialMessages.length > 0);
+  const isAiMode = promptMode === "ai";
 
   const agent = useMemo(
     () => createPondviewAgent(connectedTables),
     [connectedTables],
   );
-  const transport = useMemo<ChatTransport<UIMessage>>(
+  const directTransport = useMemo<ChatTransport<UIMessage>>(
     () =>
       new DirectChatTransport({
         agent,
@@ -106,10 +144,10 @@ export default function Chat({
   const { messages, setMessages, sendMessage, status } = useChat<UIMessage>({
     id: chatId,
     messages: resolvedInitialMessages,
-    transport,
+    transport: directTransport,
     onError: (error) => {
       console.error("AI chat error:", error);
-      setPromptError(error.message);
+      setPromptError(toPromptErrorMessage(error));
     },
     onFinish: ({ message, isAbort, isError }) => {
       if (isAbort || isError || message.role !== "assistant") {
@@ -150,6 +188,17 @@ export default function Chat({
   const prevSqlRef = useRef<string | null>(null);
   const [isDashboardBuilderOpen, setIsDashboardBuilderOpen] = useState(false);
   const executeSqlArtifactType = "data-execute-sql";
+  const [animationFrame, setAnimationFrame] = useState("");
+  const [verbAiIsThinking, setVerbAiIsThinking] = useState("is thinking");
+  const {
+    visualizations,
+    activeVisualizationId,
+    handleSelectVisualization,
+    getLastSelectableVisualizationIdForMessage,
+  } = useVisualizationSelection({
+    messages,
+    executeSqlArtifactType,
+  });
 
   useEffect(() => {
     if (!selectedDb && connectedTables.length > 0) {
@@ -215,13 +264,6 @@ export default function Chat({
       const files = message.files;
 
       if (!text && (!files || files.length === 0)) {
-        return;
-      }
-
-      if (!hasBrowserGatewayApiKey()) {
-        setPromptError(
-          "Missing AI gateway API key. Add AI_GATEWAY_API_KEY in Settings.",
-        );
         return;
       }
 
@@ -384,6 +426,21 @@ export default function Chat({
     handleAddVisual,
     setPromptMode,
   });
+  useEffect(() => {
+    if (status === "streaming" || status === "submitted") {
+      const animation = showRandomAnimation(
+        undefined,
+        Number.POSITIVE_INFINITY,
+        (frame) => setAnimationFrame(frame),
+      );
+      return () => animation.stop();
+    }
+    setAnimationFrame("");
+  }, [status]);
+
+  useEffect(() => {
+    setVerbAiIsThinking(getRandomVerbAiIsThinking());
+  }, []);
 
   const handleAddSqlResultToChat = useCallback(
     async (payload: SqlAnalysisData) => {
@@ -452,10 +509,24 @@ export default function Chat({
   const rightPanelContent = (
     <div className="relative h-full w-full overflow-hidden">
       <div
-        aria-hidden={isDashboardBuilderOpen}
+        aria-hidden={!isAiMode || isDashboardBuilderOpen}
         className={cn(
           "absolute inset-0 flex flex-col transition-all duration-300 ease-out",
-          isDashboardBuilderOpen
+          isAiMode && !isDashboardBuilderOpen
+            ? "opacity-100 translate-y-0 pointer-events-auto"
+            : "opacity-0 translate-y-2 pointer-events-none",
+        )}
+      >
+        <VisualizationPanel
+          visualizations={visualizations}
+          selectedVisualizationId={activeVisualizationId}
+        />
+      </div>
+      <div
+        aria-hidden={isAiMode || isDashboardBuilderOpen}
+        className={cn(
+          "absolute inset-0 flex flex-col transition-all duration-300 ease-out",
+          isAiMode || isDashboardBuilderOpen
             ? "opacity-0 translate-y-2 pointer-events-none"
             : "opacity-100 translate-y-0 pointer-events-auto",
         )}
@@ -515,54 +586,76 @@ export default function Chat({
                     }
                     className="shrink-0 bg-background"
                   />
-                  <div className="flex-1 min-h-0 w-full p-3">
-                    <div className="h-full min-h-0 overflow-hidden rounded-md border border-border/30">
-                      <DuckdbRepl
-                        className="h-full w-full border-r-0 p-0"
-                        selectedDbIdentifier={selectedDb}
-                        onConsoleApiChangeAction={setSqlConsoleApi}
-                        inlineResults={false}
-                        showRunControls={false}
-                        chartConfig={manualChartConfig}
-                        onResultChangeAction={(result) => {
-                          setSqlResult(result);
-                          const newSql = result?.sql ?? null;
-                          if (newSql !== prevSqlRef.current) {
-                            setManualChartConfig(null);
-                            prevSqlRef.current = newSql;
-                          }
-                        }}
+                  <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+                    {isAiMode ? (
+                      <ChatMessageThread
+                        messages={messages}
+                        status={status}
+                        animationFrame={animationFrame}
+                        verbAiIsThinking={verbAiIsThinking}
+                        executeSqlArtifactType={executeSqlArtifactType}
+                        activeVisualizationId={activeVisualizationId}
+                        getLastSelectableVisualizationIdForMessage={
+                          getLastSelectableVisualizationIdForMessage
+                        }
+                        onSelectVisualization={handleSelectVisualization}
+                        onRemoveMessage={handleRemoveMessage}
+                        conversationClassName="flex-1 min-h-0"
+                        contentSpacingClassName="space-y-2"
+                        messagePaddingClassName="p-3"
+                        userResponsePaddingClassName="p-1"
                       />
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleAddVisual}
-                        className="rounded border border-border px-3 py-1 text-xs"
-                      >
-                        Add Visual
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleOpenDashboardBuilder}
-                        className="rounded border border-border px-3 py-1 text-xs"
-                      >
-                        Build Dashboard
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const latest = messages[messages.length - 1];
-                          if (latest) {
-                            void handleRemoveMessage(latest.id);
-                          }
-                        }}
-                        className="rounded border border-border px-3 py-1 text-xs"
-                        disabled={messages.length === 0}
-                      >
-                        Remove Last Visual
-                      </button>
-                    </div>
+                    ) : (
+                      <div className="flex-1 min-h-0 w-full p-3">
+                        <div className="h-full min-h-0 overflow-hidden rounded-md border border-border/30">
+                          <DuckdbRepl
+                            className="h-full w-full border-r-0 p-0"
+                            selectedDbIdentifier={selectedDb}
+                            onConsoleApiChangeAction={setSqlConsoleApi}
+                            inlineResults={false}
+                            showRunControls={false}
+                            chartConfig={manualChartConfig}
+                            onResultChangeAction={(result) => {
+                              setSqlResult(result);
+                              const newSql = result?.sql ?? null;
+                              if (newSql !== prevSqlRef.current) {
+                                setManualChartConfig(null);
+                                prevSqlRef.current = newSql;
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleAddVisual}
+                            className="rounded border border-border px-3 py-1 text-xs"
+                          >
+                            Add Visual
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleOpenDashboardBuilder}
+                            className="rounded border border-border px-3 py-1 text-xs"
+                          >
+                            Build Dashboard
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const latest = messages[messages.length - 1];
+                              if (latest) {
+                                void handleRemoveMessage(latest.id);
+                              }
+                            }}
+                            className="rounded border border-border px-3 py-1 text-xs"
+                            disabled={messages.length === 0}
+                          >
+                            Remove Last Visual
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
