@@ -1,47 +1,138 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
-import { useRouter, useSearchParams } from '@/vite/next-navigation';
+import { type ChatTransport, DirectChatTransport } from "ai";
+import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPondviewAgent } from "@/ai/client/agent";
+import { hasBrowserGatewayApiKey } from "@/ai/gateway-model";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ArtifactMutationProvider } from "@/components/artifact-mutation-context";
-import { ChatMessageThread } from "@/components/chat/chat-message-thread";
 import { useChatUrlParams } from "@/components/chat/hooks/use-chat-url-params";
-import { useRightPanelResize } from "@/components/chat/hooks/use-right-panel-resize";
-import { useVisualizationSelection } from "@/components/chat/hooks/use-visualization-selection";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import { ManualModeResultsPanel } from "@/components/manual-mode-results-panel";
-import { PromptInputWrapper } from "@/components/prompt-input-wrapper";
+import {
+  PromptInputWrapper,
+  type PromptMode,
+} from "@/components/prompt-input-wrapper";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
-import { VisualizationPanel } from "@/components/visualization-panel";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
-import {
-  getRandomVerbAiIsThinking,
-  showRandomAnimation,
-} from "@/lib/animations";
-import { apiFetch } from "@/lib/api/client";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  appendAssistantMessage,
+  appendUserMessageTx,
+  type DbMessageRow,
+  deleteMessageFromChat,
+  ensureChat,
+  listMessagesByChatId,
+} from "@/lib/workspace/chat-repo";
+import { useRouter, useSearchParams } from "@/vite/next-navigation";
 
-type PromptMode = "ai" | "manual";
+function safeJsonParse(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function parsePartsOrFallback(
+  partsJson: string | null | undefined,
+  content: string,
+): UIMessage["parts"] {
+  const parsed = partsJson ? safeJsonParse(partsJson) : undefined;
+
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    return parsed as UIMessage["parts"];
+  }
+
+  if (parsed && typeof parsed === "object") {
+    const maybeParts = (parsed as { parts?: unknown }).parts;
+    if (Array.isArray(maybeParts) && maybeParts.length > 0) {
+      return maybeParts as UIMessage["parts"];
+    }
+  }
+
+  return [{ type: "text", text: content }] as UIMessage["parts"];
+}
+
+function toUiMessages(rows: DbMessageRow[]): UIMessage[] {
+  return rows.map((row) => ({
+    id: row.id,
+    role: row.role as UIMessage["role"],
+    parts: parsePartsOrFallback(row.parts, row.content),
+  }));
+}
+
+function deriveTitleFromInput(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  return trimmed.length > 20 ? `${trimmed.slice(0, 20)}...` : trimmed;
+}
+
+const EMPTY_INITIAL_MESSAGES: UIMessage[] = [];
 
 export default function Chat({
   chatId,
-  initialMessages = [],
+  initialMessages,
 }: {
   chatId: string;
   initialMessages?: UIMessage[];
 }) {
+  const resolvedInitialMessages = initialMessages ?? EMPTY_INITIAL_MESSAGES;
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const connectedTables = useConnectedTables();
-  const [promptMode, setPromptMode] = useState<PromptMode>("ai");
-  const [promptPendingMode, setPromptPendingMode] = useState<PromptMode | null>(
-    null,
-  );
-  const isAiMode = promptMode === "ai";
+  const [promptMode, setPromptMode] = useState<PromptMode>("manual");
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const hydratedMessagesRef = useRef(resolvedInitialMessages.length > 0);
 
-  // Manual mode state
+  const agent = useMemo(
+    () => createPondviewAgent(connectedTables),
+    [connectedTables],
+  );
+  const transport = useMemo<ChatTransport<UIMessage>>(
+    () =>
+      new DirectChatTransport({
+        agent,
+        sendReasoning: false,
+        sendSources: false,
+      }) as unknown as ChatTransport<UIMessage>,
+    [agent],
+  );
+
+  const { messages, setMessages, sendMessage, status } = useChat<UIMessage>({
+    id: chatId,
+    messages: resolvedInitialMessages,
+    transport,
+    onError: (error) => {
+      console.error("AI chat error:", error);
+      setPromptError(error.message);
+    },
+    onFinish: ({ message, isAbort, isError }) => {
+      if (isAbort || isError || message.role !== "assistant") {
+        return;
+      }
+
+      const textPart = Array.isArray(message.parts)
+        ? message.parts.find((part) => part.type === "text")
+        : undefined;
+      const text =
+        textPart && "text" in textPart && typeof textPart.text === "string"
+          ? textPart.text
+          : "";
+
+      void appendAssistantMessage(
+        chatId,
+        message.id || nanoid(),
+        text,
+        JSON.stringify(message.parts ?? [{ type: "text", text }]),
+      );
+    },
+  });
+
   const [selectedDb, setSelectedDb] = useState<string | undefined>();
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(true);
   const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(
@@ -57,123 +148,53 @@ export default function Chat({
     null,
   );
   const prevSqlRef = useRef<string | null>(null);
-  const loadedInitialMessagesForChatRef = useRef<string | null>(null);
-  const {
-    rightPanelWidth,
-    isResizing,
-    resizeHandleRef,
-    containerRef,
-    handleResizeStart,
-  } = useRightPanelResize();
+  const [isDashboardBuilderOpen, setIsDashboardBuilderOpen] = useState(false);
+  const executeSqlArtifactType = "data-execute-sql";
 
-  // Initialize selectedDb with first connected table's database if available
   useEffect(() => {
     if (!selectedDb && connectedTables.length > 0) {
       setSelectedDb(connectedTables[0]?.databasePath);
     }
   }, [connectedTables, selectedDb]);
 
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: `/${"api/chat"}/${chatId}`,
-        fetch: (() => {
-          const customFetch = (async (
-            url: RequestInfo | URL,
-            options?: RequestInit,
-          ) => {
-            // Add connected tables to the request body
-            if (options?.body) {
-              const body = JSON.parse(options.body as string);
-              return fetch(url, {
-                ...options,
-                body: JSON.stringify({
-                  ...body,
-                  connectedTables,
-                }),
-              });
-            }
-            return fetch(url, options);
-          }) as typeof fetch;
-          // Preserve Next.js augmented fetch.preconnect to satisfy typeof fetch
-          type FetchWithPreconnect = typeof fetch & {
-            preconnect?: (...args: unknown[]) => unknown;
-          };
-          const fetchWithPreconnect = fetch as FetchWithPreconnect;
-          const customFetchWithPreconnect = customFetch as FetchWithPreconnect;
-          customFetchWithPreconnect.preconnect =
-            fetchWithPreconnect.preconnect?.bind(fetch) ?? (() => {});
-          return customFetch;
-        })(),
-      }),
-    [chatId, connectedTables],
-  );
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { messages, sendMessage, status, setMessages } = useChat({
-    id: chatId,
-    messages: initialMessages.length > 0 ? initialMessages : undefined,
-    transport,
-  });
+  useEffect(() => {
+    hydratedMessagesRef.current = resolvedInitialMessages.length > 0;
+    if (resolvedInitialMessages.length > 0) {
+      setMessages(resolvedInitialMessages);
+    } else {
+      setMessages([]);
+    }
+  }, [resolvedInitialMessages, setMessages]);
 
   useEffect(() => {
-    if (initialMessages.length > 0) {
+    if (hydratedMessagesRef.current) {
       return;
     }
-    if (loadedInitialMessagesForChatRef.current === chatId) {
-      return;
-    }
-    loadedInitialMessagesForChatRef.current = chatId;
 
     let cancelled = false;
-    const loadInitialMessages = async () => {
+
+    const loadMessages = async () => {
       try {
-        const res = await apiFetch(`/api/chat/${chatId}`, {
-          cache: "no-store",
-        });
-        if (!res.ok || cancelled) {
-          return;
-        }
-        const data = (await res.json()) as { messages?: UIMessage[] };
-        if (!cancelled && Array.isArray(data.messages)) {
-          setMessages(data.messages);
+        const rows = await listMessagesByChatId(chatId);
+        if (!cancelled) {
+          setMessages((previous) =>
+            previous.length > 0 ? previous : toUiMessages(rows),
+          );
+          hydratedMessagesRef.current = true;
         }
       } catch (error) {
         if (!cancelled) {
-          console.error("Failed to load initial messages:", error);
+          console.error("Failed to load chat messages:", error);
         }
       }
     };
 
-    void loadInitialMessages();
+    void loadMessages();
+
     return () => {
       cancelled = true;
     };
-  }, [chatId, initialMessages.length, setMessages]);
-  const [animationFrame, setAnimationFrame] = useState("");
-  const [verbAiIsThinking, setVerbAiIsThinking] = useState("is thinking");
-  const [isDashboardBuilderOpen, setIsDashboardBuilderOpen] = useState(false);
-  const executeSqlArtifactType = "data-execute-sql";
-  const {
-    visualizations,
-    activeVisualizationId,
-    handleSelectVisualization,
-    getLastSelectableVisualizationIdForMessage,
-  } = useVisualizationSelection({
-    messages,
-    executeSqlArtifactType,
-  });
-
-  const handleSubmit = (message: PromptInputMessage) => {
-    const hasText = Boolean(message.text);
-
-    if (!hasText) {
-      return;
-    }
-    sendMessage({
-      text: message.text ?? "",
-    });
-  };
+  }, [chatId, setMessages]);
 
   const handleOpenDashboardBuilder = () => {
     setIsDashboardBuilderOpen(true);
@@ -188,8 +209,118 @@ export default function Chat({
     sqlConsoleApi.focus();
   };
 
+  const submitAiPrompt = useCallback(
+    async (message: PromptInputMessage) => {
+      const text = message.text?.trim() ?? "";
+      const files = message.files;
+
+      if (!text && (!files || files.length === 0)) {
+        return;
+      }
+
+      if (!hasBrowserGatewayApiKey()) {
+        setPromptError(
+          "Missing AI gateway API key. Add AI_GATEWAY_API_KEY in Settings.",
+        );
+        return;
+      }
+
+      setPromptError(null);
+
+      const now = Date.now();
+      const messageId = nanoid();
+      const userParts: UIMessage["parts"] = [];
+
+      if (text) {
+        userParts.push({ type: "text", text });
+      }
+
+      if (files && files.length > 0) {
+        userParts.push(...(files as unknown as UIMessage["parts"][number][]));
+      }
+
+      const persistedContent =
+        text || files?.[0]?.filename || "Attachment message";
+
+      await appendUserMessageTx({
+        chatId,
+        messageId,
+        content: persistedContent,
+        partsJson: JSON.stringify(userParts),
+        titleForNewChat: deriveTitleFromInput(text),
+        now,
+      });
+
+      // `sendMessage({ messageId })` expects the user message to already exist in local chat state.
+      setMessages((previous) => {
+        if (previous.some((message) => message.id === messageId)) {
+          return previous;
+        }
+
+        const nextMessage: UIMessage = {
+          id: messageId,
+          role: "user",
+          parts: userParts,
+        };
+        return [...previous, nextMessage];
+      });
+
+      if (text) {
+        await sendMessage({ text, files, messageId });
+        return;
+      }
+
+      await sendMessage({
+        files: files ?? [],
+        messageId,
+      });
+    },
+    [chatId, sendMessage, setMessages],
+  );
+
+  const handlePromptSubmit = useCallback(
+    (message: PromptInputMessage) => {
+      if (promptMode === "manual") {
+        const text = message.text?.trim();
+        if (text && sqlConsoleApi) {
+          sqlConsoleApi.setQuery(text);
+          sqlConsoleApi.focus();
+        }
+        return;
+      }
+
+      void submitAiPrompt(message);
+    },
+    [promptMode, sqlConsoleApi, submitAiPrompt],
+  );
+
+  const persistArtifactMessage = useCallback(
+    async (
+      artifactPart: UIMessage["parts"][number],
+      now: number,
+      messageId: string,
+    ) => {
+      const nextMessage: UIMessage = {
+        id: messageId,
+        role: "assistant",
+        parts: [artifactPart],
+      };
+
+      setMessages((previous) => [...previous, nextMessage]);
+
+      await ensureChat(chatId, "SQL Query Results", now);
+      await appendAssistantMessage(
+        chatId,
+        messageId,
+        "",
+        JSON.stringify([artifactPart]),
+        now,
+      );
+    },
+    [chatId, setMessages],
+  );
+
   const handleAddVisual = useCallback(async () => {
-    setPromptPendingMode("manual");
     const now = Date.now();
     const messageId = `manual-visual-${now}`;
     const artifactId = `manual-artifact-${now}`;
@@ -235,36 +366,30 @@ export default function Chat({
       },
     } as unknown as UIMessage["parts"][number];
 
-    const newMessage: UIMessage = {
-      id: messageId,
-      role: "assistant",
-      parts: [newArtifactPart],
-    };
-
-    // Update local state immediately for responsive UI
-    setMessages((prevMessages) => [...prevMessages, newMessage]);
-    setPromptPendingMode((current) => (current === "manual" ? null : current));
-
-    // Persist to database
     try {
-      await apiFetch(`/api/chat/${chatId}/message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messageId,
-          content: "",
-          parts: [newArtifactPart],
-          createdAt: now,
-        }),
-      });
+      await persistArtifactMessage(newArtifactPart, now, messageId);
     } catch (error) {
-      console.error("Failed to persist message:", error);
+      console.error("Failed to persist visual placeholder:", error);
     }
-  }, [chatId, connectedTables, setMessages]);
+  }, [connectedTables, persistArtifactMessage]);
+
+  useChatUrlParams({
+    chatId,
+    searchParams,
+    sendMessage: ({ text }) => {
+      setPromptMode("ai");
+      void submitAiPrompt({ text });
+    },
+    router,
+    handleAddVisual,
+    setPromptMode,
+  });
 
   const handleAddSqlResultToChat = useCallback(
     async (payload: SqlAnalysisData) => {
       const now = Date.now();
+      const messageId = `sql-${now}`;
+      const artifactId = `sql-artifact-${now}`;
       const normalizedPayload: SqlAnalysisData = {
         stage: payload.stage ?? "complete",
         progress: payload.progress ?? 1,
@@ -288,8 +413,6 @@ export default function Chat({
         },
       };
 
-      const messageId = `sql-${now}`;
-      const artifactId = `sql-artifact-${now}`;
       const artifactPart = {
         type: executeSqlArtifactType as `data-${string}`,
         data: {
@@ -303,112 +426,36 @@ export default function Chat({
         },
       } as unknown as UIMessage["parts"][number];
 
-      const newMessage: UIMessage = {
-        id: messageId,
-        role: "assistant",
-        parts: [artifactPart],
-      };
-
-      // Update local state immediately for responsive UI
-      setMessages((prev) => [...prev, newMessage]);
-
-      // Persist to database
       try {
-        await apiFetch(`/api/chat/${chatId}/message`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messageId,
-            content: "",
-            parts: [artifactPart],
-            createdAt: now,
-          }),
-        });
+        await persistArtifactMessage(artifactPart, now, messageId);
       } catch (error) {
-        console.error("Failed to persist message:", error);
+        console.error("Failed to persist SQL result message:", error);
       }
     },
-    [chatId, setMessages],
+    [persistArtifactMessage],
   );
 
   const handleRemoveMessage = useCallback(
     async (messageId: string) => {
-      // Optimistically remove from UI
-      setMessages((prev) => prev.filter((message) => message.id !== messageId));
-
-      // Attempt to delete, then always reload from server to avoid rehydration
+      setMessages((previous) =>
+        previous.filter((message) => message.id !== messageId),
+      );
       try {
-        await apiFetch(`/api/chat/${chatId}/message/${messageId}`, {
-          method: "DELETE",
-        });
+        await deleteMessageFromChat(chatId, messageId);
       } catch (error) {
         console.error("Failed to delete message:", error);
-      } finally {
-        try {
-          const reload = await apiFetch(`/api/chat/${chatId}`, {
-            cache: "no-store",
-          });
-          if (reload.ok) {
-            const data = (await reload.json()) as { messages: UIMessage[] };
-            setMessages(data.messages ?? []);
-          }
-        } catch {
-          // Ignore reload errors
-        }
       }
     },
     [chatId, setMessages],
   );
 
-  useChatUrlParams({
-    chatId,
-    searchParams,
-    sendMessage,
-    router,
-    handleAddVisual,
-    setPromptMode,
-  });
-
-  // Animation effect for streaming status
-  useEffect(() => {
-    if (status === "streaming" || status === "submitted") {
-      const animation = showRandomAnimation(
-        undefined,
-        Number.POSITIVE_INFINITY, // Run indefinitely
-        (frame) => setAnimationFrame(frame),
-      );
-      return () => animation.stop();
-    }
-    setAnimationFrame("");
-  }, [status]);
-
-  useEffect(() => {
-    setVerbAiIsThinking(getRandomVerbAiIsThinking());
-  }, []);
-
-  const isConversationEmpty = messages.length === 0;
-
   const rightPanelContent = (
     <div className="relative h-full w-full overflow-hidden">
       <div
-        aria-hidden={!isAiMode || isDashboardBuilderOpen}
+        aria-hidden={isDashboardBuilderOpen}
         className={cn(
           "absolute inset-0 flex flex-col transition-all duration-300 ease-out",
-          isAiMode && !isDashboardBuilderOpen
-            ? "opacity-100 translate-y-0 pointer-events-auto"
-            : "opacity-0 translate-y-2 pointer-events-none",
-        )}
-      >
-        <VisualizationPanel
-          visualizations={visualizations}
-          selectedVisualizationId={activeVisualizationId}
-        />
-      </div>
-      <div
-        aria-hidden={isAiMode || isDashboardBuilderOpen}
-        className={cn(
-          "absolute inset-0 flex flex-col transition-all duration-300 ease-out",
-          isAiMode || isDashboardBuilderOpen
+          isDashboardBuilderOpen
             ? "opacity-0 translate-y-2 pointer-events-none"
             : "opacity-100 translate-y-0 pointer-events-auto",
         )}
@@ -448,31 +495,15 @@ export default function Chat({
       setMessages={setMessages}
       executeSqlArtifactType={executeSqlArtifactType}
     >
-      <div
-        className={`chat-container flex h-screen transition-all duration-300 ${
-          isConversationEmpty
-            ? "flex-col items-center justify-center"
-            : "flex-col"
-        }`}
-      >
-        <div className="flex h-full w-full flex-col relative">
-          {/* Two-column layout: Messages on left, Visualizations on right */}
+      <div className="chat-container flex h-screen flex-col">
+        <div className="flex flex-1 w-full flex-col relative">
           <div className="flex-1 overflow-hidden bg-card">
-            <div ref={containerRef} className="flex h-full">
-              {/* Left Panel */}
+            <div className="flex h-full">
               <div
                 className="flex flex-col min-w-0 h-full overflow-hidden"
-                style={{
-                  width: `calc(100% - ${rightPanelWidth}% - ${isResizing ? "0px" : "4px"})`,
-                  transition: isResizing ? "none" : "width 0.2s ease-out",
-                }}
+                style={{ width: "60%" }}
               >
-                <div
-                  className={cn(
-                    "flex-1 min-h-0 flex overflow-hidden",
-                    isAiMode && "h-full",
-                  )}
-                >
+                <div className="flex-1 min-h-0 flex overflow-hidden">
                   <ConnectedDataPanel
                     selectedDb={selectedDb}
                     onSelect={setSelectedDb}
@@ -484,99 +515,91 @@ export default function Chat({
                     }
                     className="shrink-0 bg-background"
                   />
-                  <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-                    {promptMode === "ai" ? (
-                      <ChatMessageThread
-                        messages={messages}
-                        status={status}
-                        animationFrame={animationFrame}
-                        verbAiIsThinking={verbAiIsThinking}
-                        executeSqlArtifactType={executeSqlArtifactType}
-                        activeVisualizationId={activeVisualizationId}
-                        getLastSelectableVisualizationIdForMessage={
-                          getLastSelectableVisualizationIdForMessage
-                        }
-                        onSelectVisualization={handleSelectVisualization}
-                        onRemoveMessage={handleRemoveMessage}
-                        conversationClassName="flex-1 min-h-0"
-                        contentSpacingClassName="space-y-2"
-                        messagePaddingClassName="p-3"
-                        userResponsePaddingClassName="p-1"
+                  <div className="flex-1 min-h-0 w-full p-3">
+                    <div className="h-full min-h-0 overflow-hidden rounded-md border border-border/30">
+                      <DuckdbRepl
+                        className="h-full w-full border-r-0 p-0"
+                        selectedDbIdentifier={selectedDb}
+                        onConsoleApiChangeAction={setSqlConsoleApi}
+                        inlineResults={false}
+                        showRunControls={false}
+                        chartConfig={manualChartConfig}
+                        onResultChangeAction={(result) => {
+                          setSqlResult(result);
+                          const newSql = result?.sql ?? null;
+                          if (newSql !== prevSqlRef.current) {
+                            setManualChartConfig(null);
+                            prevSqlRef.current = newSql;
+                          }
+                        }}
                       />
-                    ) : (
-                      <div className="flex-1 min-h-0 w-full p-3">
-                        <div className="h-full min-h-0 overflow-hidden rounded-md border border-border/30">
-                          <DuckdbRepl
-                            className="h-full w-full border-r-0 p-0"
-                            selectedDbIdentifier={selectedDb}
-                            onConsoleApiChangeAction={setSqlConsoleApi}
-                            inlineResults={false}
-                            showRunControls={false}
-                            chartConfig={manualChartConfig}
-                            onResultChangeAction={(result) => {
-                              setSqlResult(result);
-                              const newSql = result?.sql ?? null;
-                              if (newSql !== prevSqlRef.current) {
-                                setManualChartConfig(null);
-                                prevSqlRef.current = newSql;
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    <div className="shrink-0 w-full px-3 pb-2 pt-1 border-t border-border/20 bg-card">
-                      <PromptInputWrapper
-                        onSubmit={handleSubmit}
-                        showHeader
-                        showAiInput
-                        className="transition delay-150 duration-300 ease-in-out"
-                        status={status}
-                        onCreateDashboard={handleOpenDashboardBuilder}
-                        onAddVisual={handleAddVisual}
-                        mode={promptMode}
-                        onModeChange={setPromptMode}
-                        pendingMode={promptPendingMode}
-                      />
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAddVisual}
+                        className="rounded border border-border px-3 py-1 text-xs"
+                      >
+                        Add Visual
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenDashboardBuilder}
+                        className="rounded border border-border px-3 py-1 text-xs"
+                      >
+                        Build Dashboard
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const latest = messages[messages.length - 1];
+                          if (latest) {
+                            void handleRemoveMessage(latest.id);
+                          }
+                        }}
+                        className="rounded border border-border px-3 py-1 text-xs"
+                        disabled={messages.length === 0}
+                      >
+                        Remove Last Visual
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Resize Handle */}
-              <div
-                ref={resizeHandleRef}
-                onPointerDown={handleResizeStart}
-                className={cn(
-                  "hidden lg:block w-1 bg-border hover:bg-primary/50 cursor-col-resize transition-colors relative z-10",
-                  "hover:w-1.5",
-                  isResizing && "bg-primary w-1.5",
-                )}
-                style={{
-                  touchAction: "none",
-                }}
-              />
-
-              {/* Right: Visualization Panel or Manual Results */}
               <div
                 className="hidden lg:flex flex-col min-w-0 h-full"
-                style={{
-                  width: `${rightPanelWidth}%`,
-                  transition: isResizing ? "none" : "width 0.2s ease-out",
-                }}
+                style={{ width: "40%" }}
               >
                 {rightPanelContent}
               </div>
             </div>
           </div>
 
-          {/* Visualization Panel for Mobile (below messages) */}
           <div className="lg:hidden border-t border-border bg-background">
             <div className="h-[400px] p-6">{rightPanelContent}</div>
           </div>
         </div>
+        <div className="border-t border-border bg-background p-3">
+          <div className="mx-auto w-full max-w-5xl">
+            {promptError ? (
+              <p className="mb-2 text-xs text-destructive">{promptError}</p>
+            ) : null}
+            <PromptInputWrapper
+              onSubmit={handlePromptSubmit}
+              mode={promptMode}
+              onModeChange={setPromptMode}
+              pendingMode={
+                status === "submitted" || status === "streaming" ? "ai" : null
+              }
+              status={status}
+              compact
+              showAiInput
+              onCreateDashboard={handleOpenDashboardBuilder}
+            />
+          </div>
+        </div>
       </div>
-      {/* <AIDevtools /> */}
     </ArtifactMutationProvider>
   );
 }

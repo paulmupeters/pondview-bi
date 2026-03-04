@@ -13,6 +13,7 @@ import {
 import { useChatHistory } from "@/hooks/use-chat-history";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
+import { deleteChat } from "@/lib/workspace/chat-repo";
 
 const railButtonClassName =
   "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-tight";
@@ -49,15 +50,9 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
       if (!alreadyListed) {
         // Retry briefly so a new chat has time to persist.
         for (let i = 0; i < 4 && !cancelled; i++) {
-          const res = await fetch("/api/chats", { cache: "no-store" });
-          if (res.ok) {
-            const data = (await res.json()) as {
-              chats: ChatHistoryEntry[];
-            };
-            if (data.chats?.some((chat) => chat.id === activeChatId)) {
-              await loadChats();
-              break;
-            }
+          const latestRetry = await loadChats();
+          if (latestRetry.some((chat) => chat.id === activeChatId)) {
+            break;
           }
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
@@ -91,12 +86,8 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
     }
 
     try {
-      const res = await fetch(`/api/chat/${chatId}`, { method: "DELETE" });
-      if (!res.ok) {
-        await loadChats();
-      } else {
-        await loadChats();
-      }
+      await deleteChat(chatId);
+      await loadChats();
     } catch {
       await loadChats();
     }

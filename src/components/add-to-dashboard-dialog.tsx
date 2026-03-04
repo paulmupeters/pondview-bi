@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { CardConfig, Config, TableConfig, VisualType } from "@/lib/types";
+import { addChartToDashboard, createDashboard, listDashboards } from "@/lib/workspace/dashboard-repo";
 
 export type AddToDashboardVisualOption =
   | {
@@ -62,6 +63,7 @@ export function AddToDashboardDialog({
     string | "new"
   >("new");
   const [newDashboardTitle, setNewDashboardTitle] = useState("My Dashboard");
+  const newDashboardTitleId = useId();
   const resolvedDefaultType = useMemo<VisualType | null>(() => {
     if (!visualOptions.length) return null;
     if (
@@ -136,10 +138,8 @@ export function AddToDashboardDialog({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/dashboards", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { dashboards: DashboardLite[] };
-        if (!cancelled) setDashboards(data.dashboards ?? []);
+        const dashboardList = await listDashboards();
+        if (!cancelled) setDashboards(dashboardList);
       } catch { }
     })();
     return () => {
@@ -167,13 +167,7 @@ export function AddToDashboardDialog({
     try {
       let dashboardId = selectedDashboardId as string;
       if (selectedDashboardId === "new") {
-        const res = await fetch("/api/dashboards", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: newDashboardTitle.trim() }),
-        });
-        if (!res.ok) throw new Error("Failed to create dashboard");
-        const data = (await res.json()) as { id: string };
+        const data = await createDashboard(newDashboardTitle.trim());
         dashboardId = data.id;
       }
 
@@ -200,18 +194,14 @@ export function AddToDashboardDialog({
         };
       }
 
-      const res2 = await fetch(`/api/dashboard/${dashboardId}/charts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: currentFormState.title,
-          description: currentFormState.description,
-          sql,
-          dbIdentifier: dbIdentifier ?? "md:my_db",
-          chartConfigJson: JSON.stringify(configJson),
-        }),
+      await addChartToDashboard({
+        dashboardId,
+        title: currentFormState.title,
+        description: currentFormState.description,
+        sql,
+        dbIdentifier: dbIdentifier ?? "md:my_db",
+        chartConfigJson: JSON.stringify(configJson),
       });
-      if (!res2.ok) throw new Error("Failed to add chart");
       setOpen(false);
     } catch {
       // no-op for now; could show a toast
@@ -241,7 +231,7 @@ export function AddToDashboardDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="dashboard-select" className="text-sm font-medium">
+            <label htmlFor={useId()} className="text-sm font-medium">
               Select dashboard
             </label>
             <select
@@ -261,13 +251,13 @@ export function AddToDashboardDialog({
           {selectedDashboardId === "new" && (
             <div className="space-y-2">
               <label
-                htmlFor="new-dashboard-title"
+                htmlFor={newDashboardTitleId}
                 className="text-sm font-medium"
               >
                 New dashboard title
               </label>
               <Input
-                id="new-dashboard-title"
+                id={newDashboardTitleId}
                 value={newDashboardTitle}
                 onChange={(e) => setNewDashboardTitle(e.target.value)}
                 placeholder="e.g. Sales KPIs"
@@ -324,7 +314,7 @@ export function AddToDashboardDialog({
               title
             </label>
             <Input
-              id="visual-title"
+              id={useId()}
               value={currentFormState.title}
               onChange={(e) => {
                 const value = e.target.value;
@@ -351,7 +341,7 @@ export function AddToDashboardDialog({
               description (optional)
             </label>
             <Input
-              id="visual-description"
+              id={useId()}
               value={currentFormState.description}
               onChange={(e) => {
                 const value = e.target.value;

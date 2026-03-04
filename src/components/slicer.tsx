@@ -126,39 +126,13 @@ export function Slicer({
   // Fetch dimension values
   const fetchValues = useCallback(
     async (searchTerm: string) => {
+      void searchTerm;
       setLoading(true);
-      try {
-        // Exclude the current field's filter to avoid self-filter lockout
-        const effectiveFilters =
-          activeScope.kind === "chart"
-            ? [...dashboardFilters, ...filters]
-            : filters;
-        const otherFilters = effectiveFilters.filter((f) => f.field !== field);
-        const filtersParam =
-          otherFilters.length > 0
-            ? `&filters=${encodeURIComponent(JSON.stringify(otherFilters))}`
-            : "";
-        const searchParam = searchTerm
-          ? `&search=${encodeURIComponent(searchTerm)}`
-          : "";
-        const res = await fetch(
-          `/api/dashboard/${dashboardId}/dimension-values?field=${encodeURIComponent(field)}&limit=${limit}${searchParam}${filtersParam}`,
-        );
-        if (!res.ok) {
-          throw new Error(`Failed to fetch values: ${res.statusText}`);
-        }
-        const data = (await res.json()) as {
-          values: DimensionValue[];
-        };
-        setValues(data.values);
-      } catch (error) {
-        console.error("[Slicer] Failed to fetch values:", error);
-        setValues([]);
-      } finally {
-        setLoading(false);
-      }
+      // Server-backed dimension value discovery is deferred in browser mode.
+      setValues([]);
+      setLoading(false);
     },
-    [activeScope.kind, dashboardFilters, dashboardId, field, limit, filters],
+    [],
   );
 
   // Debounced search

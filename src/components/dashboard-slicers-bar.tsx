@@ -46,8 +46,8 @@ export function DashboardSlicersBar({
   const [addSlicerSearch, setAddSlicerSearch] = useState("");
 
   const slicersEndpoint = selectedChartId
-    ? `/api/charts/${selectedChartId}/slicers`
-    : `/api/dashboard/${dashboardId}/slicers`;
+    ? `chart:${selectedChartId}`
+    : `dashboard:${dashboardId}`;
 
   useEffect(() => {
     if (selectedChartId) {
@@ -57,34 +57,12 @@ export function DashboardSlicersBar({
     }
   }, [selectedChartId, setActiveScope]);
 
-  // Load slicers from API
+  // Server-backed slicer persistence is deferred in browser mode.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(slicersEndpoint);
-        if (!res.ok) {
-          throw new Error(`Failed to load slicers: ${res.statusText}`);
-        }
-        const data = (await res.json()) as { slicers: DashboardSlicer[] };
-        if (!cancelled) {
-          setSlicers(data.slicers);
-        }
-      } catch (error) {
-        console.error("[DashboardSlicersBar] Failed to load slicers:", error);
-        if (!cancelled) {
-          setSlicers([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void slicersEndpoint;
+    setLoading(true);
+    setSlicers([]);
+    setLoading(false);
   }, [slicersEndpoint]);
 
   // Filter available dimensions to exclude those already used as slicers
@@ -94,66 +72,33 @@ export function DashboardSlicersBar({
   );
 
   const handleAddSlicer = async (field: string) => {
-    try {
-      const res = await fetch(slicersEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field }),
-      });
-      if (!res.ok) {
-        throw new Error(`Failed to add selection: ${res.statusText}`);
-      }
-      await res.json();
-
-      // Reload slicers
-      const listRes = await fetch(slicersEndpoint);
-      if (listRes.ok) {
-        const listData = (await listRes.json()) as {
-          slicers: DashboardSlicer[];
-        };
-        setSlicers(listData.slicers);
-      }
-
-      setAddSlicerOpen(false);
-      setAddSlicerSearch("");
-    } catch (error) {
-      console.error("[DashboardSlicersBar] Failed to add selection:", error);
-    }
+    const maxPosition = slicers.reduce((max, item) => Math.max(max, item.position), -1);
+    setSlicers((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${field}`,
+        dashboardId: selectedChartId ? undefined : dashboardId,
+        chartId: selectedChartId ?? undefined,
+        field,
+        title: null,
+        limit: 50,
+        position: maxPosition + 1,
+      },
+    ]);
+    setAddSlicerOpen(false);
+    setAddSlicerSearch("");
   };
 
   const handleRemoveSlicer = async (slicerId: string) => {
-    try {
-      // Find the slicer to get its field
-      const slicer = slicers.find((s) => s.id === slicerId);
-
-      // Remove filter if it exists for this slicer's field
-      if (slicer) {
-        const filterIndex = filters.findIndex((f) => f.field === slicer.field);
-        if (filterIndex >= 0) {
-          removeFilter(filterIndex);
-        }
+    // Find the slicer to get its field
+    const slicer = slicers.find((s) => s.id === slicerId);
+    if (slicer) {
+      const filterIndex = filters.findIndex((f) => f.field === slicer.field);
+      if (filterIndex >= 0) {
+        removeFilter(filterIndex);
       }
-
-      // Remove slicer from database
-      const res = await fetch(
-        `${slicersEndpoint}?id=${encodeURIComponent(slicerId)}`,
-        { method: "DELETE" },
-      );
-      if (!res.ok) {
-        throw new Error(`Failed to remove slicer: ${res.statusText}`);
-      }
-
-      // Reload slicers
-      const listRes = await fetch(slicersEndpoint);
-      if (listRes.ok) {
-        const listData = (await listRes.json()) as {
-          slicers: DashboardSlicer[];
-        };
-        setSlicers(listData.slicers);
-      }
-    } catch (error) {
-      console.error("[DashboardSlicersBar] Failed to remove slicer:", error);
     }
+    setSlicers((prev) => prev.filter((item) => item.id !== slicerId));
   };
 
   if (loading) {

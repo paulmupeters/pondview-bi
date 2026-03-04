@@ -89,39 +89,11 @@ export function FilterProvider({
     setActiveScopeState({ kind: "dashboard" });
   }, [dashboardId]);
 
-  // Load available dimensions from API on mount.
+  // Dimension discovery from server APIs is deferred in browser mode.
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadDimensions() {
-      setIsLoading(true);
-      try {
-        const res = await fetch(`/api/dashboard/${dashboardId}/dimensions`);
-        if (!res.ok) {
-          throw new Error(`Failed to load dimensions: ${res.statusText}`);
-        }
-        const data = await res.json();
-        if (!cancelled) {
-          setAvailableDimensions(
-            Array.isArray(data.dimensions) ? data.dimensions : [],
-          );
-        }
-      } catch (error) {
-        console.error("[Filters] Failed to load dimensions:", error);
-        if (!cancelled) {
-          setAvailableDimensions([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadDimensions();
-    return () => {
-      cancelled = true;
-    };
+    setIsLoading(true);
+    setAvailableDimensions([]);
+    setIsLoading(false);
   }, [dashboardId]);
 
   // Load dashboard-level filters from localStorage on mount.

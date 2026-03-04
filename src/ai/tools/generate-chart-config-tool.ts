@@ -1,15 +1,14 @@
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
+import { resolveGatewayModel } from "@/ai/gateway-model";
 import { VISUALIZATION_MODEL } from "@/ai/models";
 import { configSchema, normalizeChartConfig, type Result } from "@/lib/types";
 
 export const generateChartConfig = async (
   results: Result[],
-  userQuery: string
+  userQuery: string,
 ) => {
-  "use server";
-
-  const { object: config } = await generateObject({
-    model: VISUALIZATION_MODEL,
+  const { output: config } = await generateText({
+    model: resolveGatewayModel(VISUALIZATION_MODEL),
     system: "You are a data visualization expert.",
     prompt: `Given the following data from a SQL query result, generate the chart config that best visualises the data and answers the users query.
       For multiple groups use multi-lines.
@@ -49,12 +48,14 @@ export const generateChartConfig = async (
 
       Data:
       ${JSON.stringify(results, null, 2)}`,
-    schema: configSchema,
+    output: Output.object({
+      schema: configSchema,
+    }),
   });
 
   const normalizedConfig = normalizeChartConfig(config);
   const colors: Record<string, string> = {};
-  
+
   const updatedConfig = { ...normalizedConfig, colors };
   return { config: updatedConfig };
 };

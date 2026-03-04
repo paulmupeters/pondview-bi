@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -25,6 +25,18 @@ import {
   getSelectedTheme,
   setSelectedTheme as setThemeInStorage,
 } from "@/lib/custom-css";
+import {
+  clearSessionSecret,
+  hasSessionSecret,
+  runBridgeQuery,
+  setSessionSecret,
+} from "@/lib/bridge/pondview-bridge";
+import {
+  exportWorkspace,
+  importWorkspace,
+  resetWorkspace,
+  validateWorkspaceImport,
+} from "@/lib/workspace/export-import";
 import { getAllThemes } from "@/themes";
 
 const CSS_PLACEHOLDER = `:root{
@@ -49,12 +61,18 @@ export default function SettingsPage() {
     useState<string>(CUSTOM_THEME_VALUE);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [bridgeSecret, setBridgeSecret] = useState("");
+  const [hasBridgeSecret, setHasBridgeSecret] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [secrets, setSecrets] = useState<{ name: string; provider: string }[]>(
     []
   );
   const [secretsError, setSecretsError] = useState<string | null>(null);
   const [isSecretsLoading, setIsSecretsLoading] = useState(false);
+  const [isExportingWorkspace, setIsExportingWorkspace] = useState(false);
+  const [isImportingWorkspace, setIsImportingWorkspace] = useState(false);
+  const [isResettingWorkspace, setIsResettingWorkspace] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
 
   // Load settings from localStorage on mount
@@ -67,6 +85,7 @@ export default function SettingsPage() {
     setCssCode(savedCss);
     // Set selected theme, or "custom" if no theme is selected but custom CSS exists
     setSelectedTheme(savedTheme || (savedCss ? CUSTOM_THEME_VALUE : "default"));
+    setHasBridgeSecret(hasSessionSecret());
   }, []);
 
   // Apply CSS on component mount (only if custom theme is selected)
@@ -77,20 +96,25 @@ export default function SettingsPage() {
   }, [cssCode, selectedTheme]);
 
   const fetchSecrets = useCallback(async () => {
+    if (!hasSessionSecret()) {
+      setSecrets([]);
+      setSecretsError(
+        "Set your Pondview session secret first to query DuckDB secrets.",
+      );
+      return;
+    }
+
     setIsSecretsLoading(true);
     setSecretsError(null);
     try {
-      const response = await fetch("/api/duckdb/secrets");
-      const data = (await response.json().catch(() => ({}))) as {
-        secrets?: { name: string; provider: string }[];
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load DuckDB secrets.");
-      }
-
-      setSecrets(Array.isArray(data.secrets) ? data.secrets : []);
+      const result = await runBridgeQuery(
+        "SELECT name, provider FROM duckdb_secrets();",
+      );
+      const resolved = result.rows.map((row) => ({
+        name: String(row.name ?? ""),
+        provider: String(row.provider ?? ""),
+      }));
+      setSecrets(resolved);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to load secrets.";
@@ -104,6 +128,86 @@ export default function SettingsPage() {
   useEffect(() => {
     void fetchSecrets();
   }, [fetchSecrets]);
+
+  const handleSetBridgeSecret = () => {
+    setSessionSecret(bridgeSecret);
+    setHasBridgeSecret(hasSessionSecret());
+    setBridgeSecret("");
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleClearBridgeSecret = () => {
+    clearSessionSecret();
+    setHasBridgeSecret(false);
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleExportWorkspace = async () => {
+    setIsExportingWorkspace(true);
+    try {
+      const payload = await exportWorkspace();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = "pondview-workspace-v1.json";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(href);
+    } finally {
+      setIsExportingWorkspace(false);
+    }
+  };
+
+  const handleImportWorkspace = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setIsImportingWorkspace(true);
+    try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw);
+      const payload = validateWorkspaceImport(parsed);
+      await importWorkspace(payload);
+      location.reload();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to import workspace.";
+      setSecretsError(message);
+    } finally {
+      setIsImportingWorkspace(false);
+      if (importFileRef.current) {
+        importFileRef.current.value = "";
+      }
+    }
+  };
+
+  const handleResetWorkspace = async () => {
+    if (
+      !confirm(
+        "Reset all browser workspace data (chats, dashboards, preferences)? This cannot be undone.",
+      )
+    ) {
+      return;
+    }
+
+    setIsResettingWorkspace(true);
+    try {
+      await resetWorkspace();
+      location.reload();
+    } finally {
+      setIsResettingWorkspace(false);
+    }
+  };
 
   const handleSaveApiKey = async () => {
     setIsSaving(true);
@@ -203,6 +307,84 @@ export default function SettingsPage() {
                   {isSaving ? "Saving..." : "Save API Key"}
                 </Button>
               </div>
+            </div>
+          </Card>
+
+          <Card className="p-6 mb-6">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Bridge Authentication</h2>
+                <p className="text-sm text-muted-foreground">
+                  Session-only Pondview secret for authenticated bridge queries.
+                </p>
+              </div>
+              <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
+                Status: {hasBridgeSecret ? "configured for this session" : "not configured"}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  type="password"
+                  value={bridgeSecret}
+                  onChange={(event) => setBridgeSecret(event.target.value)}
+                  placeholder="Enter Pondview secret"
+                />
+                <Button
+                  onClick={handleSetBridgeSecret}
+                  disabled={!bridgeSecret.trim().length}
+                >
+                  Set Session Secret
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleClearBridgeSecret}
+                  disabled={!hasBridgeSecret}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6 mb-6">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Workspace Data</h2>
+                <p className="text-sm text-muted-foreground">
+                  Export, import, or reset browser-local workspace state.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => void handleExportWorkspace()}
+                  disabled={isExportingWorkspace}
+                >
+                  {isExportingWorkspace ? "Exporting..." : "Export Workspace"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => importFileRef.current?.click()}
+                  disabled={isImportingWorkspace}
+                >
+                  {isImportingWorkspace ? "Importing..." : "Import Workspace"}
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => void handleResetWorkspace()}
+                  disabled={isResettingWorkspace}
+                >
+                  {isResettingWorkspace ? "Resetting..." : "Reset Workspace"}
+                </Button>
+              </div>
+
+              <input
+                ref={importFileRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={handleImportWorkspace}
+              />
             </div>
           </Card>
 

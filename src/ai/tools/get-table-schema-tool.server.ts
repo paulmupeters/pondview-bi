@@ -1,40 +1,9 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { runQuery } from "@/lib/sql/run-query";
+import { runSqlNormalized } from "@/lib/db/router";
 import type { Result } from "@/lib/types";
 
-function normalizeRows(rows: Record<string, unknown>[]): Result[] {
-  const normalizeValue = (value: unknown): string | number | boolean | Date => {
-    if (value instanceof Date) return value;
-    if (
-      typeof value === "string" ||
-      typeof value === "number" ||
-      typeof value === "boolean"
-    ) {
-      return value;
-    }
-    if (value === null || value === undefined) return "";
-    return JSON.stringify(value);
-  };
-
-  return rows.map((row) => {
-    const normalized: Result = {};
-    for (const [key, value] of Object.entries(row)) {
-      normalized[key] = normalizeValue(value);
-    }
-    return normalized;
-  });
-}
-
-async function runSqlForRuntime(
-  databasePath: string,
-  sql: string,
-): Promise<Result[]> {
-  const result = await runQuery({ sql, dbIdentifier: databasePath });
-  return normalizeRows(result.rows);
-}
-
-export const getTableSchemaTool = tool({
+export const getTableSchemaToolServer = tool({
   description:
     "Get the schema of a table, including column names, types and sample data",
   inputSchema: z.object({
@@ -47,7 +16,7 @@ export const getTableSchemaTool = tool({
   execute: async ({ table, databasePath }) => {
     const describeSql = `DESCRIBE ${table}`;
 
-    const schemaRows = (await runSqlForRuntime(
+    const schemaRows = (await runSqlNormalized(
       databasePath,
       describeSql,
     )) as Array<{
@@ -61,7 +30,7 @@ export const getTableSchemaTool = tool({
 
     let sampleRows: Result[] = [];
     try {
-      sampleRows = await runSqlForRuntime(
+      sampleRows = await runSqlNormalized(
         databasePath,
         `SELECT * FROM ${table} LIMIT 5`,
       );

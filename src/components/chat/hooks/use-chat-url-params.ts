@@ -1,5 +1,5 @@
-import type { ReadonlyURLSearchParams } from '@/vite/next-navigation';
 import { useEffect, useState } from "react";
+import type { ReadonlyURLSearchParams } from "@/vite/next-navigation";
 
 const AUTO_SENT_FLAG_PREFIX = "autoSent:";
 const AUTO_SENT_STALE_MS = 5 * 60 * 1000;
@@ -125,6 +125,12 @@ export function useChatUrlParams({
     const modeParam = searchParams?.get("mode");
     if (modeParam === "manual") {
       setPromptMode("manual");
+      router.replace(`/chat?id=${encodeURIComponent(chatId)}`);
+      return;
+    }
+
+    if (modeParam === "ai") {
+      setPromptMode("ai");
       router.replace(`/chat?id=${encodeURIComponent(chatId)}`);
     }
   }, [searchParams, router, chatId, setPromptMode]);

@@ -1,46 +1,14 @@
 import { tool } from "ai";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { runQuery } from "@/lib/sql/run-query";
+import { getContext, getCurrentUser } from "@/ai/context";
+import { runSqlNormalized } from "@/lib/db/router";
+import { delay } from "@/lib/delay";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { generateCardConfig } from "./generate-card-config-tool";
 import { generateChartConfig } from "./generate-chart-config-tool";
 
-function normalizeRows(rows: Record<string, unknown>[]): Result[] {
-  const normalizeValue = (value: unknown): string | number | boolean | Date => {
-    if (value instanceof Date) return value;
-    if (
-      typeof value === "string" ||
-      typeof value === "number" ||
-      typeof value === "boolean"
-    ) {
-      return value;
-    }
-    if (value === null || value === undefined) return "";
-    return JSON.stringify(value);
-  };
-
-  return rows.map((row) => {
-    const normalized: Result = {};
-    for (const [key, value] of Object.entries(row)) {
-      normalized[key] = normalizeValue(value);
-    }
-    return normalized;
-  });
-}
-
-async function executeSqlForRuntime(
-  databasePath: string,
-  sql: string,
-): Promise<{ rows: Result[]; durationMs: number }> {
-  const response = await runQuery({ sql, dbIdentifier: databasePath });
-  return {
-    rows: normalizeRows(response.rows),
-    durationMs: response.durationMs,
-  };
-}
-
-export const executeSqlTool = tool({
+export const executeSqlToolServer = tool({
   description:
     "Execute a SQL query and return the results, returns a maximum of 50 rows.",
   inputSchema: z.object({
@@ -62,25 +30,92 @@ export const executeSqlTool = tool({
       .describe("Whether to generate chart visualization (default: true)"),
   }),
   execute: async ({ sql, userQuery, generateChart, databasePath }) => {
+    // Get current user context
+    const user = getCurrentUser();
+    const { writer } = getContext();
     const artifactId = nanoid();
     const createdAt = Date.now();
 
+    // Helper to write data part updates
+    const writeArtifact = (
+      status: "loading" | "streaming" | "complete" | "error",
+      progress: number,
+      payload: Record<string, unknown>,
+      error?: string,
+    ) => {
+      writer.write({
+        type: "data-execute-sql",
+        id: artifactId,
+        data: {
+          id: artifactId,
+          version: 1,
+          status,
+          progress,
+          error,
+          payload,
+          createdAt,
+          updatedAt: Date.now(),
+        },
+      });
+    };
+
     const debugContext = {
       artifactId,
+      userId: user.id,
       databasePath,
     };
 
+    // Step 1: Loading state
+    writeArtifact("loading", 0, {
+      stage: "loading",
+      title: "SQL Query Results",
+      query: sql,
+      progress: 0,
+      columns: [],
+      rows: [],
+    });
+
+    console.debug("[executeSqlTool] Step 1 (loading) initialized", {
+      ...debugContext,
+      query: sql,
+    });
+
+    // Step 2: Processing - execute query
+    writeArtifact("streaming", 0.2, {
+      stage: "processing",
+      query: sql,
+      progress: 0.2,
+    });
+    await delay(2000);
+
+    console.debug("[executeSqlTool] Step 2 (processing) started", debugContext);
+
+    const startTime = Date.now();
     let parsedResults: Result[] = [];
-    let executionTime = 0;
     try {
-      const queryResult = await executeSqlForRuntime(databasePath, sql);
-      parsedResults = queryResult.rows;
-      executionTime = queryResult.durationMs;
+      parsedResults = await runSqlNormalized(databasePath, sql);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
+      writeArtifact("error", 0, { stage: "error", query: sql }, errorMessage);
       throw new Error(errorMessage);
     }
+
+    console.debug("[executeSqlTool] Step 2 (processing) finished", {
+      ...debugContext,
+    });
+
+    const executionTime = Date.now() - startTime;
+
+    // Step 3: Analyzing - process results
+    writeArtifact("streaming", 0.6, {
+      stage: "analyzing",
+      query: sql,
+      progress: 0.6,
+    });
+    await delay(2500);
+
+    console.debug("[executeSqlTool] Step 3 (analyzing) started", debugContext);
 
     // Extract columns from first row if available
     const columns =
@@ -143,7 +178,11 @@ export const executeSqlTool = tool({
         typeof sampleValue === "number" || !Number.isNaN(Number(sampleValue))
       );
     });
-
+    writeArtifact("streaming", 0.8, {
+      stage: "visualizing",
+      query: sql,
+      progress: 0.8,
+    });
     console.debug(
       "[executeSqlTool] Step 4 (visualizing) started",
       debugContext,
@@ -151,6 +190,8 @@ export const executeSqlTool = tool({
 
     if (isSingleValue && userQuery) {
       try {
+        // Add delay to avoid rate limit errors
+        await delay(100);
         const singleValue = parsedResults[0]?.[columns[0].name];
         const cardResult = await generateCardConfig(
           singleValue,
@@ -167,6 +208,8 @@ export const executeSqlTool = tool({
       }
     } else if (isChartWorthy && hasNumericData && userQuery && generateChart) {
       try {
+        // Add delay to avoid rate limit errors
+        await delay(100);
         const chartResult = await generateChartConfig(parsedResults, userQuery);
         chartConfig = chartResult.config;
         visualType = "chart";
@@ -199,7 +242,7 @@ export const executeSqlTool = tool({
     const finalData = {
       title: "SQL Query Results",
       stage: "complete" as const,
-      progress: 1 as const,
+      progress: 1,
       query: sql,
       dbIdentifier: databasePath,
       executionTime,
@@ -217,6 +260,8 @@ export const executeSqlTool = tool({
       },
     };
 
+    writeArtifact("complete", 1, finalData);
+
     console.debug("[executeSqlTool] Step 5 (complete) finished", {
       ...debugContext,
       executionTimeMs: executionTime,
@@ -226,25 +271,15 @@ export const executeSqlTool = tool({
       actualRowsInPayload: finalData.rows.length,
     });
 
-    const artifactPart = {
-      type: "data-execute-sql" as const,
-      data: {
-        id: artifactId,
-        version: 1,
-        status: "complete" as const,
-        progress: 1,
-        payload: finalData,
-        createdAt,
-        updatedAt: Date.now(),
-      },
-    };
-
     // Return the text summary for the AI model
     return {
-      text: `Executed ${queryType} query successfully on ${databasePath}. Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
+      text: `Executed ${queryType} query successfully (User: ${
+        user.fullName
+      } - ${
+        user.id
+      }) on ${databasePath}. Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
         ". ",
       )}.`,
-      parts: [artifactPart],
     };
   },
 });

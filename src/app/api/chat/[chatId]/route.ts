@@ -10,7 +10,7 @@ import { nanoid } from "nanoid";
 import { setContext } from "@/ai/context";
 import { CHAT_MODEL } from "@/ai/models";
 import { analysisPrompt } from "@/ai/prompts";
-import { tools } from "@/ai/tools";
+import { tools } from "@/ai/tools/server";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import type { messages } from "@/lib/db/schema";
 import {
@@ -25,6 +25,10 @@ export const runtime = "nodejs";
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
+
+// Deprecated compatibility route:
+// Primary UI chat flow now uses client-side DirectChatTransport.
+// Keep this endpoint for external callers and transition period support.
 
 export async function GET(
   _req: Request,
@@ -99,7 +103,7 @@ export async function POST(
         JSON.stringify(responseMessage.parts ?? [{ type: "text", text }]),
       );
     },
-    execute: ({ writer }) => {
+    execute: async ({ writer }) => {
       // Set up typed context with user information
       setContext({
         writer,
@@ -115,7 +119,7 @@ export async function POST(
             connectedTables.map(({ databasePath, ...rest }) => rest),
           ),
         ),
-        messages: convertToModelMessages(uiMessages),
+        messages: await convertToModelMessages(uiMessages),
         tools,
         stopWhen: stepCountIs(5),
       });

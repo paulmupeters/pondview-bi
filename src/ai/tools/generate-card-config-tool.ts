@@ -1,16 +1,15 @@
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
+import { resolveGatewayModel } from "@/ai/gateway-model";
 import { VISUALIZATION_MODEL } from "@/ai/models";
-import { cardConfigSchema, type Result } from "@/lib/types";
+import { cardConfigSchema } from "@/lib/types";
 
 export const generateCardConfig = async (
   value: string | number | boolean | Date,
   columnName: string,
   userQuery: string,
 ) => {
-  "use server";
-
-  const { object: config } = await generateObject({
-    model: VISUALIZATION_MODEL,
+  const { output: config } = await generateText({
+    model: resolveGatewayModel(VISUALIZATION_MODEL),
     system:
       "You are a data visualization expert specializing in KPI cards and metrics.",
     prompt: `Given a single value from a SQL query result, generate a card configuration that best presents this value to answer the user's query.
@@ -28,7 +27,9 @@ export const generateCardConfig = async (
       ${userQuery}
 
       Generate a card configuration that helps the user understand this value in the context of their query.`,
-    schema: cardConfigSchema,
+    output: Output.object({
+      schema: cardConfigSchema,
+    }),
   });
 
   return { config };

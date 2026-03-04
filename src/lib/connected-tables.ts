@@ -1,5 +1,3 @@
-import { apiFetch } from "@/lib/api/client";
-
 export const CONNECTED_TABLES_STORAGE_KEY = "connectedTables";
 
 export const CONNECTED_TABLES_UPDATED_EVENT = "connectedTablesUpdated";
@@ -101,41 +99,9 @@ export function writeConnectedTablesToStorage(tables: ConnectedTable[]) {
 }
 
 export async function updateSemanticLayerSources(
-  entry: ConnectedTable,
+  _entry: ConnectedTable,
 ): Promise<void> {
-  if (!isClient) {
-    return;
-  }
-
-  try {
-    const response = await apiFetch("/api/semantic-layer/sources", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        table: entry.table,
-        schema: entry.schema,
-        tables: entry.tables,
-        type: entry.type,
-        databasePath: entry.databasePath,
-        databaseName: entry.databaseName,
-        attachAs: entry.attachAs,
-        readOnly: entry.readOnly,
-        duckdbExtension: entry.duckdbExtension,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error(
-        "[Semantic Layer] Failed to update sources:",
-        errorData.error || response.statusText,
-      );
-    }
-  } catch (error) {
-    console.error("[Semantic Layer] Failed to update sources:", error);
-  }
+  // Semantic layer sync is deferred in browser mode.
 }
 
 export async function appendConnectedTable(
@@ -145,51 +111,10 @@ export async function appendConnectedTable(
     return;
   }
 
-  // Update semantic layer sources.yml and retrieve a connectionId from the server
-  let connectionId: string | undefined;
-  try {
-    const response = await apiFetch("/api/semantic-layer/sources", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        table: entry.table,
-        schema: entry.schema,
-        tables: entry.tables,
-        type: entry.type,
-        databasePath: entry.databasePath,
-        databaseName: entry.databaseName,
-        attachAs: entry.attachAs,
-        readOnly: entry.readOnly,
-        duckdbExtension: entry.duckdbExtension,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error(
-        "[Semantic Layer] Failed to update sources:",
-        errorData.error || response.statusText,
-      );
-    } else {
-      const result = await response.json();
-      connectionId = result.connectionId;
-      if (result.success && result.addedSources > 0) {
-        console.log(
-          `[Semantic Layer] Added ${result.addedSources} source(s) to sources.yml`,
-        );
-      }
-    }
-  } catch (error) {
-    // Don't fail the connection if semantic layer update fails
-    console.error("[Semantic Layer] Error updating sources:", error);
-  }
-
-  // Store in localStorage with connectionId and WITHOUT raw credentials
+  // Store in localStorage (semantic-layer sync is deferred in browser mode)
   const storageEntry: ConnectedTable = {
     type: entry.type,
-    connectionId: connectionId ?? entry.connectionId,
+    connectionId: entry.connectionId,
     databaseName: entry.databaseName,
     table: entry.table,
     schema: entry.schema,
@@ -198,7 +123,7 @@ export async function appendConnectedTable(
     attachAs: entry.attachAs,
     readOnly: entry.readOnly,
     duckdbExtension: entry.duckdbExtension,
-    // Intentionally omit databasePath – credentials stay server-side only
+    databasePath: entry.databasePath,
   };
 
   const existing = readConnectedTablesFromStorage();

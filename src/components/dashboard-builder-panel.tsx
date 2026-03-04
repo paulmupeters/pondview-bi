@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ArtifactData } from "@/hooks/types";
 import { useArtifacts } from "@/hooks/use-artifacts";
 import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
+import { addChartToDashboard, createDashboard } from "@/lib/workspace/dashboard-repo";
 
 type DashboardBuilderPanelProps = {
   open: boolean;
@@ -269,20 +270,7 @@ export function DashboardBuilderPanel({
     setError(null);
 
     try {
-      const createDashboardResponse = await fetch("/api/dashboards", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: trimmedTitle }),
-      });
-
-      if (!createDashboardResponse.ok) {
-        const text = await createDashboardResponse.text();
-        throw new Error(text || "Failed to create dashboard");
-      }
-
-      const { id: dashboardId } = (await createDashboardResponse.json()) as {
-        id: string;
-      };
+      const { id: dashboardId } = await createDashboard(trimmedTitle);
 
       for (const snapshot of selectedCharts) {
         const { payload, type } = snapshot;
@@ -304,22 +292,14 @@ export function DashboardBuilderPanel({
 
         const description = config?.description ?? null;
 
-        const response = await fetch(`/api/dashboard/${dashboardId}/charts`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title,
-            description,
-            sql: payload.query ?? "",
-            dbIdentifier: payload.dbIdentifier ?? "md:my_db",
-            chartConfigJson: JSON.stringify(config ?? {}),
-          }),
+        await addChartToDashboard({
+          dashboardId,
+          title,
+          description,
+          sql: payload.query ?? "",
+          dbIdentifier: payload.dbIdentifier ?? "md:my_db",
+          chartConfigJson: JSON.stringify(config ?? {}),
         });
-
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(text || `Failed to add ${type} to dashboard`);
-        }
       }
 
       onOpenChange(false);
