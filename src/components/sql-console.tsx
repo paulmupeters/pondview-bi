@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
+import { cancelBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import { runQuery } from "@/lib/sql/run-query";
 import { cn } from "@/lib/utils";
 import { SqlCodeEditor, type SqlCodeEditorApi } from "./sql-code-editor";
@@ -27,8 +28,8 @@ export type ExecuteQueryFn = (params: {
 }>;
 
 /**
- * Creates an ExecuteQueryFn that fetches from /api/duckdb/query.
- * Supports both dbIdentifier (for local/MotherDuck) and config (for HTTP DuckDB).
+ * Creates an ExecuteQueryFn backed by the Pondview bridge.
+ * Keeps config/dbIdentifier options for compatibility with existing callers.
  */
 export function createDuckDbExecuteQuery(options: {
   dbIdentifier?: string;
@@ -235,6 +236,9 @@ export function SqlConsole({
     if (abortRef.current) {
       abortRef.current.abort();
     }
+    void cancelBridgeQuery().catch(() => {
+      // Best effort cancel; local abort already stops the UI request.
+    });
   };
 
   const runQueryRef = useRef<() => void>(() => { });

@@ -2,13 +2,13 @@ import { LayoutDashboard, Plus, Trash2 } from "lucide-react";
 import Link from '@/vite/next-link';
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { apiFetch } from "@/lib/api/client";
 import {
   Card,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { createDashboard, deleteDashboard, listDashboards } from "@/lib/workspace/dashboard-repo";
 
 type DashboardLite = { id: string; title: string | null; updatedAt: number };
 
@@ -35,11 +35,8 @@ export default function DashboardsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch("/api/dashboards", { cache: "no-store" });
-      if (res.ok) {
-        const data = (await res.json()) as { dashboards: DashboardLite[] };
-        setDashboards(data.dashboards ?? []);
-      }
+      const dashboardsList = await listDashboards();
+      setDashboards(dashboardsList);
     } finally {
       setLoading(false);
     }
@@ -54,12 +51,8 @@ export default function DashboardsPage() {
     try {
       const title = prompt("New dashboard title")?.trim();
       if (!title) return;
-      const res = await apiFetch("/api/dashboards", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
-      if (res.ok) await load();
+      await createDashboard(title);
+      await load();
     } finally {
       setCreating(false);
     }
@@ -79,13 +72,7 @@ export default function DashboardsPage() {
     try {
       // Optimistically remove from UI
       setDashboards((prev) => prev.filter((d) => d.id !== dashboardId));
-      const res = await apiFetch(`/api/dashboards/${dashboardId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        // Reload list on failure to restore
-        await load();
-      }
+      await deleteDashboard(dashboardId);
     } catch {
       // Reload list on error to restore
       await load();

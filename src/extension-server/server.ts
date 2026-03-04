@@ -1,15 +1,24 @@
 /* biome-ignore-all lint/suspicious/noExplicitAny: extension adapter uses intentional boundary casts */
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createReadStream, existsSync, statSync } from "node:fs";
-import { promises as fs } from "node:fs";
+
+import {
+  createReadStream,
+  existsSync,
+  promises as fs,
+  statSync,
+} from "node:fs";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { extname, join, normalize } from "node:path";
 import { Readable } from "node:stream";
 import * as chartRoute from "../app/api/charts/[chartId]/route";
 import * as chartSlicersRoute from "../app/api/charts/[chartId]/slicers/route";
-import * as chatRoute from "../app/api/chat/[chatId]/route";
-import * as chatMessageRoute from "../app/api/chat/[chatId]/message/route";
 import * as chatMessageArtifactRoute from "../app/api/chat/[chatId]/message/[messageId]/artifact/route";
 import * as chatMessageDeleteRoute from "../app/api/chat/[chatId]/message/[messageId]/route";
+import * as chatMessageRoute from "../app/api/chat/[chatId]/message/route";
+import * as chatRoute from "../app/api/chat/[chatId]/route";
 import * as legacyChatRoute from "../app/api/chat/route";
 import * as chatsRoute from "../app/api/chats/route";
 import * as dashboardChartsRoute from "../app/api/dashboard/[dashboardId]/charts/route";
@@ -17,8 +26,8 @@ import * as dashboardDataRoute from "../app/api/dashboard/[dashboardId]/data/rou
 import * as dashboardDimensionValuesRoute from "../app/api/dashboard/[dashboardId]/dimension-values/route";
 import * as dashboardDimensionsRoute from "../app/api/dashboard/[dashboardId]/dimensions/route";
 import * as dashboardSlicersRoute from "../app/api/dashboard/[dashboardId]/slicers/route";
-import * as dashboardsRoute from "../app/api/dashboards/route";
 import * as dashboardsIdRoute from "../app/api/dashboards/[dashboardId]/route";
+import * as dashboardsRoute from "../app/api/dashboards/route";
 import * as duckdbConfigRoute from "../app/api/duckdb/config/route";
 import * as duckdbQueryRoute from "../app/api/duckdb/query/route";
 import * as duckdbSecretsRoute from "../app/api/duckdb/secrets/route";
@@ -26,8 +35,8 @@ import * as duckdbTablesRoute from "../app/api/duckdb/tables/route";
 import * as materializedTablesRoute from "../app/api/semantic-layer/materialized-tables/route";
 import * as semanticSourcesRoute from "../app/api/semantic-layer/sources/route";
 import * as tablesRoute from "../app/api/tables/route";
-import * as uploadRoute from "../app/api/upload/route";
 import * as uploadFileRoute from "../app/api/upload/[fileId]/route";
+import * as uploadRoute from "../app/api/upload/route";
 
 const PORT = Number(process.env.EXTENSION_SERVER_PORT || 4318);
 const STATIC_ROOT = process.env.STATIC_OUT_DIR || join(process.cwd(), "dist");
@@ -62,59 +71,78 @@ const routes: Route[] = [
     method: "GET",
     pattern: /^\/api\/chat\/([^/]+)$/,
     handler: (request, params) =>
-      chatRoute.GET(request as any, {
-        params: Promise.resolve({ chatId: params.chatId }),
-      } as any),
+      chatRoute.GET(
+        request as any,
+        {
+          params: Promise.resolve({ chatId: params.chatId }),
+        } as any,
+      ),
   },
   {
     method: "POST",
     pattern: /^\/api\/chat\/([^/]+)$/,
     handler: (request, params) =>
-      chatRoute.POST(request as any, {
-        params: Promise.resolve({ chatId: params.chatId }),
-      } as any),
+      chatRoute.POST(
+        request as any,
+        {
+          params: Promise.resolve({ chatId: params.chatId }),
+        } as any,
+      ),
   },
   {
     method: "DELETE",
     pattern: /^\/api\/chat\/([^/]+)$/,
     handler: (request, params) =>
-      chatRoute.DELETE(request as any, {
-        params: Promise.resolve({ chatId: params.chatId }),
-      } as any),
+      chatRoute.DELETE(
+        request as any,
+        {
+          params: Promise.resolve({ chatId: params.chatId }),
+        } as any,
+      ),
   },
   {
     method: "POST",
     pattern: /^\/api\/chat\/([^/]+)\/message$/,
     handler: (request, params) =>
-      chatMessageRoute.POST(request as any, {
-        params: Promise.resolve({ chatId: params.chatId }),
-      } as any),
+      chatMessageRoute.POST(
+        request as any,
+        {
+          params: Promise.resolve({ chatId: params.chatId }),
+        } as any,
+      ),
   },
   {
     method: "DELETE",
     pattern: /^\/api\/chat\/([^/]+)\/message\/([^/]+)$/,
     handler: (request, params) =>
-      chatMessageDeleteRoute.DELETE(request as any, {
-        params: Promise.resolve({
-          chatId: params.chatId,
-          messageId: params.messageId,
-        }),
-      } as any),
+      chatMessageDeleteRoute.DELETE(
+        request as any,
+        {
+          params: Promise.resolve({
+            chatId: params.chatId,
+            messageId: params.messageId,
+          }),
+        } as any,
+      ),
   },
   {
     method: "PUT",
     pattern: /^\/api\/chat\/([^/]+)\/message\/([^/]+)\/artifact$/,
     handler: (request, params) =>
-      chatMessageArtifactRoute.PUT(request as any, {
-        params: Promise.resolve({
-          chatId: params.chatId,
-          messageId: params.messageId,
-        }),
-      } as any),
+      chatMessageArtifactRoute.PUT(
+        request as any,
+        {
+          params: Promise.resolve({
+            chatId: params.chatId,
+            messageId: params.messageId,
+          }),
+        } as any,
+      ),
   },
   {
     method: "POST",
     pattern: /^\/api\/chat$/,
+    // Deprecated compatibility endpoint (primary chat flow is now client-side transport).
     handler: (request) => legacyChatRoute.POST(request as any),
   },
   {
@@ -131,145 +159,199 @@ const routes: Route[] = [
     method: "DELETE",
     pattern: /^\/api\/dashboards\/([^/]+)$/,
     handler: (request, params) =>
-      dashboardsIdRoute.DELETE(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardsIdRoute.DELETE(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "PATCH",
     pattern: /^\/api\/dashboards\/([^/]+)$/,
     handler: (request, params) =>
-      dashboardsIdRoute.PATCH(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardsIdRoute.PATCH(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "GET",
     pattern: /^\/api\/dashboard\/([^/]+)\/charts$/,
     handler: (request, params) =>
-      dashboardChartsRoute.GET(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardChartsRoute.GET(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "POST",
     pattern: /^\/api\/dashboard\/([^/]+)\/charts$/,
     handler: (request, params) =>
-      dashboardChartsRoute.POST(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardChartsRoute.POST(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "PATCH",
     pattern: /^\/api\/dashboard\/([^/]+)\/charts$/,
     handler: (request, params) =>
-      dashboardChartsRoute.PATCH(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardChartsRoute.PATCH(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "DELETE",
     pattern: /^\/api\/dashboard\/([^/]+)\/charts$/,
     handler: (request, params) =>
-      dashboardChartsRoute.DELETE(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardChartsRoute.DELETE(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "PUT",
     pattern: /^\/api\/charts\/([^/]+)$/,
     handler: (request, params) =>
-      chartRoute.PUT(request as any, {
-        params: Promise.resolve({ chartId: params.chartId }),
-      } as any),
+      chartRoute.PUT(
+        request as any,
+        {
+          params: Promise.resolve({ chartId: params.chartId }),
+        } as any,
+      ),
   },
   {
     method: "GET",
     pattern: /^\/api\/dashboard\/([^/]+)\/slicers$/,
     handler: (request, params) =>
-      dashboardSlicersRoute.GET(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardSlicersRoute.GET(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "POST",
     pattern: /^\/api\/dashboard\/([^/]+)\/slicers$/,
     handler: (request, params) =>
-      dashboardSlicersRoute.POST(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardSlicersRoute.POST(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "PATCH",
     pattern: /^\/api\/dashboard\/([^/]+)\/slicers$/,
     handler: (request, params) =>
-      dashboardSlicersRoute.PATCH(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardSlicersRoute.PATCH(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "DELETE",
     pattern: /^\/api\/dashboard\/([^/]+)\/slicers$/,
     handler: (request, params) =>
-      dashboardSlicersRoute.DELETE(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardSlicersRoute.DELETE(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "GET",
     pattern: /^\/api\/charts\/([^/]+)\/slicers$/,
     handler: (request, params) =>
-      chartSlicersRoute.GET(request as any, {
-        params: Promise.resolve({ chartId: params.chartId }),
-      } as any),
+      chartSlicersRoute.GET(
+        request as any,
+        {
+          params: Promise.resolve({ chartId: params.chartId }),
+        } as any,
+      ),
   },
   {
     method: "POST",
     pattern: /^\/api\/charts\/([^/]+)\/slicers$/,
     handler: (request, params) =>
-      chartSlicersRoute.POST(request as any, {
-        params: Promise.resolve({ chartId: params.chartId }),
-      } as any),
+      chartSlicersRoute.POST(
+        request as any,
+        {
+          params: Promise.resolve({ chartId: params.chartId }),
+        } as any,
+      ),
   },
   {
     method: "PATCH",
     pattern: /^\/api\/charts\/([^/]+)\/slicers$/,
     handler: (request, params) =>
-      chartSlicersRoute.PATCH(request as any, {
-        params: Promise.resolve({ chartId: params.chartId }),
-      } as any),
+      chartSlicersRoute.PATCH(
+        request as any,
+        {
+          params: Promise.resolve({ chartId: params.chartId }),
+        } as any,
+      ),
   },
   {
     method: "DELETE",
     pattern: /^\/api\/charts\/([^/]+)\/slicers$/,
     handler: (request, params) =>
-      chartSlicersRoute.DELETE(request as any, {
-        params: Promise.resolve({ chartId: params.chartId }),
-      } as any),
+      chartSlicersRoute.DELETE(
+        request as any,
+        {
+          params: Promise.resolve({ chartId: params.chartId }),
+        } as any,
+      ),
   },
   {
     method: "GET",
     pattern: /^\/api\/dashboard\/([^/]+)\/data$/,
     handler: (request, params) =>
-      dashboardDataRoute.GET(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardDataRoute.GET(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "GET",
     pattern: /^\/api\/dashboard\/([^/]+)\/dimensions$/,
     handler: (request, params) =>
-      dashboardDimensionsRoute.GET(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardDimensionsRoute.GET(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "GET",
     pattern: /^\/api\/dashboard\/([^/]+)\/dimension-values$/,
     handler: (request, params) =>
-      dashboardDimensionValuesRoute.GET(request as any, {
-        params: Promise.resolve({ dashboardId: params.dashboardId }),
-      } as any),
+      dashboardDimensionValuesRoute.GET(
+        request as any,
+        {
+          params: Promise.resolve({ dashboardId: params.dashboardId }),
+        } as any,
+      ),
   },
   {
     method: "GET",
@@ -315,9 +397,12 @@ const routes: Route[] = [
     method: "GET",
     pattern: /^\/api\/upload\/([^/]+)$/,
     handler: (request, params) =>
-      uploadFileRoute.GET(request as any, {
-        params: Promise.resolve({ fileId: params.fileId }),
-      } as any),
+      uploadFileRoute.GET(
+        request as any,
+        {
+          params: Promise.resolve({ fileId: params.fileId }),
+        } as any,
+      ),
   },
 ];
 

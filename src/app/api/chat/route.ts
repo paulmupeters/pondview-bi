@@ -9,13 +9,15 @@ import {
 import { setContext } from "@/ai/context";
 import { LEGACY_CHAT_MODEL } from "@/ai/models";
 import { analysisPrompt } from "@/ai/prompts";
-import { tools } from "@/ai/tools";
+import { tools } from "@/ai/tools/server";
 import type { ConnectedTable } from "@/lib/connected-tables";
 
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
 
-// This route is kept for backward compatibility. The new per-chat route is at `app/api/chat/[chatId]/route.ts`.
+// Deprecated compatibility route:
+// Primary UI chat flow now uses client-side DirectChatTransport.
+// Keep this endpoint for legacy callers and transition period support.
 export async function POST(req: Request) {
   const body = await req.json();
   const { messages }: { messages: UIMessage[] } = body;
@@ -27,7 +29,7 @@ export async function POST(req: Request) {
   };
 
   const stream = createUIMessageStream({
-    execute: ({ writer }) => {
+    execute: async ({ writer }) => {
       // Set up typed context with user information
       setContext({
         writer,
@@ -43,7 +45,7 @@ export async function POST(req: Request) {
             connectedTables.map(({ databasePath, ...rest }) => rest),
           ),
         ),
-        messages: convertToModelMessages(messages),
+        messages: await convertToModelMessages(messages),
         tools,
         stopWhen: stepCountIs(5),
       });

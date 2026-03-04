@@ -1,5 +1,4 @@
 import { Settings } from "lucide-react";
-import { DashboardFilterPane } from "@/components/dashboard-filter-pane";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -94,8 +93,8 @@ export function DashboardSettingsDialog({
           </div>
           <div className="flex flex-col gap-2">
             <h3 className="text-sm font-medium">Filters</h3>
-            <div className="rounded-md border p-4">
-              <DashboardFilterPane />
+            <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+              Dashboard filter discovery is deferred in browser mode.
             </div>
           </div>
         </div>

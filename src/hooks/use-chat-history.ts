@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api/client";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
+import { listRecentChats } from "@/lib/workspace/chat-repo";
 
 type LoadChatsOptions = {
   showLoading?: boolean;
@@ -22,13 +22,9 @@ export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
       }
 
       try {
-        const res = await apiFetch("/api/chats", { cache: "no-store" });
-        if (res.ok) {
-          const data = (await res.json()) as { chats: ChatHistoryEntry[] };
-          const chatList = data.chats ?? [];
-          setChats(chatList);
-          return chatList;
-        }
+        const chatList = await listRecentChats();
+        setChats(chatList);
+        return chatList;
       } catch (error) {
         console.error("Failed to load chats:", error);
       } finally {

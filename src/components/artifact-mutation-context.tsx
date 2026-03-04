@@ -3,6 +3,7 @@ import type { UIMessage } from "ai";
 import type { CardConfig, Config } from "@/lib/types";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { ArtifactStatus } from "@/hooks/types";
+import { getMessageById, updateMessageParts } from "@/lib/workspace/chat-repo";
 
 interface ArtifactMutationContextValue {
   updateArtifactConfig: (
@@ -99,30 +100,42 @@ export function ArtifactMutationProvider({
         }),
       );
 
-      // Persist to database
+      // Persist to browser workspace
       try {
-        await fetch(`/api/chat/${chatId}/message/${message.id}/artifact`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            artifactId,
-            payload: updatedPayload,
-          }),
+        const storedMessage = await getMessageById(message.id);
+        if (!storedMessage) {
+          return;
+        }
+
+        let parts: unknown[] = [];
+        if (storedMessage.parts) {
+          try {
+            parts = JSON.parse(storedMessage.parts);
+          } catch {
+            parts = [];
+          }
+        }
+
+        const updatedParts = parts.map((part) => {
+          const typedPart = part as {
+            type?: string;
+            data?: { id?: string; payload?: unknown };
+          };
+          if (typedPart.data?.id === artifactId) {
+            return {
+              ...typedPart,
+              data: {
+                ...typedPart.data,
+                payload: updatedPayload,
+              },
+            };
+          }
+          return part;
         });
+
+        await updateMessageParts(chatId, message.id, JSON.stringify(updatedParts));
       } catch (error) {
         console.error("Failed to update artifact config:", error);
-        // Reload messages from server on error
-        try {
-          const res = await fetch(`/api/chat/${chatId}`);
-          if (res.ok) {
-            const data = (await res.json()) as { messages?: UIMessage[] };
-            if (data.messages) {
-              setMessages(() => data.messages!);
-            }
-          }
-        } catch (reloadError) {
-          console.error("Failed to reload messages:", reloadError);
-        }
       }
     },
     [chatId, executeSqlArtifactType, messages, setMessages],

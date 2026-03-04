@@ -67,6 +67,7 @@ function FileAttachmentHoverCard() {
     new Set(),
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const deferredUploadsMessage = "File uploads are deferred in browser mode.";
   // Filter uploaded files based on search query
   const filteredFiles = uploadedFiles.filter((file) =>
     file.originalName.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -74,85 +75,19 @@ function FileAttachmentHoverCard() {
 
   // Handle adding an uploaded file as attachment
   const handleAddUploadedFile = async (file: (typeof uploadedFiles)[0]) => {
-    try {
-      // Fetch the file from the server
-      const response = await fetch(`/api/upload/${file.fileId}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch file");
-      }
-
-      const blob = await response.blob();
-      const fileObj = new File([blob], file.originalName, { type: file.type });
-
-      // Add to attachments
-      attachments.add([fileObj]);
-      setSelectedFileIds((prev) => new Set([...prev, file.fileId]));
-    } catch (error) {
-      console.error("Failed to add file:", error);
-    }
+    console.info(deferredUploadsMessage, file.fileId);
+    setSelectedFileIds((prev) => new Set(prev).add(file.fileId));
+    alert(deferredUploadsMessage);
   };
 
   // Handle uploading a new file
   const handleUploadNewFile = async (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    const validExtensions = [".csv", ".xlsx", ".xls", ".parquet"];
-    const fileExtension = file.name
-      .toLowerCase()
-      .substring(file.name.lastIndexOf("."));
-    if (!validExtensions.includes(fileExtension)) {
-      alert("Invalid file type. Please upload a CSV, XLSX, or Parquet file.");
-      return;
-    }
-
-    // Validate file size (max 50MB)
-    const maxSize = 50 * 1024 * 1024;
-    if (file.size > maxSize) {
-      alert("File size exceeds 50MB. Please choose a smaller file.");
-      return;
-    }
-
-    try {
-      const uploadFormData = new FormData();
-      uploadFormData.append("file", file);
-
-      const uploadResponse = await fetch("/api/upload", {
-        method: "POST",
-        body: uploadFormData,
-      });
-
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json();
-        throw new Error(errorData.error || "Failed to upload file");
-      }
-
-      const uploadData = await uploadResponse.json();
-
-      // Import and save to localStorage
-      const { appendUploadedFile } = await import("@/lib/uploaded-files");
-      appendUploadedFile({
-        fileId: uploadData.fileId,
-        fileName: uploadData.fileName,
-        originalName: file.name,
-        filePath: uploadData.filePath,
-        size: file.size,
-        type: file.type || "application/octet-stream",
-        uploadedAt: new Date().toISOString(),
-      });
-
-      // Also add as attachment
-      attachments.add([file]);
-    } catch (error) {
-      console.error("File upload error:", error);
-      alert(error instanceof Error ? error.message : "Failed to upload file");
-    } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+    e.preventDefault();
+    alert(deferredUploadsMessage);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -162,7 +97,7 @@ function FileAttachmentHoverCard() {
         <PromptInputButton
           size="icon-sm"
           variant="outline"
-          className="!h-8 group dark:hover:bg-accent"
+          className="h-8! group dark:hover:bg-accent"
         >
           <PaperClipIcon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
         </PromptInputButton>
@@ -271,10 +206,9 @@ export function PromptInputWrapper({
   onSelectDb,
   onInsertTable,
 }: PromptInputWrapperProps) {
-  const [internalMode, setInternalMode] = useState<PromptMode>(mode ?? "ai");
-
-  const promptMode = mode ?? internalMode;
-  const isAiMode = promptMode === "ai";
+  const [internalMode, setInternalMode] = useState<PromptMode>(
+    mode ?? "manual",
+  );
 
   useEffect(() => {
     if (mode) {
@@ -283,7 +217,7 @@ export function PromptInputWrapper({
   }, [mode]);
 
   const handlePromptModeChange = (value: PromptMode) => {
-    if (!value || value === promptMode) {
+    if (!value || value === internalMode) {
       return;
     }
     if (!mode) {
@@ -297,7 +231,7 @@ export function PromptInputWrapper({
   const aiButtonLabel = useMemo(() => {
     if (
       pendingMode === "ai" &&
-      (!status || status === ("idle" as ChatStatus))
+      (!status || status === ("ready" as ChatStatus))
     ) {
       return "[SENDING …]";
     }
@@ -314,6 +248,9 @@ export function PromptInputWrapper({
   }, [pendingMode, status]);
 
   const content = aiButtonLabel;
+  const nextMode: PromptMode = internalMode === "ai" ? "manual" : "ai";
+  const modeButtonLabel =
+    nextMode === "ai" ? "Switch to AI" : "Switch to Manual";
 
   if (!showHeader && !showAiInput) {
     return null;
@@ -342,10 +279,12 @@ export function PromptInputWrapper({
                       compact ? "min-h-10 pb-10" : "min-h-28 pb-12",
                     )}
                   />
-                  <div className={cn(
-                    "absolute right-3",
-                    compact ? "bottom-2" : "bottom-3",
-                  )}>
+                  <div
+                    className={cn(
+                      "absolute right-3",
+                      compact ? "bottom-2" : "bottom-3",
+                    )}
+                  >
                     <Button
                       size="sm"
                       variant="outline"
@@ -362,13 +301,15 @@ export function PromptInputWrapper({
           </PromptInputBody>
         )}
         {showHeader && (
-          <PromptInputHeader className={cn(
-            "p-0 overflow-hidden",
-            compact ? "border-t-0" : "border-t border-border/20",
-          )}>
+          <PromptInputHeader
+            className={cn(
+              "p-0 overflow-hidden",
+              compact ? "border-t-0" : "border-t border-border/20",
+            )}
+          >
             <div className="flex items-center gap-1.5 justify-between w-full">
               <div className="flex items-center gap-1.5">
-                {onHomePage && promptMode === "ai" && (
+                {onHomePage && (
                   <ConnectedDataPanel
                     selectedDb={selectedDb}
                     onSelect={(db) => onSelectDb?.(db)}
@@ -399,20 +340,22 @@ export function PromptInputWrapper({
               <Button
                 type="button"
                 size="sm"
-                variant={!isAiMode ? "default" : "outline"}
+                variant="default"
                 className={cn(
                   "gap-1.5",
-                  !isAiMode &&
-                    "bg-primary text-primary-foreground hover:bg-primary/90 border-primary",
+                  "bg-primary text-primary-foreground hover:bg-primary/90 border-primary",
                 )}
-                onClick={() =>
-                  handlePromptModeChange(isAiMode ? "manual" : "ai")
-                }
+                onClick={() => handlePromptModeChange(nextMode)}
                 disabled={Boolean(pendingMode)}
-                aria-pressed={!isAiMode}
+                aria-pressed
+                title={modeButtonLabel}
               >
-                <WrenchScrewdriverIcon className="h-4 w-4" />
-                <span>Manual</span>
+                {nextMode === "ai" ? (
+                  <GlobeEuropeAfricaIcon className="h-4 w-4" />
+                ) : (
+                  <WrenchScrewdriverIcon className="h-4 w-4" />
+                )}
+                <span>{modeButtonLabel}</span>
               </Button>
             </div>
           </PromptInputHeader>
