@@ -96,14 +96,6 @@ export default function SettingsPage() {
   }, [cssCode, selectedTheme]);
 
   const fetchSecrets = useCallback(async () => {
-    if (!hasSessionSecret()) {
-      setSecrets([]);
-      setSecretsError(
-        "Set your Pondview session secret first to query DuckDB secrets.",
-      );
-      return;
-    }
-
     setIsSecretsLoading(true);
     setSecretsError(null);
     try {
@@ -315,7 +307,9 @@ export default function SettingsPage() {
               <div>
                 <h2 className="text-xl font-semibold mb-2">Bridge Authentication</h2>
                 <p className="text-sm text-muted-foreground">
-                  Session-only Pondview secret for authenticated bridge queries.
+                  Optional session-only Pondview secret for authenticated bridge
+                  queries. Leave empty when Pondview is started with an empty
+                  secret (no-auth mode).
                 </p>
               </div>
               <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
