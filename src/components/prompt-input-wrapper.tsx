@@ -276,7 +276,7 @@ export function PromptInputWrapper({
                     placeholder={placeholder}
                     className={cn(
                       "flex-1 pr-4",
-                      compact ? "min-h-10 pb-10" : "min-h-28 pb-12",
+                      compact ? "min-h-10 pb-10" : "min-h-28 pb-10",
                     )}
                   />
                   <div
@@ -304,10 +304,9 @@ export function PromptInputWrapper({
           <PromptInputHeader
             className={cn(
               "p-0 overflow-hidden",
-              compact ? "border-t-0" : "border-t border-border/20",
             )}
           >
-            <div className="flex items-center gap-1.5 justify-between w-full">
+            <div className="flex items-center gap-1.5 justify-between w-full m-3">
               <div className="flex items-center gap-1.5">
                 {onHomePage && (
                   <ConnectedDataPanel

@@ -43,6 +43,11 @@ export async function listRecentChats(limit = 12): Promise<ChatHistoryEntry[]> {
     }));
 }
 
+export async function getChatTitleById(chatId: string): Promise<string | null> {
+  const chat = await getByKey<WorkspaceChat>(STORE_CHATS, chatId);
+  return chat?.title ?? null;
+}
+
 export async function listMessagesByChatId(chatId: string): Promise<DbMessageRow[]> {
   const messages = await getAllFromStore<WorkspaceMessage>(STORE_MESSAGES);
   return sortMessagesByCreatedAt(messages.filter((message) => message.chatId === chatId)).map(
