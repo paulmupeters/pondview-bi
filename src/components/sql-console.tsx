@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
-import { cancelBridgeQuery } from "@/lib/bridge/pondview-bridge";
+import {
+  cancelBridgeQuery,
+  hasSessionSecret,
+} from "@/lib/bridge/pondview-bridge";
 import { runQuery } from "@/lib/sql/run-query";
 import { cn } from "@/lib/utils";
 import { SqlCodeEditor, type SqlCodeEditorApi } from "./sql-code-editor";
@@ -27,11 +30,7 @@ export type ExecuteQueryFn = (params: {
   columns?: { name: string; type?: string }[];
 }>;
 
-/**
- * Creates an ExecuteQueryFn backed by the Pondview bridge.
- * Keeps config/dbIdentifier options for compatibility with existing callers.
- */
-export function createDuckDbExecuteQuery(options: {
+export function createSqlExecuteQuery(options: {
   dbIdentifier?: string;
   config?: HttpDuckDbConfig;
 }): ExecuteQueryFn {
@@ -46,6 +45,9 @@ export function createDuckDbExecuteQuery(options: {
     return { rows, columns };
   };
 }
+
+// Backward-compatible alias for existing callers.
+export const createDuckDbExecuteQuery = createSqlExecuteQuery;
 
 export type SqlConsoleApi = {
   /**
@@ -192,7 +194,6 @@ export function SqlConsole({
     setResults(null);
 
     const currentSql = sql.trim();
-    console.log("sql", currentSql)
     if (!currentSql) return;
     addToHistory(currentSql);
 
@@ -236,9 +237,11 @@ export function SqlConsole({
     if (abortRef.current) {
       abortRef.current.abort();
     }
-    void cancelBridgeQuery().catch(() => {
-      // Best effort cancel; local abort already stops the UI request.
-    });
+    if (hasSessionSecret()) {
+      void cancelBridgeQuery().catch(() => {
+        // Best effort cancel; local abort already stops the UI request.
+      });
+    }
   };
 
   const runQueryRef = useRef<() => void>(() => { });

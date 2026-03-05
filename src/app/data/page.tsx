@@ -10,6 +10,7 @@ import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { removeConnectedTable } from "@/lib/connected-tables";
+import { resolveSqlBackend } from "@/lib/sql/sql-runtime";
 import { formatFileSize, removeUploadedFile } from "@/lib/uploaded-files";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -31,6 +32,7 @@ export default function ViewDataPage() {
   const isDarkMode = theme === "dark";
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [isShellDialogOpen, setIsShellDialogOpen] = useState(false);
+  const effectiveSqlBackend = resolveSqlBackend({ backendPreference: "auto" });
 
   const tablesBySchema = useMemo(() => {
     const grouped = new Map<string, { name: string; type: string }[]>();
@@ -116,8 +118,19 @@ export default function ViewDataPage() {
       <Separator />
 
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-foreground">DuckDB Bridge Metadata</h2>
-        {isDuckdbHttpConfigured ? (
+        <h2 className="text-base font-semibold text-foreground">Duckdb connection</h2>
+        {effectiveSqlBackend === "duckdb-wasm" ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">DuckDB WASM</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Queries are running against the browser-local DuckDB WASM database.
+              </p>
+            </CardContent>
+          </Card>
+        ) : isDuckdbHttpConfigured ? (
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">
@@ -154,7 +167,7 @@ export default function ViewDataPage() {
         ) : (
           <Card>
             <CardContent className="pt-6 text-sm text-muted-foreground">
-              Bridge metadata is unavailable until `/api/duckdb/config` is configured.
+              Bridge runtime is selected, but bridge metadata is unavailable until `/api/duckdb/config` is configured.
             </CardContent>
           </Card>
         )}

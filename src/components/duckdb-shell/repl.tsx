@@ -14,7 +14,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import { runQuery } from "@/lib/sql/run-query";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -103,7 +102,6 @@ const SQL_SAMPLE_LINES: {
 
 type DuckdbReplProps = {
   className?: string;
-  httpConfig?: HttpDuckDbConfig;
   selectedDbIdentifier?: string;
   onRunSqlAction?: (params: {
     sql: string;
@@ -128,7 +126,6 @@ const HISTORY_KEY = "bi.repl.history";
 
 export function DuckdbRepl({
   className,
-  httpConfig,
   selectedDbIdentifier,
   onRunSqlAction,
   onConsoleApiChangeAction,
@@ -158,7 +155,6 @@ export function DuckdbRepl({
     return runQuery({
       sql,
       dbIdentifier: selectedDbIdentifier,
-      config: httpConfig,
       signal,
     });
   };

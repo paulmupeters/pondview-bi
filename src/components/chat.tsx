@@ -6,6 +6,7 @@ import {
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPondviewAgent } from "@/ai/client/agent";
+import { getSelectedAiProviderDisplayName } from "@/ai/gateway-model";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ArtifactMutationProvider } from "@/components/artifact-mutation-context";
 import { ChatMessageThread } from "@/components/chat/chat-message-thread";
@@ -27,6 +28,7 @@ import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
+import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
@@ -84,9 +86,18 @@ function deriveTitleFromInput(input: string): string | null {
 function toPromptErrorMessage(error: Error): string {
   const message = error.message?.trim() || "Unknown AI chat error.";
   const normalized = message.toLowerCase();
+  const providerName = getSelectedAiProviderDisplayName();
 
-  if (normalized.includes("missing ai gateway api key")) {
-    return "Missing AI Gateway API key. Open Settings and set AI_GATEWAY_API_KEY.";
+  if (normalized.includes("missing ")) {
+    return "Missing AI configuration. Open Settings and configure provider, API key, and model.";
+  }
+
+  if (
+    normalized.includes("header ‘user-agent’ is not allowed") ||
+    normalized.includes("header 'user-agent' is not allowed") ||
+    (normalized.includes("cors") && normalized.includes("user-agent"))
+  ) {
+    return "Browser request blocked by CORS (user-agent header). Refresh and retry; if it persists, update to the latest app build.";
   }
 
   if (
@@ -95,15 +106,15 @@ function toPromptErrorMessage(error: Error): string {
     normalized.includes("load failed") ||
     normalized.includes("network request failed")
   ) {
-    return "Cannot reach AI Gateway from browser. Check network, ad blocker/proxy, and AI_GATEWAY_API_KEY.";
+    return `Cannot reach ${providerName} from browser. Check network, ad blocker/proxy, and provider settings.`;
   }
 
   if (normalized.includes("authentication")) {
-    return "AI Gateway authentication failed. Verify AI_GATEWAY_API_KEY in Settings.";
+    return `${providerName} authentication failed. Verify provider API settings in Settings.`;
   }
 
   if (normalized.includes("gateway request failed")) {
-    return "AI Gateway request failed. Check network access and AI_GATEWAY_API_KEY.";
+    return `${providerName} request failed. Check network access and provider settings.`;
   }
 
   return message;
@@ -366,7 +377,8 @@ export default function Chat({
     const now = Date.now();
     const messageId = `manual-visual-${now}`;
     const artifactId = `manual-artifact-${now}`;
-    const defaultDatabase = connectedTables[0]?.databasePath ?? "md:my_db";
+    const defaultDatabase =
+      connectedTables[0]?.databasePath ?? DEFAULT_WASM_DB_IDENTIFIER;
 
     const defaultPayload: SqlAnalysisData = {
       stage: "complete",

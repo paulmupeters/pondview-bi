@@ -1,38 +1,87 @@
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenResponses } from "@ai-sdk/open-responses";
+import { createXai } from "@ai-sdk/xai";
 import { createGateway, gateway, type LanguageModel } from "ai";
+import { createBrowserGatewayFetch } from "@/ai/browser-gateway-fetch";
+import {
+  getAiProviderDisplayName,
+  getMissingRequiredSetting,
+  loadAiSettingsFromStorage,
+  type AiProvider,
+} from "@/ai/settings";
 
-const AI_GATEWAY_API_KEY_STORAGE_KEY = "AI_GATEWAY_API_KEY";
-
-function getBrowserGatewayApiKey(): string | null {
-  if (typeof window === "undefined") {
-    return null;
+function resolveBrowserModel(provider: AiProvider, modelId: string): LanguageModel {
+  const settings = loadAiSettingsFromStorage();
+  const missingSetting = getMissingRequiredSetting(settings);
+  if (missingSetting) {
+    throw new Error(`Missing ${missingSetting}. Open Settings to configure AI provider.`);
   }
 
-  const key = window.localStorage.getItem(AI_GATEWAY_API_KEY_STORAGE_KEY);
-  const trimmed = key?.trim() ?? "";
-  return trimmed.length > 0 ? trimmed : null;
+  switch (provider) {
+    case "gateway": {
+      const browserGateway = createGateway({
+        apiKey: settings.apiKey,
+        fetch: createBrowserGatewayFetch(),
+      });
+      return browserGateway(modelId);
+    }
+    case "openai": {
+      const provider = createOpenAI({ apiKey: settings.apiKey });
+      return provider(modelId);
+    }
+    case "anthropic": {
+      const provider = createAnthropic({ apiKey: settings.apiKey });
+      return provider(modelId);
+    }
+    case "xai": {
+      const provider = createXai({ apiKey: settings.apiKey });
+      return provider(modelId);
+    }
+    case "open-responses": {
+      const provider = createOpenResponses({
+        apiKey: settings.apiKey,
+        url: settings.openResponsesUrl!,
+        name: settings.openResponsesName!,
+      });
+      return provider(modelId);
+    }
+  }
 }
 
 /**
- * Resolve a gateway model for both browser and server runtimes.
- * - Browser: uses API key from Settings localStorage.
+ * Resolve a language model for both browser and server runtimes.
+ * - Browser: uses provider + credentials from Settings localStorage.
  * - Server: uses default gateway provider (env-driven).
  */
-export function resolveGatewayModel(modelId: string): LanguageModel {
-  const browserApiKey = getBrowserGatewayApiKey();
-  if (browserApiKey) {
-    const browserGateway = createGateway({ apiKey: browserApiKey });
-    return browserGateway(modelId);
+export function resolveGatewayModel(fallbackModelId: string): LanguageModel {
+  if (typeof window === "undefined") {
+    return gateway(fallbackModelId);
   }
 
-  if (typeof window !== "undefined") {
-    throw new Error(
-      "Missing AI Gateway API key. Set AI_GATEWAY_API_KEY in Settings.",
-    );
-  }
+  const settings = loadAiSettingsFromStorage();
+  const modelId = settings.model.trim() || fallbackModelId;
 
-  return gateway(modelId);
+  return resolveBrowserModel(settings.provider, modelId);
 }
 
 export function hasBrowserGatewayApiKey(): boolean {
-  return getBrowserGatewayApiKey() !== null;
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const settings = loadAiSettingsFromStorage();
+    return Boolean(settings.apiKey.trim());
+  } catch {
+    return false;
+  }
+}
+
+export function getSelectedAiProviderDisplayName(): string {
+  if (typeof window === "undefined") {
+    return getAiProviderDisplayName("gateway");
+  }
+
+  return getAiProviderDisplayName(loadAiSettingsFromStorage().provider);
 }
