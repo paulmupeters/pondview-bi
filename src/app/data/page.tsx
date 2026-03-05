@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "@/vite/next-image";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import { DuckdbShellDialog } from "@/components/duckdb-shell";
@@ -10,7 +10,8 @@ import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { removeConnectedTable } from "@/lib/connected-tables";
-import { resolveSqlBackend } from "@/lib/sql/sql-runtime";
+import { refreshBridgeHealth, resolveSqlBackend } from "@/lib/sql/sql-runtime";
+import { useBridgeHealthStatus } from "@/lib/sql/use-sql-backend";
 import { formatFileSize, removeUploadedFile } from "@/lib/uploaded-files";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -32,6 +33,19 @@ export default function ViewDataPage() {
   const isDarkMode = theme === "dark";
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [isShellDialogOpen, setIsShellDialogOpen] = useState(false);
+  const bridgeHealthStatus = useBridgeHealthStatus();
+
+  useEffect(() => {
+    void refreshBridgeHealth();
+    const intervalId = window.setInterval(() => {
+      void refreshBridgeHealth();
+    }, 15000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   const effectiveSqlBackend = resolveSqlBackend({ backendPreference: "auto" });
 
   const tablesBySchema = useMemo(() => {
@@ -167,7 +181,7 @@ export default function ViewDataPage() {
         ) : (
           <Card>
             <CardContent className="pt-6 text-sm text-muted-foreground">
-              Bridge runtime is selected, but bridge metadata is unavailable until `/api/duckdb/config` is configured.
+              Bridge runtime is selected, but bridge metadata is unavailable. Bridge health: {bridgeHealthStatus}.
             </CardContent>
           </Card>
         )}
