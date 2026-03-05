@@ -37,7 +37,20 @@ import {
   resetWorkspace,
   validateWorkspaceImport,
 } from "@/lib/workspace/export-import";
+import {
+  getSqlBackendPreferenceFromStorage,
+  setSqlBackendPreferenceInStorage,
+  type SqlBackend,
+} from "@/lib/sql/sql-runtime";
 import { getAllThemes } from "@/themes";
+import {
+  getAiProviderDisplayName,
+  getApiKeyStorageKeyForProvider,
+  getMissingRequiredSetting,
+  loadAiSettingsFromStorage,
+  saveAiSettingsToStorage,
+  type AiProvider,
+} from "@/ai/settings";
 
 const CSS_PLACEHOLDER = `:root{
   --background: 0 0% 100%;
@@ -55,7 +68,11 @@ const CSS_PLACEHOLDER = `:root{
 const CUSTOM_THEME_VALUE = "custom";
 
 export default function SettingsPage() {
+  const [aiProvider, setAiProvider] = useState<AiProvider>("gateway");
+  const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [openResponsesUrl, setOpenResponsesUrl] = useState("");
+  const [openResponsesName, setOpenResponsesName] = useState("");
   const [cssCode, setCssCode] = useState("");
   const [selectedTheme, setSelectedTheme] =
     useState<string>(CUSTOM_THEME_VALUE);
@@ -63,7 +80,10 @@ export default function SettingsPage() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [bridgeSecret, setBridgeSecret] = useState("");
   const [hasBridgeSecret, setHasBridgeSecret] = useState(false);
+  const [sqlBackendPreference, setSqlBackendPreference] =
+    useState<SqlBackend>("duckdb-wasm");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
   const [secrets, setSecrets] = useState<{ name: string; provider: string }[]>(
     []
   );
@@ -77,15 +97,36 @@ export default function SettingsPage() {
 
   // Load settings from localStorage on mount
   useEffect(() => {
-    const savedApiKey = localStorage.getItem("AI_GATEWAY_API_KEY") || "";
+    const aiSettings = loadAiSettingsFromStorage();
     const savedCss = localStorage.getItem("CUSTOM_CSS") || "";
     const savedTheme = getSelectedTheme();
 
-    setApiKey(savedApiKey);
+    setAiProvider(aiSettings.provider);
+    setModel(aiSettings.model);
+    setApiKey(aiSettings.apiKey);
+    setOpenResponsesUrl(aiSettings.openResponsesUrl ?? "");
+    setOpenResponsesName(aiSettings.openResponsesName ?? "");
     setCssCode(savedCss);
     // Set selected theme, or "custom" if no theme is selected but custom CSS exists
     setSelectedTheme(savedTheme || (savedCss ? CUSTOM_THEME_VALUE : "default"));
-    setHasBridgeSecret(hasSessionSecret());
+    const hasSecret = hasSessionSecret();
+    setHasBridgeSecret(hasSecret);
+
+    const savedBackendPreference = getSqlBackendPreferenceFromStorage();
+    if (savedBackendPreference === "bridge" || savedBackendPreference === "duckdb-wasm") {
+      const resolvedPreference =
+        savedBackendPreference === "bridge" && !hasSecret
+          ? "duckdb-wasm"
+          : savedBackendPreference;
+      setSqlBackendPreference(resolvedPreference);
+      if (resolvedPreference !== savedBackendPreference) {
+        setSqlBackendPreferenceInStorage(resolvedPreference);
+      }
+    } else {
+      const defaultPreference = hasSecret ? "bridge" : "duckdb-wasm";
+      setSqlBackendPreference(defaultPreference);
+      setSqlBackendPreferenceInStorage(defaultPreference);
+    }
   }, []);
 
   // Apply CSS on component mount (only if custom theme is selected)
@@ -95,7 +136,27 @@ export default function SettingsPage() {
     }
   }, [cssCode, selectedTheme]);
 
+  useEffect(() => {
+    if (!hasBridgeSecret && sqlBackendPreference === "bridge") {
+      setSqlBackendPreference("duckdb-wasm");
+      setSqlBackendPreferenceInStorage("duckdb-wasm");
+    }
+  }, [hasBridgeSecret, sqlBackendPreference]);
+
+  const effectiveSqlBackend: SqlBackend =
+    sqlBackendPreference === "bridge" && hasBridgeSecret
+      ? "bridge"
+      : "duckdb-wasm";
+  const isBridgeRuntimeActive = effectiveSqlBackend === "bridge";
+
   const fetchSecrets = useCallback(async () => {
+    if (!isBridgeRuntimeActive) {
+      setSecrets([]);
+      setSecretsError(null);
+      setIsSecretsLoading(false);
+      return;
+    }
+
     setIsSecretsLoading(true);
     setSecretsError(null);
     try {
@@ -115,11 +176,17 @@ export default function SettingsPage() {
     } finally {
       setIsSecretsLoading(false);
     }
-  }, []);
+  }, [isBridgeRuntimeActive]);
 
   useEffect(() => {
-    void fetchSecrets();
-  }, [fetchSecrets]);
+    if (isBridgeRuntimeActive) {
+      void fetchSecrets();
+      return;
+    }
+
+    setSecrets([]);
+    setSecretsError(null);
+  }, [fetchSecrets, isBridgeRuntimeActive]);
 
   const handleSetBridgeSecret = () => {
     setSessionSecret(bridgeSecret);
@@ -132,6 +199,20 @@ export default function SettingsPage() {
   const handleClearBridgeSecret = () => {
     clearSessionSecret();
     setHasBridgeSecret(false);
+    if (sqlBackendPreference === "bridge") {
+      setSqlBackendPreference("duckdb-wasm");
+      setSqlBackendPreferenceInStorage("duckdb-wasm");
+    }
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleSqlBackendChange = (backend: SqlBackend) => {
+    if (backend === "bridge" && !hasBridgeSecret) {
+      return;
+    }
+    setSqlBackendPreference(backend);
+    setSqlBackendPreferenceInStorage(backend);
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
   };
@@ -201,15 +282,39 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveApiKey = async () => {
+  const handleSaveAiSettings = async () => {
+    const settings = {
+      provider: aiProvider,
+      model,
+      apiKey,
+      openResponsesUrl,
+      openResponsesName,
+    };
+    const missingSetting = getMissingRequiredSetting(settings);
+    if (missingSetting) {
+      setAiSettingsError(`Missing ${missingSetting}.`);
+      return;
+    }
+
     setIsSaving(true);
     try {
-      localStorage.setItem("AI_GATEWAY_API_KEY", apiKey);
+      saveAiSettingsToStorage(settings);
+      setAiSettingsError(null);
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleAiProviderChange = (provider: AiProvider) => {
+    const persistedApiKey = localStorage.getItem(
+      getApiKeyStorageKeyForProvider(provider),
+    );
+
+    setAiProvider(provider);
+    setApiKey((persistedApiKey ?? "").trim());
+    setAiSettingsError(null);
   };
 
   const handleSaveCss = async () => {
@@ -266,22 +371,64 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* API Key Section */}
+          {/* AI Provider Section */}
           <Card className="p-6 mb-6">
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold mb-2">API Key</h2>
+                <h2 className="text-xl font-semibold mb-2">
+                  AI Provider Configuration
+                </h2>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Configure your AI Gateway API key for enhanced functionality.
+                  Configure provider credentials and model selection for AI
+                  requests.
                 </p>
               </div>
 
               <div>
                 <label
+                  htmlFor="ai-provider"
+                  className="text-sm font-medium mb-2 block"
+                >
+                  Provider
+                </label>
+                <Select
+                  value={aiProvider}
+                  onValueChange={(value) =>
+                    handleAiProviderChange(value as AiProvider)
+                  }
+                >
+                  <SelectTrigger id="ai-provider" className="mb-4">
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gateway">Gateway</SelectItem>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="anthropic">Anthropic</SelectItem>
+                    <SelectItem value="xai">xAI</SelectItem>
+                    <SelectItem value="open-responses">Open Responses</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <label
+                  htmlFor="model-id"
+                  className="text-sm font-medium mb-2 block"
+                >
+                  Model
+                </label>
+                <Input
+                  id="model-id"
+                  type="text"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="Enter model ID"
+                  className="mb-4"
+                />
+
+                <label
                   htmlFor="api-key"
                   className="text-sm font-medium mb-2 block"
                 >
-                  AI_GATEWAY_API_KEY
+                  {getApiKeyStorageKeyForProvider(aiProvider)}
                 </label>
                 <Input
                   id="api-key"
@@ -291,12 +438,52 @@ export default function SettingsPage() {
                   placeholder="Enter your API key"
                   className="mb-4"
                 />
+                {aiProvider === "open-responses" && (
+                  <>
+                    <label
+                      htmlFor="open-responses-url"
+                      className="text-sm font-medium mb-2 block"
+                    >
+                      Open Responses URL
+                    </label>
+                    <Input
+                      id="open-responses-url"
+                      type="text"
+                      value={openResponsesUrl}
+                      onChange={(e) => setOpenResponsesUrl(e.target.value)}
+                      placeholder="https://api.example.com/v1"
+                      className="mb-4"
+                    />
+
+                    <label
+                      htmlFor="open-responses-name"
+                      className="text-sm font-medium mb-2 block"
+                    >
+                      Open Responses Provider Name
+                    </label>
+                    <Input
+                      id="open-responses-name"
+                      type="text"
+                      value={openResponsesName}
+                      onChange={(e) => setOpenResponsesName(e.target.value)}
+                      placeholder="openresponses"
+                      className="mb-4"
+                    />
+                  </>
+                )}
+                {aiSettingsError && (
+                  <p className="mb-4 text-sm text-red-600 dark:text-red-400">
+                    {aiSettingsError}
+                  </p>
+                )}
                 <Button
-                  onClick={handleSaveApiKey}
+                  onClick={handleSaveAiSettings}
                   disabled={isSaving}
                   className="w-full sm:w-auto"
                 >
-                  {isSaving ? "Saving..." : "Save API Key"}
+                  {isSaving
+                    ? "Saving..."
+                    : `Save ${getAiProviderDisplayName(aiProvider)} Settings`}
                 </Button>
               </div>
             </div>
@@ -305,7 +492,7 @@ export default function SettingsPage() {
           <Card className="p-6 mb-6">
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold mb-2">Bridge Authentication</h2>
+                <h2 className="text-xl font-semibold mb-2">Duckdb Authentication</h2>
                 <p className="text-sm text-muted-foreground">
                   Optional session-only Pondview secret for authenticated bridge
                   queries. Leave empty when Pondview is started with an empty
@@ -314,6 +501,38 @@ export default function SettingsPage() {
               </div>
               <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
                 Status: {hasBridgeSecret ? "configured for this session" : "not configured"}
+              </div>
+              <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
+                SQL runtime:{" "}
+                {isBridgeRuntimeActive
+                  ? "Bridge"
+                  : hasBridgeSecret
+                    ? "DuckDB WASM (manual selection)"
+                    : "DuckDB WASM fallback (bridge auth not configured)"}
+              </div>
+              <div>
+                <label
+                  htmlFor="sql-backend-select"
+                  className="text-sm font-medium mb-2 block"
+                >
+                  Query Runtime
+                </label>
+                <Select
+                  value={sqlBackendPreference}
+                  onValueChange={(value) =>
+                    handleSqlBackendChange(value as SqlBackend)
+                  }
+                >
+                  <SelectTrigger id="sql-backend-select" className="w-full sm:w-auto">
+                    <SelectValue placeholder="Select query runtime" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="duckdb-wasm">DuckDB WASM</SelectItem>
+                    <SelectItem value="bridge" disabled={!hasBridgeSecret}>
+                      Bridge {hasBridgeSecret ? "" : "(Unavailable)"}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex flex-col sm:flex-row gap-2">
                 <Input
@@ -385,57 +604,72 @@ export default function SettingsPage() {
           {/* DuckDB Secrets Section */}
           <Card className="p-6 mb-6">
             <div className="flex flex-col gap-4">
-              <div className="flex items-start justify-between gap-4 flex-wrap">
+              {isBridgeRuntimeActive ? (
+                <>
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <h2 className="text-xl font-semibold mb-2">DuckDB Secrets</h2>
+                      <p className="text-sm text-muted-foreground">
+                        View persistent secrets managed by DuckDB. Use{" "}
+                        <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                          CREATE PERSISTENT SECRET
+                        </code>{" "}
+                        in the DuckDB shell to add one.
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => void fetchSecrets()}
+                      disabled={isSecretsLoading}
+                      className="whitespace-nowrap"
+                    >
+                      {isSecretsLoading ? "Refreshing..." : "Refresh"}
+                    </Button>
+                  </div>
+
+                  <div className="border rounded-lg divide-y bg-muted/20">
+                    {isSecretsLoading ? (
+                      <div className="p-4 text-sm text-muted-foreground">
+                        Loading secrets...
+                      </div>
+                    ) : secretsError ? (
+                      <div className="p-4 text-sm text-red-600 dark:text-red-400">
+                        {secretsError}
+                      </div>
+                    ) : secrets.length === 0 ? (
+                      <div className="p-4 text-sm text-muted-foreground">
+                        No persistent secrets found. Create one and it will appear
+                        here.
+                      </div>
+                    ) : (
+                      secrets.map((secret) => (
+                        <div
+                          key={`${secret.provider}:${secret.name}`}
+                          className="p-4 flex justify-between items-center gap-4"
+                        >
+                          <div>
+                            <p className="font-medium">{secret.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Provider: {secret.provider || "unknown"}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              ) : (
                 <div>
                   <h2 className="text-xl font-semibold mb-2">DuckDB Secrets</h2>
                   <p className="text-sm text-muted-foreground">
-                    View persistent secrets managed by DuckDB. Use{" "}
-                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                      CREATE PERSISTENT SECRET
-                    </code>{" "}
-                    in the DuckDB shell to add one.
+                    DuckDB secrets are bridge-only. SQL queries are currently running
+                    through DuckDB WASM.
+                    {!hasBridgeSecret
+                      ? " Configure a bridge secret and switch runtime to Bridge to view secrets."
+                      : " Switch runtime to Bridge to view secrets."}
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={() => void fetchSecrets()}
-                  disabled={isSecretsLoading}
-                  className="whitespace-nowrap"
-                >
-                  {isSecretsLoading ? "Refreshing..." : "Refresh"}
-                </Button>
-              </div>
-
-              <div className="border rounded-lg divide-y bg-muted/20">
-                {isSecretsLoading ? (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    Loading secrets...
-                  </div>
-                ) : secretsError ? (
-                  <div className="p-4 text-sm text-red-600 dark:text-red-400">
-                    {secretsError}
-                  </div>
-                ) : secrets.length === 0 ? (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    No persistent secrets found. Create one and it will appear
-                    here.
-                  </div>
-                ) : (
-                  secrets.map((secret) => (
-                    <div
-                      key={`${secret.provider}:${secret.name}`}
-                      className="p-4 flex justify-between items-center gap-4"
-                    >
-                      <div>
-                        <p className="font-medium">{secret.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Provider: {secret.provider || "unknown"}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+              )}
             </div>
           </Card>
 

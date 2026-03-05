@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { TextConfigDialog } from "@/components/text-config-dialog";
 import { Button } from "@/components/ui/button";
 import { runQuery } from "@/lib/sql/run-query";
+import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import type { Result, TextConfig } from "@/lib/types";
 import {
   addChartToDashboard,
@@ -220,7 +221,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
           title: textConfig.title ?? "Text Card",
           description: textConfig.title ?? null,
           sql: "SELECT 1",
-          dbIdentifier: "md:my_db",
+          dbIdentifier: DEFAULT_WASM_DB_IDENTIFIER,
           chartConfigJson: JSON.stringify(textConfig),
         });
         await refreshDashboardData();

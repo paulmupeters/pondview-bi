@@ -41,8 +41,8 @@ export const getTableSchemaTool = tool({
     table: z.string().describe("The table name to get schema for"),
     databasePath: z
       .string()
-      .describe("Database identifier/path to query (e.g. md:my_db)")
-      .default("md:my_db"),
+      .describe("Database identifier/path to query (e.g. wasm:local)")
+      .default("wasm:local"),
   }),
   execute: async ({ table, databasePath }) => {
     const describeSql = `DESCRIBE ${table}`;

@@ -48,9 +48,9 @@ export const executeSqlTool = tool({
     databasePath: z
       .string()
       .describe(
-        "Database identifier/path to run the SQL against (e.g. md:my_db)",
+        "Database identifier/path to run the SQL against (e.g. wasm:local)",
       )
-      .default("md:my_db"),
+      .default("wasm:local"),
     userQuery: z
       .string()
       .optional()
