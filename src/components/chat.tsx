@@ -1,8 +1,5 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
-import {
-  type ChatTransport,
-  DirectChatTransport,
-} from "ai";
+import { type ChatTransport, DirectChatTransport } from "ai";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPondviewAgent } from "@/ai/client/agent";
@@ -11,6 +8,7 @@ import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ArtifactMutationProvider } from "@/components/artifact-mutation-context";
 import { ChatMessageThread } from "@/components/chat/chat-message-thread";
 import { useChatUrlParams } from "@/components/chat/hooks/use-chat-url-params";
+import { useRightPanelResize } from "@/components/chat/hooks/use-right-panel-resize";
 import { useVisualizationSelection } from "@/components/chat/hooks/use-visualization-selection";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
@@ -37,6 +35,7 @@ import {
   type DbMessageRow,
   deleteMessageFromChat,
   ensureChat,
+  getChatTitleById,
   listMessagesByChatId,
 } from "@/lib/workspace/chat-repo";
 import { useRouter, useSearchParams } from "@/vite/next-navigation";
@@ -135,6 +134,7 @@ export default function Chat({
   const connectedTables = useConnectedTables();
   const [promptMode, setPromptMode] = useState<PromptMode>("manual");
   const [promptError, setPromptError] = useState<string | null>(null);
+  const [chatTitle, setChatTitle] = useState<string | null>(null);
   const hydratedMessagesRef = useRef(resolvedInitialMessages.length > 0);
   const isAiMode = promptMode === "ai";
 
@@ -193,6 +193,7 @@ export default function Chat({
     columns: { name: string; type?: string }[];
     durationMs: number;
   } | null>(null);
+  const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
   const [manualChartConfig, setManualChartConfig] = useState<Config | null>(
     null,
   );
@@ -211,9 +212,46 @@ export default function Chat({
     executeSqlArtifactType,
   });
 
+  const {
+    rightPanelWidth,
+    isResizing,
+    resizeHandleRef,
+    containerRef,
+    handleResizeStart,
+  } = useRightPanelResize();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadChatTitle = async () => {
+      try {
+        const title = await getChatTitleById(chatId);
+        if (!cancelled) {
+          setChatTitle(title);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load chat title:", error);
+        }
+      }
+    };
+
+    void loadChatTitle();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chatId]);
+
   useEffect(() => {
     if (!selectedDb && connectedTables.length > 0) {
-      setSelectedDb(connectedTables[0]?.databasePath);
+      const first = connectedTables[0];
+      const firstIdentifier =
+        first?.connectionId ??
+        first?.databasePath ??
+        first?.attachAs ??
+        DEFAULT_WASM_DB_IDENTIFIER;
+      setSelectedDb(firstIdentifier);
     }
   }, [connectedTables, selectedDb]);
 
@@ -303,6 +341,10 @@ export default function Chat({
         titleForNewChat: deriveTitleFromInput(text),
         now,
       });
+      const inferredTitle = deriveTitleFromInput(text);
+      if (inferredTitle) {
+        setChatTitle((previous) => previous || inferredTitle);
+      }
 
       // `sendMessage({ messageId })` expects the user message to already exist in local chat state.
       setMessages((previous) => {
@@ -377,8 +419,12 @@ export default function Chat({
     const now = Date.now();
     const messageId = `manual-visual-${now}`;
     const artifactId = `manual-artifact-${now}`;
+    const first = connectedTables[0];
     const defaultDatabase =
-      connectedTables[0]?.databasePath ?? DEFAULT_WASM_DB_IDENTIFIER;
+      first?.connectionId ??
+      first?.databasePath ??
+      first?.attachAs ??
+      DEFAULT_WASM_DB_IDENTIFIER;
 
     const defaultPayload: SqlAnalysisData = {
       stage: "complete",
@@ -518,12 +564,43 @@ export default function Chat({
     [chatId, setMessages],
   );
 
+  const handleReplResultChange = useCallback(
+    (
+      result: {
+        sql: string;
+        rows: Record<string, unknown>[];
+        columns: { name: string; type?: string }[];
+        durationMs: number;
+      } | null,
+    ) => {
+      setSqlResult(result);
+      if (result) {
+        setExplorerRefreshToken((previous) => previous + 1);
+      }
+
+      const newSql = result?.sql ?? null;
+      if (newSql !== prevSqlRef.current) {
+        setManualChartConfig(null);
+        prevSqlRef.current = newSql;
+      }
+    },
+    [],
+  );
+
   const rightPanelContent = (
     <div className="relative h-full w-full overflow-hidden">
+      <div className="border-b border-border/70 px-3 py-2">
+        <p
+          className="truncate text-xs font-medium text-muted-foreground"
+          title={chatTitle || "Untitled chat"}
+        >
+          {chatTitle || "Untitled chat"}
+        </p>
+      </div>
       <div
         aria-hidden={!isAiMode || isDashboardBuilderOpen}
         className={cn(
-          "absolute inset-0 flex flex-col transition-all duration-300 ease-out",
+          "absolute inset-x-0 bottom-0 top-9 flex flex-col transition-all duration-300 ease-out",
           isAiMode && !isDashboardBuilderOpen
             ? "opacity-100 translate-y-0 pointer-events-auto"
             : "opacity-0 translate-y-2 pointer-events-none",
@@ -537,7 +614,7 @@ export default function Chat({
       <div
         aria-hidden={isAiMode || isDashboardBuilderOpen}
         className={cn(
-          "absolute inset-0 flex flex-col transition-all duration-300 ease-out",
+          "absolute inset-x-0 bottom-0 top-9 flex flex-col transition-all duration-300 ease-out",
           isAiMode || isDashboardBuilderOpen
             ? "opacity-0 translate-y-2 pointer-events-none"
             : "opacity-100 translate-y-0 pointer-events-auto",
@@ -555,7 +632,7 @@ export default function Chat({
       <div
         aria-hidden={!isDashboardBuilderOpen}
         className={cn(
-          "absolute inset-0 flex flex-col transition-all duration-300 ease-out",
+          "absolute inset-x-0 bottom-0 top-9 flex flex-col transition-all duration-300 ease-out",
           isDashboardBuilderOpen
             ? "opacity-100 translate-y-0 pointer-events-auto"
             : "opacity-0 translate-y-2 pointer-events-none",
@@ -581,10 +658,13 @@ export default function Chat({
       <div className="chat-container flex h-screen flex-col">
         <div className="flex flex-1 w-full flex-col relative">
           <div className="flex-1 overflow-hidden bg-card">
-            <div className="flex h-full">
+            <div
+              ref={containerRef}
+              className={cn("flex h-full", isResizing && "select-none")}
+            >
               <div
                 className="flex flex-col min-w-0 h-full overflow-hidden"
-                style={{ width: "60%" }}
+                style={{ width: `${100 - rightPanelWidth}%` }}
               >
                 <div className="flex-1 min-h-0 flex overflow-hidden">
                   <ConnectedDataPanel
@@ -592,6 +672,7 @@ export default function Chat({
                     onSelect={setSelectedDb}
                     mode="sidebar"
                     onInsertTable={handleInsertTableIntoSql}
+                    refreshToken={explorerRefreshToken}
                     collapsed={isExplorerCollapsed}
                     onToggleCollapse={() =>
                       setIsExplorerCollapsed((prev) => !prev)
@@ -619,7 +700,7 @@ export default function Chat({
                       />
                     ) : (
                       <div className="flex-1 min-h-0 w-full p-3">
-                        <div className="h-full min-h-0 overflow-hidden rounded-md border border-border/30">
+                        <div className="h-full min-h-0 overflow-hidden">
                           <DuckdbRepl
                             className="h-full w-full border-r-0 p-0"
                             selectedDbIdentifier={selectedDb}
@@ -627,14 +708,7 @@ export default function Chat({
                             inlineResults={false}
                             showRunControls={false}
                             chartConfig={manualChartConfig}
-                            onResultChangeAction={(result) => {
-                              setSqlResult(result);
-                              const newSql = result?.sql ?? null;
-                              if (newSql !== prevSqlRef.current) {
-                                setManualChartConfig(null);
-                                prevSqlRef.current = newSql;
-                              }
-                            }}
+                            onResultChangeAction={handleReplResultChange}
                           />
                         </div>
                         <div className="mt-2 flex gap-2">
@@ -673,8 +747,16 @@ export default function Chat({
               </div>
 
               <div
-                className="hidden lg:flex flex-col min-w-0 h-full"
-                style={{ width: "40%" }}
+                ref={resizeHandleRef}
+                onPointerDown={handleResizeStart}
+                className={cn(
+                  "hidden lg:block w-1 shrink-0 cursor-col-resize transition-colors hover:bg-border",
+                  isResizing && "bg-border",
+                )}
+              />
+              <div
+                className="hidden lg:flex flex-col min-w-0 h-full border-l border-border"
+                style={{ width: `${rightPanelWidth}%` }}
               >
                 {rightPanelContent}
               </div>
