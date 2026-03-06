@@ -132,7 +132,7 @@ export default function Chat({
   const router = useRouter();
   const searchParams = useSearchParams();
   const connectedTables = useConnectedTables();
-  const [promptMode, setPromptMode] = useState<PromptMode>("manual");
+  const [promptMode, setPromptMode] = useState<PromptMode>("ai");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [chatTitle, setChatTitle] = useState<string | null>(null);
   const hydratedMessagesRef = useRef(resolvedInitialMessages.length > 0);
@@ -656,7 +656,7 @@ export default function Chat({
       executeSqlArtifactType={executeSqlArtifactType}
     >
       <div className="chat-container flex h-screen flex-col">
-        <div className="flex flex-1 w-full flex-col relative">
+        <div className="flex flex-1 min-h-0 w-full flex-col relative">
           <div className="flex-1 overflow-hidden bg-card">
             <div
               ref={containerRef}
