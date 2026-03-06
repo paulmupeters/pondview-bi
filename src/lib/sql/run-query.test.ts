@@ -33,6 +33,40 @@ describe("runQuery routing", () => {
     expect(result.rows).toEqual([{ ok: true }]);
   });
 
+  test("routes to duckdb-http and returns backend metadata", async () => {
+    let receivedSignal: AbortSignal | undefined;
+
+    const runQuery = createRunQuery({
+      resolveBackend: () => "duckdb-http",
+      runDuckDbHttp: async (_sql, signal) => {
+        receivedSignal = signal;
+        return {
+          rows: [{ ok: true }],
+          columns: [{ name: "ok", type: "BOOLEAN" }],
+          durationMs: 8,
+        };
+      },
+      runBridge: async () => {
+        throw new Error("should not reach bridge");
+      },
+      runWasm: async () => {
+        throw new Error("should not reach wasm");
+      },
+      assertWasmCompatibleIdentifier: () => {},
+    });
+
+    const controller = new AbortController();
+    const result = await runQuery({
+      sql: "SELECT 1",
+      signal: controller.signal,
+      backendPreference: "duckdb-http",
+    });
+
+    expect(receivedSignal).toBe(controller.signal);
+    expect(result.backend).toBe("duckdb-http");
+    expect(result.rows).toEqual([{ ok: true }]);
+  });
+
   test("routes to duckdb-wasm and validates identifier compatibility", async () => {
     let validatedIdentifier: string | undefined;
 
@@ -83,6 +117,34 @@ describe("runQuery routing", () => {
 
     await expect(runQuery({ sql: "SELECT 1" })).rejects.toThrow(
       "Bridge authentication failed",
+    );
+    expect(wasmCalled).toBe(false);
+  });
+
+  test("does not fallback when duckdb-http execution fails", async () => {
+    let wasmCalled = false;
+
+    const runQuery = createRunQuery({
+      resolveBackend: () => "duckdb-http",
+      runDuckDbHttp: async () => {
+        throw new Error("DuckDB HTTP authentication failed");
+      },
+      runBridge: async () => {
+        throw new Error("should not reach bridge");
+      },
+      runWasm: async () => {
+        wasmCalled = true;
+        return {
+          rows: [],
+          columns: [],
+          durationMs: 0,
+        };
+      },
+      assertWasmCompatibleIdentifier: () => {},
+    });
+
+    await expect(runQuery({ sql: "SELECT 1" })).rejects.toThrow(
+      "DuckDB HTTP authentication failed",
     );
     expect(wasmCalled).toBe(false);
   });

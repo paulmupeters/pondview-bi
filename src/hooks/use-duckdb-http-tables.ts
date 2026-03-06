@@ -1,46 +1,130 @@
 import { useEffect, useState } from "react";
-import type {
-  DuckdbTableEntry,
-  DuckdbTablesResponse,
-} from "@/lib/api/types/duckdb";
+import type { DuckdbTableEntry } from "@/lib/api/types/duckdb";
+import { getBridgeSession, runBridgeQuery } from "@/lib/bridge/pondview-bridge";
+import {
+  getDuckDbHttpConfigFromStorage,
+  runDuckDbHttpQuery,
+} from "@/lib/duckdb/duckdb-http-browser";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
+import { useDuckDbHttpConfig } from "@/lib/sql/use-sql-backend";
 
 export interface DuckdbHttpConnectionInfo {
   host: string;
   port: number;
 }
 
-export function useDuckdbHttpTables() {
+const LIST_TABLES_SQL = `
+  SELECT table_schema, table_name, table_type
+  FROM information_schema.tables
+  WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+  ORDER BY table_schema, table_name
+`;
+
+function mapInformationSchemaRows(
+  rows: Record<string, unknown>[],
+): DuckdbTableEntry[] {
+  return rows.map((row) => ({
+    schema: String(row.table_schema ?? ""),
+    name: String(row.table_name ?? ""),
+    type: String(row.table_type ?? ""),
+  }));
+}
+
+function mapShowAllTablesRows(
+  rows: Record<string, unknown>[],
+): DuckdbTableEntry[] {
+  return rows
+    .filter(
+      (row) =>
+        String(row.schema ?? "") !== "information_schema" &&
+        String(row.schema ?? "") !== "pg_catalog",
+    )
+    .map((row) => ({
+      schema: String(row.schema ?? ""),
+      name: String(row.name ?? ""),
+      type: "BASE TABLE",
+    }));
+}
+
+export function useDuckdbHttpTables(backend: SqlBackend) {
   const [tables, setTables] = useState<DuckdbTableEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isConfigured, setIsConfigured] = useState(false);
   const [connectionInfo, setConnectionInfo] =
     useState<DuckdbHttpConnectionInfo | null>(null);
+  const duckDbHttpConfig = useDuckDbHttpConfig();
+  const _duckDbHttpConfigKey = duckDbHttpConfig
+    ? `${duckDbHttpConfig.host}:${duckDbHttpConfig.port}`
+    : "";
 
   useEffect(() => {
     let cancelled = false;
 
     async function fetchTables() {
+      if (backend === "duckdb-wasm") {
+        setTables([]);
+        setError(null);
+        setIsConfigured(false);
+        setConnectionInfo(null);
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
         setError(null);
 
-        const response = await fetch("/api/duckdb/tables");
+        if (backend === "bridge") {
+          const session = await getBridgeSession().catch(() => null);
 
-        const data = (await response.json()) as DuckdbTablesResponse;
-
-        if (!cancelled) {
-          setIsConfigured(!!data.configured);
-
-          if (data.host && data.port) {
-            setConnectionInfo({ host: data.host, port: data.port });
+          if (!cancelled) {
+            setIsConfigured(true);
+            setConnectionInfo(
+              session ? { host: session.host, port: session.port } : null,
+            );
           }
 
-          const nextTables = Array.isArray(data.tables) ? data.tables : [];
-          setTables(nextTables);
+          try {
+            const result = await runBridgeQuery(LIST_TABLES_SQL);
+            if (!cancelled) {
+              setTables(mapInformationSchemaRows(result.rows));
+            }
+          } catch {
+            const fallback = await runBridgeQuery("SHOW ALL TABLES;");
+            if (!cancelled) {
+              setTables(mapShowAllTablesRows(fallback.rows));
+            }
+          }
 
-          if (data.error) {
-            setError(data.error);
+          return;
+        }
+
+        const config = getDuckDbHttpConfigFromStorage();
+        if (!config) {
+          if (!cancelled) {
+            setTables([]);
+            setError(null);
+            setIsConfigured(false);
+            setConnectionInfo(null);
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setIsConfigured(true);
+          setConnectionInfo({ host: config.host, port: config.port });
+        }
+
+        try {
+          const result = await runDuckDbHttpQuery(LIST_TABLES_SQL);
+          if (!cancelled) {
+            setTables(mapInformationSchemaRows(result.rows));
+          }
+        } catch {
+          const fallback = await runDuckDbHttpQuery("SHOW ALL TABLES;");
+          if (!cancelled) {
+            setTables(mapShowAllTablesRows(fallback.rows));
           }
         }
       } catch (err) {
@@ -48,8 +132,8 @@ export function useDuckdbHttpTables() {
           const message =
             err instanceof Error ? err.message : String(err ?? "");
           setError(message);
-          console.error("[useDuckdbHttpTables] Error:", message);
           setTables([]);
+          console.error("[useDuckdbHttpTables] Error:", message);
         }
       } finally {
         if (!cancelled) {
@@ -58,12 +142,12 @@ export function useDuckdbHttpTables() {
       }
     }
 
-    fetchTables();
+    void fetchTables();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [backend]);
 
   return { tables, isLoading, error, isConfigured, connectionInfo };
 }

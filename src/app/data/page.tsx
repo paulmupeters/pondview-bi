@@ -1,19 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
-import Image from "@/vite/next-image";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import { DuckdbShellDialog } from "@/components/duckdb-shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { removeConnectedTable } from "@/lib/connected-tables";
+import { refreshDuckDbHttpHealth } from "@/lib/duckdb/duckdb-http-browser";
 import { refreshBridgeHealth, resolveSqlBackend } from "@/lib/sql/sql-runtime";
-import { useBridgeHealthStatus } from "@/lib/sql/use-sql-backend";
-import { formatFileSize, removeUploadedFile } from "@/lib/uploaded-files";
+import {
+  useBridgeHealthStatus,
+  useDuckDbHttpConfig,
+  useDuckDbHttpHealthStatus,
+  useSqlBackendPreference,
+} from "@/lib/sql/use-sql-backend";
 import { useTheme } from "@/lib/theme-provider";
+import { formatFileSize, removeUploadedFile } from "@/lib/uploaded-files";
+import Image from "@/vite/next-image";
 
 const DEFERRED_MESSAGE =
   "Uploads, semantic/materialized-table flows, and guided connect flows are deferred in browser mode.";
@@ -21,19 +33,25 @@ const DEFERRED_MESSAGE =
 export default function ViewDataPage() {
   const tables = useConnectedTables();
   const uploadedFiles = useUploadedFiles();
+  const sqlBackendPreference = useSqlBackendPreference();
+  const bridgeHealthStatus = useBridgeHealthStatus();
+  const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
+  const duckDbHttpConfig = useDuckDbHttpConfig();
+  const effectiveSqlBackend = resolveSqlBackend({
+    backendPreference: sqlBackendPreference,
+  });
   const {
     tables: duckdbTables,
     isLoading: isDuckdbTablesLoading,
     error: duckdbTablesError,
     isConfigured: isDuckdbHttpConfigured,
     connectionInfo: duckdbHttpConnectionInfo,
-  } = useDuckdbHttpTables();
+  } = useDuckdbHttpTables(effectiveSqlBackend);
 
   const { theme } = useTheme();
   const isDarkMode = theme === "dark";
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [isShellDialogOpen, setIsShellDialogOpen] = useState(false);
-  const bridgeHealthStatus = useBridgeHealthStatus();
 
   useEffect(() => {
     void refreshBridgeHealth();
@@ -46,7 +64,20 @@ export default function ViewDataPage() {
     };
   }, []);
 
-  const effectiveSqlBackend = resolveSqlBackend({ backendPreference: "auto" });
+  useEffect(() => {
+    if (!duckDbHttpConfig) {
+      return;
+    }
+
+    void refreshDuckDbHttpHealth();
+    const intervalId = window.setInterval(() => {
+      void refreshDuckDbHttpHealth();
+    }, 15000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [duckDbHttpConfig]);
 
   const tablesBySchema = useMemo(() => {
     const grouped = new Map<string, { name: string; type: string }[]>();
@@ -70,7 +101,8 @@ export default function ViewDataPage() {
   const groupedConnectedSources = useMemo(() => {
     const grouped = new Map<string, ConnectedTable[]>();
     for (const table of tables) {
-      const key = table.connectionId ?? table.databasePath ?? table.attachAs ?? "source";
+      const key =
+        table.connectionId ?? table.databasePath ?? table.attachAs ?? "source";
       const existing = grouped.get(key);
       if (existing) {
         existing.push(table);
@@ -79,12 +111,17 @@ export default function ViewDataPage() {
       }
     }
 
-    return Array.from(grouped.entries()).map(([key, entries]) => ({ key, entries }));
+    return Array.from(grouped.entries()).map(([key, entries]) => ({
+      key,
+      entries,
+    }));
   }, [tables]);
 
   const getDatabaseLogo = (dbType: string): string | null => {
     if (dbType === "duckdb") {
-      return isDarkMode ? "/DuckDB_icon-darkmode.svg" : "/DuckDB_icon-lightmode.svg";
+      return isDarkMode
+        ? "/DuckDB_icon-darkmode.svg"
+        : "/DuckDB_icon-lightmode.svg";
     }
     if (dbType === "postgres") {
       return "/Postgresql_elephant.png";
@@ -98,6 +135,13 @@ export default function ViewDataPage() {
     return null;
   };
 
+  const remoteRuntimeLabel =
+    effectiveSqlBackend === "bridge" ? "Bridge" : "DuckDB over HTTP";
+  const selectedRemoteHealthStatus =
+    effectiveSqlBackend === "bridge"
+      ? bridgeHealthStatus
+      : duckDbHttpHealthStatus;
+
   return (
     <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-6 overflow-y-auto px-6 py-10">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -105,19 +149,35 @@ export default function ViewDataPage() {
           <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Data Sources
           </span>
-          <h1 className="text-3xl font-semibold text-foreground">Connected Data</h1>
+          <h1 className="text-3xl font-semibold text-foreground">
+            Connected Data
+          </h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Browser mode stores workspace metadata locally and queries DuckDB through the extension bridge.
+            Browser mode stores workspace metadata locally and runs SQL through
+            the selected DuckDB runtime.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => setIsShellDialogOpen(true)}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsShellDialogOpen(true)}
+          >
             Open SQL Shell
           </Button>
-          <Button type="button" variant="outline" onClick={() => setIsConnectDialogOpen(true)}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsConnectDialogOpen(true)}
+          >
             Connect Data Source
           </Button>
-          <Button type="button" variant="outline" disabled title={DEFERRED_MESSAGE}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled
+            title={DEFERRED_MESSAGE}
+          >
             Upload Data (Deferred)
           </Button>
         </div>
@@ -132,7 +192,9 @@ export default function ViewDataPage() {
       <Separator />
 
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-foreground">Duckdb connection</h2>
+        <h2 className="text-base font-semibold text-foreground">
+          Duckdb connection
+        </h2>
         {effectiveSqlBackend === "duckdb-wasm" ? (
           <Card>
             <CardHeader>
@@ -140,7 +202,8 @@ export default function ViewDataPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Queries are running against the browser-local DuckDB WASM database.
+                Queries are running against the browser-local DuckDB WASM
+                database.
               </p>
             </CardContent>
           </Card>
@@ -148,27 +211,45 @@ export default function ViewDataPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">
-                Bridge {duckdbHttpConnectionInfo ? `${duckdbHttpConnectionInfo.host}:${duckdbHttpConnectionInfo.port}` : "configured"}
+                {remoteRuntimeLabel}{" "}
+                {duckdbHttpConnectionInfo
+                  ? `${duckdbHttpConnectionInfo.host}:${duckdbHttpConnectionInfo.port}`
+                  : "configured"}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {isDuckdbTablesLoading ? (
-                <p className="text-sm text-muted-foreground">Loading tables...</p>
+                <p className="text-sm text-muted-foreground">
+                  Loading tables...
+                </p>
               ) : duckdbTablesError ? (
-                <p className="text-sm text-destructive">Failed to load tables: {duckdbTablesError}</p>
+                <p className="text-sm text-destructive">
+                  Failed to load tables: {duckdbTablesError}
+                </p>
               ) : tablesBySchema.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No tables found.</p>
+                <p className="text-sm text-muted-foreground">
+                  No tables found.
+                </p>
               ) : (
                 <div className="grid gap-3">
                   {tablesBySchema.map((group) => (
                     <div key={group.schema} className="rounded-lg border p-3">
-                      <p className="text-xs uppercase text-muted-foreground">Schema</p>
-                      <p className="mb-2 text-sm font-semibold">{group.schema}</p>
+                      <p className="text-xs uppercase text-muted-foreground">
+                        Schema
+                      </p>
+                      <p className="mb-2 text-sm font-semibold">
+                        {group.schema}
+                      </p>
                       <div className="grid gap-1">
                         {group.tables.map((table) => (
-                          <div key={`${group.schema}.${table.name}`} className="flex items-center justify-between text-sm">
+                          <div
+                            key={`${group.schema}.${table.name}`}
+                            className="flex items-center justify-between text-sm"
+                          >
                             <span>{table.name}</span>
-                            <span className="text-xs text-muted-foreground">{table.type}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {table.type}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -181,14 +262,17 @@ export default function ViewDataPage() {
         ) : (
           <Card>
             <CardContent className="pt-6 text-sm text-muted-foreground">
-              Bridge runtime is selected, but bridge metadata is unavailable. Bridge health: {bridgeHealthStatus}.
+              {remoteRuntimeLabel} is selected, but remote metadata is
+              unavailable. Health: {selectedRemoteHealthStatus}.
             </CardContent>
           </Card>
         )}
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-foreground">Connected Sources</h2>
+        <h2 className="text-base font-semibold text-foreground">
+          Connected Sources
+        </h2>
         {groupedConnectedSources.length === 0 ? (
           <Card>
             <CardContent className="pt-6 text-sm text-muted-foreground">
@@ -204,8 +288,17 @@ export default function ViewDataPage() {
                 <Card key={group.key}>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-sm">
-                      {logo ? <Image src={logo} alt={first.type ?? "source"} width={20} height={20} /> : null}
-                      <span>{first.databaseName ?? first.databasePath ?? "Source"}</span>
+                      {logo ? (
+                        <Image
+                          src={logo}
+                          alt={first.type ?? "source"}
+                          width={20}
+                          height={20}
+                        />
+                      ) : null}
+                      <span>
+                        {first.databaseName ?? first.databasePath ?? "Source"}
+                      </span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -214,20 +307,33 @@ export default function ViewDataPage() {
                         key={`${entry.type}-${entry.databasePath}-${entry.schema ?? ""}-${entry.table ?? ""}`}
                         className="rounded-md border p-3"
                       >
-                        <p className="text-xs text-muted-foreground">{entry.type}</p>
-                        <p className="text-sm font-medium">{entry.schema || entry.table || entry.attachAs || "(unspecified)"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {entry.type}
+                        </p>
+                        <p className="text-sm font-medium">
+                          {entry.schema ||
+                            entry.table ||
+                            entry.attachAs ||
+                            "(unspecified)"}
+                        </p>
                         {entry.tables && entry.tables.length > 0 ? (
-                          <p className="text-xs text-muted-foreground">Tables: {entry.tables.join(", ")}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Tables: {entry.tables.join(", ")}
+                          </p>
                         ) : null}
                         {entry.description ? (
-                          <p className="mt-1 text-xs text-muted-foreground">{entry.description}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {entry.description}
+                          </p>
                         ) : null}
                         <div className="mt-2 flex justify-end">
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={async () => {
-                              if (confirm("Remove this connected source entry?")) {
+                              if (
+                                confirm("Remove this connected source entry?")
+                              ) {
                                 await removeConnectedTable(entry);
                               }
                             }}
@@ -246,13 +352,18 @@ export default function ViewDataPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-foreground">Uploaded Files</h2>
+        <h2 className="text-base font-semibold text-foreground">
+          Uploaded Files
+        </h2>
         <p className="text-sm text-muted-foreground">
-          Existing uploaded file entries are visible here, but uploads and new file connections are deferred in browser mode.
+          Existing uploaded file entries are visible here, but uploads and new
+          file connections are deferred in browser mode.
         </p>
         {uploadedFiles.length === 0 ? (
           <Card>
-            <CardContent className="pt-6 text-sm text-muted-foreground">No uploaded files recorded.</CardContent>
+            <CardContent className="pt-6 text-sm text-muted-foreground">
+              No uploaded files recorded.
+            </CardContent>
           </Card>
         ) : (
           <div className="grid gap-3">
@@ -261,8 +372,12 @@ export default function ViewDataPage() {
                 <CardContent className="pt-6">
                   <div className="space-y-1">
                     <p className="text-sm font-medium">{file.originalName}</p>
-                    <p className="text-xs text-muted-foreground">{formatFileSize(file.size)} • {file.type}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(file.uploadedAt).toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatFileSize(file.size)} • {file.type}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(file.uploadedAt).toLocaleString()}
+                    </p>
                   </div>
                 </CardContent>
                 <CardFooter className="justify-end">
@@ -270,7 +385,9 @@ export default function ViewDataPage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      if (confirm(`Remove \"${file.originalName}\" from this list?`)) {
+                      if (
+                        confirm(`Remove "${file.originalName}" from this list?`)
+                      ) {
                         removeUploadedFile(file.fileId);
                       }
                     }}
@@ -284,8 +401,14 @@ export default function ViewDataPage() {
         )}
       </section>
 
-      <ConnectDataDialog open={isConnectDialogOpen} onOpenChange={setIsConnectDialogOpen} />
-      <DuckdbShellDialog open={isShellDialogOpen} onOpenChange={setIsShellDialogOpen} />
+      <ConnectDataDialog
+        open={isConnectDialogOpen}
+        onOpenChange={setIsConnectDialogOpen}
+      />
+      <DuckdbShellDialog
+        open={isShellDialogOpen}
+        onOpenChange={setIsShellDialogOpen}
+      />
     </div>
   );
 }

@@ -1,11 +1,19 @@
 import { useSyncExternalStore } from "react";
 import {
+  getDuckDbHttpConfigFromStorage,
+  getDuckDbHttpHealthStatus,
+  type StoredDuckDbHttpConfig,
+  subscribeDuckDbHttpConfig,
+  subscribeDuckDbHttpHealth,
+} from "@/lib/duckdb/duckdb-http-browser";
+import {
+  type BridgeHealthStatus,
+  type DuckDbHttpHealthStatus,
   getBridgeHealthStatus,
   getSqlBackendPreference,
+  type SqlBackendPreference,
   subscribeBridgeHealth,
   subscribeSqlBackendPreference,
-  type BridgeHealthStatus,
-  type SqlBackendPreference,
 } from "@/lib/sql/sql-runtime";
 
 export function useSqlBackendPreference(): SqlBackendPreference {
@@ -21,5 +29,21 @@ export function useBridgeHealthStatus(): BridgeHealthStatus {
     subscribeBridgeHealth,
     getBridgeHealthStatus,
     getBridgeHealthStatus,
+  );
+}
+
+export function useDuckDbHttpHealthStatus(): DuckDbHttpHealthStatus {
+  return useSyncExternalStore(
+    subscribeDuckDbHttpHealth,
+    getDuckDbHttpHealthStatus,
+    getDuckDbHttpHealthStatus,
+  );
+}
+
+export function useDuckDbHttpConfig(): StoredDuckDbHttpConfig | null {
+  return useSyncExternalStore(
+    subscribeDuckDbHttpConfig,
+    getDuckDbHttpConfigFromStorage,
+    getDuckDbHttpConfigFromStorage,
   );
 }

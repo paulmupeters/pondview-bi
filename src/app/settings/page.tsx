@@ -40,6 +40,16 @@ import {
   setSelectedTheme as setThemeInStorage,
 } from "@/lib/custom-css";
 import {
+  clearDuckDbHttpConfigInStorage,
+  clearDuckDbHttpSessionAuth,
+  getDuckDbHttpConfigFromStorage,
+  hasDuckDbHttpSessionAuth,
+  refreshDuckDbHttpHealth,
+  runDuckDbHttpQuery,
+  setDuckDbHttpConfigInStorage,
+  setDuckDbHttpSessionAuth,
+} from "@/lib/duckdb/duckdb-http-browser";
+import {
   getSqlBackendPreferenceFromStorage,
   refreshBridgeHealth,
   type SqlBackend,
@@ -47,6 +57,8 @@ import {
 } from "@/lib/sql/sql-runtime";
 import {
   useBridgeHealthStatus,
+  useDuckDbHttpConfig,
+  useDuckDbHttpHealthStatus,
   useSqlBackendPreference,
 } from "@/lib/sql/use-sql-backend";
 import {
@@ -85,8 +97,15 @@ export default function SettingsPage() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [bridgeSecret, setBridgeSecret] = useState("");
   const [hasBridgeSecret, setHasBridgeSecret] = useState(false);
+  const [duckDbHttpHost, setDuckDbHttpHost] = useState("");
+  const [duckDbHttpPort, setDuckDbHttpPort] = useState("");
+  const [duckDbHttpAuth, setDuckDbHttpAuth] = useState("");
+  const [hasDuckDbHttpAuth, setHasDuckDbHttpAuth] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
+  const [runtimeSettingsError, setRuntimeSettingsError] = useState<
+    string | null
+  >(null);
   const [secrets, setSecrets] = useState<{ name: string; provider: string }[]>(
     [],
   );
@@ -99,9 +118,14 @@ export default function SettingsPage() {
   const availableThemes = getAllThemes();
   const sqlBackendPreference = useSqlBackendPreference();
   const bridgeHealthStatus = useBridgeHealthStatus();
+  const duckDbHttpConfig = useDuckDbHttpConfig();
+  const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
   const isBridgeAvailable = hasBridgeSecret && bridgeHealthStatus === "online";
+  const isDuckDbHttpConfigured = Boolean(duckDbHttpConfig);
   const selectedSqlBackend: SqlBackend =
-    sqlBackendPreference === "bridge" ? "bridge" : "duckdb-wasm";
+    sqlBackendPreference === "bridge" || sqlBackendPreference === "duckdb-http"
+      ? sqlBackendPreference
+      : "duckdb-wasm";
 
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -119,16 +143,26 @@ export default function SettingsPage() {
     setSelectedTheme(savedTheme || (savedCss ? CUSTOM_THEME_VALUE : "default"));
     const hasSecret = hasSessionSecret();
     setHasBridgeSecret(hasSecret);
+    setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
+
+    const savedDuckDbHttpConfig = getDuckDbHttpConfigFromStorage();
+    setDuckDbHttpHost(savedDuckDbHttpConfig?.host ?? "");
+    setDuckDbHttpPort(
+      savedDuckDbHttpConfig ? String(savedDuckDbHttpConfig.port) : "",
+    );
 
     const savedBackendPreference = getSqlBackendPreferenceFromStorage();
     if (
       savedBackendPreference === "bridge" ||
+      savedBackendPreference === "duckdb-http" ||
       savedBackendPreference === "duckdb-wasm"
     ) {
       const resolvedPreference =
         savedBackendPreference === "bridge" && !hasSecret
           ? "duckdb-wasm"
-          : savedBackendPreference;
+          : savedBackendPreference === "duckdb-http" && !savedDuckDbHttpConfig
+            ? "duckdb-wasm"
+            : savedBackendPreference;
       if (resolvedPreference !== savedBackendPreference) {
         setSqlBackendPreferenceInStorage(resolvedPreference);
       }
@@ -138,7 +172,15 @@ export default function SettingsPage() {
     }
 
     void refreshBridgeHealth();
+    if (savedDuckDbHttpConfig) {
+      void refreshDuckDbHttpHealth();
+    }
   }, []);
+
+  useEffect(() => {
+    setDuckDbHttpHost(duckDbHttpConfig?.host ?? "");
+    setDuckDbHttpPort(duckDbHttpConfig ? String(duckDbHttpConfig.port) : "");
+  }, [duckDbHttpConfig]);
 
   // Apply CSS on component mount (only if custom theme is selected)
   useEffect(() => {
@@ -152,6 +194,12 @@ export default function SettingsPage() {
       setSqlBackendPreferenceInStorage("duckdb-wasm");
     }
   }, [hasBridgeSecret, selectedSqlBackend]);
+
+  useEffect(() => {
+    if (!isDuckDbHttpConfigured && selectedSqlBackend === "duckdb-http") {
+      setSqlBackendPreferenceInStorage("duckdb-wasm");
+    }
+  }, [isDuckDbHttpConfigured, selectedSqlBackend]);
 
   useEffect(() => {
     if (!hasBridgeSecret) {
@@ -168,14 +216,31 @@ export default function SettingsPage() {
     };
   }, [hasBridgeSecret]);
 
+  useEffect(() => {
+    if (!isDuckDbHttpConfigured) {
+      return;
+    }
+
+    void refreshDuckDbHttpHealth();
+    const intervalId = window.setInterval(() => {
+      void refreshDuckDbHttpHealth();
+    }, 15000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isDuckDbHttpConfigured]);
+
   const effectiveSqlBackend: SqlBackend =
     selectedSqlBackend === "bridge" && isBridgeAvailable
       ? "bridge"
-      : "duckdb-wasm";
-  const isBridgeRuntimeActive = effectiveSqlBackend === "bridge";
+      : selectedSqlBackend === "duckdb-http" && isDuckDbHttpConfigured
+        ? "duckdb-http"
+        : "duckdb-wasm";
+  const isRemoteRuntimeActive = effectiveSqlBackend !== "duckdb-wasm";
 
   const fetchSecrets = useCallback(async () => {
-    if (!isBridgeRuntimeActive) {
+    if (!isRemoteRuntimeActive) {
       setSecrets([]);
       setSecretsError(null);
       setIsSecretsLoading(false);
@@ -185,9 +250,12 @@ export default function SettingsPage() {
     setIsSecretsLoading(true);
     setSecretsError(null);
     try {
-      const result = await runBridgeQuery(
-        "SELECT name, provider FROM duckdb_secrets();",
-      );
+      const result =
+        effectiveSqlBackend === "bridge"
+          ? await runBridgeQuery("SELECT name, provider FROM duckdb_secrets();")
+          : await runDuckDbHttpQuery(
+              "SELECT name, provider FROM duckdb_secrets();",
+            );
       const resolved = result.rows.map((row) => ({
         name: String(row.name ?? ""),
         provider: String(row.provider ?? ""),
@@ -201,21 +269,22 @@ export default function SettingsPage() {
     } finally {
       setIsSecretsLoading(false);
     }
-  }, [isBridgeRuntimeActive]);
+  }, [effectiveSqlBackend, isRemoteRuntimeActive]);
 
   useEffect(() => {
-    if (isBridgeRuntimeActive) {
+    if (isRemoteRuntimeActive) {
       void fetchSecrets();
       return;
     }
 
     setSecrets([]);
     setSecretsError(null);
-  }, [fetchSecrets, isBridgeRuntimeActive]);
+  }, [fetchSecrets, isRemoteRuntimeActive]);
 
   const handleSetBridgeSecret = () => {
     setSessionSecret(bridgeSecret);
     setHasBridgeSecret(hasSessionSecret());
+    setRuntimeSettingsError(null);
     void refreshBridgeHealth();
     setBridgeSecret("");
     setShowSuccessMessage(true);
@@ -225,6 +294,7 @@ export default function SettingsPage() {
   const handleClearBridgeSecret = () => {
     clearSessionSecret();
     setHasBridgeSecret(false);
+    setRuntimeSettingsError(null);
     void refreshBridgeHealth();
     if (selectedSqlBackend === "bridge") {
       setSqlBackendPreferenceInStorage("duckdb-wasm");
@@ -237,7 +307,70 @@ export default function SettingsPage() {
     if (backend === "bridge" && !isBridgeAvailable) {
       return;
     }
+
+    if (backend === "duckdb-http" && !isDuckDbHttpConfigured) {
+      return;
+    }
+
+    setRuntimeSettingsError(null);
     setSqlBackendPreferenceInStorage(backend);
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleSaveDuckDbHttpConfig = () => {
+    const host = duckDbHttpHost.trim();
+    const port = Number.parseInt(duckDbHttpPort.trim(), 10);
+
+    if (!host) {
+      setRuntimeSettingsError("DuckDB HTTP host is required.");
+      return;
+    }
+
+    if (!Number.isFinite(port) || port < 1 || port > 65535) {
+      setRuntimeSettingsError(
+        "DuckDB HTTP port must be a valid number between 1 and 65535.",
+      );
+      return;
+    }
+
+    setDuckDbHttpConfigInStorage({ host, port });
+    setRuntimeSettingsError(null);
+    void refreshDuckDbHttpHealth();
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleClearDuckDbHttpConfig = () => {
+    clearDuckDbHttpConfigInStorage();
+    setDuckDbHttpHost("");
+    setDuckDbHttpPort("");
+    setRuntimeSettingsError(null);
+    if (selectedSqlBackend === "duckdb-http") {
+      setSqlBackendPreferenceInStorage("duckdb-wasm");
+    }
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleSetDuckDbHttpAuth = () => {
+    setDuckDbHttpSessionAuth(duckDbHttpAuth);
+    setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
+    setRuntimeSettingsError(null);
+    void refreshDuckDbHttpHealth();
+    setDuckDbHttpAuth("");
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleClearDuckDbHttpAuth = () => {
+    clearDuckDbHttpSessionAuth();
+    setHasDuckDbHttpAuth(false);
+    setRuntimeSettingsError(null);
+    void refreshDuckDbHttpHealth();
+    if (selectedSqlBackend === "duckdb-http" && !isDuckDbHttpConfigured) {
+      setSqlBackendPreferenceInStorage("duckdb-wasm");
+    }
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
   };
@@ -381,6 +514,22 @@ export default function SettingsPage() {
     }
   };
 
+  const effectiveRuntimeLabel =
+    effectiveSqlBackend === "bridge"
+      ? "Bridge"
+      : effectiveSqlBackend === "duckdb-http"
+        ? "DuckDB over HTTP"
+        : selectedSqlBackend === "bridge" && bridgeHealthStatus === "offline"
+          ? "DuckDB WASM (bridge unavailable)"
+          : selectedSqlBackend === "duckdb-http" &&
+              duckDbHttpHealthStatus === "offline"
+            ? "DuckDB WASM (HTTP unavailable)"
+            : selectedSqlBackend === "duckdb-http" && isDuckDbHttpConfigured
+              ? "DuckDB WASM (HTTP pending)"
+              : selectedSqlBackend === "bridge" && hasBridgeSecret
+                ? "DuckDB WASM (bridge pending)"
+                : "DuckDB WASM";
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-auto">
@@ -517,27 +666,25 @@ export default function SettingsPage() {
           </Card>
 
           <Card className="p-6 mb-6">
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold mb-2">
-                  Duckdb Authentication
-                </h2>
+                <h2 className="text-xl font-semibold mb-2">Query Runtime</h2>
                 <p className="text-sm text-muted-foreground">
-                  Optional session-only Pondview secret for authenticated bridge
-                  queries. Leave empty when Pondview is started with an empty
-                  secret (no-auth mode).
+                  Choose where SQL runs. Bridge uses Pondview endpoints, while
+                  DuckDB over HTTP connects directly from the browser to a
+                  DuckDB `httpserver` instance.
                 </p>
               </div>
               <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs flex items-center justify-between">
-                <span className="text-muted-foreground">SQL runtime</span>
-                <span className={isBridgeRuntimeActive ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
-                  {isBridgeRuntimeActive
-                    ? "Bridge"
-                    : hasBridgeSecret
-                      ? bridgeHealthStatus === "offline"
-                        ? "DuckDB WASM (bridge unavailable)"
-                        : "DuckDB WASM (manual selection)"
-                      : "DuckDB WASM"}
+                <span className="text-muted-foreground">Active runtime</span>
+                <span
+                  className={
+                    effectiveSqlBackend === "duckdb-wasm"
+                      ? "text-muted-foreground"
+                      : "text-green-600 dark:text-green-400"
+                  }
+                >
+                  {effectiveRuntimeLabel}
                 </span>
               </div>
               <div>
@@ -564,29 +711,130 @@ export default function SettingsPage() {
                     <SelectItem value="bridge" disabled={!isBridgeAvailable}>
                       Bridge {isBridgeAvailable ? "" : "(Unavailable)"}
                     </SelectItem>
+                    <SelectItem
+                      value="duckdb-http"
+                      disabled={!isDuckDbHttpConfigured}
+                    >
+                      DuckDB over HTTP{" "}
+                      {isDuckDbHttpConfigured ? "" : "(Unavailable)"}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input
-                  type="password"
-                  value={bridgeSecret}
-                  onChange={(event) => setBridgeSecret(event.target.value)}
-                  placeholder="Enter Pondview secret"
-                />
-                <Button
-                  onClick={handleSetBridgeSecret}
-                  disabled={!bridgeSecret.trim().length}
-                >
-                  Set Session Secret
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleClearBridgeSecret}
-                  disabled={!hasBridgeSecret}
-                >
-                  Clear
-                </Button>
+
+              {runtimeSettingsError && (
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {runtimeSettingsError}
+                </p>
+              )}
+
+              <div className="space-y-3 rounded-lg border p-4">
+                <div>
+                  <h3 className="text-sm font-semibold">Bridge Auth</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Optional session-only Pondview secret for authenticated
+                    bridge queries. Leave empty when Pondview is started with an
+                    empty secret.
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Health: {bridgeHealthStatus}
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    type="password"
+                    value={bridgeSecret}
+                    onChange={(event) => setBridgeSecret(event.target.value)}
+                    placeholder="Enter Pondview secret"
+                  />
+                  <Button
+                    onClick={handleSetBridgeSecret}
+                    disabled={!bridgeSecret.trim().length}
+                  >
+                    Set Session Secret
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleClearBridgeSecret}
+                    disabled={!hasBridgeSecret}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-lg border p-4">
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    DuckDB HTTP Connection
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Persist the remote DuckDB host and port in browser storage.
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Health: {duckDbHttpHealthStatus}
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+                  <Input
+                    type="text"
+                    value={duckDbHttpHost}
+                    onChange={(event) => setDuckDbHttpHost(event.target.value)}
+                    placeholder="http://127.0.0.1 or duckdb-host.local"
+                  />
+                  <Input
+                    type="text"
+                    value={duckDbHttpPort}
+                    onChange={(event) => setDuckDbHttpPort(event.target.value)}
+                    placeholder="8123"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={handleSaveDuckDbHttpConfig}>
+                    Save HTTP Config
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleClearDuckDbHttpConfig}
+                    disabled={!isDuckDbHttpConfigured}
+                  >
+                    Clear Config
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-lg border p-4">
+                <div>
+                  <h3 className="text-sm font-semibold">DuckDB HTTP Auth</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Session-only auth for direct DuckDB HTTP queries. Use a
+                    token for `X-API-Key` or `user:pass` for basic auth.
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Current auth: {hasDuckDbHttpAuth ? "set" : "not set"}
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    type="password"
+                    value={duckDbHttpAuth}
+                    onChange={(event) => setDuckDbHttpAuth(event.target.value)}
+                    placeholder="token or user:pass"
+                  />
+                  <Button
+                    onClick={handleSetDuckDbHttpAuth}
+                    disabled={!duckDbHttpAuth.trim().length}
+                  >
+                    Set Session Auth
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleClearDuckDbHttpAuth}
+                    disabled={!hasDuckDbHttpAuth}
+                  >
+                    Clear
+                  </Button>
+                </div>
               </div>
             </div>
           </Card>
@@ -637,7 +885,7 @@ export default function SettingsPage() {
           {/* DuckDB Secrets Section */}
           <Card className="p-6 mb-6">
             <div className="flex flex-col gap-4">
-              {isBridgeRuntimeActive ? (
+              {isRemoteRuntimeActive ? (
                 <>
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div>
@@ -673,8 +921,8 @@ export default function SettingsPage() {
                       </div>
                     ) : secrets.length === 0 ? (
                       <div className="p-4 text-sm text-muted-foreground">
-                            No persistent secrets found. Create one and it will
-                            appear here.
+                        No persistent secrets found. Create one and it will
+                        appear here.
                       </div>
                     ) : (
                       secrets.map((secret) => (
@@ -697,13 +945,15 @@ export default function SettingsPage() {
                 <div>
                   <h2 className="text-xl font-semibold mb-2">DuckDB Secrets</h2>
                   <p className="text-sm text-muted-foreground">
-                      DuckDB secrets are bridge-only. SQL queries are currently
-                      running through DuckDB WASM.
-                    {!hasBridgeSecret
-                      ? " Configure a bridge secret and switch runtime to Bridge to view secrets."
-                      : bridgeHealthStatus === "offline"
-                        ? " Bridge appears offline. Start Pondview bridge and switch runtime to Bridge to view secrets."
-                        : " Switch runtime to Bridge to view secrets."}
+                    DuckDB secrets are available when queries run against a
+                    remote DuckDB runtime. SQL queries are currently running
+                    through DuckDB WASM.
+                    {!hasBridgeSecret && !isDuckDbHttpConfigured
+                      ? " Configure Bridge or DuckDB over HTTP, then switch to that runtime to view secrets."
+                      : bridgeHealthStatus === "offline" &&
+                          duckDbHttpHealthStatus === "offline"
+                        ? " Your remote runtimes currently appear offline. Bring one online and switch to it to view secrets."
+                        : " Switch runtime to Bridge or DuckDB over HTTP to view secrets."}
                   </p>
                 </div>
               )}
