@@ -10,7 +10,12 @@ describe("resolveSqlBackend", () => {
   test("uses duckdb-wasm when bridge health is offline", () => {
     const backend = resolveSqlBackend(
       { backendPreference: "auto" },
-      { hasBridgeSecret: () => true, getBridgeHealthStatus: () => "offline" },
+      {
+        hasBridgeSecret: () => true,
+        getBridgeHealthStatus: () => "offline",
+        hasDuckDbHttpConfig: () => false,
+        getDuckDbHttpHealthStatus: () => "offline",
+      },
     );
 
     expect(backend).toBe("duckdb-wasm");
@@ -19,7 +24,12 @@ describe("resolveSqlBackend", () => {
   test("uses bridge only when secret exists and bridge is online", () => {
     const backend = resolveSqlBackend(
       { backendPreference: "auto" },
-      { hasBridgeSecret: () => true, getBridgeHealthStatus: () => "online" },
+      {
+        hasBridgeSecret: () => true,
+        getBridgeHealthStatus: () => "online",
+        hasDuckDbHttpConfig: () => false,
+        getDuckDbHttpHealthStatus: () => "offline",
+      },
     );
 
     expect(backend).toBe("bridge");
@@ -29,14 +39,48 @@ describe("resolveSqlBackend", () => {
     expect(
       resolveSqlBackend(
         { backendPreference: "duckdb-wasm" },
-        { hasBridgeSecret: () => true, getBridgeHealthStatus: () => "online" },
+        {
+          hasBridgeSecret: () => true,
+          getBridgeHealthStatus: () => "online",
+          hasDuckDbHttpConfig: () => true,
+          getDuckDbHttpHealthStatus: () => "online",
+        },
       ),
     ).toBe("duckdb-wasm");
 
     expect(
       resolveSqlBackend(
         { backendPreference: "bridge" },
-        { hasBridgeSecret: () => true, getBridgeHealthStatus: () => "offline" },
+        {
+          hasBridgeSecret: () => true,
+          getBridgeHealthStatus: () => "offline",
+          hasDuckDbHttpConfig: () => true,
+          getDuckDbHttpHealthStatus: () => "online",
+        },
+      ),
+    ).toBe("duckdb-wasm");
+
+    expect(
+      resolveSqlBackend(
+        { backendPreference: "duckdb-http" },
+        {
+          hasBridgeSecret: () => false,
+          getBridgeHealthStatus: () => "offline",
+          hasDuckDbHttpConfig: () => true,
+          getDuckDbHttpHealthStatus: () => "offline",
+        },
+      ),
+    ).toBe("duckdb-http");
+
+    expect(
+      resolveSqlBackend(
+        { backendPreference: "duckdb-http" },
+        {
+          hasBridgeSecret: () => false,
+          getBridgeHealthStatus: () => "offline",
+          hasDuckDbHttpConfig: () => false,
+          getDuckDbHttpHealthStatus: () => "offline",
+        },
       ),
     ).toBe("duckdb-wasm");
   });
@@ -50,9 +94,9 @@ describe("identifier classification", () => {
   });
 
   test("classifies bridge-backed and opaque identifiers", () => {
-    expect(classifyDbIdentifier("postgresql://demo:pw@localhost:5432/demo")).toBe(
-      "bridge-remote",
-    );
+    expect(
+      classifyDbIdentifier("postgresql://demo:pw@localhost:5432/demo"),
+    ).toBe("bridge-remote");
     expect(classifyDbIdentifier("connection-prod-east-01")).toBe("unknown");
   });
 });
@@ -60,7 +104,9 @@ describe("identifier classification", () => {
 describe("assertWasmCompatibleDbIdentifier", () => {
   test("rejects external identifiers", () => {
     expect(() =>
-      assertWasmCompatibleDbIdentifier("postgresql://demo:pw@localhost:5432/demo"),
+      assertWasmCompatibleDbIdentifier(
+        "postgresql://demo:pw@localhost:5432/demo",
+      ),
     ).toThrow("Switch runtime to Bridge");
   });
 

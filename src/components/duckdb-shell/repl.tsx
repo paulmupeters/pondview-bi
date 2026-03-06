@@ -1,7 +1,4 @@
-import {
-  ClipboardDocumentIcon,
-  PlayIcon,
-} from "@heroicons/react/24/outline";
+import { ClipboardDocumentIcon, PlayIcon } from "@heroicons/react/24/outline";
 import { Eraser } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
@@ -14,7 +11,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cancelBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import { runQuery } from "@/lib/sql/run-query";
+import { resolveSqlBackend } from "@/lib/sql/sql-runtime";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -28,77 +27,77 @@ CROSS JOIN
     (SELECT UNNEST(GENERATE_SERIES(11, 20)) AS range2) t2;
 `;
 
-const SQL_SAMPLE_LINES: {
+const _SQL_SAMPLE_LINES: {
   id: string;
   content: ReactNode;
   indent?: boolean;
 }[] = [
-    {
-      id: "select",
-      content: <span className="text-purple-600 font-bold">SELECT</span>,
-    },
-    {
-      id: "date-trunc",
-      indent: true,
-      content: (
-        <>
-          date_trunc(<span className="text-green-600">'minute'</span>, timestamp,
-          5) <span className="text-purple-600 font-bold">AS</span> time_bucket,
-        </>
-      ),
-    },
-    {
-      id: "count-distinct",
-      indent: true,
-      content: (
-        <>
-          count(
-          <span className="text-purple-600 font-bold">DISTINCT</span> user_id){" "}
-          <span className="text-purple-600 font-bold">AS</span> active_users
-        </>
-      ),
-    },
-    {
-      id: "from",
-      content: <span className="text-purple-600 font-bold">FROM</span>,
-    },
-    {
-      id: "analytics-table",
-      indent: true,
-      content: <span className="text-amber-600">analytics.page_views</span>,
-    },
-    {
-      id: "where",
-      content: <span className="text-purple-600 font-bold">WHERE</span>,
-    },
-    {
-      id: "region",
-      indent: true,
-      content: (
-        <>
-          region = <span className="text-green-600">'us-east-1'</span>
-        </>
-      ),
-    },
-    {
-      id: "group-by",
-      content: (
-        <>
-          <span className="text-purple-600 font-bold">GROUP BY</span> 1
-        </>
-      ),
-    },
-    {
-      id: "order-by",
-      content: (
-        <>
-          <span className="text-purple-600 font-bold">ORDER BY</span> 1{" "}
-          <span className="text-purple-600 font-bold">ASC</span>
-          {";"}
-        </>
-      ),
-    },
-  ];
+  {
+    id: "select",
+    content: <span className="text-purple-600 font-bold">SELECT</span>,
+  },
+  {
+    id: "date-trunc",
+    indent: true,
+    content: (
+      <>
+        date_trunc(<span className="text-green-600">'minute'</span>, timestamp,
+        5) <span className="text-purple-600 font-bold">AS</span> time_bucket,
+      </>
+    ),
+  },
+  {
+    id: "count-distinct",
+    indent: true,
+    content: (
+      <>
+        count(
+        <span className="text-purple-600 font-bold">DISTINCT</span> user_id){" "}
+        <span className="text-purple-600 font-bold">AS</span> active_users
+      </>
+    ),
+  },
+  {
+    id: "from",
+    content: <span className="text-purple-600 font-bold">FROM</span>,
+  },
+  {
+    id: "analytics-table",
+    indent: true,
+    content: <span className="text-amber-600">analytics.page_views</span>,
+  },
+  {
+    id: "where",
+    content: <span className="text-purple-600 font-bold">WHERE</span>,
+  },
+  {
+    id: "region",
+    indent: true,
+    content: (
+      <>
+        region = <span className="text-green-600">'us-east-1'</span>
+      </>
+    ),
+  },
+  {
+    id: "group-by",
+    content: (
+      <>
+        <span className="text-purple-600 font-bold">GROUP BY</span> 1
+      </>
+    ),
+  },
+  {
+    id: "order-by",
+    content: (
+      <>
+        <span className="text-purple-600 font-bold">ORDER BY</span> 1{" "}
+        <span className="text-purple-600 font-bold">ASC</span>
+        {";"}
+      </>
+    ),
+  },
+];
 
 type DuckdbReplProps = {
   className?: string;
@@ -132,7 +131,7 @@ export function DuckdbRepl({
   inlineResults = true,
   onResultChangeAction,
   showRunControls = true,
-  chartConfig,
+  chartConfig: _chartConfig,
 }: DuckdbReplProps) {
   const [lastResult, setLastResult] = useState<{
     sql: string;
@@ -184,6 +183,19 @@ export function DuckdbRepl({
       return;
     }
     internalApi.runQuery();
+  };
+
+  const handleCancelQuery = async () => {
+    const backend = resolveSqlBackend({
+      backendPreference: "auto",
+      dbIdentifier: selectedDbIdentifier,
+    });
+
+    if (backend !== "bridge") {
+      return;
+    }
+
+    await cancelBridgeQuery();
   };
 
   // Propagate result changes to parent when inlineResults is false
@@ -289,9 +301,7 @@ export function DuckdbRepl({
           <PlayIcon className="w-3 h-3" />
           Run
         </button>
-
       </div>
-
 
       {/* SQL Console */}
       <div className="relative z-10 h-full min-h-[380px]">
@@ -300,6 +310,7 @@ export function DuckdbRepl({
           historyKey={HISTORY_KEY}
           executeQueryAction={executeQuery}
           onApiChangeAction={setInternalApi}
+          onCancelQueryAction={handleCancelQuery}
           showInlineResults={inlineResults}
           showRunControls={showRunControls}
           onSuccessAction={({ sql, rows, columns, durationMs }) => {

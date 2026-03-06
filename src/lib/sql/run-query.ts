@@ -1,5 +1,6 @@
 import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
+import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
 import { runQueryWasm } from "@/lib/sql/run-query-wasm";
 import {
   assertWasmCompatibleDbIdentifier,
@@ -27,6 +28,7 @@ type RunQueryDeps = {
   resolveBackend: typeof resolveSqlBackend;
   assertWasmCompatibleIdentifier: typeof assertWasmCompatibleDbIdentifier;
   runBridge: typeof runBridgeQuery;
+  runDuckDbHttp: typeof runDuckDbHttpQuery;
   runWasm: typeof runQueryWasm;
 };
 
@@ -34,6 +36,7 @@ const defaultDeps: RunQueryDeps = {
   resolveBackend: resolveSqlBackend,
   assertWasmCompatibleIdentifier: assertWasmCompatibleDbIdentifier,
   runBridge: runBridgeQuery,
+  runDuckDbHttp: runDuckDbHttpQuery,
   runWasm: runQueryWasm,
 };
 
@@ -45,8 +48,7 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
 
   return async function runQuery({
     sql,
-    // Kept for signature compatibility in browser mode.
-    config: _config,
+    config,
     dbIdentifier,
     signal,
     backendPreference = "auto",
@@ -65,8 +67,20 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
       };
     }
 
+    if (backend === "duckdb-http") {
+      const result = await deps.runDuckDbHttp(trimmedSql, signal, config);
+      return {
+        ...result,
+        backend,
+      };
+    }
+
     deps.assertWasmCompatibleIdentifier(dbIdentifier);
-    const result = await deps.runWasm({ sql: trimmedSql, signal, dbIdentifier });
+    const result = await deps.runWasm({
+      sql: trimmedSql,
+      signal,
+      dbIdentifier,
+    });
     return {
       ...result,
       backend,

@@ -2,10 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
-import {
-  cancelBridgeQuery,
-  hasSessionSecret,
-} from "@/lib/bridge/pondview-bridge";
 import { runQuery } from "@/lib/sql/run-query";
 import { cn } from "@/lib/utils";
 import { SqlCodeEditor, type SqlCodeEditorApi } from "./sql-code-editor";
@@ -91,12 +87,12 @@ export type SqlConsoleProps = {
     durationMs: number;
   }) => void;
   onApiChangeAction?: (api: SqlConsoleApi | null) => void;
+  onCancelQueryAction?: () => Promise<void> | void;
   showInlineResults?: boolean;
   showRunControls?: boolean;
 };
 
-const DEFAULT_PLACEHOLDER =
-  "ENTER SQL QUERY...";
+const DEFAULT_PLACEHOLDER = "ENTER SQL QUERY...";
 const DEFAULT_HISTORY_LIMIT = 100;
 const DEFAULT_RUN_LABEL = "▶ RUN";
 const DEFAULT_STOP_LABEL = "⏹ STOP";
@@ -111,6 +107,7 @@ export function SqlConsole({
   executeQueryAction,
   onSuccessAction,
   onApiChangeAction,
+  onCancelQueryAction,
   showInlineResults = true,
   showRunControls = true,
 }: SqlConsoleProps) {
@@ -220,7 +217,12 @@ export function SqlConsole({
           insights: [],
         },
       });
-      onSuccessAction?.({ sql: currentSql, rows, columns, durationMs: duration });
+      onSuccessAction?.({
+        sql: currentSql,
+        rows,
+        columns,
+        durationMs: duration,
+      });
     } catch (err) {
       if ((err as Error).name === "AbortError") {
         setError("Query cancelled");
@@ -237,14 +239,14 @@ export function SqlConsole({
     if (abortRef.current) {
       abortRef.current.abort();
     }
-    if (hasSessionSecret()) {
-      void cancelBridgeQuery().catch(() => {
+    if (onCancelQueryAction) {
+      void Promise.resolve(onCancelQueryAction()).catch(() => {
         // Best effort cancel; local abort already stops the UI request.
       });
     }
   };
 
-  const runQueryRef = useRef<() => void>(() => { });
+  const runQueryRef = useRef<() => void>(() => {});
   useEffect(() => {
     runQueryRef.current = () => {
       void handleRunQuery();
@@ -282,9 +284,13 @@ export function SqlConsole({
     };
   }, [onApiChangeAction, sql]);
 
-
   return (
-    <div className={cn("flex w-full min-w-0 h-full flex-col gap-3 p-0 py-4 relative", className)}>
+    <div
+      className={cn(
+        "flex w-full min-w-0 h-full flex-col gap-3 p-0 py-4 relative",
+        className,
+      )}
+    >
       <div className="rounded-sm bg-card transition-colors h-full">
         <div className="flex flex-col gap-3 p-0 sm:flex-row sm:items-center sm:gap-4">
           <div className="flex-1 min-w-0 flex flex-col gap-2 mt-12">
@@ -303,31 +309,31 @@ export function SqlConsole({
             />
           </div>
           {showRunControls && (
-          <div className="flex flex-row justify-end gap-2 sm:flex-col sm:items-center sm:px-1 absolute top-2 right-1">
-            {!isRunning && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void handleRunQuery()}
-                disabled={isRunning}
-                className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-              >
-                {runButtonLabel}
-              </Button>
-            )}
-            {isRunning && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={cancelRun}
-                disabled={!isRunning}
-                className="text-sm font-mono bg-primary text-primary-foreground border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-              >
-                {stopButtonLabel}
-              </Button>
-            )}
-          </div>
-          )} 
+            <div className="flex flex-row justify-end gap-2 sm:flex-col sm:items-center sm:px-1 absolute top-2 right-1">
+              {!isRunning && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleRunQuery()}
+                  disabled={isRunning}
+                  className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                >
+                  {runButtonLabel}
+                </Button>
+              )}
+              {isRunning && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={cancelRun}
+                  disabled={!isRunning}
+                  className="text-sm font-mono bg-primary text-primary-foreground border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                >
+                  {stopButtonLabel}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
       {showInlineResults && results && (
