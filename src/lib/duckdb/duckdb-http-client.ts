@@ -82,11 +82,6 @@ export function buildDuckDbHttpUrl(config: ResolvedHttpDuckDbConfig): URL {
   return url;
 }
 
-export function buildDuckDbHttpPingUrl(config: ResolvedHttpDuckDbConfig): URL {
-  const queryUrl = buildDuckDbHttpUrl(config);
-  return new URL("/ping", queryUrl);
-}
-
 export function buildDuckDbHttpHeaders(
   config: ResolvedHttpDuckDbConfig,
 ): Record<string, string> {
@@ -194,20 +189,14 @@ export async function pingDuckDbHttp(
   config: ResolvedHttpDuckDbConfig,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  const response = await fetch(buildDuckDbHttpPingUrl(config), {
-    method: "GET",
+  // Probe the same SQL endpoint used by normal queries to avoid server-specific
+  // /ping behavior and CORS differences.
+  const response = await fetch(buildDuckDbHttpUrl(config), {
+    method: "POST",
     headers: buildDuckDbHttpHeaders(config),
-    cache: "no-store",
+    body: "SELECT 1;",
     signal,
   });
 
-  if (!response.ok) {
-    return false;
-  }
-
-  const payload = (await response.json().catch(() => ({}))) as {
-    status?: string;
-  };
-
-  return payload.status === "ok";
+  return response.ok;
 }

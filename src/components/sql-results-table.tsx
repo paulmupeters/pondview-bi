@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 const DEFAULT_COLUMN_SIZE = 180;
 const MIN_COLUMN_SIZE = 120;
 const MAX_COLUMN_SIZE = 640;
@@ -20,6 +20,7 @@ const MAX_COLUMN_SIZE = 640;
 export function SqlResultsTable({
   dataOverride,
   className,
+  pageSize = DEFAULT_PAGE_SIZE,
 }: {
   dataOverride?: {
     stage?: "loading" | "processing" | "analyzing" | "visualizing" | "complete";
@@ -33,6 +34,7 @@ export function SqlResultsTable({
     };
   };
   className?: string;
+  pageSize?: number;
 }) {
   const payload = dataOverride; // parent supplies data; avoid extra subscription
 
@@ -60,12 +62,13 @@ export function SqlResultsTable({
     [columns],
   );
 
-  const shouldPaginate = rows.length > PAGE_SIZE;
+  const resolvedPageSize = Math.max(1, pageSize);
+  const shouldPaginate = rows.length > resolvedPageSize;
 
   // Controlled pagination state - resets when rows change
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
-    pageSize: shouldPaginate ? PAGE_SIZE : Math.max(rows.length, 1),
+    pageSize: shouldPaginate ? resolvedPageSize : Math.max(rows.length, 1),
   });
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const previousColumnNamesSignature = useRef<string>("");
@@ -73,12 +76,12 @@ export function SqlResultsTable({
   // Update pageSize when rows change
   useEffect(() => {
     const newPageSize =
-      rows.length > PAGE_SIZE ? PAGE_SIZE : Math.max(rows.length, 1);
+      rows.length > resolvedPageSize ? resolvedPageSize : Math.max(rows.length, 1);
     setPagination({
       pageIndex: 0, // Reset to first page when data changes
       pageSize: newPageSize,
     });
-  }, [rows.length]);
+  }, [rows.length, resolvedPageSize]);
 
   // Reset custom widths when result columns change.
   useEffect(() => {
@@ -242,9 +245,9 @@ export function SqlResultsTable({
       {shouldPaginate && (
         <div className="shrink-0 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            Showing {table.getState().pagination.pageIndex * PAGE_SIZE + 1} to{" "}
+            Showing {table.getState().pagination.pageIndex * resolvedPageSize + 1} to{" "}
             {Math.min(
-              (table.getState().pagination.pageIndex + 1) * PAGE_SIZE,
+              (table.getState().pagination.pageIndex + 1) * resolvedPageSize,
               rows.length,
             )}{" "}
             of {rows.length} results

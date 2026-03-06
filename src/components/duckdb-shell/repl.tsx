@@ -1,6 +1,7 @@
 import { ClipboardDocumentIcon, PlayIcon } from "@heroicons/react/24/outline";
 import { Eraser } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import {
   type ExecuteQueryFn,
   SqlConsole,
@@ -13,7 +14,8 @@ import {
 } from "@/components/ui/tooltip";
 import { cancelBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import { runQuery } from "@/lib/sql/run-query";
-import { resolveSqlBackend } from "@/lib/sql/sql-runtime";
+import { DEFAULT_WASM_DB_IDENTIFIER, resolveSqlBackend } from "@/lib/sql/sql-runtime";
+import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -142,6 +144,15 @@ export function DuckdbRepl({
   const [internalApi, setInternalApi] = useState<SqlConsoleApi | null>(null);
   const [copiedSqlSnippet, setCopiedSqlSnippet] = useState(false);
   const copySnippetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [selectedDb, setSelectedDb] = useState<string | undefined>(
+    selectedDbIdentifier ?? DEFAULT_WASM_DB_IDENTIFIER,
+  );
+  const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(true);
+  const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
+  const sqlBackendPreference = useSqlBackendPreference();
+  const effectiveSqlBackend = resolveSqlBackend({
+    backendPreference: sqlBackendPreference,
+  });
 
   const executeQuery: ExecuteQueryFn = async ({ sql, signal }) => {
     if (onRunSqlAction) {
@@ -185,6 +196,18 @@ export function DuckdbRepl({
     internalApi.runQuery();
   };
 
+  const handleInsertTableName = useCallback(
+    (tableName: string) => {
+      if (!internalApi) return;
+      const current = internalApi.getQuery() ?? "";
+      const lastChar = current.length > 0 ? current[current.length - 1] : "";
+      const needsSpace = current.length > 0 && !/\s/.test(lastChar);
+      internalApi.insertText(`${needsSpace ? " " : ""}${tableName}`);
+      internalApi.focus();
+    },
+    [internalApi],
+  );
+
   const handleCancelQuery = async () => {
     const backend = resolveSqlBackend({
       backendPreference: "auto",
@@ -227,96 +250,115 @@ export function DuckdbRepl({
   return (
     <div
       className={cn(
-        "relative flex-1 min-w-0 h-full overflow-hidden border-r border-border p-4",
+        "flex min-w-0 h-full overflow-hidden border-r border-border",
         className,
       )}
     >
-      {/* Toolbar Buttons */}
-      <div className="absolute top-4 right-4 z-20 flex gap-2 text-xs">
-        {lastResult && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="flex items-center gap-2 bg-card text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors h-[26px]"
-                onClick={() => {
-                  setLastResult(null);
-                  internalApi?.clearResults();
-                  internalApi?.setQuery("");
-                  if (!inlineResults && onResultChangeAction) {
-                    onResultChangeAction(null);
-                  }
-                }}
-              >
-                <Eraser className="w-3 h-3" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Clear results</p>
-            </TooltipContent>
-          </Tooltip>
-        )}
-        <button
-          type="button"
-          className="flex items-center gap-2 bg-card border border-border text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors shadow-sm h-[26px]"
-          onClick={handleCopySqlSnippet}
-        >
-          {copiedSqlSnippet ? (
-            <>
-              <svg
-                aria-hidden="true"
-                className="w-3 h-3 text-green-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-              Copied
-            </>
-          ) : (
-            <>
-              <ClipboardDocumentIcon className="w-3 h-3" />
-              Copy
-            </>
-          )}
-        </button>
+      {/* Table Explorer Sidebar */}
+      <ConnectedDataPanel
+        selectedDb={selectedDb}
+        onSelect={setSelectedDb}
+        mode="sidebar"
+        onInsertTable={handleInsertTableName}
+        refreshToken={explorerRefreshToken}
+        collapsed={isExplorerCollapsed}
+        onToggleCollapse={() => setIsExplorerCollapsed((prev) => !prev)}
+        className="shrink-0 bg-background"
+        sqlBackend={effectiveSqlBackend}
+      />
 
-        <button
-          type="button"
-          disabled={!internalApi}
-          onClick={handleRunSqlFromBanner}
-          className={cn(
-            "flex items-center gap-2 px-4 py-1.5 rounded text-xs font-bold transition-colors shadow-sm h-[26px]",
-            internalApi
-              ? "bg-card border border-border text-card-foreground hover:bg-accent"
-              : "bg-card border border-border text-card-foreground cursor-not-allowed",
+      {/* Editor + Results area */}
+      <div className="relative flex-1 min-w-0 h-full p-4">
+        {/* Toolbar Buttons */}
+        <div className="absolute top-4 right-4 z-20 flex gap-2 text-xs">
+          {lastResult && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 bg-card text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors h-[26px]"
+                  onClick={() => {
+                    setLastResult(null);
+                    internalApi?.clearResults();
+                    internalApi?.setQuery("");
+                    if (!inlineResults && onResultChangeAction) {
+                      onResultChangeAction(null);
+                    }
+                  }}
+                >
+                  <Eraser className="w-3 h-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Clear results</p>
+              </TooltipContent>
+            </Tooltip>
           )}
-        >
-          <PlayIcon className="w-3 h-3" />
-          Run
-        </button>
-      </div>
+          <button
+            type="button"
+            className="flex items-center gap-2 bg-card border border-border text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors shadow-sm h-[26px]"
+            onClick={handleCopySqlSnippet}
+          >
+            {copiedSqlSnippet ? (
+              <>
+                <svg
+                  aria-hidden="true"
+                  className="w-3 h-3 text-green-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+                Copied
+              </>
+            ) : (
+              <>
+                <ClipboardDocumentIcon className="w-3 h-3" />
+                Copy
+              </>
+            )}
+          </button>
 
-      {/* SQL Console */}
-      <div className="relative z-10 h-full min-h-[380px]">
-        <SqlConsole
-          className="h-full w-full"
-          historyKey={HISTORY_KEY}
-          executeQueryAction={executeQuery}
-          onApiChangeAction={setInternalApi}
-          onCancelQueryAction={handleCancelQuery}
-          showInlineResults={inlineResults}
-          showRunControls={showRunControls}
-          onSuccessAction={({ sql, rows, columns, durationMs }) => {
-            setLastResult({ sql, rows, columns, durationMs });
-          }}
-        />
+          {showRunControls && (
+            <button
+              type="button"
+              disabled={!internalApi}
+              onClick={handleRunSqlFromBanner}
+              className={cn(
+                "flex items-center gap-2 px-4 py-1.5 rounded text-xs font-bold transition-colors shadow-sm h-[26px]",
+                internalApi
+                  ? "bg-card border border-border text-card-foreground hover:bg-accent"
+                  : "bg-card border border-border text-card-foreground cursor-not-allowed",
+              )}
+            >
+              <PlayIcon className="w-3 h-3" />
+              Run
+            </button>
+          )}
+        </div>
+
+        {/* SQL Console */}
+        <div className="relative z-10 h-full">
+          <SqlConsole
+            className="h-full w-full"
+            historyKey={HISTORY_KEY}
+            executeQueryAction={executeQuery}
+            onApiChangeAction={setInternalApi}
+            onCancelQueryAction={handleCancelQuery}
+            showInlineResults={inlineResults}
+            showRunControls={false}
+            onSuccessAction={({ sql, rows, columns, durationMs }) => {
+              setLastResult({ sql, rows, columns, durationMs });
+              setExplorerRefreshToken((prev) => prev + 1);
+            }}
+          />
+        </div>
       </div>
     </div>
   );

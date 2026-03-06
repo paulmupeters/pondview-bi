@@ -13,6 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
+import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
 import { useMaterializedTables } from "@/hooks/use-materialized-tables";
 import { useWasmTables } from "@/hooks/use-wasm-tables";
 import {
@@ -22,6 +23,7 @@ import {
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
+  type SqlBackend,
 } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 import { Separator } from "./ui/separator";
@@ -35,6 +37,7 @@ interface ConnectedDataPanelProps {
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   refreshToken?: number;
+  sqlBackend?: SqlBackend;
 }
 
 export function ConnectedDataPanel({
@@ -46,6 +49,7 @@ export function ConnectedDataPanel({
   collapsed = false,
   onToggleCollapse,
   refreshToken,
+  sqlBackend = "duckdb-wasm",
 }: ConnectedDataPanelProps) {
   const connectedTables = useConnectedTables();
   const { tables: materializedTables } = useMaterializedTables();
@@ -55,6 +59,12 @@ export function ConnectedDataPanel({
     error: wasmTablesError,
     refresh: refreshWasmTables,
   } = useWasmTables();
+  const {
+    tables: remoteTables,
+    isLoading: isLoadingRemoteTables,
+    error: remoteTablesError,
+    connectionInfo: remoteConnectionInfo,
+  } = useDuckdbHttpTables(sqlBackend, refreshToken);
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
@@ -83,6 +93,36 @@ export function ConnectedDataPanel({
       }))
       .sort((a, b) => a.schema.localeCompare(b.schema));
   }, [wasmTables]);
+
+  const groupedRemoteTables = useMemo(() => {
+    const grouped = new Map<string, string[]>();
+    for (const table of remoteTables) {
+      const schema = table.schema || "main";
+      const existing = grouped.get(schema);
+      if (existing) {
+        existing.push(table.name);
+      } else {
+        grouped.set(schema, [table.name]);
+      }
+    }
+
+    return Array.from(grouped.entries())
+      .map(([schema, tables]) => ({
+        schema,
+        tables: Array.from(new Set(tables)).sort((a, b) => a.localeCompare(b)),
+      }))
+      .sort((a, b) => a.schema.localeCompare(b.schema));
+  }, [remoteTables]);
+
+  const isRemoteBackend = sqlBackend === "bridge" || sqlBackend === "duckdb-http";
+  const remoteLabel =
+    sqlBackend === "bridge"
+      ? remoteConnectionInfo
+        ? `Bridge (${remoteConnectionInfo.host})`
+        : "Bridge"
+      : remoteConnectionInfo
+        ? `DuckDB HTTP (${remoteConnectionInfo.host}:${remoteConnectionInfo.port})`
+        : "DuckDB HTTP";
 
   const getDbIdentifier = (entry: (typeof connectedTables)[0]): string => {
     // Prefer connectionId (new) over databasePath (legacy) for identification
@@ -171,6 +211,76 @@ export function ConnectedDataPanel({
 
     return (
       <div className="flex flex-col gap-2">
+        {/* Remote backend section (bridge / duckdb-http) */}
+        {isRemoteBackend && (
+          <div className="space-y-1">
+            <div
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
+                mode === "sidebar" && "hover:bg-sidebar-accent/50",
+              )}
+            >
+              <Database className="h-4 w-4 shrink-0 text-emerald-500" />
+              <span className="truncate">{remoteLabel}</span>
+            </div>
+            <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
+              {isLoadingRemoteTables ? (
+                <p className="text-xs text-muted-foreground">
+                  Loading tables...
+                </p>
+              ) : remoteTablesError ? (
+                <p className="text-xs text-destructive">
+                  {remoteTablesError}
+                </p>
+              ) : groupedRemoteTables.length > 0 ? (
+                groupedRemoteTables.map((group, groupIdx) => (
+                  <div key={group.schema} className="space-y-1">
+                    {group.schema.toLowerCase() !== "main" && (
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {group.schema}
+                      </p>
+                    )}
+                    {group.tables.map((tableName, tableIdx) => {
+                      const colors = [
+                        "bg-emerald-400",
+                        "bg-teal-400",
+                        "bg-cyan-400",
+                      ];
+                      const color =
+                        colors[(groupIdx + tableIdx) % colors.length];
+                      return (
+                        <button
+                          key={`${group.schema}.${tableName}`}
+                          type="button"
+                          className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
+                          onClick={() =>
+                            onInsertTable?.(
+                              group.schema.toLowerCase() === "main"
+                                ? tableName
+                                : `${group.schema}.${tableName}`,
+                            )
+                          }
+                        >
+                          <span
+                            className={cn("w-1.5 h-1.5 rounded-full", color)}
+                          />
+                          <span className="truncate">{tableName}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No tables found.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isRemoteBackend && <Separator />}
+
         <div className="space-y-1">
           <div
             className={cn(

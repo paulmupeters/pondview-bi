@@ -46,7 +46,10 @@ function mapShowAllTablesRows(
     }));
 }
 
-export function useDuckdbHttpTables(backend: SqlBackend) {
+export function useDuckdbHttpTables(
+  backend: SqlBackend,
+  refreshToken?: number,
+) {
   const [tables, setTables] = useState<DuckdbTableEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +61,7 @@ export function useDuckdbHttpTables(backend: SqlBackend) {
     ? `${duckDbHttpConfig.host}:${duckDbHttpConfig.port}`
     : "";
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshToken is intentionally used to trigger re-fetches without being read
   useEffect(() => {
     let cancelled = false;
 
@@ -147,7 +151,7 @@ export function useDuckdbHttpTables(backend: SqlBackend) {
     return () => {
       cancelled = true;
     };
-  }, [backend]);
+  }, [backend, refreshToken]);
 
   return { tables, isLoading, error, isConfigured, connectionInfo };
 }

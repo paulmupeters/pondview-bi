@@ -106,11 +106,15 @@ export default function SettingsPage() {
   const [runtimeSettingsError, setRuntimeSettingsError] = useState<
     string | null
   >(null);
+  const [runtimeSettingsSuccess, setRuntimeSettingsSuccess] = useState<
+    string | null
+  >(null);
   const [secrets, setSecrets] = useState<{ name: string; provider: string }[]>(
     [],
   );
   const [secretsError, setSecretsError] = useState<string | null>(null);
   const [isSecretsLoading, setIsSecretsLoading] = useState(false);
+  const [isTestingHttpConnection, setIsTestingHttpConnection] = useState(false);
   const [isExportingWorkspace, setIsExportingWorkspace] = useState(false);
   const [isImportingWorkspace, setIsImportingWorkspace] = useState(false);
   const [isResettingWorkspace, setIsResettingWorkspace] = useState(false);
@@ -196,12 +200,6 @@ export default function SettingsPage() {
   }, [hasBridgeSecret, selectedSqlBackend]);
 
   useEffect(() => {
-    if (!isDuckDbHttpConfigured && selectedSqlBackend === "duckdb-http") {
-      setSqlBackendPreferenceInStorage("duckdb-wasm");
-    }
-  }, [isDuckDbHttpConfigured, selectedSqlBackend]);
-
-  useEffect(() => {
     if (!hasBridgeSecret) {
       return;
     }
@@ -285,6 +283,7 @@ export default function SettingsPage() {
     setSessionSecret(bridgeSecret);
     setHasBridgeSecret(hasSessionSecret());
     setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
     void refreshBridgeHealth();
     setBridgeSecret("");
     setShowSuccessMessage(true);
@@ -295,6 +294,7 @@ export default function SettingsPage() {
     clearSessionSecret();
     setHasBridgeSecret(false);
     setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
     void refreshBridgeHealth();
     if (selectedSqlBackend === "bridge") {
       setSqlBackendPreferenceInStorage("duckdb-wasm");
@@ -308,11 +308,8 @@ export default function SettingsPage() {
       return;
     }
 
-    if (backend === "duckdb-http" && !isDuckDbHttpConfigured) {
-      return;
-    }
-
     setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
     setSqlBackendPreferenceInStorage(backend);
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
@@ -321,9 +318,11 @@ export default function SettingsPage() {
   const handleSaveDuckDbHttpConfig = () => {
     const host = duckDbHttpHost.trim();
     const port = Number.parseInt(duckDbHttpPort.trim(), 10);
+    const auth = duckDbHttpAuth.trim();
 
     if (!host) {
       setRuntimeSettingsError("DuckDB HTTP host is required.");
+      setRuntimeSettingsSuccess(null);
       return;
     }
 
@@ -331,11 +330,19 @@ export default function SettingsPage() {
       setRuntimeSettingsError(
         "DuckDB HTTP port must be a valid number between 1 and 65535.",
       );
+      setRuntimeSettingsSuccess(null);
       return;
+    }
+
+    if (auth.length) {
+      setDuckDbHttpSessionAuth(auth);
+      setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
+      setDuckDbHttpAuth("");
     }
 
     setDuckDbHttpConfigInStorage({ host, port });
     setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess("DuckDB HTTP connection settings saved.");
     void refreshDuckDbHttpHealth();
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
@@ -346,19 +353,10 @@ export default function SettingsPage() {
     setDuckDbHttpHost("");
     setDuckDbHttpPort("");
     setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess("DuckDB HTTP connection settings cleared.");
     if (selectedSqlBackend === "duckdb-http") {
       setSqlBackendPreferenceInStorage("duckdb-wasm");
     }
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
-  };
-
-  const handleSetDuckDbHttpAuth = () => {
-    setDuckDbHttpSessionAuth(duckDbHttpAuth);
-    setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
-    setRuntimeSettingsError(null);
-    void refreshDuckDbHttpHealth();
-    setDuckDbHttpAuth("");
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
   };
@@ -367,12 +365,56 @@ export default function SettingsPage() {
     clearDuckDbHttpSessionAuth();
     setHasDuckDbHttpAuth(false);
     setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess("DuckDB HTTP auth cleared.");
     void refreshDuckDbHttpHealth();
     if (selectedSqlBackend === "duckdb-http" && !isDuckDbHttpConfigured) {
       setSqlBackendPreferenceInStorage("duckdb-wasm");
     }
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleTestDuckDbHttpConnection = async () => {
+    const host = duckDbHttpHost.trim();
+    const port = Number.parseInt(duckDbHttpPort.trim(), 10);
+
+    if (!host) {
+      setRuntimeSettingsError("DuckDB HTTP host is required.");
+      setRuntimeSettingsSuccess(null);
+      return;
+    }
+
+    if (!Number.isFinite(port) || port < 1 || port > 65535) {
+      setRuntimeSettingsError(
+        "DuckDB HTTP port must be a valid number between 1 and 65535.",
+      );
+      setRuntimeSettingsSuccess(null);
+      return;
+    }
+
+    setIsTestingHttpConnection(true);
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
+
+    try {
+      setDuckDbHttpConfigInStorage({ host, port });
+      const status = await refreshDuckDbHttpHealth(undefined, { host, port });
+      if (status === "online") {
+        setRuntimeSettingsSuccess("Connection successful — DuckDB HTTP is reachable.");
+        setShowSuccessMessage(true);
+        setTimeout(() => setShowSuccessMessage(false), 3000);
+      } else {
+        setRuntimeSettingsSuccess(null);
+        setRuntimeSettingsError(
+          "Connection failed — DuckDB HTTP server is not reachable.",
+        );
+      }
+    } catch {
+      setRuntimeSettingsSuccess(null);
+      setRuntimeSettingsError("Connection test failed unexpectedly.");
+    } finally {
+      setIsTestingHttpConnection(false);
+    }
   };
 
   const handleExportWorkspace = async () => {
@@ -711,12 +753,8 @@ export default function SettingsPage() {
                     <SelectItem value="bridge" disabled={!isBridgeAvailable}>
                       Bridge {isBridgeAvailable ? "" : "(Unavailable)"}
                     </SelectItem>
-                    <SelectItem
-                      value="duckdb-http"
-                      disabled={!isDuckDbHttpConfigured}
-                    >
-                      DuckDB over HTTP{" "}
-                      {isDuckDbHttpConfigured ? "" : "(Unavailable)"}
+                    <SelectItem value="duckdb-http">
+                      DuckDB over HTTP
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -727,115 +765,144 @@ export default function SettingsPage() {
                   {runtimeSettingsError}
                 </p>
               )}
+              {runtimeSettingsSuccess && (
+                <p className="text-sm text-green-600 dark:text-green-400">
+                  {runtimeSettingsSuccess}
+                </p>
+              )}
 
-              <div className="space-y-3 rounded-lg border p-4">
-                <div>
-                  <h3 className="text-sm font-semibold">Bridge Auth</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Optional session-only Pondview secret for authenticated
-                    bridge queries. Leave empty when Pondview is started with an
-                    empty secret.
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Health: {bridgeHealthStatus}
-                  </p>
+              {selectedSqlBackend === "bridge" && (
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">Bridge Auth</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Optional session-only Pondview secret for authenticated
+                      bridge queries. Leave empty when Pondview is started with
+                      an empty secret.
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Health: {bridgeHealthStatus}
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      type="password"
+                      value={bridgeSecret}
+                      onChange={(event) => setBridgeSecret(event.target.value)}
+                      placeholder="Enter Pondview secret"
+                    />
+                    <Button
+                      onClick={handleSetBridgeSecret}
+                      disabled={!bridgeSecret.trim().length}
+                    >
+                      Set Session Secret
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleClearBridgeSecret}
+                      disabled={!hasBridgeSecret}
+                    >
+                      Clear
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Input
-                    type="password"
-                    value={bridgeSecret}
-                    onChange={(event) => setBridgeSecret(event.target.value)}
-                    placeholder="Enter Pondview secret"
-                  />
-                  <Button
-                    onClick={handleSetBridgeSecret}
-                    disabled={!bridgeSecret.trim().length}
-                  >
-                    Set Session Secret
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleClearBridgeSecret}
-                    disabled={!hasBridgeSecret}
-                  >
-                    Clear
-                  </Button>
-                </div>
-              </div>
+              )}
 
-              <div className="space-y-3 rounded-lg border p-4">
-                <div>
-                  <h3 className="text-sm font-semibold">
-                    DuckDB HTTP Connection
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Persist the remote DuckDB host and port in browser storage.
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Health: {duckDbHttpHealthStatus}
-                  </p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-                  <Input
-                    type="text"
-                    value={duckDbHttpHost}
-                    onChange={(event) => setDuckDbHttpHost(event.target.value)}
-                    placeholder="http://127.0.0.1 or duckdb-host.local"
-                  />
-                  <Input
-                    type="text"
-                    value={duckDbHttpPort}
-                    onChange={(event) => setDuckDbHttpPort(event.target.value)}
-                    placeholder="8123"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button onClick={handleSaveDuckDbHttpConfig}>
-                    Save HTTP Config
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleClearDuckDbHttpConfig}
-                    disabled={!isDuckDbHttpConfigured}
-                  >
-                    Clear Config
-                  </Button>
-                </div>
-              </div>
+              {selectedSqlBackend === "duckdb-http" && (
+                <div className="space-y-4 rounded-lg border p-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      DuckDB HTTP Connection
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Configure host, port, and optional auth for a remote
+                      DuckDB{" "}
+                      <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                        httpserver
+                      </code>{" "}
+                      instance.
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Health: {duckDbHttpHealthStatus}
+                    </p>
+                  </div>
 
-              <div className="space-y-3 rounded-lg border p-4">
-                <div>
-                  <h3 className="text-sm font-semibold">DuckDB HTTP Auth</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Session-only auth for direct DuckDB HTTP queries. Use a
-                    token for `X-API-Key` or `user:pass` for basic auth.
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Current auth: {hasDuckDbHttpAuth ? "set" : "not set"}
-                  </p>
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+                    <Input
+                      type="text"
+                      value={duckDbHttpHost}
+                      onChange={(event) =>
+                        setDuckDbHttpHost(event.target.value)
+                      }
+                      placeholder="http://127.0.0.1 or duckdb-host.local"
+                    />
+                    <Input
+                      type="text"
+                      value={duckDbHttpPort}
+                      onChange={(event) =>
+                        setDuckDbHttpPort(event.target.value)
+                      }
+                      placeholder="8123"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="duckdb-http-auth"
+                      className="text-sm font-medium mb-2 block"
+                    >
+                      Auth{" "}
+                      <span className="font-normal text-muted-foreground">
+                        ({hasDuckDbHttpAuth ? "set" : "not set"})
+                      </span>
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        id="duckdb-http-auth"
+                        type="password"
+                        value={duckDbHttpAuth}
+                        onChange={(event) =>
+                          setDuckDbHttpAuth(event.target.value)
+                        }
+                        placeholder={
+                          hasDuckDbHttpAuth
+                            ? "••••••••  (enter new value, then Save Config)"
+                            : "token or user:pass"
+                        }
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={handleClearDuckDbHttpAuth}
+                        disabled={!hasDuckDbHttpAuth}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={handleSaveDuckDbHttpConfig}>
+                      Save Connection
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => void handleTestDuckDbHttpConnection()}
+                      disabled={isTestingHttpConnection}
+                    >
+                      {isTestingHttpConnection
+                        ? "Testing..."
+                        : "Test Connection"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleClearDuckDbHttpConfig}
+                      disabled={!isDuckDbHttpConfigured}
+                    >
+                      Clear Config
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Input
-                    type="password"
-                    value={duckDbHttpAuth}
-                    onChange={(event) => setDuckDbHttpAuth(event.target.value)}
-                    placeholder="token or user:pass"
-                  />
-                  <Button
-                    onClick={handleSetDuckDbHttpAuth}
-                    disabled={!duckDbHttpAuth.trim().length}
-                  >
-                    Set Session Auth
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleClearDuckDbHttpAuth}
-                    disabled={!hasDuckDbHttpAuth}
-                  >
-                    Clear
-                  </Button>
-                </div>
-              </div>
+              )}
             </div>
           </Card>
 
