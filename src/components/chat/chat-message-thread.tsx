@@ -53,7 +53,7 @@ export function ChatMessageThread({
     <Conversation className={conversationClassName}>
       <ConversationContent
         className={cn(
-          "max-w-full mx-auto w-full overflow-y-auto",
+          "max-w-full mx-auto w-full",
           contentSpacingClassName,
         )}
       >

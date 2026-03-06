@@ -207,7 +207,7 @@ export function PromptInputWrapper({
   onInsertTable,
 }: PromptInputWrapperProps) {
   const [internalMode, setInternalMode] = useState<PromptMode>(
-    mode ?? "manual",
+    mode ?? "ai",
   );
 
   useEffect(() => {

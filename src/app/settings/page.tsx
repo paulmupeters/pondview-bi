@@ -1,4 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type AiProvider,
+  getAiProviderDisplayName,
+  getApiKeyStorageKeyForProvider,
+  getMissingRequiredSetting,
+  loadAiSettingsFromStorage,
+  saveAiSettingsToStorage,
+} from "@/ai/settings";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -20,42 +28,34 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  applyCustomCss,
-  applyTheme,
-  getSelectedTheme,
-  setSelectedTheme as setThemeInStorage,
-} from "@/lib/custom-css";
-import {
   clearSessionSecret,
   hasSessionSecret,
   runBridgeQuery,
   setSessionSecret,
 } from "@/lib/bridge/pondview-bridge";
 import {
-  exportWorkspace,
-  importWorkspace,
-  resetWorkspace,
-  validateWorkspaceImport,
-} from "@/lib/workspace/export-import";
+  applyCustomCss,
+  applyTheme,
+  getSelectedTheme,
+  setSelectedTheme as setThemeInStorage,
+} from "@/lib/custom-css";
 import {
   getSqlBackendPreferenceFromStorage,
   refreshBridgeHealth,
-  setSqlBackendPreferenceInStorage,
   type SqlBackend,
+  setSqlBackendPreferenceInStorage,
 } from "@/lib/sql/sql-runtime";
 import {
   useBridgeHealthStatus,
   useSqlBackendPreference,
 } from "@/lib/sql/use-sql-backend";
-import { getAllThemes } from "@/themes";
 import {
-  getAiProviderDisplayName,
-  getApiKeyStorageKeyForProvider,
-  getMissingRequiredSetting,
-  loadAiSettingsFromStorage,
-  saveAiSettingsToStorage,
-  type AiProvider,
-} from "@/ai/settings";
+  exportWorkspace,
+  importWorkspace,
+  resetWorkspace,
+  validateWorkspaceImport,
+} from "@/lib/workspace/export-import";
+import { getAllThemes } from "@/themes";
 
 const CSS_PLACEHOLDER = `:root{
   --background: 0 0% 100%;
@@ -88,7 +88,7 @@ export default function SettingsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
   const [secrets, setSecrets] = useState<{ name: string; provider: string }[]>(
-    []
+    [],
   );
   const [secretsError, setSecretsError] = useState<string | null>(null);
   const [isSecretsLoading, setIsSecretsLoading] = useState(false);
@@ -121,10 +121,14 @@ export default function SettingsPage() {
     setHasBridgeSecret(hasSecret);
 
     const savedBackendPreference = getSqlBackendPreferenceFromStorage();
-    if (savedBackendPreference === "bridge" || savedBackendPreference === "duckdb-wasm") {
-      const resolvedPreference = savedBackendPreference === "bridge" && !hasSecret
-        ? "duckdb-wasm"
-        : savedBackendPreference;
+    if (
+      savedBackendPreference === "bridge" ||
+      savedBackendPreference === "duckdb-wasm"
+    ) {
+      const resolvedPreference =
+        savedBackendPreference === "bridge" && !hasSecret
+          ? "duckdb-wasm"
+          : savedBackendPreference;
       if (resolvedPreference !== savedBackendPreference) {
         setSqlBackendPreferenceInStorage(resolvedPreference);
       }
@@ -165,7 +169,9 @@ export default function SettingsPage() {
   }, [hasBridgeSecret]);
 
   const effectiveSqlBackend: SqlBackend =
-    selectedSqlBackend === "bridge" && isBridgeAvailable ? "bridge" : "duckdb-wasm";
+    selectedSqlBackend === "bridge" && isBridgeAvailable
+      ? "bridge"
+      : "duckdb-wasm";
   const isBridgeRuntimeActive = effectiveSqlBackend === "bridge";
 
   const fetchSecrets = useCallback(async () => {
@@ -424,7 +430,9 @@ export default function SettingsPage() {
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="anthropic">Anthropic</SelectItem>
                     <SelectItem value="xai">xAI</SelectItem>
-                    <SelectItem value="open-responses">Open Responses</SelectItem>
+                    <SelectItem value="open-responses">
+                      Open Responses
+                    </SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -511,28 +519,26 @@ export default function SettingsPage() {
           <Card className="p-6 mb-6">
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold mb-2">Duckdb Authentication</h2>
+                <h2 className="text-xl font-semibold mb-2">
+                  Duckdb Authentication
+                </h2>
                 <p className="text-sm text-muted-foreground">
                   Optional session-only Pondview secret for authenticated bridge
                   queries. Leave empty when Pondview is started with an empty
                   secret (no-auth mode).
                 </p>
               </div>
-              <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
-                Status: {hasBridgeSecret ? "configured for this session" : "not configured"}
-              </div>
-              <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
-                Bridge health: {hasBridgeSecret ? bridgeHealthStatus : "offline"}
-              </div>
-              <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
-                SQL runtime:{" "}
-                {isBridgeRuntimeActive
-                  ? "Bridge"
-                  : hasBridgeSecret
-                    ? bridgeHealthStatus === "offline"
-                      ? "DuckDB WASM fallback (bridge unavailable)"
-                      : "DuckDB WASM (manual selection)"
-                    : "DuckDB WASM fallback (bridge auth not configured)"}
+              <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs flex items-center justify-between">
+                <span className="text-muted-foreground">SQL runtime</span>
+                <span className={isBridgeRuntimeActive ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}>
+                  {isBridgeRuntimeActive
+                    ? "Bridge"
+                    : hasBridgeSecret
+                      ? bridgeHealthStatus === "offline"
+                        ? "DuckDB WASM (bridge unavailable)"
+                        : "DuckDB WASM (manual selection)"
+                      : "DuckDB WASM"}
+                </span>
               </div>
               <div>
                 <label
@@ -547,7 +553,10 @@ export default function SettingsPage() {
                     handleSqlBackendChange(value as SqlBackend)
                   }
                 >
-                  <SelectTrigger id="sql-backend-select" className="w-full sm:w-auto">
+                  <SelectTrigger
+                    id="sql-backend-select"
+                    className="w-full sm:w-auto"
+                  >
                     <SelectValue placeholder="Select query runtime" />
                   </SelectTrigger>
                   <SelectContent>
@@ -632,7 +641,9 @@ export default function SettingsPage() {
                 <>
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div>
-                      <h2 className="text-xl font-semibold mb-2">DuckDB Secrets</h2>
+                      <h2 className="text-xl font-semibold mb-2">
+                        DuckDB Secrets
+                      </h2>
                       <p className="text-sm text-muted-foreground">
                         View persistent secrets managed by DuckDB. Use{" "}
                         <code className="bg-muted px-1 py-0.5 rounded text-xs">
@@ -662,8 +673,8 @@ export default function SettingsPage() {
                       </div>
                     ) : secrets.length === 0 ? (
                       <div className="p-4 text-sm text-muted-foreground">
-                        No persistent secrets found. Create one and it will appear
-                        here.
+                            No persistent secrets found. Create one and it will
+                            appear here.
                       </div>
                     ) : (
                       secrets.map((secret) => (
@@ -686,8 +697,8 @@ export default function SettingsPage() {
                 <div>
                   <h2 className="text-xl font-semibold mb-2">DuckDB Secrets</h2>
                   <p className="text-sm text-muted-foreground">
-                    DuckDB secrets are bridge-only. SQL queries are currently running
-                    through DuckDB WASM.
+                      DuckDB secrets are bridge-only. SQL queries are currently
+                      running through DuckDB WASM.
                     {!hasBridgeSecret
                       ? " Configure a bridge secret and switch runtime to Bridge to view secrets."
                       : bridgeHealthStatus === "offline"
