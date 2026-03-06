@@ -18,9 +18,18 @@ const DUCKDB_HTTP_CONFIG_KEY = "bi.duckdb.http.config";
 const DUCKDB_HTTP_CONFIG_EVENT = "bi:duckdb-http-config-change";
 const DUCKDB_HTTP_HEALTH_EVENT = "bi:duckdb-http-health-change";
 
+const DUCKDB_HTTP_SESSION_AUTH_KEY = "bi.duckdb.http.session-auth";
+
 let duckDbHttpConfigCache: StoredDuckDbHttpConfig | null = null;
 let duckDbHttpHealthCache: DuckDbHttpHealthStatus = "unknown";
-let sessionAuth: string | undefined;
+
+function getSessionAuth(): string | undefined {
+  if (!isBrowser()) {
+    return undefined;
+  }
+  const value = window.sessionStorage.getItem(DUCKDB_HTTP_SESSION_AUTH_KEY);
+  return value?.length ? value : undefined;
+}
 
 function isBrowser(): boolean {
   return (
@@ -170,19 +179,29 @@ export function subscribeDuckDbHttpHealth(listener: () => void): () => void {
 
 export function setDuckDbHttpSessionAuth(auth: string): void {
   const trimmed = auth.trim();
-  sessionAuth = trimmed.length > 0 ? trimmed : undefined;
+  if (!isBrowser()) {
+    return;
+  }
+  if (trimmed.length > 0) {
+    window.sessionStorage.setItem(DUCKDB_HTTP_SESSION_AUTH_KEY, trimmed);
+  } else {
+    window.sessionStorage.removeItem(DUCKDB_HTTP_SESSION_AUTH_KEY);
+  }
 }
 
 export function clearDuckDbHttpSessionAuth(): void {
-  sessionAuth = undefined;
+  if (!isBrowser()) {
+    return;
+  }
+  window.sessionStorage.removeItem(DUCKDB_HTTP_SESSION_AUTH_KEY);
 }
 
 export function hasDuckDbHttpSessionAuth(): boolean {
-  return Boolean(sessionAuth);
+  return Boolean(getSessionAuth());
 }
 
 export function getDuckDbHttpSessionAuth(): string | undefined {
-  return sessionAuth;
+  return getSessionAuth();
 }
 
 export function resolveBrowserDuckDbHttpConfig(
@@ -192,7 +211,7 @@ export function resolveBrowserDuckDbHttpConfig(
   return resolveHttpDuckDbConfigValues({
     host: config?.host ?? stored?.host,
     port: config?.port ?? stored?.port,
-    auth: config?.auth ?? sessionAuth,
+    auth: config?.auth ?? getSessionAuth(),
   });
 }
 

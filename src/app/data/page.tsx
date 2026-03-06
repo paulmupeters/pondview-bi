@@ -15,7 +15,9 @@ import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { removeConnectedTable } from "@/lib/connected-tables";
-import { refreshDuckDbHttpHealth } from "@/lib/duckdb/duckdb-http-browser";
+import { buildDetachStatement } from "@/lib/duckdb/duckdb-attachments";
+import { refreshDuckDbHttpHealth, runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
+import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import { refreshBridgeHealth, resolveSqlBackend } from "@/lib/sql/sql-runtime";
 import {
   useBridgeHealthStatus,
@@ -28,7 +30,7 @@ import { formatFileSize, removeUploadedFile } from "@/lib/uploaded-files";
 import Image from "@/vite/next-image";
 
 const DEFERRED_MESSAGE =
-  "Uploads, semantic/materialized-table flows, and guided connect flows are deferred in browser mode.";
+  "Uploads, semantic/materialized-table flows, and uploads are deferred in browser mode.";
 
 export default function ViewDataPage() {
   const tables = useConnectedTables();
@@ -334,6 +336,19 @@ export default function ViewDataPage() {
                               if (
                                 confirm("Remove this connected source entry?")
                               ) {
+                                // Best-effort remote detach before removing local metadata
+                                if (entry.attachAs && effectiveSqlBackend !== "duckdb-wasm") {
+                                  try {
+                                    const detachSql = buildDetachStatement(entry.attachAs, { ifExists: true });
+                                    if (effectiveSqlBackend === "bridge") {
+                                      await runBridgeQuery(detachSql);
+                                    } else if (effectiveSqlBackend === "duckdb-http") {
+                                      await runDuckDbHttpQuery(detachSql);
+                                    }
+                                  } catch {
+                                    // Best-effort only; removal proceeds regardless
+                                  }
+                                }
                                 await removeConnectedTable(entry);
                               }
                             }}
@@ -404,6 +419,7 @@ export default function ViewDataPage() {
       <ConnectDataDialog
         open={isConnectDialogOpen}
         onOpenChange={setIsConnectDialogOpen}
+        effectiveSqlBackend={effectiveSqlBackend}
       />
       <DuckdbShellDialog
         open={isShellDialogOpen}

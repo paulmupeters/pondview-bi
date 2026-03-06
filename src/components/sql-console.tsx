@@ -291,7 +291,7 @@ export function SqlConsole({
         className,
       )}
     >
-      <div className="rounded-sm bg-card transition-colors h-full">
+      <div className="rounded-sm bg-card transition-colors flex-1 min-h-0">
         <div className="flex flex-col gap-3 p-0 sm:flex-row sm:items-center sm:gap-4">
           <div className="flex-1 min-w-0 flex flex-col gap-2 mt-12">
             <SqlCodeEditor
@@ -337,8 +337,8 @@ export function SqlConsole({
         </div>
       </div>
       {showInlineResults && results && (
-        <div className="border border-border bg-background p-6 rounded-sm">
-          <SqlResultsTable dataOverride={results} />
+        <div className="border border-border bg-background rounded-sm min-w-0 overflow-hidden flex-1 min-h-0">
+          <SqlResultsTable dataOverride={results} pageSize={50} />
         </div>
       )}
       {error && (

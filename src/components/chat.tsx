@@ -26,7 +26,12 @@ import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
-import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
+import { DEFAULT_WASM_DB_IDENTIFIER, resolveSqlBackend } from "@/lib/sql/sql-runtime";
+import {
+  useBridgeHealthStatus,
+  useDuckDbHttpHealthStatus,
+  useSqlBackendPreference,
+} from "@/lib/sql/use-sql-backend";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
@@ -132,6 +137,12 @@ export default function Chat({
   const router = useRouter();
   const searchParams = useSearchParams();
   const connectedTables = useConnectedTables();
+  const sqlBackendPreference = useSqlBackendPreference();
+  useBridgeHealthStatus();
+  useDuckDbHttpHealthStatus();
+  const effectiveSqlBackend = resolveSqlBackend({
+    backendPreference: sqlBackendPreference,
+  });
   const [promptMode, setPromptMode] = useState<PromptMode>("ai");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [chatTitle, setChatTitle] = useState<string | null>(null);
@@ -678,6 +689,7 @@ export default function Chat({
                       setIsExplorerCollapsed((prev) => !prev)
                     }
                     className="shrink-0 bg-background"
+                    sqlBackend={effectiveSqlBackend}
                   />
                   <div className="flex-1 min-h-0 min-w-0 flex flex-col">
                     {isAiMode ? (
