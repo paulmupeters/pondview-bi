@@ -44,10 +44,12 @@ export function DynamicChart({
   chartData,
   chartConfig,
   className,
+  showMetadata = true,
 }: {
   chartData: Result[];
   chartConfig: Config;
   className?: string;
+  showMetadata?: boolean;
 }) {
   const defaultColors = getChartColors();
 
@@ -303,7 +305,7 @@ export function DynamicChart({
         className,
       )}
     >
-      <h2 className="text-lg font-bold mb-2">{chartConfig.title}</h2>
+      {showMetadata && <h2 className="text-lg font-bold mb-2">{chartConfig.title}</h2>}
       {chartConfig && chartData.length > 0 && hasYData && (
         <ChartContainer
           config={
@@ -325,7 +327,7 @@ export function DynamicChart({
           {renderChart()}
         </ChartContainer>
       )}
-      {(chartConfig.description || chartConfig.takeaway) && (
+      {showMetadata && (chartConfig.description || chartConfig.takeaway) && (
         <HoverCard>
           <HoverCardTrigger asChild>
             <button

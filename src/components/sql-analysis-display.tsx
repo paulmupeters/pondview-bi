@@ -34,6 +34,47 @@ import type {
   SqlAnalysisStage,
 } from "./sql-analysis-display.types";
 
+function normalizeChartConfigForRows(
+  config: Config | null | undefined,
+  rows: Result[],
+): Config | null {
+  if (!config || rows.length === 0) {
+    return null;
+  }
+
+  const availableColumns = new Set<string>();
+  rows.forEach((row) => {
+    Object.keys(row).forEach((key) => {
+      availableColumns.add(key);
+    });
+  });
+
+  if (!config.xKey || !availableColumns.has(config.xKey)) {
+    return null;
+  }
+
+  if (config.countMode) {
+    return config;
+  }
+
+  const validYKeys = (config.yKeys ?? []).filter((key) =>
+    availableColumns.has(key),
+  );
+
+  if (validYKeys.length === 0) {
+    return null;
+  }
+
+  if (validYKeys.length === config.yKeys.length) {
+    return config;
+  }
+
+  return {
+    ...config,
+    yKeys: validYKeys,
+  };
+}
+
 export function SqlAnalysisDisplay({
   data,
   stage,
@@ -205,22 +246,33 @@ export function SqlAnalysisDisplay({
 
   const selectedForChart = useMemo((): SelectedForChart | undefined => {
     if (executedRows !== null) {
+      const resolvedConfig = normalizeChartConfigForRows(
+        chartConfig ?? data?.chartConfig,
+        executedRows,
+      );
       return {
         stage: "complete",
         rows: executedRows,
-        chartConfig: chartConfig ?? data?.chartConfig,
+        chartConfig: resolvedConfig ?? undefined,
         summary: data?.summary,
       };
     }
 
-    return data?.stage === "complete"
-      ? {
-          stage: data.stage,
-          rows: (data.rows as Result[] | undefined) ?? [],
-          chartConfig: data.chartConfig,
-          summary: data.summary,
-        }
-      : undefined;
+    if (data?.stage !== "complete") {
+      return undefined;
+    }
+
+    const completedRows = (data.rows as Result[] | undefined) ?? [];
+    const resolvedConfig = normalizeChartConfigForRows(
+      data.chartConfig,
+      completedRows,
+    );
+    return {
+      stage: data.stage,
+      rows: completedRows,
+      chartConfig: resolvedConfig ?? undefined,
+      summary: data.summary,
+    };
   }, [
     executedRows,
     chartConfig,
@@ -286,6 +338,21 @@ export function SqlAnalysisDisplay({
   const canShowVisualOptionsToggle =
     activeView === "chart" && columnsForDialog.length > 0 && !selectedForCard;
 
+  useEffect(() => {
+    if (activeView !== "chart" || selectedForCard || !canShowTable) {
+      return;
+    }
+
+    if (!selectedForChart?.chartConfig) {
+      setActiveView("table");
+    }
+  }, [
+    activeView,
+    canShowTable,
+    selectedForCard,
+    selectedForChart?.chartConfig,
+  ]);
+
   const payloadForAddToChat = useMemo(() => {
     if (!data && executedRows === null && executedColumns === null) {
       return null;
@@ -306,6 +373,10 @@ export function SqlAnalysisDisplay({
 
     const resolvedRows = finalRows ?? [];
     const resolvedColumns = finalColumns ?? [];
+    const resolvedChartConfig = normalizeChartConfigForRows(
+      chartConfig ?? data?.chartConfig,
+      resolvedRows,
+    );
     const totalRows =
       resolvedRows.length > 0
         ? resolvedRows.length
@@ -316,12 +387,12 @@ export function SqlAnalysisDisplay({
     if (activeView === "chart") {
       if (cardConfig || data?.cardConfig) {
         visualType = "card";
-      } else if (chartConfig || data?.chartConfig) {
+      } else if (resolvedChartConfig) {
         visualType = "chart";
       } else if (resolvedRows.length === 1 && resolvedColumns.length === 1) {
         visualType = "card";
       } else {
-        visualType = "chart";
+        visualType = "table";
       }
     }
 
@@ -335,7 +406,7 @@ export function SqlAnalysisDisplay({
       columns: resolvedColumns,
       rows: resolvedRows,
       visualType,
-      chartConfig: chartConfig ?? data?.chartConfig,
+      chartConfig: resolvedChartConfig ?? undefined,
       cardConfig: cardConfig ?? data?.cardConfig,
       summary:
         data?.summary ??

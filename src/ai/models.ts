@@ -8,16 +8,16 @@
 /**
  * Model used for main chat streaming with complex reasoning
  */
-export const CHAT_MODEL = "moonshotai/kimi-k2.5";
+export const CHAT_MODEL = "zai/glm-5";
 
 /**
  * Model used for generating chart and card configurations
  * (lightweight tasks requiring structured output)
  */
-export const VISUALIZATION_MODEL = "moonshotai/kimi-k2.5";
+export const VISUALIZATION_MODEL = "zai/glm-5";
 
 /**
  * Legacy chat model (used in backward compatibility route)
  */
-export const LEGACY_CHAT_MODEL = "openai/gpt-5-nano";
+export const LEGACY_CHAT_MODEL = "openai/gpt-5-mini";
  
