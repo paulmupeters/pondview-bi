@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  extractSqlArtifactParts,
   getVisualizationIdForArtifact,
   shouldIncludeVisualization,
 } from "@/components/chat/sql-artifact-utils";
@@ -8,7 +9,6 @@ import type {
   SqlAnalysisData,
   SqlAnalysisStage,
 } from "@/components/sql-analysis-display.types";
-import type { ArtifactStatus } from "@/hooks/types";
 
 type VisualizationEntry = {
   id: string;
@@ -31,36 +31,19 @@ export function useVisualizationSelection({
   >(null);
   const [hasPinnedVisualizationSelection, setHasPinnedVisualizationSelection] =
     useState(false);
+  const lastAutoSelectedGeneratedVisualizationIdRef = useRef<string | null>(
+    null,
+  );
 
   const getLastSelectableVisualizationIdForMessage = useCallback(
     (message: UIMessage) => {
-      if (!message.parts) {
-        return null;
-      }
-
       let lastVisualizationId: string | null = null;
+      const sqlArtifacts = extractSqlArtifactParts(
+        message.parts,
+        executeSqlArtifactType,
+      );
 
-      for (
-        let partIndex = 0;
-        partIndex < message.parts.length;
-        partIndex += 1
-      ) {
-        const part = message.parts[partIndex];
-        if (part.type !== executeSqlArtifactType) {
-          continue;
-        }
-
-        const artifactPart = part as {
-          data?: {
-            id?: string;
-            status?: ArtifactStatus;
-            progress?: number;
-            error?: string;
-            payload?: SqlAnalysisData;
-          };
-        };
-        const artifactData = artifactPart.data;
-
+      for (const { partIndex, artifactData } of sqlArtifacts) {
         if (!artifactData || artifactData.status === "error") {
           continue;
         }
@@ -93,26 +76,12 @@ export function useVisualizationSelection({
     const vizList: VisualizationEntry[] = [];
 
     messages.forEach((message) => {
-      if (!message.parts) {
-        return;
-      }
+      const sqlArtifacts = extractSqlArtifactParts(
+        message.parts,
+        executeSqlArtifactType,
+      );
 
-      message.parts.forEach((part, partIndex) => {
-        if (part.type !== executeSqlArtifactType) {
-          return;
-        }
-
-        const artifactPart = part as {
-          data?: {
-            id?: string;
-            status?: ArtifactStatus;
-            progress?: number;
-            error?: string;
-            payload?: SqlAnalysisData;
-          };
-        };
-        const artifactData = artifactPart.data;
-
+      sqlArtifacts.forEach(({ partIndex, artifactData }) => {
         if (!artifactData || artifactData.status === "error") {
           return;
         }
@@ -158,13 +127,36 @@ export function useVisualizationSelection({
       if (hasPinnedVisualizationSelection) {
         setHasPinnedVisualizationSelection(false);
       }
+      lastAutoSelectedGeneratedVisualizationIdRef.current = null;
       return;
     }
 
     const latestVisualizationId = visualizations[visualizations.length - 1]?.id;
+    const latestVisualization = visualizations[visualizations.length - 1];
     const activeSelectionExists = visualizations.some(
       (visualization) => visualization.id === activeVisualizationId,
     );
+    const latestVisualizationIsGeneratedChart =
+      latestVisualization?.stage === "complete" &&
+      (latestVisualization.data?.visualType === "chart" ||
+        latestVisualization.data?.visualType === "card");
+    const isNewGeneratedVisualization =
+      latestVisualizationId &&
+      latestVisualizationId !==
+        lastAutoSelectedGeneratedVisualizationIdRef.current;
+
+    if (
+      latestVisualizationIsGeneratedChart &&
+      isNewGeneratedVisualization &&
+      latestVisualizationId &&
+      activeVisualizationId !== latestVisualizationId
+    ) {
+      lastAutoSelectedGeneratedVisualizationIdRef.current =
+        latestVisualizationId;
+      setHasPinnedVisualizationSelection(false);
+      setActiveVisualizationId(latestVisualizationId);
+      return;
+    }
 
     if (hasPinnedVisualizationSelection) {
       if (!activeSelectionExists) {

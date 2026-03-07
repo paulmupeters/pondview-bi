@@ -8,10 +8,13 @@ import {
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
 import { GeneratedSqlBlock } from "@/components/chat/generated-sql-block";
-import { getVisualizationIdForArtifact } from "@/components/chat/sql-artifact-utils";
+import {
+  extractSqlArtifactParts,
+  getTopLevelPartIndex,
+  getVisualizationIdForArtifact,
+} from "@/components/chat/sql-artifact-utils";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import { Button } from "@/components/ui/button";
-import type { ArtifactStatus } from "@/hooks/types";
 import { cn } from "@/lib/utils";
 
 type ChatMessageThreadProps = {
@@ -52,10 +55,7 @@ export function ChatMessageThread({
   return (
     <Conversation className={conversationClassName}>
       <ConversationContent
-        className={cn(
-          "max-w-full mx-auto w-full",
-          contentSpacingClassName,
-        )}
+        className={cn("max-w-full mx-auto w-full", contentSpacingClassName)}
       >
         {isConversationEmpty && (
           <Message from="assistant" key="assistant-ready">
@@ -94,6 +94,97 @@ export function ChatMessageThread({
             if (messageVisualizationId) {
               onSelectVisualization(messageVisualizationId);
             }
+          };
+
+          const sqlArtifactParts = extractSqlArtifactParts(
+            message.parts,
+            executeSqlArtifactType,
+          );
+          const sqlArtifactsByTopLevelPartIndex = new Map<
+            number,
+            Array<{
+              partIndex: number;
+              data: {
+                id?: string;
+                status?: string;
+                progress?: number;
+                error?: string;
+                payload?: SqlAnalysisData;
+              };
+            }>
+          >();
+
+          sqlArtifactParts.forEach(({ partIndex, artifactData }) => {
+            const topLevelPartIndex = getTopLevelPartIndex(partIndex);
+            const existing =
+              sqlArtifactsByTopLevelPartIndex.get(topLevelPartIndex);
+            const nextEntry = {
+              partIndex,
+              data: artifactData,
+            };
+            if (existing) {
+              existing.push(nextEntry);
+              return;
+            }
+            sqlArtifactsByTopLevelPartIndex.set(topLevelPartIndex, [nextEntry]);
+          });
+
+          const renderSqlBlock = ({
+            artifactData,
+            partIndex,
+          }: {
+            artifactData: {
+              id?: string;
+              status?: string;
+              progress?: number;
+              error?: string;
+              payload?: SqlAnalysisData;
+            };
+            partIndex: number;
+          }) => {
+            if (artifactData.status === "error") {
+              return (
+                <div
+                  key={`${message.id}-part-${partIndex}-error`}
+                  className="mt-4 max-w-full text-sm text-red-500"
+                >
+                  {artifactData.error ?? "SQL analysis failed."}
+                </div>
+              );
+            }
+
+            const payload = (artifactData.payload ??
+              null) as SqlAnalysisData | null;
+
+            if (!payload?.query) {
+              return null;
+            }
+
+            const executionTimeMs =
+              payload.summary?.executionTimeMs ?? payload.executionTime;
+            const rowCount =
+              payload.summary?.totalRows ??
+              payload.rowCount ??
+              payload.rows?.length;
+            const queryType = payload.summary?.queryType;
+            const visualizationId = getVisualizationIdForArtifact({
+              artifactId: artifactData.id,
+              messageId: message.id,
+              partIndex,
+            });
+
+            return (
+              <GeneratedSqlBlock
+                key={`${message.id}-part-${partIndex}`}
+                query={payload.query}
+                executionTimeMs={executionTimeMs}
+                rowCount={rowCount}
+                queryType={queryType}
+                visualizationId={visualizationId}
+                onSelectVisualization={onSelectVisualization}
+                isSelected={activeVisualizationId === visualizationId}
+              />
+            );
           };
 
           if (isEmptyAssistantMessage) {
@@ -158,65 +249,19 @@ export function ChatMessageThread({
                   }
 
                   if (part.type === executeSqlArtifactType) {
-                    const artifactPart = part as {
-                      data?: {
-                        id?: string;
-                        status?: ArtifactStatus;
-                        progress?: number;
-                        error?: string;
-                        payload?: SqlAnalysisData;
-                      };
-                    };
-                    const artifactData = artifactPart.data;
+                    const entriesForPart =
+                      sqlArtifactsByTopLevelPartIndex.get(partIndex) ?? [];
 
-                    if (!artifactData) {
+                    if (entriesForPart.length === 0) {
                       return null;
                     }
 
-                    if (artifactData.status === "error") {
-                      return (
-                        <div
-                          key={`${message.id}-part-${partIndex}`}
-                          className="mt-4 max-w-full text-sm text-red-500"
-                        >
-                          {artifactData.error ?? "SQL analysis failed."}
-                        </div>
-                      );
-                    }
-
-                    const payload = (artifactData.payload ??
-                      null) as SqlAnalysisData | null;
-
-                    if (payload?.query) {
-                      const executionTimeMs =
-                        payload.summary?.executionTimeMs ??
-                        payload.executionTime;
-                      const rowCount =
-                        payload.summary?.totalRows ??
-                        payload.rowCount ??
-                        payload.rows?.length;
-                      const queryType = payload.summary?.queryType;
-                      const visualizationId = getVisualizationIdForArtifact({
-                        artifactId: artifactData.id,
-                        messageId: message.id,
-                        partIndex,
-                      });
-
-                      return (
-                        <GeneratedSqlBlock
-                          key={`${message.id}-part-${partIndex}`}
-                          query={payload.query}
-                          executionTimeMs={executionTimeMs}
-                          rowCount={rowCount}
-                          queryType={queryType}
-                          visualizationId={visualizationId}
-                          onSelectVisualization={onSelectVisualization}
-                          isSelected={activeVisualizationId === visualizationId}
-                        />
-                      );
-                    }
-
-                    return null;
+                    return entriesForPart.map((entry) =>
+                      renderSqlBlock({
+                        artifactData: entry.data,
+                        partIndex: entry.partIndex,
+                      }),
+                    );
                   }
 
                   if (part.type === "tool-getTableSchema") {
@@ -237,6 +282,17 @@ export function ChatMessageThread({
                   }
 
                   if (part.type === "tool-executeSql") {
+                    const entriesForPart =
+                      sqlArtifactsByTopLevelPartIndex.get(partIndex) ?? [];
+                    if (entriesForPart.length > 0) {
+                      return entriesForPart.map((entry) =>
+                        renderSqlBlock({
+                          artifactData: entry.data,
+                          partIndex: entry.partIndex,
+                        }),
+                      );
+                    }
+
                     const executeSqlPart = part as { state?: string };
                     if (
                       executeSqlPart.state === "output-available" ||

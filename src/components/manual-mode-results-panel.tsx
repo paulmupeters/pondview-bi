@@ -319,9 +319,6 @@ export function ManualModeResultsPanel({
             onCardConfigChange={isCardMode ? setCardConfig : undefined}
             isCardMode={isCardMode}
             showAdvancedConfig={showAdvancedConfig}
-            onToggleAdvancedConfig={() =>
-              setShowAdvancedConfig(!showAdvancedConfig)
-            }
           />
           )}
         <div className="p-4">

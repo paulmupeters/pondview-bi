@@ -600,7 +600,7 @@ export default function Chat({
 
   const rightPanelContent = (
     <div className="relative h-full w-full overflow-hidden">
-      <div className="border-b border-border/70 px-3 py-2">
+      <div className="border-border/70 px-3 py-4">
         <p
           className="truncate text-xs font-medium text-muted-foreground"
           title={chatTitle || "Untitled chat"}
