@@ -26,7 +26,10 @@ import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
-import { DEFAULT_WASM_DB_IDENTIFIER, resolveSqlBackend } from "@/lib/sql/sql-runtime";
+import {
+  DEFAULT_WASM_DB_IDENTIFIER,
+  resolveSqlBackend,
+} from "@/lib/sql/sql-runtime";
 import {
   useBridgeHealthStatus,
   useDuckDbHttpHealthStatus,
@@ -146,7 +149,9 @@ export default function Chat({
   const [promptMode, setPromptMode] = useState<PromptMode>("ai");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [chatTitle, setChatTitle] = useState<string | null>(null);
-  const hydratedMessagesRef = useRef(resolvedInitialMessages.length > 0);
+  const hydratedChatIdRef = useRef<string | null>(
+    resolvedInitialMessages.length > 0 ? chatId : null,
+  );
   const isAiMode = promptMode === "ai";
 
   const agent = useMemo(
@@ -267,16 +272,17 @@ export default function Chat({
   }, [connectedTables, selectedDb]);
 
   useEffect(() => {
-    hydratedMessagesRef.current = resolvedInitialMessages.length > 0;
+    hydratedChatIdRef.current =
+      resolvedInitialMessages.length > 0 ? chatId : null;
     if (resolvedInitialMessages.length > 0) {
       setMessages(resolvedInitialMessages);
     } else {
       setMessages([]);
     }
-  }, [resolvedInitialMessages, setMessages]);
+  }, [chatId, resolvedInitialMessages, setMessages]);
 
   useEffect(() => {
-    if (hydratedMessagesRef.current) {
+    if (hydratedChatIdRef.current === chatId) {
       return;
     }
 
@@ -289,7 +295,7 @@ export default function Chat({
           setMessages((previous) =>
             previous.length > 0 ? previous : toUiMessages(rows),
           );
-          hydratedMessagesRef.current = true;
+          hydratedChatIdRef.current = chatId;
         }
       } catch (error) {
         if (!cancelled) {
@@ -779,7 +785,7 @@ export default function Chat({
             <div className="h-[400px] p-6">{rightPanelContent}</div>
           </div>
         </div>
-        <div className="border-t border-border bg-background p-3">
+        <div className="bg-transparent p-4">
           <div className="mx-auto w-full max-w-5xl">
             {promptError ? (
               <p className="mb-2 text-xs text-destructive">{promptError}</p>

@@ -1,7 +1,6 @@
 import {
   ChatBubbleBottomCenterTextIcon,
   PlusCircleIcon,
-  TrashIcon,
 } from "@heroicons/react/24/outline";
 import {
   ChartBar,
@@ -19,11 +18,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { runQuery } from "@/lib/sql/run-query";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ChartView } from "./sql-analysis-display/chart-view";
-import { SqlControls } from "./sql-analysis-display/sql-controls";
 import { StageIndicator } from "./sql-analysis-display/stage-indicator";
 import type {
   ActiveView,
@@ -101,60 +98,15 @@ export function SqlAnalysisDisplay({
   const [cardConfig, setCardConfig] = useState<CardConfig | null>(
     () => data?.cardConfig ?? null,
   );
-  const [executedRows, setExecutedRows] = useState<Result[] | null>(null);
-  const [executedColumns, setExecutedColumns] = useState<
-    { name: string; type?: string }[] | null
-  >(null);
   const lastQueryRef = useRef<string | null>(data?.query ?? null);
-  const lastAutoSwitchQueryRef = useRef<string | null>(data?.query ?? null);
   const lastVisualTypeRef = useRef<string | undefined>(data?.visualType);
-  const [query, setQuery] = useState<string | null>(null);
-  const [isSqlExpanded, setIsSqlExpanded] = useState(
-    data?.isSqlExpandedInitial ?? false,
-  );
   const [showVisualOptions, setShowVisualOptions] = useState(false);
 
-  const toggleSqlExpanded = () => {
-    setIsSqlExpanded((prev) => !prev);
-  };
-
-  const handleExecute = async () => {
-    const queryToExecute = query || data?.query || "";
-
-    try {
-      const result = await runQuery({
-        sql: queryToExecute,
-        dbIdentifier: data?.dbIdentifier,
-      });
-
-      setExecutedColumns(result.columns);
-      // Cast to Result[] since the API returns compatible data
-      setExecutedRows(result.rows as Result[]);
-    } catch (error) {
-      console.error("Query execution failed:", error);
-      // Reset to empty state on error
-      setExecutedColumns([]);
-      setExecutedRows([]);
-    }
-  };
-
   const handleClear = () => {
-    setQuery(null);
-    setExecutedRows(null);
-    setExecutedColumns(null);
     setChartConfig(null);
     setCardConfig(null);
     setShowVisualOptions(false);
-    lastAutoSwitchQueryRef.current = null;
   };
-
-  const { renderControls, renderEditor } = SqlControls({
-    query: query ?? data?.query ?? "",
-    onQueryChange: (newQuery) => setQuery(newQuery),
-    onExecute: handleExecute,
-    isExpanded: isSqlExpanded,
-    onToggleExpanded: toggleSqlExpanded,
-  });
 
   // Wrapper functions to notify parent of config changes
   const handleChartConfigChange = useCallback(
@@ -195,15 +147,11 @@ export function SqlAnalysisDisplay({
       setChartConfig(data?.chartConfig ?? null);
       setCardConfig(data?.cardConfig ?? null);
       setShowVisualOptions(false);
-      setExecutedRows(null);
-      setExecutedColumns(null);
-      setQuery(null);
       setActiveView(
         currentVisualType === "chart" || currentVisualType === "card"
           ? "chart"
           : "table",
       );
-      lastAutoSwitchQueryRef.current = currentQuery;
       lastQueryRef.current = currentQuery;
       lastVisualTypeRef.current = currentVisualType;
     } else if (currentVisualType !== lastVisualTypeRef.current) {
@@ -215,11 +163,13 @@ export function SqlAnalysisDisplay({
           : "table",
       );
       // Also sync chartConfig/cardConfig if they weren't set yet
-      if (data?.chartConfig && !chartConfig) {
-        setChartConfig(data.chartConfig);
+      if (data?.chartConfig) {
+        const nextChartConfig = data.chartConfig;
+        setChartConfig((previous) => previous ?? nextChartConfig);
       }
-      if (data?.cardConfig && !cardConfig) {
-        setCardConfig(data.cardConfig);
+      if (data?.cardConfig) {
+        const nextCardConfig = data.cardConfig;
+        setCardConfig((previous) => previous ?? nextCardConfig);
       }
       lastVisualTypeRef.current = currentVisualType;
     }
@@ -228,8 +178,6 @@ export function SqlAnalysisDisplay({
     data?.visualType,
     data?.chartConfig,
     data?.cardConfig,
-    chartConfig,
-    cardConfig,
   ]);
 
   useEffect(() => {
@@ -239,25 +187,11 @@ export function SqlAnalysisDisplay({
   }, [activeView]);
 
   const columnsForDialog = useMemo(
-    () =>
-      (executedColumns ?? data?.columns ?? []).map((c) => ({ name: c.name })),
-    [executedColumns, data?.columns],
+    () => (data?.columns ?? []).map((c) => ({ name: c.name })),
+    [data?.columns],
   );
 
   const selectedForChart = useMemo((): SelectedForChart | undefined => {
-    if (executedRows !== null) {
-      const resolvedConfig = normalizeChartConfigForRows(
-        chartConfig ?? data?.chartConfig,
-        executedRows,
-      );
-      return {
-        stage: "complete",
-        rows: executedRows,
-        chartConfig: resolvedConfig ?? undefined,
-        summary: data?.summary,
-      };
-    }
-
     if (data?.stage !== "complete") {
       return undefined;
     }
@@ -274,8 +208,6 @@ export function SqlAnalysisDisplay({
       summary: data.summary,
     };
   }, [
-    executedRows,
-    chartConfig,
     data?.stage,
     data?.rows,
     data?.chartConfig,
@@ -283,15 +215,6 @@ export function SqlAnalysisDisplay({
   ]);
 
   const selectedForTable = useMemo((): SelectedForTable | undefined => {
-    if (executedRows !== null && executedColumns !== null) {
-      return {
-        stage: "complete",
-        columns: executedColumns,
-        rows: executedRows as Record<string, unknown>[],
-        summary: data?.summary,
-      };
-    }
-
     return data?.stage === "complete"
       ? {
           stage: data.stage,
@@ -301,19 +224,15 @@ export function SqlAnalysisDisplay({
         }
       : undefined;
   }, [
-    executedRows,
-    executedColumns,
     data?.stage,
     data?.columns,
     data?.rows,
     data?.summary,
   ]);
 
-  const cardSourceRows =
-    executedRows ?? (data?.stage === "complete" ? (data.rows ?? null) : null);
+  const cardSourceRows = data?.stage === "complete" ? (data.rows ?? null) : null;
   const cardSourceColumns =
-    executedColumns ??
-    (data?.stage === "complete" ? (data.columns ?? null) : null);
+    data?.stage === "complete" ? (data.columns ?? null) : null;
 
   const selectedForCard: SelectedForCard | undefined =
     cardSourceRows &&
@@ -354,20 +273,15 @@ export function SqlAnalysisDisplay({
   ]);
 
   const payloadForAddToChat = useMemo(() => {
-    if (!data && executedRows === null && executedColumns === null) {
+    if (!data) {
       return null;
     }
 
-    const finalRows =
-      (executedRows as Result[] | null) ??
-      (data?.rows as Result[] | undefined) ??
-      null;
+    const finalRows = (data.rows as Result[] | undefined) ?? null;
     const finalColumns =
-      executedColumns ??
-      (data?.columns as { name: string; type?: string }[] | undefined) ??
-      null;
+      (data.columns as { name: string; type?: string }[] | undefined) ?? null;
 
-    if (!data && !finalRows && !finalColumns) {
+    if (!finalRows && !finalColumns) {
       return null;
     }
 
@@ -399,7 +313,7 @@ export function SqlAnalysisDisplay({
     return {
       stage: "complete" as const,
       progress: 1,
-      query: query ?? data?.query ?? "",
+      query: data?.query ?? "",
       dbIdentifier: data?.dbIdentifier,
       executionTime: data?.executionTime,
       rowCount: totalRows,
@@ -422,11 +336,8 @@ export function SqlAnalysisDisplay({
     };
   }, [
     data,
-    executedRows,
-    executedColumns,
     chartConfig,
     cardConfig,
-    query,
     activeView,
   ]);
 
@@ -446,19 +357,10 @@ export function SqlAnalysisDisplay({
     return null;
   }
 
-  // Logic to determine if we should show the clear button.
-  // We generally want to show it if we are in "interactive" mode (e.g. in the prompt input area),
-  // but NOT if we are just displaying a static result (e.g. in the chat history).
-  //
-  // - If `data` comes from props and has stage="complete", it's likely a static chat artifact -> NO Clear button.
-  // - If `data` is initial (e.g. from prompt input wrapper), we are interactive -> YES Clear button (once we have results).
-  //
-  // The `executedRows` state being non-null implies the user has run a query interactively in this session.
-  const isInteractive = executedRows !== null || data?.stage === "initial";
+  // Keep clear controls limited to interactive/initial states.
+  const isInteractive = data?.stage === "initial";
 
-  const showClearButton =
-    isInteractive &&
-    (executedRows !== null || (data && data.stage !== "complete"));
+  const showClearButton = isInteractive && Boolean(data && data.stage !== "complete");
 
   return (
     <div className={cn("space-y-6 w-full", className)}>
@@ -544,7 +446,7 @@ export function SqlAnalysisDisplay({
                 <p>Edit with AI</p>
               </TooltipContent>
             </Tooltip>
-            {showClearButton && (
+            {showClearButton ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -553,7 +455,6 @@ export function SqlAnalysisDisplay({
                     className="flex items-center gap-2"
                     onClick={handleClear}
                   >
-                    <TrashIcon className="w-4 h-4" />
                     Clear
                   </Button>
                 </TooltipTrigger>
@@ -561,7 +462,7 @@ export function SqlAnalysisDisplay({
                   <p>Clear analysis</p>
                 </TooltipContent>
               </Tooltip>
-            )}
+            ) : null}
           </div>
           {history && history.total > 0 && (
             <div className="flex items-center gap-2">
@@ -619,8 +520,6 @@ export function SqlAnalysisDisplay({
               columnsForDialog={columnsForDialog}
               onChartConfigChange={handleChartConfigChange}
               onCardConfigChange={handleCardConfigChange}
-              renderSqlControls={renderControls}
-              renderSqlEditor={renderEditor}
               showVisualOptions={showVisualOptions}
               onShowVisualOptionsChange={setShowVisualOptions}
             />
@@ -629,9 +528,7 @@ export function SqlAnalysisDisplay({
 
       {data && activeView === "table" && (
         <div className="group relative">
-          {renderControls(undefined, "sql-editor-analysis-table")}
           <SqlResultsTable dataOverride={selectedForTable} />
-          {renderEditor("sql-editor-analysis-table")}
         </div>
       )}
 
