@@ -35,6 +35,24 @@ type ChatMessageThreadProps = {
   userResponsePaddingClassName: string;
 };
 
+function hasNoRenderableAssistantContent(
+  message: UIMessage,
+  executeSqlArtifactType: string,
+) {
+  return (
+    !message.parts ||
+    message.parts.length === 0 ||
+    message.parts.every(
+      (part) =>
+        (part.type === "text" &&
+          (!(part as { text?: string }).text ||
+            (part as { text?: string }).text?.trim() === "")) ||
+        (part.type === executeSqlArtifactType &&
+          !(part as { data?: unknown }).data),
+    )
+  );
+}
+
 export function ChatMessageThread({
   messages,
   status,
@@ -51,6 +69,29 @@ export function ChatMessageThread({
   userResponsePaddingClassName,
 }: ChatMessageThreadProps) {
   const isConversationEmpty = messages.length === 0;
+  const isAssistantThinking =
+    status === "streaming" || status === "submitted";
+  const lastMessage = messages[messages.length - 1];
+  const hasInlineThinkingPlaceholder =
+    isAssistantThinking &&
+    Boolean(
+      lastMessage &&
+        lastMessage.role === "assistant" &&
+        hasNoRenderableAssistantContent(lastMessage, executeSqlArtifactType),
+    );
+
+  const renderThinkingMessage = (key: string) => (
+    <Message from="assistant" key={key}>
+      <MessageContent className="relative w-full rounded-lg border border-border bg-sidebar p-4 shadow-sm">
+        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-opacity duration-200 ease-out">
+          <span className="inline-block w-4 text-center">
+            {animationFrame || "."}
+          </span>
+          <span>{verbAiIsThinking}</span>
+        </span>
+      </MessageContent>
+    </Message>
+  );
 
   return (
     <Conversation className={conversationClassName}>
@@ -71,17 +112,8 @@ export function ChatMessageThread({
           const isEmptyAssistantMessage =
             isLastMessage &&
             message.role === "assistant" &&
-            (status === "streaming" || status === "submitted") &&
-            (!message.parts ||
-              message.parts.length === 0 ||
-              message.parts.every(
-                (part) =>
-                  (part.type === "text" &&
-                    (!(part as { text?: string }).text ||
-                      (part as { text?: string }).text?.trim() === "")) ||
-                  (part.type === executeSqlArtifactType &&
-                    !(part as { data?: unknown }).data),
-              ));
+            isAssistantThinking &&
+            hasNoRenderableAssistantContent(message, executeSqlArtifactType);
           const messageVisualizationId =
             getLastSelectableVisualizationIdForMessage(message);
           const isSelectableMessage =
@@ -181,6 +213,9 @@ export function ChatMessageThread({
                 rowCount={rowCount}
                 queryType={queryType}
                 visualizationId={visualizationId}
+                artifactId={artifactData.id}
+                dbIdentifier={payload.dbIdentifier}
+                payload={payload}
                 onSelectVisualization={onSelectVisualization}
                 isSelected={activeVisualizationId === visualizationId}
               />
@@ -188,15 +223,7 @@ export function ChatMessageThread({
           };
 
           if (isEmptyAssistantMessage) {
-            return (
-              <Message from="assistant" key={message.id}>
-                <MessageContent className="relative w-full group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
-                  <span>
-                    {animationFrame} {verbAiIsThinking}
-                  </span>
-                </MessageContent>
-              </Message>
-            );
+            return renderThinkingMessage(message.id);
           }
 
           return (
@@ -227,13 +254,6 @@ export function ChatMessageThread({
                   <TrashIcon className="h-4 w-4" />
                 </Button>
                 {message.parts?.map((part, partIndex) => {
-                  if (status === "submitted") {
-                    return (
-                      <span key={`${message.id}-part-${partIndex}-submitted`}>
-                        {animationFrame}
-                      </span>
-                    );
-                  }
                   if (part.type === "text") {
                     return (
                       <Response
@@ -315,29 +335,9 @@ export function ChatMessageThread({
           );
         })}
 
-        {status === "streaming" &&
-          !(
-            messages.length > 0 &&
-            messages[messages.length - 1]?.role === "assistant" &&
-            (!messages[messages.length - 1]?.parts ||
-              messages[messages.length - 1]?.parts.length === 0 ||
-              messages[messages.length - 1]?.parts.every(
-                (part) =>
-                  (part.type === "text" &&
-                    (!(part as { text?: string }).text ||
-                      (part as { text?: string }).text?.trim() === "")) ||
-                  (part.type === executeSqlArtifactType &&
-                    !(part as { data?: unknown }).data),
-              ))
-          ) && (
-            <Message from="assistant" key="assistant-streaming">
-              <MessageContent className="relative w-full group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm p-4">
-                <span>
-                  {animationFrame} {verbAiIsThinking}
-                </span>
-              </MessageContent>
-            </Message>
-          )}
+        {isAssistantThinking &&
+          !hasInlineThinkingPlaceholder &&
+          renderThinkingMessage("assistant-streaming")}
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>
