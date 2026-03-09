@@ -89,6 +89,7 @@ npm run dev
 5. Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 6. *(Optional)* To persist materialized tables across restarts, set `DUCKDB_PERSIST_PATH=./data/materialized.duckdb` in `.env.local`.
+   Browser-first dashboard filtering now prefers lightweight `mat.*` views for reusable local/runtime tables and only falls back to physical copies for harder-to-reuse sources.
 
 7. *(Optional)* To use the DuckDB HTTP adapter for ad-hoc queries, run a DuckDB instance with the `httpserver` extension and set `DUCKDB_HTTP_HOST` / `DUCKDB_HTTP_PORT` in `.env.local`.
 
@@ -211,6 +212,11 @@ The `semantic-layer/` directory holds lightweight configuration consumed by the 
 - **`context/context.md`**: Business/domain context injected into AI prompts
 - **`joins.yml`**: Global join graph for cross-table filter injection
 - **`models/sources.yml`**: Source-to-physical-table mappings and connection metadata
+
+Browser-first dashboard filters use selective materialization:
+- simple reusable table refs are exposed as lightweight `mat.*` views,
+- filtered SQL can fall back to direct source refs when alias creation is unavailable,
+- physical `mat.*` tables remain a fallback for harder-to-reuse source refs.
 
 ## Contributing
 

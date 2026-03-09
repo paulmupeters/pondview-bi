@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { Filter } from "@/lib/types/filters";
 import {
   buildMaterializationTableRefs,
   executeDashboardChartsWithFilters,
+  listMaterializedTablesForBackend,
   loadDashboardDimensionValues,
 } from "@/lib/dashboard/browser-filter-engine";
+import type { Filter } from "@/lib/types/filters";
 import type { DbDashboardChart } from "@/lib/workspace/dashboard-repo";
 
 function createChart(input: {
@@ -88,6 +89,7 @@ describe("browser-filter-engine", () => {
       },
       {
         resolveBackend: () => "duckdb-wasm",
+        resolveRuntimeFingerprint: async () => "duckdb-wasm:local",
         readJoinDefs: () => [],
         listCharts: async () => [chart],
         getMaterializationCache: () => new Map(),
@@ -102,8 +104,24 @@ describe("browser-filter-engine", () => {
       },
     );
 
-    expect(runtimeSqlCalls.some((sql) => sql.includes('"mat"."orders"'))).toBe(true);
-    expect(runtimeSqlCalls.some((sql) => sql.includes('WITH "__filtered_base"'))).toBe(true);
+    expect(runtimeSqlCalls.some((sql) => sql.includes('"mat"."orders"'))).toBe(
+      true,
+    );
+    expect(
+      runtimeSqlCalls.some((sql) =>
+        sql.includes(
+          'CREATE OR REPLACE VIEW "mat"."orders" AS SELECT * FROM orders',
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      runtimeSqlCalls.some((sql) =>
+        sql.includes('CREATE OR REPLACE TABLE "mat"."orders"'),
+      ),
+    ).toBe(false);
+    expect(
+      runtimeSqlCalls.some((sql) => sql.includes('WITH "__filtered_base"')),
+    ).toBe(true);
     expect(result.rowsByChartId[chart.id]).toEqual([{ source: "fallback" }]);
     expect(result.metadataByChartId[chart.id]).toEqual({
       filtersApplied: false,
@@ -134,6 +152,7 @@ describe("browser-filter-engine", () => {
       },
       {
         resolveBackend: () => "duckdb-wasm",
+        resolveRuntimeFingerprint: async () => "duckdb-wasm:local",
         readJoinDefs: () => [
           {
             leftTable: "orders",
@@ -148,7 +167,7 @@ describe("browser-filter-engine", () => {
         runRuntimeSql: async (sql: string) => {
           runtimeSqlCalls.push(sql);
 
-          if (sql.includes('CREATE OR REPLACE TABLE "mat"."customers"')) {
+          if (sql.includes('CREATE OR REPLACE VIEW "mat"."customers"')) {
             throw new Error("customers materialization failed");
           }
 
@@ -164,7 +183,7 @@ describe("browser-filter-engine", () => {
 
     expect(
       runtimeSqlCalls.some((sql) =>
-        sql.includes('CREATE OR REPLACE TABLE "mat"."customers"'),
+        sql.includes('CREATE OR REPLACE VIEW "mat"."customers"'),
       ),
     ).toBe(true);
     expect(result.rowsByChartId[chart.id]).toEqual([{ source: "raw" }]);
@@ -198,6 +217,7 @@ describe("browser-filter-engine", () => {
       },
       {
         resolveBackend: () => "duckdb-wasm",
+        resolveRuntimeFingerprint: async () => "duckdb-wasm:local",
         readJoinDefs: () => [],
         listCharts: async () => [chart],
         getMaterializationCache: () => new Map(),
@@ -212,7 +232,9 @@ describe("browser-filter-engine", () => {
       },
     );
 
-    const valueQuery = runtimeSqlCalls.find((sql) => sql.includes('SELECT DISTINCT "value"'));
+    const valueQuery = runtimeSqlCalls.find((sql) =>
+      sql.includes('SELECT DISTINCT "value"'),
+    );
 
     expect(valueQuery).toBeDefined();
     expect(valueQuery).toContain('b."amount" > 100');
@@ -222,5 +244,84 @@ describe("browser-filter-engine", () => {
       { value: "EMEA", label: "EMEA" },
       { value: "APAC", label: "APAC" },
     ]);
+  });
+
+  test("does not reuse cached aliases across runtime fingerprints", async () => {
+    const cache = new Map();
+    const runtimeSqlCalls: string[] = [];
+    const chart = createChart({
+      id: "chart-1",
+      sql: "SELECT * FROM orders",
+    });
+    const filters: Filter[] = [
+      {
+        field: "orders.region",
+        op: "eq",
+        values: ["EMEA"],
+      },
+    ];
+
+    await executeDashboardChartsWithFilters(
+      {
+        dashboardId: "dashboard-1",
+        charts: [chart],
+        dashboardFilters: filters,
+        chartFiltersById: {},
+      },
+      {
+        resolveBackend: () => "duckdb-http",
+        resolveRuntimeFingerprint: async () => "duckdb-http:alpha:8080",
+        readJoinDefs: () => [],
+        listCharts: async () => [chart],
+        getMaterializationCache: () => cache,
+        runRuntimeSql: async (sql: string) => {
+          runtimeSqlCalls.push(sql);
+          return [];
+        },
+        runChartSql: async () => [],
+      },
+    );
+
+    await executeDashboardChartsWithFilters(
+      {
+        dashboardId: "dashboard-1",
+        charts: [chart],
+        dashboardFilters: filters,
+        chartFiltersById: {},
+      },
+      {
+        resolveBackend: () => "duckdb-http",
+        resolveRuntimeFingerprint: async () => "duckdb-http:beta:8080",
+        readJoinDefs: () => [],
+        listCharts: async () => [chart],
+        getMaterializationCache: () => cache,
+        runRuntimeSql: async (sql: string) => {
+          runtimeSqlCalls.push(sql);
+          return [];
+        },
+        runChartSql: async () => [],
+      },
+    );
+
+    expect(
+      runtimeSqlCalls.filter((sql) =>
+        sql.includes('CREATE OR REPLACE VIEW "mat"."orders"'),
+      ).length,
+    ).toBe(2);
+  });
+
+  test("lists view aliases as materialized tables", async () => {
+    const runtimeSqlCalls: string[] = [];
+
+    const tables = await listMaterializedTablesForBackend("duckdb-wasm", {
+      runRuntimeSql: async (sql: string) => {
+        runtimeSqlCalls.push(sql);
+        return [{ table_name: "orders" }, { table_name: "customers" }];
+      },
+    });
+
+    expect(runtimeSqlCalls[0]).toContain("SELECT DISTINCT table_name");
+    expect(runtimeSqlCalls[0]).not.toContain("table_type = 'BASE TABLE'");
+    expect(tables).toEqual(["orders", "customers"]);
   });
 });

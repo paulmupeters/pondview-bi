@@ -951,6 +951,7 @@ export default function Chat({
                     onInsertTable={handleInsertTableIntoSql}
                     refreshToken={explorerRefreshToken}
                     collapsed={isExplorerCollapsed}
+                    collapsedBehavior="overlay"
                     onToggleCollapse={() =>
                       setIsExplorerCollapsed((prev) => !prev)
                     }
@@ -1030,7 +1031,7 @@ export default function Chat({
             <div className="h-[400px] p-6">{rightPanelContent}</div>
           </div>
         </div>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-4 pb-4">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 px-4 pb-4">
           <div className="pointer-events-auto mx-auto w-full max-w-5xl">
             {promptError ? (
               <p className="mb-2 text-xs text-destructive">{promptError}</p>

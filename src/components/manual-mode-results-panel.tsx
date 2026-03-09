@@ -236,18 +236,6 @@ export function ManualModeResultsPanel({
           className="gap-2"
         >
           <ToggleGroupItem
-            value="chart"
-            disabled={false}
-            className={cn(
-              "rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-mono bg-transparent data-[state=on]:text-primary data-[state=on]:bg-transparent",
-              manualViewMode === "chart"
-                ? "border-primary font-bold"
-                : "text-muted-foreground hover:text-foreground font-medium ",
-            )}
-          >
-            Chart
-          </ToggleGroupItem>
-          <ToggleGroupItem
             value="table"
             disabled={false}
             className={cn(
@@ -258,6 +246,18 @@ export function ManualModeResultsPanel({
             )}
           >
             Table
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="chart"
+            disabled={false}
+            className={cn(
+              "rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-mono bg-transparent data-[state=on]:text-primary data-[state=on]:bg-transparent",
+              manualViewMode === "chart"
+                ? "border-primary font-bold"
+                : "text-muted-foreground hover:text-foreground font-medium ",
+            )}
+          >
+            Visual
           </ToggleGroupItem>
         </ToggleGroup>
         <div className="flex items-center gap-2">
@@ -280,18 +280,6 @@ export function ManualModeResultsPanel({
               </TooltipContent>
             </Tooltip>
           )}
-          {onSwitchToAiMode && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="text-xs font-mono"
-              onClick={onSwitchToAiMode}
-            >
-              <ChatBubbleLeftRightIcon className="h-4 w-4 mr-2" />
-              Chat
-            </Button>
-          )}
           {sqlResult && sqlResult.columns.length > 0 && (
             <Button
               type="button"
@@ -309,17 +297,17 @@ export function ManualModeResultsPanel({
         {manualViewMode === "chart" &&
           sqlResult &&
           sqlResult.columns.length > 0 && (
-          <InlineChartConfig
-            chartConfig={chartConfig}
-            defaultChartConfig={defaultChartConfig}
-            onChartConfigChange={setChartConfig}
-            columns={chartColumns}
-            rows={chartRows}
-            cardConfig={isCardMode ? cardConfig : undefined}
-            onCardConfigChange={isCardMode ? setCardConfig : undefined}
-            isCardMode={isCardMode}
-            showAdvancedConfig={showAdvancedConfig}
-          />
+            <InlineChartConfig
+              chartConfig={chartConfig}
+              defaultChartConfig={defaultChartConfig}
+              onChartConfigChange={setChartConfig}
+              columns={chartColumns}
+              rows={chartRows}
+              cardConfig={isCardMode ? cardConfig : undefined}
+              onCardConfigChange={isCardMode ? setCardConfig : undefined}
+              isCardMode={isCardMode}
+              showAdvancedConfig={showAdvancedConfig}
+            />
           )}
         <div className="p-4">
           {sqlResult ? (
@@ -335,19 +323,19 @@ export function ManualModeResultsPanel({
                   className="mx-auto w-fit border-0 shadow-none"
                 />
               ) : (
-                  <SqlChart
-                    customChartConfig={chartConfig ?? defaultChartConfig}
-                    dataOverride={{
-                      stage: "complete",
-                      rows: chartRows,
-                      summary: {
-                        totalRows: sqlResult.rows.length,
-                        executionTimeMs: sqlResult.durationMs,
-                        insights: [],
-                      },
-                    }}
-                  />
-                )
+                <SqlChart
+                  customChartConfig={chartConfig ?? defaultChartConfig}
+                  dataOverride={{
+                    stage: "complete",
+                    rows: chartRows,
+                    summary: {
+                      totalRows: sqlResult.rows.length,
+                      executionTimeMs: sqlResult.durationMs,
+                      insights: [],
+                    },
+                  }}
+                />
+              )
             ) : (
               <SqlResultsTable
                 className="w-full h-full"

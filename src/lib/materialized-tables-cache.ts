@@ -8,16 +8,18 @@ const isClient = typeof window !== "undefined";
 
 export type MaterializedTablesCacheEntry = {
   backend: SqlBackend;
+  runtimeFingerprint: string;
   tables: string[];
   timestamp: number;
 };
 
 type MaterializedTablesCachePayload = {
-  version: 2;
+  version: 3;
   entries: Partial<
     Record<
       SqlBackend,
       {
+        runtimeFingerprint: string;
         tables: string[];
         timestamp: number;
       }
@@ -44,7 +46,7 @@ function readCachePayload(): MaterializedTablesCachePayload | null {
 
     const parsed = JSON.parse(raw) as Partial<MaterializedTablesCachePayload>;
     if (
-      parsed?.version !== 2 ||
+      parsed?.version !== 3 ||
       typeof parsed.entries !== "object" ||
       parsed.entries === null
     ) {
@@ -54,12 +56,18 @@ function readCachePayload(): MaterializedTablesCachePayload | null {
     const normalizedEntries: MaterializedTablesCachePayload["entries"] = {};
 
     for (const [backend, entry] of Object.entries(parsed.entries)) {
-      if (!isValidBackend(backend) || typeof entry !== "object" || entry === null) {
+      if (
+        !isValidBackend(backend) ||
+        typeof entry !== "object" ||
+        entry === null
+      ) {
         continue;
       }
 
       const candidate = entry as Partial<MaterializedTablesCacheEntry>;
       if (
+        typeof candidate.runtimeFingerprint !== "string" ||
+        candidate.runtimeFingerprint.length === 0 ||
         typeof candidate.timestamp !== "number" ||
         !Array.isArray(candidate.tables) ||
         !candidate.tables.every((value) => typeof value === "string")
@@ -68,13 +76,14 @@ function readCachePayload(): MaterializedTablesCachePayload | null {
       }
 
       normalizedEntries[backend] = {
+        runtimeFingerprint: candidate.runtimeFingerprint,
         tables: candidate.tables,
         timestamp: candidate.timestamp,
       };
     }
 
     return {
-      version: 2,
+      version: 3,
       entries: normalizedEntries,
     };
   } catch (error) {
@@ -106,15 +115,20 @@ function writeCachePayload(payload: MaterializedTablesCachePayload): void {
 
 export function readMaterializedTablesCache(
   backend: SqlBackend,
+  runtimeFingerprint: string,
 ): MaterializedTablesCacheEntry | null {
   const payload = readCachePayload();
   const entry = payload?.entries[backend];
   if (!entry) {
     return null;
   }
+  if (entry.runtimeFingerprint !== runtimeFingerprint) {
+    return null;
+  }
 
   return {
     backend,
+    runtimeFingerprint,
     tables: entry.tables,
     timestamp: entry.timestamp,
   };
@@ -132,14 +146,16 @@ export function isMaterializedTablesCacheFresh(
 
 export function writeMaterializedTablesCache(
   backend: SqlBackend,
+  runtimeFingerprint: string,
   tables: string[],
 ): void {
   const payload = readCachePayload() ?? {
-    version: 2,
+    version: 3,
     entries: {},
   };
 
   payload.entries[backend] = {
+    runtimeFingerprint,
     tables,
     timestamp: Date.now(),
   };

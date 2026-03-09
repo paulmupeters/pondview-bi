@@ -1,5 +1,5 @@
 import {
-  GlobeEuropeAfricaIcon,
+  ChatBubbleBottomCenterTextIcon,
   PaperClipIcon,
   Squares2X2Icon,
   WrenchScrewdriverIcon,
@@ -122,7 +122,7 @@ function FileAttachmentHoverCard() {
                 <PromptInputCommandGroup heading="Added">
                   {attachments.files.map((file) => (
                     <PromptInputCommandItem key={file.id}>
-                      <GlobeEuropeAfricaIcon className="h-4 w-4" />
+                      <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
                       <span>{file.filename}</span>
                       <span className="ml-auto text-muted-foreground">✓</span>
                     </PromptInputCommandItem>
@@ -149,7 +149,7 @@ function FileAttachmentHoverCard() {
                       key={file.fileId}
                       onSelect={() => handleAddUploadedFile(file)}
                     >
-                      <GlobeEuropeAfricaIcon className="h-4 w-4" />
+                      <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
                       <span className="flex-1 truncate">
                         {file.originalName}
                       </span>
@@ -206,9 +206,7 @@ export function PromptInputWrapper({
   onSelectDb,
   onInsertTable,
 }: PromptInputWrapperProps) {
-  const [internalMode, setInternalMode] = useState<PromptMode>(
-    mode ?? "ai",
-  );
+  const [internalMode, setInternalMode] = useState<PromptMode>(mode ?? "ai");
 
   useEffect(() => {
     if (mode) {
@@ -249,8 +247,7 @@ export function PromptInputWrapper({
 
   const content = aiButtonLabel;
   const nextMode: PromptMode = internalMode === "ai" ? "manual" : "ai";
-  const modeButtonLabel =
-    nextMode === "ai" ? "Switch to AI" : "Switch to Manual";
+  const modeButtonLabel = nextMode === "ai" ? "Chat" : "Manual";
 
   if (!showHeader && !showAiInput) {
     return null;
@@ -301,11 +298,7 @@ export function PromptInputWrapper({
           </PromptInputBody>
         )}
         {showHeader && (
-          <PromptInputHeader
-            className={cn(
-              "p-0 overflow-hidden",
-            )}
-          >
+          <PromptInputHeader className={cn("p-0 overflow-hidden")}>
             <div className="flex items-center gap-1.5 justify-between w-full m-3">
               <div className="flex items-center gap-1.5">
                 {onHomePage && (
@@ -350,7 +343,7 @@ export function PromptInputWrapper({
                 title={modeButtonLabel}
               >
                 {nextMode === "ai" ? (
-                  <GlobeEuropeAfricaIcon className="h-4 w-4" />
+                  <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
                 ) : (
                   <WrenchScrewdriverIcon className="h-4 w-4" />
                 )}
