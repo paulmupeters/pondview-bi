@@ -1,5 +1,6 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { type ChatTransport, DirectChatTransport } from "ai";
+import { Pencil } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPondviewAgent } from "@/ai/client/agent";
@@ -46,12 +47,15 @@ import {
   ensureChat,
   getChatTitleById,
   listMessagesByChatId,
+  updateChatTitle,
 } from "@/lib/workspace/chat-repo";
 import {
   deleteSavedSqlQuery,
+  deriveSavedSqlQueryName,
   listSavedSqlQueries,
-  saveSqlQuery,
+  renameSavedSqlQuery,
   type SavedSqlQuery,
+  saveSqlQuery,
 } from "@/lib/workspace/saved-sql-queries-repo";
 import { useRouter, useSearchParams } from "@/vite/next-navigation";
 
@@ -156,6 +160,10 @@ export default function Chat({
   const [promptMode, setPromptMode] = useState<PromptMode>("ai");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [chatTitle, setChatTitle] = useState<string | null>(null);
+  const [isEditingChatTitle, setIsEditingChatTitle] = useState(false);
+  const [chatTitleDraft, setChatTitleDraft] = useState("");
+  const chatTitleInputRef = useRef<HTMLInputElement | null>(null);
+  const skipNextTitleBlurSaveRef = useRef(false);
   const hydratedChatIdRef = useRef<string | null>(
     resolvedInitialMessages.length > 0 ? chatId : null,
   );
@@ -269,6 +277,14 @@ export default function Chat({
       cancelled = true;
     };
   }, [chatId]);
+
+  useEffect(() => {
+    if (!isEditingChatTitle) {
+      return;
+    }
+    chatTitleInputRef.current?.focus();
+    chatTitleInputRef.current?.select();
+  }, [isEditingChatTitle]);
 
   useEffect(() => {
     let cancelled = false;
@@ -449,26 +465,59 @@ export default function Chat({
     setPendingSqlToLoad(null);
   }, [pendingSqlToLoad, sqlConsoleApi]);
 
-  const handleSaveStoredSqlQuery = useCallback(async () => {
-    if (!sqlConsoleApi || isSavingStoredSqlQuery) {
-      return;
-    }
+  const handleSaveStoredSqlQuery = useCallback(
+    async (sqlOverride?: string) => {
+      if (isSavingStoredSqlQuery) {
+        return;
+      }
 
-    const sql = sqlConsoleApi.getQuery().trim();
-    if (!sql) {
-      return;
-    }
+      const sql = (sqlOverride ?? sqlConsoleApi?.getQuery() ?? "").trim();
+      if (!sql) {
+        return;
+      }
 
-    setIsSavingStoredSqlQuery(true);
-    try {
-      const rows = await saveSqlQuery(sql);
-      setStoredSqlQueries(rows);
-    } catch (error) {
-      console.error("Failed to save SQL query:", error);
-    } finally {
-      setIsSavingStoredSqlQuery(false);
-    }
-  }, [isSavingStoredSqlQuery, sqlConsoleApi]);
+      const suggestedName = deriveSavedSqlQueryName(sql);
+      const requestedName =
+        typeof window !== "undefined"
+          ? window.prompt("Name this SQL query:", suggestedName)
+          : suggestedName;
+      if (requestedName === null) {
+        return;
+      }
+
+      const normalizedName = requestedName.trim();
+      if (!normalizedName) {
+        return;
+      }
+
+      const duplicateByName = storedSqlQueries.find(
+        (entry) =>
+          entry.name.trim().toLowerCase() === normalizedName.toLowerCase(),
+      );
+      if (duplicateByName && typeof window !== "undefined") {
+        const shouldReplace = window.confirm(
+          `A saved query named "${normalizedName}" already exists. Replace it?`,
+        );
+        if (!shouldReplace) {
+          return;
+        }
+      }
+
+      setIsSavingStoredSqlQuery(true);
+      try {
+        const rows = await saveSqlQuery({
+          sql,
+          name: normalizedName,
+        });
+        setStoredSqlQueries(rows);
+      } catch (error) {
+        console.error("Failed to save SQL query:", error);
+      } finally {
+        setIsSavingStoredSqlQuery(false);
+      }
+    },
+    [isSavingStoredSqlQuery, sqlConsoleApi, storedSqlQueries],
+  );
 
   const handleSelectStoredSqlQuery = useCallback(
     (queryId: string) => {
@@ -502,6 +551,50 @@ export default function Chat({
       console.error("Failed to delete saved SQL query:", error);
     }
   }, []);
+
+  const handleRenameStoredSqlQuery = useCallback(
+    async (queryId: string) => {
+      const existing = storedSqlQueries.find((entry) => entry.id === queryId);
+      if (!existing) {
+        return;
+      }
+
+      const requestedName =
+        typeof window !== "undefined"
+          ? window.prompt("Rename saved SQL query:", existing.name)
+          : existing.name;
+      if (requestedName === null) {
+        return;
+      }
+
+      const normalizedName = requestedName.trim();
+      if (!normalizedName) {
+        return;
+      }
+
+      const duplicateByName = storedSqlQueries.find(
+        (entry) =>
+          entry.id !== queryId &&
+          entry.name.trim().toLowerCase() === normalizedName.toLowerCase(),
+      );
+      if (duplicateByName && typeof window !== "undefined") {
+        const shouldReplace = window.confirm(
+          `A saved query named "${normalizedName}" already exists. Replace it?`,
+        );
+        if (!shouldReplace) {
+          return;
+        }
+      }
+
+      try {
+        const rows = await renameSavedSqlQuery(queryId, normalizedName);
+        setStoredSqlQueries(rows);
+      } catch (error) {
+        console.error("Failed to rename saved SQL query:", error);
+      }
+    },
+    [storedSqlQueries],
+  );
 
   const persistArtifactMessage = useCallback(
     async (
@@ -701,15 +794,85 @@ export default function Chat({
     [],
   );
 
+  const beginChatTitleEdit = useCallback(() => {
+    setChatTitleDraft(chatTitle ?? "");
+    setIsEditingChatTitle(true);
+  }, [chatTitle]);
+
+  const cancelChatTitleEdit = useCallback(() => {
+    skipNextTitleBlurSaveRef.current = true;
+    setIsEditingChatTitle(false);
+    setChatTitleDraft(chatTitle ?? "");
+  }, [chatTitle]);
+
+  const saveChatTitle = useCallback(async () => {
+    const previousTitle = chatTitle;
+    const nextTitle = chatTitleDraft.trim() || null;
+    setIsEditingChatTitle(false);
+    setChatTitleDraft(nextTitle ?? "");
+
+    if (nextTitle === previousTitle) {
+      return;
+    }
+
+    setChatTitle(nextTitle);
+    try {
+      await updateChatTitle(chatId, nextTitle);
+    } catch (error) {
+      console.error("Failed to update chat title:", error);
+      setChatTitle(previousTitle);
+    }
+  }, [chatId, chatTitle, chatTitleDraft]);
+
   const rightPanelContent = (
     <div className="relative h-full w-full overflow-hidden">
-      <div className="border-border/70 px-3 py-4">
-        <p
-          className="truncate text-xs font-medium text-muted-foreground"
-          title={chatTitle || "Untitled chat"}
-        >
-          {chatTitle || "Untitled chat"}
-        </p>
+      <div className="group/title border-border/70 px-3 py-4">
+        <div className="flex items-center gap-1">
+          {isEditingChatTitle ? (
+            <input
+              ref={chatTitleInputRef}
+              value={chatTitleDraft}
+              onChange={(event) => setChatTitleDraft(event.target.value)}
+              onBlur={() => {
+                if (skipNextTitleBlurSaveRef.current) {
+                  skipNextTitleBlurSaveRef.current = false;
+                  return;
+                }
+                void saveChatTitle();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void saveChatTitle();
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelChatTitleEdit();
+                }
+              }}
+              className="h-6 w-full rounded border border-border bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              placeholder="Untitled chat"
+              aria-label="Edit chat title"
+            />
+          ) : (
+            <>
+              <p
+                className="truncate text-xs font-medium text-muted-foreground"
+                title={chatTitle || "Untitled chat"}
+              >
+                {chatTitle || "Untitled chat"}
+              </p>
+              <button
+                type="button"
+                onClick={beginChatTitleEdit}
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring group-hover/title:opacity-100"
+                aria-label="Edit chat title"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+        </div>
       </div>
       <div
         aria-hidden={!isAiMode || isDashboardBuilderOpen}
@@ -769,8 +932,8 @@ export default function Chat({
       setMessages={setMessages}
       executeSqlArtifactType={executeSqlArtifactType}
     >
-      <div className="chat-container flex h-screen flex-col">
-        <div className="flex flex-1 min-h-0 w-full flex-col relative">
+      <div className="chat-container relative flex h-screen flex-col">
+        <div className="relative flex flex-1 min-h-0 w-full flex-col">
           <div className="flex-1 overflow-hidden bg-card">
             <div
               ref={containerRef}
@@ -798,6 +961,9 @@ export default function Chat({
                     onDeleteStoredSqlQuery={(queryId) => {
                       void handleDeleteStoredSqlQuery(queryId);
                     }}
+                    onRenameStoredSqlQuery={(queryId) => {
+                      void handleRenameStoredSqlQuery(queryId);
+                    }}
                     showStoredSqlQueries
                   />
                   <div className="flex-1 min-h-0 min-w-0 flex flex-col">
@@ -815,13 +981,13 @@ export default function Chat({
                         onSelectVisualization={handleSelectVisualization}
                         onRemoveMessage={handleRemoveMessage}
                         conversationClassName="flex-1 min-h-0"
-                        contentSpacingClassName="space-y-2"
+                        contentSpacingClassName="space-y-2 pb-36 lg:pb-40"
                         messagePaddingClassName="p-3"
                         userResponsePaddingClassName="p-1"
                         showExecuteSqlRawOutput={showExecuteSqlRawOutput}
                       />
                     ) : (
-                      <div className="flex-1 min-h-0 w-full p-3">
+                      <div className="flex-1 min-h-0 w-full p-3 pb-36 lg:pb-40">
                         <div className="h-full min-h-0 overflow-hidden">
                           <DuckdbRepl
                             className="h-full w-full border-r-0 p-0"
@@ -829,48 +995,13 @@ export default function Chat({
                             onConsoleApiChangeAction={setSqlConsoleApi}
                             inlineResults={false}
                             showRunControls={false}
+                            showExplorer={false}
+                            showSaveQueryButton
+                            onSaveQueryAction={handleSaveStoredSqlQuery}
+                            isSavingQuery={isSavingStoredSqlQuery}
                             chartConfig={manualChartConfig}
                             onResultChangeAction={handleReplResultChange}
                           />
-                        </div>
-                        <div className="mt-2 flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void handleSaveStoredSqlQuery();
-                            }}
-                            className="rounded border border-border px-3 py-1 text-xs"
-                            disabled={isSavingStoredSqlQuery || !sqlConsoleApi}
-                          >
-                            {isSavingStoredSqlQuery ? "Saving..." : "Save Query"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleAddVisual}
-                            className="rounded border border-border px-3 py-1 text-xs"
-                          >
-                            Add Visual
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleOpenDashboardBuilder}
-                            className="rounded border border-border px-3 py-1 text-xs"
-                          >
-                            Build Dashboard
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const latest = messages[messages.length - 1];
-                              if (latest) {
-                                void handleRemoveMessage(latest.id);
-                              }
-                            }}
-                            className="rounded border border-border px-3 py-1 text-xs"
-                            disabled={messages.length === 0}
-                          >
-                            Remove Last Visual
-                          </button>
                         </div>
                       </div>
                     )}
@@ -899,8 +1030,8 @@ export default function Chat({
             <div className="h-[400px] p-6">{rightPanelContent}</div>
           </div>
         </div>
-        <div className="bg-transparent p-4">
-          <div className="mx-auto w-full max-w-5xl">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-4 pb-4">
+          <div className="pointer-events-auto mx-auto w-full max-w-5xl">
             {promptError ? (
               <p className="mb-2 text-xs text-destructive">{promptError}</p>
             ) : null}

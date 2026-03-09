@@ -1,5 +1,5 @@
-export const themeName = "pond pink";
-export const themeDisplayName = "Pond Pink";
+export const themeName = "rosewater";
+export const themeDisplayName = "Rosewater";
 export const themeCss = `
 :root {
   --background: oklch(0.9722 0.0035 39.4845);
@@ -14,21 +14,21 @@ export const themeCss = `
   --secondary-foreground: oklch(0.2726 0.0226 215.0584);
   --muted: oklch(0.9172 0.0067 28.8353);
   --muted-foreground: oklch(0.5785 0.0225 204.3250);
-  --accent: oklch(0.8094 0.0153 115.1045);
+  --accent: oklch(0.8146 0.0214 350.6748);
   --accent-foreground: oklch(0.2726 0.0226 215.0584);
   --destructive: oklch(0.5772 0.1895 352.5206);
   --destructive-foreground: oklch(1.0000 0 0);
   --border: oklch(0.9172 0.0067 28.8353);
   --input: oklch(1.0000 0 0);
   --ring: oklch(0.6237 0.0245 80.6235);
-  --chart-1: oklch(0.6237 0.0245 80.6235);
-  --chart-2: oklch(0.7098 0.0366 90.5670);
-  --chart-3: oklch(0.6855 0.0372 114.4893);
-  --chart-4: oklch(0.5785 0.0225 204.3250);
-  --chart-5: oklch(0.9172 0.0067 28.8353);
+  --chart-1: oklch(0.6506 0.0431 12.5562);
+  --chart-2: oklch(0.8146 0.0214 350.6748);
+  --chart-3: oklch(0.6121 0.0385 342.7373);
+  --chart-4: oklch(0.4745 0.0701 24.8677);
+  --chart-5: oklch(0.7695 0.0523 300.3934);
   --sidebar: oklch(0.9826 0.0017 67.8027);
   --sidebar-foreground: oklch(0.2726 0.0226 215.0584);
-  --sidebar-primary: oklch(0.6354 0.0341 137.8589);
+  --sidebar-primary: oklch(0.5648 0.0462 13.0733);
   --sidebar-primary-foreground: oklch(1.0000 0 0);
   --sidebar-accent: oklch(0.9172 0.0067 28.8353);
   --sidebar-accent-foreground: oklch(0.2726 0.0226 215.0584);

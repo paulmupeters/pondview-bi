@@ -123,6 +123,7 @@ export function CommandPalette() {
         id: "change-theme-menu",
         label: "Change theme",
         icon: <Palette size={16} />,
+        shortcut: ["6"],
         perform: () => {
           setShowThemeMenu(true);
           setSearch("");
@@ -169,6 +170,12 @@ export function CommandPalette() {
     [navigationCommands, showThemeMenu, themeCommands],
   );
 
+  const shouldKeepPaletteOpen = useCallback(
+    (commandId: string) =>
+      commandId === "change-theme-menu" || commandId === "theme-back",
+    [],
+  );
+
   // Toggle the menu when ⌘K is pressed
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -194,11 +201,13 @@ export function CommandPalette() {
       if (matchedCommand) {
         e.preventDefault();
         matchedCommand.perform();
-        setOpen(false);
-        setSearch("");
+        if (!shouldKeepPaletteOpen(matchedCommand.id)) {
+          setOpen(false);
+          setSearch("");
+        }
       }
     },
-    [open, commands],
+    [open, commands, shouldKeepPaletteOpen],
   );
 
   useEffect(() => {
@@ -261,7 +270,7 @@ export function CommandPalette() {
                   onSelect={() => {
                     command.perform();
                     // Don't close dialog for menu navigation commands
-                    if (command.id !== "change-theme-menu" && command.id !== "theme-back") {
+                    if (!shouldKeepPaletteOpen(command.id)) {
                       setOpen(false);
                       setSearch("");
                     }

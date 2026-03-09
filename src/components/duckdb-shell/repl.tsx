@@ -1,6 +1,12 @@
 import { ClipboardDocumentIcon, PlayIcon } from "@heroicons/react/24/outline";
 import { Eraser } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import {
   type ExecuteQueryFn,
@@ -14,7 +20,10 @@ import {
 } from "@/components/ui/tooltip";
 import { cancelBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import { runQuery } from "@/lib/sql/run-query";
-import { DEFAULT_WASM_DB_IDENTIFIER, resolveSqlBackend } from "@/lib/sql/sql-runtime";
+import {
+  DEFAULT_WASM_DB_IDENTIFIER,
+  resolveSqlBackend,
+} from "@/lib/sql/sql-runtime";
 import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -120,6 +129,10 @@ type DuckdbReplProps = {
     } | null,
   ) => void;
   showRunControls?: boolean;
+  showExplorer?: boolean;
+  showSaveQueryButton?: boolean;
+  onSaveQueryAction?: (sql: string) => void | Promise<void>;
+  isSavingQuery?: boolean;
   chartConfig?: Config | null;
 };
 
@@ -133,6 +146,10 @@ export function DuckdbRepl({
   inlineResults = true,
   onResultChangeAction,
   showRunControls = true,
+  showExplorer = true,
+  showSaveQueryButton = false,
+  onSaveQueryAction,
+  isSavingQuery = false,
   chartConfig: _chartConfig,
 }: DuckdbReplProps) {
   const [lastResult, setLastResult] = useState<{
@@ -196,6 +213,20 @@ export function DuckdbRepl({
     internalApi.runQuery();
   };
 
+  const currentSql = internalApi?.getQuery()?.trim() ?? "";
+  const isSaveQueryDisabled =
+    !internalApi ||
+    !onSaveQueryAction ||
+    isSavingQuery ||
+    currentSql.length === 0;
+
+  const handleSaveQuery = () => {
+    if (isSaveQueryDisabled || !onSaveQueryAction) {
+      return;
+    }
+    void Promise.resolve(onSaveQueryAction(currentSql));
+  };
+
   const handleInsertTableName = useCallback(
     (tableName: string) => {
       if (!internalApi) return;
@@ -255,17 +286,19 @@ export function DuckdbRepl({
       )}
     >
       {/* Table Explorer Sidebar */}
-      <ConnectedDataPanel
-        selectedDb={selectedDb}
-        onSelect={setSelectedDb}
-        mode="sidebar"
-        onInsertTable={handleInsertTableName}
-        refreshToken={explorerRefreshToken}
-        collapsed={isExplorerCollapsed}
-        onToggleCollapse={() => setIsExplorerCollapsed((prev) => !prev)}
-        className="shrink-0 bg-background"
-        sqlBackend={effectiveSqlBackend}
-      />
+      {showExplorer && (
+        <ConnectedDataPanel
+          selectedDb={selectedDb}
+          onSelect={setSelectedDb}
+          mode="sidebar"
+          onInsertTable={handleInsertTableName}
+          refreshToken={explorerRefreshToken}
+          collapsed={isExplorerCollapsed}
+          onToggleCollapse={() => setIsExplorerCollapsed((prev) => !prev)}
+          className="shrink-0 bg-background"
+          sqlBackend={effectiveSqlBackend}
+        />
+      )}
 
       {/* Editor + Results area */}
       <div className="relative flex-1 min-w-0 h-full p-4">
@@ -324,6 +357,19 @@ export function DuckdbRepl({
               </>
             )}
           </button>
+          {showSaveQueryButton && (
+            <button
+              type="button"
+              className={cn(
+                "flex items-center gap-2 bg-card border border-border text-foreground px-3 py-1.5 rounded text-xs font-bold transition-colors shadow-sm h-[26px]",
+                isSaveQueryDisabled ? "cursor-not-allowed" : "hover:bg-accent",
+              )}
+              onClick={handleSaveQuery}
+              disabled={isSaveQueryDisabled}
+            >
+              {isSavingQuery ? "Saving..." : "Save Query"}
+            </button>
+          )}
 
           {showRunControls && (
             <button

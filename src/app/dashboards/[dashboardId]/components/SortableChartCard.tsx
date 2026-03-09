@@ -48,6 +48,7 @@ export function SortableChartCard({
   onResizeChange,
   isSelected = false,
   onSelect,
+  onPreviewChart,
 }: SortableChartCardProps) {
   const { filters } = useFilters();
   const [editedSql, setEditedSql] = useState(chart.sql);
@@ -82,6 +83,7 @@ export function SortableChartCard({
     !isCardConfig(config) &&
     !isTableConfig(config) &&
     !isTextConfig(config);
+  const canPreview = Boolean(config && (isChart || isTableConfig(config)));
   const {
     attributes,
     listeners,
@@ -241,17 +243,17 @@ export function SortableChartCard({
         >
           <GripVertical className="h-4 w-4" />
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            window.open(`/charts/${chart.id}`, "_blank");
-          }}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="View chart"
-          title="View chart"
-        >
-          <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-        </button>
+        {canPreview ? (
+          <button
+            type="button"
+            onClick={() => onPreviewChart?.(chart.id)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="View chart"
+            title="View chart"
+          >
+            <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => onSelect?.(chart.id)}

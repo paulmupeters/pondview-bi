@@ -48,21 +48,47 @@ export async function getChatTitleById(chatId: string): Promise<string | null> {
   return chat?.title ?? null;
 }
 
-export async function listMessagesByChatId(chatId: string): Promise<DbMessageRow[]> {
-  const messages = await getAllFromStore<WorkspaceMessage>(STORE_MESSAGES);
-  return sortMessagesByCreatedAt(messages.filter((message) => message.chatId === chatId)).map(
-    (message) => ({
-      id: message.id,
-      chatId: message.chatId,
-      role: message.role,
-      content: message.content,
-      parts: message.parts,
-      createdAt: message.createdAt,
-    }),
-  );
+export async function updateChatTitle(
+  chatId: string,
+  title: string | null,
+  now = Date.now(),
+): Promise<void> {
+  const normalizedTitle = title?.trim() ? title.trim() : null;
+  const existing = await getByKey<WorkspaceChat>(STORE_CHATS, chatId);
+
+  if (!existing) {
+    await ensureChat(chatId, normalizedTitle, now);
+    return;
+  }
+
+  await upsertChat({
+    ...existing,
+    title: normalizedTitle,
+    updatedAt: now,
+  });
 }
 
-export async function ensureChat(chatId: string, title: string | null, now = Date.now()): Promise<void> {
+export async function listMessagesByChatId(
+  chatId: string,
+): Promise<DbMessageRow[]> {
+  const messages = await getAllFromStore<WorkspaceMessage>(STORE_MESSAGES);
+  return sortMessagesByCreatedAt(
+    messages.filter((message) => message.chatId === chatId),
+  ).map((message) => ({
+    id: message.id,
+    chatId: message.chatId,
+    role: message.role,
+    content: message.content,
+    parts: message.parts,
+    createdAt: message.createdAt,
+  }));
+}
+
+export async function ensureChat(
+  chatId: string,
+  title: string | null,
+  now = Date.now(),
+): Promise<void> {
   const existing = await getByKey<WorkspaceChat>(STORE_CHATS, chatId);
   if (existing) {
     return;
@@ -77,7 +103,10 @@ export async function ensureChat(chatId: string, title: string | null, now = Dat
   });
 }
 
-export async function touchChatUpdatedAt(chatId: string, now = Date.now()): Promise<void> {
+export async function touchChatUpdatedAt(
+  chatId: string,
+  now = Date.now(),
+): Promise<void> {
   const existing = await getByKey<WorkspaceChat>(STORE_CHATS, chatId);
   if (!existing) {
     return;
@@ -123,7 +152,10 @@ export async function appendUserMessageTx(args: {
   const now = args.now ?? Date.now();
   await ensureChat(args.chatId, args.titleForNewChat, now);
 
-  const existingMessage = await getByKey<WorkspaceMessage>(STORE_MESSAGES, args.messageId);
+  const existingMessage = await getByKey<WorkspaceMessage>(
+    STORE_MESSAGES,
+    args.messageId,
+  );
   if (!existingMessage) {
     await putMessage({
       id: args.messageId,
@@ -156,7 +188,10 @@ export async function appendAssistantMessage(
 ): Promise<void> {
   await ensureChat(chatId, "SQL Query Results", now);
 
-  const existingMessage = await getByKey<WorkspaceMessage>(STORE_MESSAGES, messageId);
+  const existingMessage = await getByKey<WorkspaceMessage>(
+    STORE_MESSAGES,
+    messageId,
+  );
   if (!existingMessage) {
     await putMessage({
       id: messageId,
@@ -213,7 +248,9 @@ export async function updateMessageParts(
   await touchChatUpdatedAt(chatId, now);
 }
 
-export async function getMessageById(messageId: string): Promise<DbMessageRow | null> {
+export async function getMessageById(
+  messageId: string,
+): Promise<DbMessageRow | null> {
   const message = await getByKey<WorkspaceMessage>(STORE_MESSAGES, messageId);
   if (!message) {
     return null;

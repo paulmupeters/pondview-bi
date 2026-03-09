@@ -4,9 +4,24 @@ import { useSearchParams } from '@/vite/next-navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { TextConfigDialog } from "@/components/text-config-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { DynamicChart } from "@/components/dynamic-chart";
+import { SqlResultsTable } from "@/components/sql-results-table";
 import { runQuery } from "@/lib/sql/run-query";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
-import type { Result, TextConfig } from "@/lib/types";
+import type {
+  CardConfig,
+  Config,
+  Result,
+  TableConfig,
+  TextConfig,
+} from "@/lib/types";
 import {
   addChartToDashboard,
   listChartsByDashboard,
@@ -29,6 +44,7 @@ import type {
   DashboardChart,
   ResizeState,
 } from "../[dashboardId]/types";
+import { isCardConfig, isTableConfig, isTextConfig } from "../[dashboardId]/utils";
 import { buildRows, groupConsecutiveMetricCards } from "../[dashboardId]/utils";
 
 const PREF_COLUMNS_PREFIX = "dashboard:columns:";
@@ -70,6 +86,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   );
   const [resizingChart, setResizingChart] = useState<ResizeState>(null);
   const [selectedChartId, setSelectedChartId] = useState<string | null>(null);
+  const [previewChartId, setPreviewChartId] = useState<string | null>(null);
   const [isAddingTextCard, setIsAddingTextCard] = useState(false);
 
   useEffect(() => {
@@ -321,6 +338,13 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     }
   }, [charts, selectedChartId]);
 
+  useEffect(() => {
+    if (!previewChartId) return;
+    if (!charts.some((chart) => chart.id === previewChartId)) {
+      setPreviewChartId(null);
+    }
+  }, [charts, previewChartId]);
+
   const chartGroups = useMemo(
     () => groupConsecutiveMetricCards(charts, chartData),
     [charts, chartData],
@@ -338,6 +362,33 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
           ],
     [chartGroups, columns, autoFitRows],
   );
+
+  const previewChart = useMemo(
+    () => charts.find((chart) => chart.id === previewChartId) ?? null,
+    [charts, previewChartId],
+  );
+  const previewRows = useMemo(
+    () => (previewChart ? chartData[previewChart.id] || [] : []),
+    [previewChart, chartData],
+  );
+  const previewConfig = useMemo(() => {
+    if (!previewChart) return null;
+    try {
+      return JSON.parse(previewChart.chartConfigJson) as
+        | Config
+        | CardConfig
+        | TableConfig
+        | TextConfig;
+    } catch {
+      return null;
+    }
+  }, [previewChart]);
+  const isPreviewTable = isTableConfig(previewConfig);
+  const isPreviewChart =
+    previewConfig &&
+    !isCardConfig(previewConfig) &&
+    !isTableConfig(previewConfig) &&
+    !isTextConfig(previewConfig);
 
   if (loading)
     return <div className="p-6 text-sm text-muted-foreground">Loading...</div>;
@@ -401,7 +452,52 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
           onResizeChange={handleResizeChange}
           selectedChartId={selectedChartId}
           onChartSelect={setSelectedChartId}
+          onPreviewChart={setPreviewChartId}
         />
+        <Dialog
+          open={Boolean(previewChartId)}
+          onOpenChange={(open) => {
+            if (!open) setPreviewChartId(null);
+          }}
+        >
+          <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden">
+            <DialogHeader>
+              <DialogTitle>{previewChart?.title || "Chart preview"}</DialogTitle>
+              <DialogDescription>
+                Preview for this dashboard visual.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[70vh] overflow-auto">
+              {previewChart && previewConfig && previewRows.length > 0 ? (
+                isPreviewTable ? (
+                  <SqlResultsTable
+                    dataOverride={{
+                      stage: "complete",
+                      columns: Object.keys(previewRows[0] || {}).map((name) => ({
+                        name,
+                      })),
+                      rows: previewRows as Record<string, unknown>[],
+                    }}
+                  />
+                ) : isPreviewChart ? (
+                  <DynamicChart
+                    chartData={previewRows}
+                    chartConfig={previewConfig as Config}
+                    className="w-full"
+                  />
+                ) : (
+                  <div className="p-3 text-sm text-muted-foreground">
+                    This visual type does not support preview.
+                  </div>
+                )
+              ) : (
+                <div className="p-3 text-sm text-muted-foreground">
+                  Preview unavailable. The chart config or data could not be loaded.
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </FilterProvider>
   );

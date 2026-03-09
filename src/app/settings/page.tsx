@@ -643,6 +643,8 @@ export default function SettingsPage() {
                 <Input
                   id="model-id"
                   type="text"
+                  name="ai-model-id"
+                  autoComplete="off"
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                   placeholder="Enter model ID"
@@ -658,6 +660,10 @@ export default function SettingsPage() {
                 <Input
                   id="api-key"
                   type="password"
+                  name="ai-provider-api-key"
+                  autoComplete="new-password"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="Enter your API key"
@@ -674,6 +680,8 @@ export default function SettingsPage() {
                     <Input
                       id="open-responses-url"
                       type="text"
+                      name="open-responses-url"
+                      autoComplete="off"
                       value={openResponsesUrl}
                       onChange={(e) => setOpenResponsesUrl(e.target.value)}
                       placeholder="https://api.example.com/v1"
@@ -689,6 +697,8 @@ export default function SettingsPage() {
                     <Input
                       id="open-responses-name"
                       type="text"
+                      name="open-responses-provider-name"
+                      autoComplete="off"
                       value={openResponsesName}
                       onChange={(e) => setOpenResponsesName(e.target.value)}
                       placeholder="openresponses"

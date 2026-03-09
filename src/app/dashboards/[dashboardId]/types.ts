@@ -57,6 +57,7 @@ export type SortableChartCardProps = {
   onResizeChange?: (tempColSpan: number | null) => void;
   isSelected?: boolean;
   onSelect?: (chartId: string) => void;
+  onPreviewChart?: (chartId: string) => void;
 };
 
 export type MetricCardGroupProps = {
