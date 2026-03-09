@@ -39,6 +39,8 @@ export function CommandPalette() {
   const [hasCustomCss, setHasCustomCss] = useState(false);
   const availableThemes = useMemo(() => getAllThemes(), []);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const commandListRef = React.useRef<HTMLDivElement | null>(null);
+  const lastPreviewedCommandIdRef = React.useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -72,6 +74,21 @@ export function CommandPalette() {
     } finally {
       setOpen(false);
       setSearch("");
+    }
+  }, []);
+
+  const previewTheme = useCallback((themeName: string) => {
+    try {
+      if (themeName === CUSTOM_THEME_VALUE) {
+        const savedCss = localStorage.getItem("CUSTOM_CSS") || "";
+        if (!savedCss) return;
+        applyCustomCss(savedCss);
+        return;
+      }
+
+      applyTheme(themeName);
+    } catch (error) {
+      console.error("Failed to preview theme", error);
     }
   }, []);
 
@@ -176,6 +193,20 @@ export function CommandPalette() {
     [],
   );
 
+  const previewThemeFromCommandId = useCallback(
+    (commandId: string) => {
+      if (!showThemeMenu) return;
+      if (commandId === "theme-back") return;
+      if (!commandId.startsWith("theme-")) return;
+      if (lastPreviewedCommandIdRef.current === commandId) return;
+
+      const themeName = commandId.slice("theme-".length);
+      previewTheme(themeName);
+      lastPreviewedCommandIdRef.current = commandId;
+    },
+    [previewTheme, showThemeMenu],
+  );
+
   // Toggle the menu when ⌘K is pressed
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -222,6 +253,43 @@ export function CommandPalette() {
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!showThemeMenu) {
+      lastPreviewedCommandIdRef.current = null;
+    }
+  }, [showThemeMenu]);
+
+  useEffect(() => {
+    if (!open || !showThemeMenu || !commandListRef.current) return;
+
+    const listElement = commandListRef.current;
+    const applySelectedPreview = () => {
+      const selectedItem = listElement.querySelector<HTMLElement>(
+        "[cmdk-item][data-selected='true']",
+      );
+      const commandId = selectedItem?.dataset.commandId;
+      if (commandId) {
+        previewThemeFromCommandId(commandId);
+      }
+    };
+
+    applySelectedPreview();
+
+    const observer = new MutationObserver((mutations) => {
+      if (mutations.some((mutation) => mutation.attributeName === "data-selected")) {
+        applySelectedPreview();
+      }
+    });
+
+    observer.observe(listElement, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ["data-selected"],
+    });
+
+    return () => observer.disconnect();
+  }, [open, previewThemeFromCommandId, showThemeMenu]);
+
   // Listen for programmatic open/toggle/close events
   useEffect(() => {
     const onOpen = (_e: Event) => setOpen(true);
@@ -253,7 +321,7 @@ export function CommandPalette() {
             />
           </div>
 
-          <Command.List className="max-h-76 overflow-y-auto p-2">
+          <Command.List ref={commandListRef} className="max-h-76 overflow-y-auto p-2">
             <Command.Empty className="px-3 py-2 text-sm text-muted-foreground">
               No results found.
             </Command.Empty>
@@ -267,6 +335,8 @@ export function CommandPalette() {
               .map((command) => (
                 <Command.Item
                   key={command.id}
+                  data-command-id={command.id}
+                  onMouseEnter={() => previewThemeFromCommandId(command.id)}
                   onSelect={() => {
                     command.perform();
                     // Don't close dialog for menu navigation commands

@@ -1,6 +1,7 @@
 import { Check, ChevronDown, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFilters } from "@/app/dashboards/[dashboardId]/filter-context";
+import { loadDashboardDimensionValues } from "@/lib/dashboard/browser-filter-engine";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -126,13 +127,32 @@ export function Slicer({
   // Fetch dimension values
   const fetchValues = useCallback(
     async (searchTerm: string) => {
-      void searchTerm;
       setLoading(true);
-      // Server-backed dimension value discovery is deferred in browser mode.
-      setValues([]);
-      setLoading(false);
+      try {
+        const effectiveFilters =
+          activeScope.kind === "chart"
+            ? [...dashboardFilters, ...filters]
+            : filters;
+
+        const nextValues = await loadDashboardDimensionValues({
+          dashboardId,
+          field,
+          filters: effectiveFilters,
+          limit,
+          search: searchTerm || undefined,
+        });
+        setValues(nextValues);
+      } catch (error) {
+        console.error(
+          `[Slicer] Failed to load dimension values for ${field}:`,
+          error,
+        );
+        setValues([]);
+      } finally {
+        setLoading(false);
+      }
     },
-    [],
+    [activeScope.kind, dashboardFilters, dashboardId, field, filters, limit],
   );
 
   // Debounced search

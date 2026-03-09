@@ -94,7 +94,8 @@ export function DashboardSettingsDialog({
           <div className="flex flex-col gap-2">
             <h3 className="text-sm font-medium">Filters</h3>
             <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-              Dashboard filter discovery is deferred in browser mode.
+              Manage filters from the slicer bar in dashboard view. Available
+              dimensions are discovered from the active SQL runtime.
             </div>
           </div>
         </div>

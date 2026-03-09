@@ -4,7 +4,7 @@ import {
   findJoinPath,
   type JoinDefinition,
   type JoinPathStep,
-} from "@/lib/joins/loader";
+} from "@/lib/joins/graph";
 import { findBaseTableReference } from "@/lib/filters/parse-tables";
 
 export interface ApplyFiltersOptions {
