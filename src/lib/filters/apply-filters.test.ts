@@ -5,7 +5,8 @@ import type { Filter } from "@/lib/types/filters";
 
 describe("applyFiltersToSql", () => {
   test("applies same-table filters via materialized CTE", () => {
-    const sql = "SELECT Country, COUNT(*) AS count FROM unicorns GROUP BY Country";
+    const sql =
+      "SELECT Country, COUNT(*) AS count FROM unicorns GROUP BY Country";
     const filters: Filter[] = [
       {
         field: "unicorns.Industry",
@@ -25,7 +26,8 @@ describe("applyFiltersToSql", () => {
   });
 
   test("applies cross-table filters using join paths", () => {
-    const sql = "SELECT customer_id, SUM(amount) FROM orders GROUP BY customer_id";
+    const sql =
+      "SELECT customer_id, SUM(amount) FROM orders GROUP BY customer_id";
     const filters: Filter[] = [
       {
         field: "customers.segment",
@@ -50,6 +52,28 @@ describe("applyFiltersToSql", () => {
     expect(result.sql).toContain('LEFT JOIN "mat"."customers" AS j1');
     expect(result.sql).toContain('ON b."customer_id" = j1."id"');
     expect(result.sql).toContain(`WHERE j1."segment" = 'Enterprise'`);
+  });
+
+  test("uses injected table references when provided", () => {
+    const sql =
+      "SELECT Country, COUNT(*) AS count FROM unicorns GROUP BY Country";
+    const filters: Filter[] = [
+      {
+        field: "unicorns.Industry",
+        op: "eq",
+        values: ["Fintech"],
+      },
+    ];
+
+    const result = applyFiltersToSql(sql, filters, [], {
+      tableReferences: {
+        unicorns: '"main"."unicorns"',
+      },
+    });
+
+    expect(result.appliedFilters).toBe(1);
+    expect(result.sql).toContain('FROM "main"."unicorns" AS b');
+    expect(result.sql).not.toContain('FROM "mat"."unicorns" AS b');
   });
 
   test("reports skipped filters when no join path exists", () => {

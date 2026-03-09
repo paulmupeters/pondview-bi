@@ -1,7 +1,7 @@
 import {
   ChevronLeftIcon,
-  PencilSquareIcon,
   ChevronRightIcon,
+  PencilSquareIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import { Database } from "lucide-react";
@@ -30,8 +30,8 @@ import {
   isWasmLocalIdentifier,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
-import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 import { cn } from "@/lib/utils";
+import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 import { Separator } from "./ui/separator";
 
 interface ConnectedDataPanelProps {
@@ -41,6 +41,7 @@ interface ConnectedDataPanelProps {
   onInsertTable?: (tableName: string) => void;
   mode?: "popover" | "sidebar";
   collapsed?: boolean;
+  collapsedBehavior?: "inline" | "overlay";
   onToggleCollapse?: () => void;
   refreshToken?: number;
   sqlBackend?: SqlBackend;
@@ -58,6 +59,7 @@ export function ConnectedDataPanel({
   onInsertTable,
   mode = "popover",
   collapsed = false,
+  collapsedBehavior = "inline",
   onToggleCollapse,
   refreshToken,
   sqlBackend = "duckdb-wasm",
@@ -130,7 +132,8 @@ export function ConnectedDataPanel({
       .sort((a, b) => a.schema.localeCompare(b.schema));
   }, [remoteTables]);
 
-  const isRemoteBackend = sqlBackend === "bridge" || sqlBackend === "duckdb-http";
+  const isRemoteBackend =
+    sqlBackend === "bridge" || sqlBackend === "duckdb-http";
   const remoteLabel =
     sqlBackend === "bridge"
       ? remoteConnectionInfo
@@ -308,9 +311,7 @@ export function ConnectedDataPanel({
                   Loading tables...
                 </p>
               ) : remoteTablesError ? (
-                <p className="text-xs text-destructive">
-                  {remoteTablesError}
-                </p>
+                <p className="text-xs text-destructive">{remoteTablesError}</p>
               ) : groupedRemoteTables.length > 0 ? (
                 groupedRemoteTables.map((group, groupIdx) => (
                   <div key={group.schema} className="space-y-1">
@@ -563,6 +564,29 @@ export function ConnectedDataPanel({
   // Sidebar mode: render directly without hover card
   if (mode === "sidebar") {
     if (collapsed) {
+      if (collapsedBehavior === "overlay") {
+        return (
+          <div
+            className={cn(
+              "absolute left-0 top-4 z-20 -translate-x-1/2 transition-all duration-200 ease-out",
+              className,
+            )}
+          >
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-11 w-11 rounded-full border-border bg-background/95 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/85"
+              onClick={onToggleCollapse}
+              aria-label="Expand explorer"
+            >
+              <Database className="h-4 w-4" />
+              <ChevronRightIcon className="h-2.5 w-2.5 shrink-0" />
+            </Button>
+          </div>
+        );
+      }
+
       return (
         <div
           className={cn(
@@ -612,7 +636,9 @@ export function ConnectedDataPanel({
             {renderDatabaseList()}
           </div>
           {showStoredSqlQueries ? (
-            <div className="border-t border-border">{renderStoredSqlQueries()}</div>
+            <div className="border-t border-border">
+              {renderStoredSqlQueries()}
+            </div>
           ) : null}
         </div>
       </div>

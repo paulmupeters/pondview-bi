@@ -143,8 +143,8 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
                 <path
                   d="M804.167,291.667l87.5,0l0,16.667l62.5,0l0,16.667l33.333,0l0,20.833l29.167,0l0,12.5l33.333,0l0,16.667l16.667,0l0,20.833l16.667,0l0,83.333l-16.667,0l0,16.667l-12.5,0l0,16.667l-20.833,0l0,16.667l-16.667,0l0,12.5l-29.167,0l0,16.667l-50,0l0,12.5l-50,0l0,12.5l-100,0l0,20.833l-316.667,0l0,-20.833l-95.833,0l0,-16.667l-50,0l0,-16.667l-50,0l0,-16.667l-29.167,0l0,-16.667l-20.833,0l0,-12.5l-12.5,0l0,-16.667l-16.667,0l0,-16.667l-16.667,0l0,-79.167l16.667,0l0,-16.667l16.667,0l0,-16.667l33.333,0l0,-16.667l29.167,0l0,-16.667l33.333,0l0,-16.667l66.667,0l0,-16.667l75,0l0,16.667l-62.5,0l0,12.5l-54.167,0l0,16.667l-45.833,0l0,16.667l-12.5,0l0,16.667l-16.667,0l0,16.667l-16.667,0l0,66.667l12.5,0l0,20.833l33.333,0l0,20.833l33.333,0l0,16.667l45.833,0l0,16.667l66.667,0l0,20.833l387.5,0l0,-20.833l62.5,0l0,-16.667l50,0l0,-16.667l33.333,0l0,-20.833l33.333,0l0,-16.667l16.667,0l0,-62.5l-16.667,0l0,-16.667l-12.5,0l0,-12.5l-20.833,0l0,-20.833l-37.5,0l0,-16.667l-54.167,0l0,-20.833l-70.833,0l0,-16.667Z"
                   style={{
-                    fill: "var(--accent)",
-                    stroke: "var(--accent)",
+                    fill: "var(--secondary)",
+                    stroke: "var(--secondary)",
                     strokeWidth: "4.17px",
                   }}
                 />
@@ -153,8 +153,8 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
                 <path
                   d="M550,325c0.218,35.525 0,-50 0,-50l0,-4.167l16.667,0l0,-45.833l16.667,0l0,-25l16.667,0l0,-33.333l20.833,0l0,-16.667l20.833,0l0,16.667l16.667,0l0,33.333l20.833,0l0,29.167l16.667,0l0,45.833l16.667,0l0,83.333l-16.667,0l0,33.333l-16.667,0l0,16.667l-37.5,0l0,4.167l-29.167,0l0,-4.167l-25,0l0,-16.667l-20.833,0l0,-33.333l-16.667,0c0,0 -0.218,-68.858 0,-33.333Z"
                   style={{
-                    fill: "var(--accent)",
-                    stroke: "var(--accent)",
+                    fill: "var(--secondary)",
+                    stroke: "var(--secondary)",
                     strokeWidth: "4.17px",
                   }}
                 />
@@ -167,8 +167,8 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
                 <path
                   d="M450,358.333l-45.833,0l0,16.667l-29.167,0l0,16.667l-20.833,0l0,45.833l20.833,0l0,16.667l29.167,0l0,16.667l33.333,0l0,16.667l66.667,0l0,20.833l254.167,0l0,-20.833l62.5,0l0,-12.5l37.5,0l0,-20.833l25,0l0,-12.5l20.833,0l0,-45.833l-20.833,0l0,-16.667l-29.167,0l0,-16.667l-45.833,0l0,16.667l33.333,0l0,12.5l16.667,0l0,33.333l-16.667,0l0,16.667l-33.333,0l0,16.667l-66.667,0l0,20.833l-225,0l0,-20.833l-66.667,0l0,-16.667l-33.333,0l0,-16.667l-16.667,0l0,-37.5l16.667,0l0,-12.5l33.333,0l0,-16.667"
                   style={{
-                    fill: "var(--accent)",
-                    stroke: "var(--accent)",
+                    fill: "var(--secondary)",
+                    stroke: "var(--secondary)",
                     strokeWidth: "4.17px",
                   }}
                 />
@@ -178,8 +178,8 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
                   width="45.833"
                   height="16.667"
                   style={{
-                    fill: "var(--accent)",
-                    stroke: "var(--accent)",
+                    fill: "var(--secondary)",
+                    stroke: "var(--secondary)",
                     strokeWidth: "4.17px",
                   }}
                 />
@@ -189,8 +189,8 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
                   width="45.833"
                   height="16.667"
                   style={{
-                    fill: "var(--accent)",
-                    stroke: "var(--accent)",
+                    fill: "var(--secondary)",
+                    stroke: "var(--secondary)",
                     strokeWidth: "4.17px",
                   }}
                 />
@@ -229,7 +229,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
               className={cn(
                 railButtonClassName,
                 isChatHistoryPopoverOpen &&
-                "bg-sidebar-accent text-sidebar-accent-foreground",
+                  "bg-sidebar-accent text-sidebar-accent-foreground",
               )}
               aria-label="History"
               title="History"
@@ -248,7 +248,8 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
                     key={chat.id}
                     className={cn(
                       "group relative flex items-center gap-2 rounded-md p-2 pr-8 transition-colors hover:bg-sidebar-accent text-sidebar-foreground hover:text-sidebar-accent-foreground",
-                      activeChatId === chat.id && "bg-sidebar-accent text-sidebar-accent-foreground",
+                      activeChatId === chat.id &&
+                        "bg-sidebar-accent text-sidebar-accent-foreground",
                     )}
                   >
                     <button
@@ -287,7 +288,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
                     </button>
                   </div>
                 ))
-                ) : (
+              ) : (
                 <p className="text-sm text-muted-foreground">No chats</p>
               )}
             </div>
@@ -299,7 +300,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
             className={cn(
               railButtonClassName,
               isDashboardsRoute &&
-              "bg-sidebar-accent text-sidebar-accent-foreground",
+                "bg-sidebar-accent text-sidebar-accent-foreground",
             )}
             aria-label="Dashboards"
             title="Dashboards"
@@ -333,7 +334,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
             className={cn(
               railButtonClassName,
               isSettingsRoute &&
-              "bg-sidebar-accent text-sidebar-accent-foreground",
+                "bg-sidebar-accent text-sidebar-accent-foreground",
             )}
             aria-label="Settings"
             title="Settings"

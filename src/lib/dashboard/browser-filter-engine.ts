@@ -1,11 +1,9 @@
 import { applyFiltersToSql } from "@/lib/filters/apply-filters";
 import { extractTableReferencesFromSql } from "@/lib/filters/parse-tables";
 import { readJoinDefsFromStorage } from "@/lib/joins/browser-storage";
-import {
-  canonicalTable,
-  type JoinDefinition,
-} from "@/lib/joins/graph";
+import { canonicalTable, type JoinDefinition } from "@/lib/joins/graph";
 import { runQuery } from "@/lib/sql/run-query";
+import { resolveSqlRuntimeFingerprint } from "@/lib/sql/runtime-fingerprint";
 import {
   getSqlBackendPreference,
   resolveSqlBackend,
@@ -14,8 +12,8 @@ import {
 import type { Result } from "@/lib/types";
 import type { AvailableDimension, Filter } from "@/lib/types/filters";
 import {
-  listChartsByDashboard,
   type DbDashboardChart,
+  listChartsByDashboard,
 } from "@/lib/workspace/dashboard-repo";
 
 const MATERIALIZED_SCHEMA = "mat";
@@ -25,9 +23,20 @@ export type MaterializedTableRef = {
   sourceReference: string;
 };
 
+export type MaterializationStrategy = "direct" | "view" | "table-materialize";
+export type MaterializedAliasKind = "direct" | "view" | "table";
+
+export type PlannedMaterializedTableRef = MaterializedTableRef & {
+  strategy: MaterializationStrategy;
+};
+
 type MaterializationCacheEntry = {
   signature: string;
+  runtimeFingerprint: string;
   tableRefs: MaterializedTableRef[];
+  plannedTables: PlannedMaterializedTableRef[];
+  resolvedRefByTable: Map<string, string>;
+  realizedAliasKindByTable: Map<string, MaterializedAliasKind>;
   materializedTables: Set<string>;
   backend: SqlBackend;
 };
@@ -51,8 +60,12 @@ export type BrowserFilterEngineDeps = {
     sql: string,
     backend: SqlBackend,
   ) => Promise<Record<string, unknown>[]>;
-  runChartSql: (chart: DbDashboardChart, backend: SqlBackend) => Promise<Result[]>;
+  runChartSql: (
+    chart: DbDashboardChart,
+    backend: SqlBackend,
+  ) => Promise<Result[]>;
   resolveBackend: () => SqlBackend;
+  resolveRuntimeFingerprint: (backend: SqlBackend) => Promise<string>;
   readJoinDefs: () => JoinDefinition[];
   listCharts: (dashboardId: string) => Promise<DbDashboardChart[]>;
   getMaterializationCache: () => Map<string, MaterializationCacheEntry>;
@@ -63,6 +76,7 @@ function defaultDeps(): BrowserFilterEngineDeps {
     runRuntimeSql: runDashboardRuntimeSql,
     runChartSql,
     resolveBackend: resolveActiveBackend,
+    resolveRuntimeFingerprint: resolveRuntimeFingerprintForBackend,
     readJoinDefs: readJoinDefsFromStorage,
     listCharts: listChartsByDashboard,
     getMaterializationCache: () => materializationCache,
@@ -143,6 +157,15 @@ export function buildMaterializationTableRefs(
     .sort((left, right) => left.tableName.localeCompare(right.tableName));
 }
 
+function planMaterializedTables(
+  tableRefs: MaterializedTableRef[],
+): PlannedMaterializedTableRef[] {
+  return tableRefs.map((tableRef) => ({
+    ...tableRef,
+    strategy: classifyMaterializationStrategy(tableRef.sourceReference),
+  }));
+}
+
 export async function executeDashboardChartsWithFilters(
   options: {
     dashboardId: string;
@@ -157,22 +180,26 @@ export async function executeDashboardChartsWithFilters(
   const joinDefs = deps.readJoinDefs();
   const hasAnyFilters =
     options.dashboardFilters.length > 0 ||
-    Object.values(options.chartFiltersById).some((filters) => filters.length > 0);
+    Object.values(options.chartFiltersById).some(
+      (filters) => filters.length > 0,
+    );
 
-  let materializationReady = false;
+  let filterPlanningReady = false;
+  let materialization: MaterializationCacheEntry | null = null;
   if (hasAnyFilters) {
-    const materialization = await ensureDashboardMaterialization(
+    materialization = await ensureDashboardMaterialization(
       options.dashboardId,
       options.charts,
       joinDefs,
       backend,
       deps,
     );
-    materializationReady = materialization.tableRefs.length > 0;
+    filterPlanningReady = materialization.tableRefs.length > 0;
   }
 
   const rowsByChartId: Record<string, Result[]> = {};
-  const metadataByChartId: Record<string, DashboardFilterExecutionMetadata> = {};
+  const metadataByChartId: Record<string, DashboardFilterExecutionMetadata> =
+    {};
 
   await Promise.all(
     options.charts.map(async (chart) => {
@@ -182,18 +209,29 @@ export async function executeDashboardChartsWithFilters(
       ];
 
       let sqlToExecute = chart.sql;
-      let shouldExecuteMaterializedSql = false;
+      let shouldExecuteFilteredSql = false;
       let appliedFiltersCount = 0;
       let skippedFilters: Array<{ field: string; reason: string }> = [];
 
-      if (effectiveFilters.length > 0 && materializationReady) {
+      if (
+        effectiveFilters.length > 0 &&
+        filterPlanningReady &&
+        materialization
+      ) {
         try {
-          const filterResult = applyFiltersToSql(chart.sql, effectiveFilters, joinDefs);
+          const filterResult = applyFiltersToSql(
+            chart.sql,
+            effectiveFilters,
+            joinDefs,
+            {
+              tableReferences: materialization.resolvedRefByTable,
+            },
+          );
           appliedFiltersCount = filterResult.appliedFilters;
           skippedFilters = filterResult.skippedFilters;
           if (filterResult.appliedFilters > 0) {
             sqlToExecute = filterResult.sql;
-            shouldExecuteMaterializedSql = true;
+            shouldExecuteFilteredSql = true;
           }
         } catch (error) {
           console.error(
@@ -204,18 +242,20 @@ export async function executeDashboardChartsWithFilters(
       }
 
       try {
-        const rows = shouldExecuteMaterializedSql
+        const rows = shouldExecuteFilteredSql
           ? ((await deps.runRuntimeSql(sqlToExecute, backend)) as Result[])
           : await deps.runChartSql(chart, backend);
 
         rowsByChartId[chart.id] = rows;
         metadataByChartId[chart.id] = {
-          filtersApplied: shouldExecuteMaterializedSql,
-          appliedFiltersCount: shouldExecuteMaterializedSql ? appliedFiltersCount : 0,
+          filtersApplied: shouldExecuteFilteredSql,
+          appliedFiltersCount: shouldExecuteFilteredSql
+            ? appliedFiltersCount
+            : 0,
           skippedFilters,
         };
       } catch (error) {
-        if (shouldExecuteMaterializedSql) {
+        if (shouldExecuteFilteredSql) {
           console.warn(
             `[dashboard-filters] Filtered execution failed for chart ${chart.id}; falling back to raw chart SQL.`,
             error,
@@ -278,27 +318,25 @@ export async function loadDashboardDimensions(
   const dimensions: AvailableDimension[] = [];
   const seen = new Set<string>();
 
-  for (const tableRef of materialization.tableRefs) {
-    const describeSql = `DESCRIBE ${quoteIdent(MATERIALIZED_SCHEMA)}.${quoteIdent(tableRef.tableName)};`;
-
-    let rows: Record<string, unknown>[] = [];
-    try {
-      rows = await deps.runRuntimeSql(describeSql, backend);
-    } catch (error) {
-      try {
-        rows = await deps.runRuntimeSql(`DESCRIBE ${tableRef.sourceReference};`, backend);
-      } catch (fallbackError) {
-        console.warn(
-          `[dashboard-filters] Failed to introspect dimensions for ${tableRef.tableName}:`,
-          fallbackError ?? error,
-        );
-        continue;
-      }
+  for (const tableRef of materialization.plannedTables) {
+    const describeCandidates = buildDescribeCandidates(
+      tableRef,
+      materialization,
+    );
+    const rows = await describeTableWithFallbacks(
+      tableRef.tableName,
+      describeCandidates,
+      backend,
+      deps,
+    );
+    if (!rows) {
+      continue;
     }
 
     for (const row of rows) {
-      const columnName =
-        String(row.column_name ?? row.column ?? row.name ?? "").trim();
+      const columnName = String(
+        row.column_name ?? row.column ?? row.name ?? "",
+      ).trim();
       if (!columnName) {
         continue;
       }
@@ -368,12 +406,23 @@ export async function loadDashboardDimensionValues(
     });
   }
 
-  const materializedBaseSql =
+  const preferredBaseRef =
+    materialization.resolvedRefByTable.get(parsedField.tableName) ??
+    sourceRefByTable.get(parsedField.tableName) ??
+    quoteIdent(parsedField.tableName);
+  const filteredBaseSql =
     `SELECT ${quoteIdent(parsedField.columnName)} AS "value"\n` +
-    `FROM ${quoteIdent(MATERIALIZED_SCHEMA)}.${quoteIdent(parsedField.tableName)}`;
+    `FROM ${preferredBaseRef}`;
 
   try {
-    const filtered = applyFiltersToSql(materializedBaseSql, effectiveFilters, joinDefs);
+    const filtered = applyFiltersToSql(
+      filteredBaseSql,
+      effectiveFilters,
+      joinDefs,
+      {
+        tableReferences: materialization.resolvedRefByTable,
+      },
+    );
     const valueSql =
       `SELECT DISTINCT "value"\n` +
       `FROM (\n${indentSql(filtered.sql, 2)}\n) AS "values_src"\n` +
@@ -390,7 +439,8 @@ export async function loadDashboardDimensionValues(
   }
 
   const sourceRef =
-    sourceRefByTable.get(parsedField.tableName) ?? quoteIdent(parsedField.tableName);
+    sourceRefByTable.get(parsedField.tableName) ??
+    quoteIdent(parsedField.tableName);
   const sameTableFilters = effectiveFilters.filter((filter) => {
     const parsed = parseField(filter.field);
     return parsed?.tableName === parsedField.tableName;
@@ -407,7 +457,9 @@ export async function loadDashboardDimensionValues(
     .filter((clause): clause is string => typeof clause === "string");
 
   whereClauses.push(`src.${quoteIdent(parsedField.columnName)} IS NOT NULL`);
-  whereClauses.push(`CAST(src.${quoteIdent(parsedField.columnName)} AS VARCHAR) <> ''`);
+  whereClauses.push(
+    `CAST(src.${quoteIdent(parsedField.columnName)} AS VARCHAR) <> ''`,
+  );
 
   const fallbackSql =
     `SELECT DISTINCT src.${quoteIdent(parsedField.columnName)} AS "value"\n` +
@@ -426,9 +478,9 @@ export async function listMaterializedTablesForBackend(
 ): Promise<string[]> {
   const deps = resolveDeps(depsOverride);
   const sql =
-    `SELECT table_name\n` +
+    `SELECT DISTINCT table_name\n` +
     `FROM information_schema.tables\n` +
-    `WHERE table_schema = '${MATERIALIZED_SCHEMA}' AND table_type = 'BASE TABLE'\n` +
+    `WHERE table_schema = '${MATERIALIZED_SCHEMA}'\n` +
     `ORDER BY table_name`;
   const rows = await deps.runRuntimeSql(sql, backend);
   return rows.map((row) => String(row.table_name ?? "").trim()).filter(Boolean);
@@ -450,46 +502,119 @@ async function ensureDashboardMaterialization(
   deps: BrowserFilterEngineDeps,
 ): Promise<MaterializationCacheEntry> {
   const tableRefs = buildMaterializationTableRefs(charts, joinDefs);
+  const plannedTables = planMaterializedTables(tableRefs);
   const signature = buildMaterializationSignature(charts, joinDefs);
+  const runtimeFingerprint = await deps.resolveRuntimeFingerprint(backend);
   const cache = deps.getMaterializationCache();
-  const cacheKey = `${dashboardId}:${backend}`;
+  const cacheKey = `${dashboardId}:${backend}:${runtimeFingerprint}`;
   const cached = cache.get(cacheKey);
   if (cached && cached.signature === signature) {
     return cached;
   }
 
   const materializedTables = new Set<string>();
+  const resolvedRefByTable = new Map<string, string>();
+  const realizedAliasKindByTable = new Map<string, MaterializedAliasKind>();
 
-  if (tableRefs.length > 0) {
+  if (plannedTables.length > 0) {
     await deps.runRuntimeSql(
       `CREATE SCHEMA IF NOT EXISTS ${quoteIdent(MATERIALIZED_SCHEMA)};`,
       backend,
     );
   }
 
-  for (const tableRef of tableRefs) {
+  for (const tableRef of plannedTables) {
+    const aliasRef = getMaterializedAliasRef(tableRef.tableName);
+
+    if (tableRef.strategy === "direct") {
+      resolvedRefByTable.set(tableRef.tableName, tableRef.sourceReference);
+      realizedAliasKindByTable.set(tableRef.tableName, "direct");
+      continue;
+    }
+
+    const createAliasSql =
+      tableRef.strategy === "view"
+        ? `CREATE OR REPLACE VIEW ${aliasRef} AS SELECT * FROM ${tableRef.sourceReference};`
+        : `CREATE OR REPLACE TABLE ${aliasRef} AS SELECT * FROM ${tableRef.sourceReference};`;
+
     try {
-      await deps.runRuntimeSql(
-        `CREATE OR REPLACE TABLE ${quoteIdent(MATERIALIZED_SCHEMA)}.${quoteIdent(tableRef.tableName)} AS SELECT * FROM ${tableRef.sourceReference};`,
-        backend,
-      );
+      await deps.runRuntimeSql(createAliasSql, backend);
       materializedTables.add(tableRef.tableName);
+      resolvedRefByTable.set(tableRef.tableName, aliasRef);
+      realizedAliasKindByTable.set(
+        tableRef.tableName,
+        tableRef.strategy === "view" ? "view" : "table",
+      );
     } catch (error) {
       console.warn(
-        `[dashboard-filters] Failed to materialize table ${tableRef.tableName} from ${tableRef.sourceReference}:`,
+        `[dashboard-filters] Failed to realize ${tableRef.strategy} alias for ${tableRef.tableName} from ${tableRef.sourceReference}:`,
         error,
       );
+      resolvedRefByTable.set(tableRef.tableName, tableRef.sourceReference);
+      realizedAliasKindByTable.set(tableRef.tableName, "direct");
     }
   }
 
   const entry: MaterializationCacheEntry = {
     signature,
+    runtimeFingerprint,
     tableRefs,
+    plannedTables,
+    resolvedRefByTable,
+    realizedAliasKindByTable,
     materializedTables,
     backend,
   };
   cache.set(cacheKey, entry);
   return entry;
+}
+
+async function describeTableWithFallbacks(
+  tableName: string,
+  references: string[],
+  backend: SqlBackend,
+  deps: BrowserFilterEngineDeps,
+): Promise<Record<string, unknown>[] | null> {
+  let lastError: unknown = null;
+
+  for (const reference of references) {
+    try {
+      return await deps.runRuntimeSql(`DESCRIBE ${reference};`, backend);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  console.warn(
+    `[dashboard-filters] Failed to introspect dimensions for ${tableName}:`,
+    lastError,
+  );
+  return null;
+}
+
+function buildDescribeCandidates(
+  tableRef: MaterializedTableRef,
+  materialization: MaterializationCacheEntry,
+): string[] {
+  const aliasKind = materialization.realizedAliasKindByTable.get(
+    tableRef.tableName,
+  );
+  const candidates = [
+    aliasKind === "view" || aliasKind === "table"
+      ? getMaterializedAliasRef(tableRef.tableName)
+      : null,
+    materialization.resolvedRefByTable.get(tableRef.tableName),
+    tableRef.sourceReference,
+  ];
+
+  return Array.from(
+    new Set(
+      candidates.filter(
+        (value): value is string =>
+          typeof value === "string" && value.length > 0,
+      ),
+    ),
+  );
 }
 
 async function runDashboardRuntimeSql(
@@ -521,6 +646,12 @@ function resolveActiveBackend(): SqlBackend {
   });
 }
 
+async function resolveRuntimeFingerprintForBackend(
+  backend: SqlBackend,
+): Promise<string> {
+  return resolveSqlRuntimeFingerprint(backend);
+}
+
 function toDimensionValues(
   rows: Record<string, unknown>[],
 ): Array<{ value: string | number | boolean; label: string }> {
@@ -538,7 +669,9 @@ function toDimensionValues(
     .map((value) => ({ value, label: String(value) }));
 }
 
-function parseField(field: string): { tableName: string; columnName: string } | null {
+function parseField(
+  field: string,
+): { tableName: string; columnName: string } | null {
   const parts = field
     .split(".")
     .map((part) => part.trim())
@@ -600,10 +733,14 @@ function renderFilterClause(expr: string, filter: Filter): string | null {
 }
 
 function formatDisplayName(fieldName: string): string {
-  return fieldName.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return fieldName
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function inferDimensionType(rawType: unknown): "string" | "number" | "boolean" | "time" {
+function inferDimensionType(
+  rawType: unknown,
+): "string" | "number" | "boolean" | "time" {
   const value = String(rawType ?? "").toLowerCase();
   if (
     value.includes("int") ||
@@ -634,6 +771,37 @@ function indentSql(sql: string, spaces: number): string {
 
 function quoteIdent(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
+}
+
+function getMaterializedAliasRef(tableName: string): string {
+  return `${quoteIdent(MATERIALIZED_SCHEMA)}.${quoteIdent(tableName)}`;
+}
+
+function classifyMaterializationStrategy(
+  sourceReference: string,
+): MaterializationStrategy {
+  if (isSimpleReusableReference(sourceReference)) {
+    return "view";
+  }
+  if (looksLikeDirectReference(sourceReference)) {
+    return "direct";
+  }
+  return "table-materialize";
+}
+
+function isSimpleReusableReference(sourceReference: string): boolean {
+  const trimmed = sourceReference.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const ident = '(?:"[^"]+"|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)';
+  const pattern = new RegExp(`^${ident}(?:\\.${ident}){0,2}$`);
+  return pattern.test(trimmed);
+}
+
+function looksLikeDirectReference(sourceReference: string): boolean {
+  return /[\s()]/.test(sourceReference);
 }
 
 function sqlLiteral(value: unknown): string {
