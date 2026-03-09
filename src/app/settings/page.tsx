@@ -34,6 +34,10 @@ import {
   setSessionSecret,
 } from "@/lib/bridge/pondview-bridge";
 import {
+  setExecuteSqlRawOutputPreference,
+  useExecuteSqlRawOutputPreference,
+} from "@/lib/chat-display-preferences";
+import {
   applyCustomCss,
   applyTheme,
   getSelectedTheme,
@@ -124,6 +128,7 @@ export default function SettingsPage() {
   const bridgeHealthStatus = useBridgeHealthStatus();
   const duckDbHttpConfig = useDuckDbHttpConfig();
   const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
+  const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
   const isBridgeAvailable = hasBridgeSecret && bridgeHealthStatus === "online";
   const isDuckDbHttpConfigured = Boolean(duckDbHttpConfig);
   const selectedSqlBackend: SqlBackend =
@@ -400,7 +405,9 @@ export default function SettingsPage() {
       setDuckDbHttpConfigInStorage({ host, port });
       const status = await refreshDuckDbHttpHealth(undefined, { host, port });
       if (status === "online") {
-        setRuntimeSettingsSuccess("Connection successful — DuckDB HTTP is reachable.");
+        setRuntimeSettingsSuccess(
+          "Connection successful — DuckDB HTTP is reachable.",
+        );
         setShowSuccessMessage(true);
         setTimeout(() => setShowSuccessMessage(false), 3000);
       } else {
@@ -946,6 +953,41 @@ export default function SettingsPage() {
                 className="hidden"
                 onChange={handleImportWorkspace}
               />
+            </div>
+          </Card>
+
+          <Card className="p-6 mb-6">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Chat Display</h2>
+                <p className="text-sm text-muted-foreground">
+                  Configure how tool results are shown in chat messages.
+                </p>
+              </div>
+
+              <label
+                htmlFor="show-execute-sql-raw-output"
+                className="flex items-center justify-between gap-4 rounded-md border border-border p-3"
+              >
+                <div>
+                  <p className="text-sm font-medium">
+                    Show raw executeSql output JSON
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, the tool card shows raw `tool-executeSql`
+                    output in addition to the SQL result block.
+                  </p>
+                </div>
+                <input
+                  id="show-execute-sql-raw-output"
+                  type="checkbox"
+                  checked={showExecuteSqlRawOutput}
+                  onChange={(event) =>
+                    setExecuteSqlRawOutputPreference(event.target.checked)
+                  }
+                  className="h-4 w-4 rounded border-border"
+                />
+              </label>
             </div>
           </Card>
 

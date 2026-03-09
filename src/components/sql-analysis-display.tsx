@@ -198,7 +198,7 @@ export function SqlAnalysisDisplay({
 
     const completedRows = (data.rows as Result[] | undefined) ?? [];
     const resolvedConfig = normalizeChartConfigForRows(
-      data.chartConfig,
+      chartConfig ?? data.chartConfig,
       completedRows,
     );
     return {
@@ -208,6 +208,7 @@ export function SqlAnalysisDisplay({
       summary: data.summary,
     };
   }, [
+    chartConfig,
     data?.stage,
     data?.rows,
     data?.chartConfig,
@@ -256,21 +257,6 @@ export function SqlAnalysisDisplay({
   const canShowTable = Boolean(selectedForTable);
   const canShowVisualOptionsToggle =
     activeView === "chart" && columnsForDialog.length > 0 && !selectedForCard;
-
-  useEffect(() => {
-    if (activeView !== "chart" || selectedForCard || !canShowTable) {
-      return;
-    }
-
-    if (!selectedForChart?.chartConfig) {
-      setActiveView("table");
-    }
-  }, [
-    activeView,
-    canShowTable,
-    selectedForCard,
-    selectedForChart?.chartConfig,
-  ]);
 
   const payloadForAddToChat = useMemo(() => {
     if (!data) {
