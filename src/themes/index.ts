@@ -1,7 +1,7 @@
 import * as defaultTheme from "./default";
-import * as improvedTheme from "./default2";
-import * as monoGreenTheme from "./mono-green";
-import * as redTheme from "./red";
+import * as improvedTheme from "./rosewater";
+import * as monoGreenTheme from "./moss-terminal";
+import * as emberClayTheme from "./ember-clay";
 
 export type Theme = {
   name: string;
@@ -20,10 +20,10 @@ export const themes: Record<string, Theme> = {
     displayName: monoGreenTheme.themeDisplayName,
     css: monoGreenTheme.themeCss,
   },
-  [redTheme.themeName]: {
-    name: redTheme.themeName,
-    displayName: redTheme.themeDisplayName,
-    css: redTheme.themeCss,
+  [emberClayTheme.themeName]: {
+    name: emberClayTheme.themeName,
+    displayName: emberClayTheme.themeDisplayName,
+    css: emberClayTheme.themeCss,
   },
   [improvedTheme.themeName]: {
     name: improvedTheme.themeName,

@@ -32,6 +32,7 @@ type DashboardGridProps = {
   onResizeChange: (chartId: string, tempColSpan: number | null) => void;
   selectedChartId: string | null;
   onChartSelect: (chartId: string) => void;
+  onPreviewChart: (chartId: string) => void;
 };
 
 export function DashboardGrid({
@@ -48,6 +49,7 @@ export function DashboardGrid({
   onResizeChange,
   selectedChartId,
   onChartSelect,
+  onPreviewChart,
 }: DashboardGridProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -163,6 +165,7 @@ export function DashboardGrid({
                       }
                       isSelected={selectedChartId === chart.id}
                       onSelect={onChartSelect}
+                      onPreviewChart={onPreviewChart}
                     />
                   );
                 })}

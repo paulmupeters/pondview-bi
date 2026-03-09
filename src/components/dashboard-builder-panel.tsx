@@ -321,7 +321,11 @@ export function DashboardBuilderPanel({
   return (
     <div className={panelClasses}>
       <div
-        className={embedded ? "h-full flex flex-col gap-4 min-h-0" : "h-full flex flex-col gap-4 p-6 bg-sidebar"}
+        className={
+          embedded
+            ? "h-full min-h-0 flex flex-col gap-4 pb-24"
+            : "h-full flex flex-col gap-4 p-6 bg-sidebar"
+        }
       >
         <div className="flex items-start justify-between">
           <div>

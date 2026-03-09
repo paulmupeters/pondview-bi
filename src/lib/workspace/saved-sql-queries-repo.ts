@@ -25,7 +25,11 @@ function formatFallbackName(timestamp: number): string {
   return `Query ${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
-function deriveNameFromSql(sql: string, timestamp: number): string {
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+export function deriveSavedSqlQueryName(sql: string, timestamp = Date.now()): string {
   const lines = sql.split(/\r?\n/);
   for (const line of lines) {
     const trimmed = line.trim();
@@ -87,27 +91,53 @@ export async function listSavedSqlQueries(): Promise<SavedSqlQuery[]> {
   return normalizeList(stored);
 }
 
-export async function saveSqlQuery(sql: string): Promise<SavedSqlQuery[]> {
-  const normalizedSql = sql.trim();
-  if (!normalizedSql) {
+export async function saveSqlQuery(input: {
+  sql: string;
+  name: string;
+}): Promise<SavedSqlQuery[]> {
+  const normalizedSql = input.sql.trim();
+  const normalizedName = input.name.trim();
+
+  if (!normalizedSql || !normalizedName) {
     return listSavedSqlQueries();
   }
 
   const now = Date.now();
   const existing = await listSavedSqlQueries();
   const duplicate = existing.find((entry) => entry.sql === normalizedSql);
+  const duplicateByName = existing.find(
+    (entry) => normalizeName(entry.name) === normalizeName(normalizedName),
+  );
 
   let next: SavedSqlQuery[];
   if (duplicate) {
     const updated: SavedSqlQuery = {
       ...duplicate,
+      name: normalizedName,
       updatedAt: now,
     };
-    next = [updated, ...existing.filter((entry) => entry.id !== duplicate.id)];
+    next = [
+      updated,
+      ...existing.filter(
+        (entry) =>
+          entry.id !== duplicate.id &&
+          normalizeName(entry.name) !== normalizeName(normalizedName),
+      ),
+    ];
+  } else if (duplicateByName) {
+    const replaced: SavedSqlQuery = {
+      ...duplicateByName,
+      sql: normalizedSql,
+      updatedAt: now,
+    };
+    next = [
+      replaced,
+      ...existing.filter((entry) => entry.id !== duplicateByName.id),
+    ];
   } else {
     const created: SavedSqlQuery = {
       id: `saved-sql-${nanoid()}`,
-      name: deriveNameFromSql(normalizedSql, now),
+      name: normalizedName,
       sql: normalizedSql,
       createdAt: now,
       updatedAt: now,
@@ -118,6 +148,41 @@ export async function saveSqlQuery(sql: string): Promise<SavedSqlQuery[]> {
   const persisted = next.slice(0, MAX_SAVED_SQL_QUERIES);
   await setPreference(SAVED_SQL_QUERIES_KEY, persisted);
   return persisted;
+}
+
+export async function renameSavedSqlQuery(
+  id: string,
+  name: string,
+): Promise<SavedSqlQuery[]> {
+  const normalizedName = name.trim();
+  if (!normalizedName) {
+    return listSavedSqlQueries();
+  }
+
+  const now = Date.now();
+  const existing = await listSavedSqlQueries();
+  const target = existing.find((entry) => entry.id === id);
+  if (!target) {
+    return existing;
+  }
+
+  const updated: SavedSqlQuery = {
+    ...target,
+    name: normalizedName,
+    updatedAt: now,
+  };
+
+  const next = [
+    updated,
+    ...existing.filter(
+      (entry) =>
+        entry.id !== id &&
+        normalizeName(entry.name) !== normalizeName(normalizedName),
+    ),
+  ].slice(0, MAX_SAVED_SQL_QUERIES);
+
+  await setPreference(SAVED_SQL_QUERIES_KEY, next);
+  return next;
 }
 
 export async function deleteSavedSqlQuery(id: string): Promise<SavedSqlQuery[]> {

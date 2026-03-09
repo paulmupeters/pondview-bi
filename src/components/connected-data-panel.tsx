@@ -1,5 +1,6 @@
 import {
   ChevronLeftIcon,
+  PencilSquareIcon,
   ChevronRightIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
@@ -46,6 +47,7 @@ interface ConnectedDataPanelProps {
   storedSqlQueries?: SavedSqlQuery[];
   onSelectStoredSqlQuery?: (queryId: string) => void;
   onDeleteStoredSqlQuery?: (queryId: string) => void;
+  onRenameStoredSqlQuery?: (queryId: string) => void;
   showStoredSqlQueries?: boolean;
 }
 
@@ -62,6 +64,7 @@ export function ConnectedDataPanel({
   storedSqlQueries = [],
   onSelectStoredSqlQuery,
   onDeleteStoredSqlQuery,
+  onRenameStoredSqlQuery,
   showStoredSqlQueries = false,
 }: ConnectedDataPanelProps) {
   const connectedTables = useConnectedTables();
@@ -246,15 +249,29 @@ export function ConnectedDataPanel({
                   >
                     {query.name}
                   </button>
-                  {onDeleteStoredSqlQuery ? (
-                    <button
-                      type="button"
-                      className="rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                      aria-label={`Delete stored query ${query.name}`}
-                      onClick={() => onDeleteStoredSqlQuery(query.id)}
-                    >
-                      <TrashIcon className="h-3.5 w-3.5" />
-                    </button>
+                  {onDeleteStoredSqlQuery || onRenameStoredSqlQuery ? (
+                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      {onRenameStoredSqlQuery ? (
+                        <button
+                          type="button"
+                          className="rounded p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                          aria-label={`Rename stored query ${query.name}`}
+                          onClick={() => onRenameStoredSqlQuery(query.id)}
+                        >
+                          <PencilSquareIcon className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                      {onDeleteStoredSqlQuery ? (
+                        <button
+                          type="button"
+                          className="rounded p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                          aria-label={`Delete stored query ${query.name}`}
+                          onClick={() => onDeleteStoredSqlQuery(query.id)}
+                        >
+                          <TrashIcon className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               ))}
