@@ -1,5 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { TrashIcon } from "@heroicons/react/24/outline";
+import type { ReactNode } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -7,6 +8,17 @@ import {
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
+import {
+  Tool,
+  ToolContent,
+  type ToolErrorText,
+  ToolHeader,
+  ToolInput,
+  type ToolInputValue,
+  ToolOutput,
+  type ToolOutputValue,
+  type ToolState,
+} from "@/components/ai-elements/tool";
 import { GeneratedSqlBlock } from "@/components/chat/generated-sql-block";
 import {
   extractSqlArtifactParts,
@@ -33,6 +45,17 @@ type ChatMessageThreadProps = {
   contentSpacingClassName: string;
   messagePaddingClassName: string;
   userResponsePaddingClassName: string;
+  showExecuteSqlRawOutput: boolean;
+};
+
+type ToolMessagePart = UIMessage["parts"][number] & {
+  type: `tool-${string}`;
+  state?: ToolState;
+  input?: ToolInputValue;
+  output?: ToolOutputValue;
+  result?: ToolOutputValue;
+  errorText?: ToolErrorText;
+  error?: unknown;
 };
 
 function hasNoRenderableAssistantContent(
@@ -53,6 +76,55 @@ function hasNoRenderableAssistantContent(
   );
 }
 
+function isToolMessagePart(
+  part: UIMessage["parts"][number],
+): part is ToolMessagePart {
+  return part.type.startsWith("tool-");
+}
+
+function deriveToolState(part: ToolMessagePart): ToolState {
+  if (part.state) {
+    return part.state;
+  }
+
+  if (part.errorText || typeof part.error === "string") {
+    return "output-error";
+  }
+
+  if (
+    typeof part.output !== "undefined" ||
+    typeof part.result !== "undefined"
+  ) {
+    return "output-available";
+  }
+
+  if (typeof part.input !== "undefined") {
+    return "input-available";
+  }
+
+  return "input-streaming";
+}
+
+function getToolOutput(part: ToolMessagePart): ToolOutputValue | undefined {
+  if (typeof part.output !== "undefined") {
+    return part.output;
+  }
+
+  return part.result;
+}
+
+function getToolErrorText(part: ToolMessagePart): ToolErrorText {
+  if (typeof part.errorText === "string" && part.errorText.trim()) {
+    return part.errorText;
+  }
+
+  if (typeof part.error === "string" && part.error.trim()) {
+    return part.error;
+  }
+
+  return undefined;
+}
+
 export function ChatMessageThread({
   messages,
   status,
@@ -67,10 +139,10 @@ export function ChatMessageThread({
   contentSpacingClassName,
   messagePaddingClassName,
   userResponsePaddingClassName,
+  showExecuteSqlRawOutput,
 }: ChatMessageThreadProps) {
   const isConversationEmpty = messages.length === 0;
-  const isAssistantThinking =
-    status === "streaming" || status === "submitted";
+  const isAssistantThinking = status === "streaming" || status === "submitted";
   const lastMessage = messages[messages.length - 1];
   const hasInlineThinkingPlaceholder =
     isAssistantThinking &&
@@ -284,28 +356,20 @@ export function ChatMessageThread({
                     );
                   }
 
-                  if (part.type === "tool-getTableSchema") {
-                    return (
-                      <span key={`${message.id}-part-${partIndex}`}>
-                        Getting table schema
-                      </span>
-                    );
-                  }
+                  if (isToolMessagePart(part)) {
+                    const toolState = deriveToolState(part);
+                    const toolOutput = getToolOutput(part);
+                    const toolErrorText = getToolErrorText(part);
+                    const showToolOutput =
+                      part.type !== "tool-executeSql" ||
+                      showExecuteSqlRawOutput ||
+                      Boolean(toolErrorText);
 
-                  if (part.type === "tool-generateChartConfig") {
-                    return (
-                      <span key={`${message.id}-part-${partIndex}`}>
-                        Generating chart config...
-                        {animationFrame}
-                      </span>
-                    );
-                  }
-
-                  if (part.type === "tool-executeSql") {
-                    const entriesForPart =
-                      sqlArtifactsByTopLevelPartIndex.get(partIndex) ?? [];
-                    if (entriesForPart.length > 0) {
-                      return entriesForPart.map((entry) =>
+                    let executeSqlBlocks: ReactNode = null;
+                    if (part.type === "tool-executeSql") {
+                      const entriesForPart =
+                        sqlArtifactsByTopLevelPartIndex.get(partIndex) ?? [];
+                      executeSqlBlocks = entriesForPart.map((entry) =>
                         renderSqlBlock({
                           artifactData: entry.data,
                           partIndex: entry.partIndex,
@@ -313,18 +377,27 @@ export function ChatMessageThread({
                       );
                     }
 
-                    const executeSqlPart = part as { state?: string };
-                    if (
-                      executeSqlPart.state === "output-available" ||
-                      executeSqlPart.state === "output-error"
-                    ) {
-                      return null;
-                    }
-
                     return (
-                      <span key={`${message.id}-part-${partIndex}`}>
-                        Processing...
-                      </span>
+                      <div
+                        key={`${message.id}-part-${partIndex}`}
+                        className="w-full"
+                      >
+                        <Tool defaultOpen={false}>
+                          <ToolHeader state={toolState} type={part.type} />
+                          <ToolContent>
+                            {typeof part.input !== "undefined" ? (
+                              <ToolInput input={part.input} />
+                            ) : null}
+                            {showToolOutput ? (
+                              <ToolOutput
+                                errorText={toolErrorText}
+                                output={toolOutput}
+                              />
+                            ) : null}
+                          </ToolContent>
+                        </Tool>
+                        {executeSqlBlocks}
+                      </div>
                     );
                   }
 

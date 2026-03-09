@@ -26,6 +26,7 @@ import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
+import { useExecuteSqlRawOutputPreference } from "@/lib/chat-display-preferences";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   resolveSqlBackend,
@@ -46,6 +47,12 @@ import {
   getChatTitleById,
   listMessagesByChatId,
 } from "@/lib/workspace/chat-repo";
+import {
+  deleteSavedSqlQuery,
+  listSavedSqlQueries,
+  saveSqlQuery,
+  type SavedSqlQuery,
+} from "@/lib/workspace/saved-sql-queries-repo";
 import { useRouter, useSearchParams } from "@/vite/next-navigation";
 
 function safeJsonParse(value: string): unknown {
@@ -210,6 +217,9 @@ export default function Chat({
     durationMs: number;
   } | null>(null);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
+  const [storedSqlQueries, setStoredSqlQueries] = useState<SavedSqlQuery[]>([]);
+  const [isSavingStoredSqlQuery, setIsSavingStoredSqlQuery] = useState(false);
+  const [pendingSqlToLoad, setPendingSqlToLoad] = useState<string | null>(null);
   const [manualChartConfig, setManualChartConfig] = useState<Config | null>(
     null,
   );
@@ -218,6 +228,7 @@ export default function Chat({
   const executeSqlArtifactType = "data-execute-sql";
   const [animationFrame, setAnimationFrame] = useState("");
   const [verbAiIsThinking, setVerbAiIsThinking] = useState("is thinking");
+  const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
   const {
     visualizations,
     activeVisualizationId,
@@ -258,6 +269,29 @@ export default function Chat({
       cancelled = true;
     };
   }, [chatId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSavedQueries = async () => {
+      try {
+        const rows = await listSavedSqlQueries();
+        if (!cancelled) {
+          setStoredSqlQueries(rows);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load saved SQL queries:", error);
+        }
+      }
+    };
+
+    void loadSavedQueries();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedDb && connectedTables.length > 0) {
@@ -405,6 +439,69 @@ export default function Chat({
     },
     [promptMode, sqlConsoleApi, submitAiPrompt],
   );
+
+  useEffect(() => {
+    if (!pendingSqlToLoad || !sqlConsoleApi) {
+      return;
+    }
+    sqlConsoleApi.setQuery(pendingSqlToLoad);
+    sqlConsoleApi.focus();
+    setPendingSqlToLoad(null);
+  }, [pendingSqlToLoad, sqlConsoleApi]);
+
+  const handleSaveStoredSqlQuery = useCallback(async () => {
+    if (!sqlConsoleApi || isSavingStoredSqlQuery) {
+      return;
+    }
+
+    const sql = sqlConsoleApi.getQuery().trim();
+    if (!sql) {
+      return;
+    }
+
+    setIsSavingStoredSqlQuery(true);
+    try {
+      const rows = await saveSqlQuery(sql);
+      setStoredSqlQueries(rows);
+    } catch (error) {
+      console.error("Failed to save SQL query:", error);
+    } finally {
+      setIsSavingStoredSqlQuery(false);
+    }
+  }, [isSavingStoredSqlQuery, sqlConsoleApi]);
+
+  const handleSelectStoredSqlQuery = useCallback(
+    (queryId: string) => {
+      const selected = storedSqlQueries.find((entry) => entry.id === queryId);
+      if (!selected) {
+        return;
+      }
+
+      if (promptMode !== "manual") {
+        setPendingSqlToLoad(selected.sql);
+        setPromptMode("manual");
+        return;
+      }
+
+      if (!sqlConsoleApi) {
+        setPendingSqlToLoad(selected.sql);
+        return;
+      }
+
+      sqlConsoleApi.setQuery(selected.sql);
+      sqlConsoleApi.focus();
+    },
+    [promptMode, sqlConsoleApi, storedSqlQueries],
+  );
+
+  const handleDeleteStoredSqlQuery = useCallback(async (queryId: string) => {
+    try {
+      const rows = await deleteSavedSqlQuery(queryId);
+      setStoredSqlQueries(rows);
+    } catch (error) {
+      console.error("Failed to delete saved SQL query:", error);
+    }
+  }, []);
 
   const persistArtifactMessage = useCallback(
     async (
@@ -696,6 +793,12 @@ export default function Chat({
                     }
                     className="shrink-0 bg-background"
                     sqlBackend={effectiveSqlBackend}
+                    storedSqlQueries={storedSqlQueries}
+                    onSelectStoredSqlQuery={handleSelectStoredSqlQuery}
+                    onDeleteStoredSqlQuery={(queryId) => {
+                      void handleDeleteStoredSqlQuery(queryId);
+                    }}
+                    showStoredSqlQueries
                   />
                   <div className="flex-1 min-h-0 min-w-0 flex flex-col">
                     {isAiMode ? (
@@ -715,6 +818,7 @@ export default function Chat({
                         contentSpacingClassName="space-y-2"
                         messagePaddingClassName="p-3"
                         userResponsePaddingClassName="p-1"
+                        showExecuteSqlRawOutput={showExecuteSqlRawOutput}
                       />
                     ) : (
                       <div className="flex-1 min-h-0 w-full p-3">
@@ -730,6 +834,16 @@ export default function Chat({
                           />
                         </div>
                         <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void handleSaveStoredSqlQuery();
+                            }}
+                            className="rounded border border-border px-3 py-1 text-xs"
+                            disabled={isSavingStoredSqlQuery || !sqlConsoleApi}
+                          >
+                            {isSavingStoredSqlQuery ? "Saving..." : "Save Query"}
+                          </button>
                           <button
                             type="button"
                             onClick={handleAddVisual}

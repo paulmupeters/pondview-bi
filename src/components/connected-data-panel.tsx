@@ -1,4 +1,8 @@
-import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  TrashIcon,
+} from "@heroicons/react/24/outline";
 import { Database } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -25,6 +29,7 @@ import {
   isWasmLocalIdentifier,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
+import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 import { cn } from "@/lib/utils";
 import { Separator } from "./ui/separator";
 
@@ -38,6 +43,10 @@ interface ConnectedDataPanelProps {
   onToggleCollapse?: () => void;
   refreshToken?: number;
   sqlBackend?: SqlBackend;
+  storedSqlQueries?: SavedSqlQuery[];
+  onSelectStoredSqlQuery?: (queryId: string) => void;
+  onDeleteStoredSqlQuery?: (queryId: string) => void;
+  showStoredSqlQueries?: boolean;
 }
 
 export function ConnectedDataPanel({
@@ -50,6 +59,10 @@ export function ConnectedDataPanel({
   onToggleCollapse,
   refreshToken,
   sqlBackend = "duckdb-wasm",
+  storedSqlQueries = [],
+  onSelectStoredSqlQuery,
+  onDeleteStoredSqlQuery,
+  showStoredSqlQueries = false,
 }: ConnectedDataPanelProps) {
   const connectedTables = useConnectedTables();
   const { tables: materializedTables } = useMaterializedTables();
@@ -201,6 +214,55 @@ export function ConnectedDataPanel({
     if (mode === "popover") {
       setIsOpen(false);
     }
+  };
+
+  const renderStoredSqlQueries = () => {
+    if (!showStoredSqlQueries) {
+      return null;
+    }
+
+    return (
+      <div className="flex max-h-56 flex-col gap-2 p-2">
+        <p className="px-1 text-[10px] font-bold uppercase tracking-widest text-[#5C6658]">
+          Stored SQL Queries
+        </p>
+        <div className="min-h-0 overflow-y-auto">
+          {storedSqlQueries.length === 0 ? (
+            <p className="px-1 py-2 text-xs text-muted-foreground">
+              No stored queries yet.
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {storedSqlQueries.map((query) => (
+                <div
+                  key={query.id}
+                  className="group flex items-center gap-1 rounded px-1 py-1 hover:bg-sidebar-accent/40"
+                >
+                  <button
+                    type="button"
+                    className="flex-1 truncate text-left text-xs font-mono text-sidebar-foreground"
+                    onClick={() => onSelectStoredSqlQuery?.(query.id)}
+                    title={query.name}
+                  >
+                    {query.name}
+                  </button>
+                  {onDeleteStoredSqlQuery ? (
+                    <button
+                      type="button"
+                      className="rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                      aria-label={`Delete stored query ${query.name}`}
+                      onClick={() => onDeleteStoredSqlQuery(query.id)}
+                    >
+                      <TrashIcon className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const renderDatabaseList = () => {
@@ -528,8 +590,13 @@ export function ConnectedDataPanel({
             <ChevronLeftIcon className="h-4 w-4" />
           </Button>
         </div>
-        <div className="flex-1 overflow-y-auto min-h-0 p-2">
-          {renderDatabaseList()}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            {renderDatabaseList()}
+          </div>
+          {showStoredSqlQueries ? (
+            <div className="border-t border-border">{renderStoredSqlQueries()}</div>
+          ) : null}
         </div>
       </div>
     );
@@ -557,6 +624,8 @@ export function ConnectedDataPanel({
         </Tooltip>
         <PromptInputHoverCardContent className="w-72">
           {renderDatabaseList()}
+          {showStoredSqlQueries && <Separator />}
+          {renderStoredSqlQueries()}
         </PromptInputHoverCardContent>
       </PromptInputHoverCard>
     );
@@ -578,6 +647,8 @@ export function ConnectedDataPanel({
       </Tooltip>
       <PromptInputHoverCardContent className="w-72 max-h-[400px] overflow-y-auto">
         {renderDatabaseList()}
+        {showStoredSqlQueries && <Separator />}
+        {renderStoredSqlQueries()}
       </PromptInputHoverCardContent>
     </PromptInputHoverCard>
   );
