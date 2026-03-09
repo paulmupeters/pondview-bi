@@ -3,6 +3,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { useSearchParams } from '@/vite/next-navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { TextConfigDialog } from "@/components/text-config-dialog";
+import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,8 +14,9 @@ import {
 } from "@/components/ui/dialog";
 import { DynamicChart } from "@/components/dynamic-chart";
 import { SqlResultsTable } from "@/components/sql-results-table";
-import { runQuery } from "@/lib/sql/run-query";
+import { executeDashboardChartsWithFilters } from "@/lib/dashboard/browser-filter-engine";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
+import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
 import type {
   CardConfig,
   Config,
@@ -38,7 +40,7 @@ import {
   DashboardHeader,
   DashboardSettingsDialog,
 } from "../[dashboardId]/components";
-import { FilterProvider } from "../[dashboardId]/filter-context";
+import { FilterProvider, useFilters } from "../[dashboardId]/filter-context";
 import type {
   Dashboard,
   DashboardChart,
@@ -74,6 +76,16 @@ function DashboardViewPageContent() {
 }
 
 function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
+  return (
+    <FilterProvider dashboardId={dashboardId}>
+      <DashboardDetailPageInner dashboardId={dashboardId} />
+    </FilterProvider>
+  );
+}
+
+function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
+  const { dashboardFilters, chartFiltersById } = useFilters();
+  const sqlBackendPreference = useSqlBackendPreference();
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [charts, setCharts] = useState<DashboardChart[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,32 +146,28 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     try {
       const dashboardCharts = await listChartsByDashboard(dashboardId);
       const sortedCharts = [...dashboardCharts].sort((a, b) => a.position - b.position);
-      setCharts(sortedCharts);
+      const execution = await executeDashboardChartsWithFilters({
+        dashboardId,
+        charts: sortedCharts,
+        dashboardFilters,
+        chartFiltersById,
+      });
 
-      const chartRows = await Promise.all(
-        sortedCharts.map(async (chart) => {
-          try {
-            const result = await runQuery({
-              sql: chart.sql,
-              dbIdentifier: chart.dbIdentifier ?? undefined,
-            });
-            return { chartId: chart.id, rows: result.rows as Result[] };
-          } catch (error) {
-            console.error(`[Dashboard] Failed to execute chart ${chart.id}:`, error);
-            return { chartId: chart.id, rows: [] as Result[] };
-          }
-        }),
+      setCharts(
+        sortedCharts.map((chart) => ({
+          ...chart,
+          ...(execution.metadataByChartId[chart.id] ?? {
+            filtersApplied: false,
+            appliedFiltersCount: 0,
+            skippedFilters: [],
+          }),
+        })),
       );
-
-      const nextMap: Record<string, Result[]> = {};
-      for (const item of chartRows) {
-        nextMap[item.chartId] = item.rows;
-      }
-      setChartData(nextMap);
+      setChartData(execution.rowsByChartId);
     } catch (error) {
       console.error("Failed to refresh dashboard data:", error);
     }
-  }, [dashboardId]);
+  }, [chartFiltersById, dashboardFilters, dashboardId, sqlBackendPreference]);
 
   useEffect(() => {
     void refreshDashboardData();
@@ -310,25 +318,13 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
             chart.id === chartId ? { ...chart, sql: newSql } : chart,
           ),
         );
-
-        const updatedChart = charts.find((item) => item.id === chartId);
-        if (!updatedChart) return;
-
-        const queryResult = await runQuery({
-          sql: newSql,
-          dbIdentifier: updatedChart.dbIdentifier ?? undefined,
-        });
-
-        setChartData((prev) => ({
-          ...prev,
-          [chartId]: queryResult.rows as Result[],
-        }));
+        await refreshDashboardData();
       } catch (error) {
         console.error("Failed to update SQL:", error);
         throw error;
       }
     },
-    [charts],
+    [refreshDashboardData],
   );
 
   useEffect(() => {
@@ -400,105 +396,105 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     );
 
   return (
-    <FilterProvider dashboardId={dashboardId}>
-      <div className="mx-auto flex h-full w-full flex-col gap-1 overflow-y-auto px-6 md:px-12 lg:px-18 pt-2 pb-6 md:pb-10">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <DashboardHeader
-            dashboard={dashboard}
-            onTitleUpdate={handleTitleUpdate}
-          />
-          <div className="flex items-center gap-2">
-            <TextConfigDialog
-              trigger={
-                <Button
-                  variant="outline"
-                  size="default"
-                  disabled={isAddingTextCard}
-                >
-                  Add Text Card
-                </Button>
-              }
-              config={null}
-              onConfigChange={(newConfig) => {
-                void handleAddTextCard(newConfig);
-              }}
-            />
-            <DashboardSettingsDialog
-              isOpen={isSettingsOpen}
-              onOpenChange={setIsSettingsOpen}
-              columns={columns}
-              onColumnsChange={handleColumnsChange}
-              autoFitRows={autoFitRows}
-              onAutoFitChange={handleAutoFitChange}
-            />
-          </div>
-        </div>
-
-        <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-          Dashboard slicers and materialized semantic filters are deferred in browser mode.
-        </div>
-
-        <DashboardGrid
-          charts={charts}
-          chartData={chartData}
-          layoutRows={layoutRows}
-          onDragEnd={handleDragEnd}
-          onConfigChange={handleChartConfigChange}
-          onDelete={handleChartDelete}
-          expandedSqlChartId={expandedSqlChartId}
-          onToggleSql={handleToggleSql}
-          onSqlUpdate={handleSqlUpdate}
-          resizingChart={resizingChart}
-          onResizeChange={handleResizeChange}
-          selectedChartId={selectedChartId}
-          onChartSelect={setSelectedChartId}
-          onPreviewChart={setPreviewChartId}
+    <div className="mx-auto flex h-full w-full flex-col gap-1 overflow-y-auto px-6 md:px-12 lg:px-18 pt-2 pb-6 md:pb-10">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <DashboardHeader
+          dashboard={dashboard}
+          onTitleUpdate={handleTitleUpdate}
         />
-        <Dialog
-          open={Boolean(previewChartId)}
-          onOpenChange={(open) => {
-            if (!open) setPreviewChartId(null);
-          }}
-        >
-          <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden">
-            <DialogHeader>
-              <DialogTitle>{previewChart?.title || "Chart preview"}</DialogTitle>
-              <DialogDescription>
-                Preview for this dashboard visual.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="max-h-[70vh] overflow-auto">
-              {previewChart && previewConfig && previewRows.length > 0 ? (
-                isPreviewTable ? (
-                  <SqlResultsTable
-                    dataOverride={{
-                      stage: "complete",
-                      columns: Object.keys(previewRows[0] || {}).map((name) => ({
-                        name,
-                      })),
-                      rows: previewRows as Record<string, unknown>[],
-                    }}
-                  />
-                ) : isPreviewChart ? (
-                  <DynamicChart
-                    chartData={previewRows}
-                    chartConfig={previewConfig as Config}
-                    className="w-full"
-                  />
-                ) : (
-                  <div className="p-3 text-sm text-muted-foreground">
-                    This visual type does not support preview.
-                  </div>
-                )
+        <div className="flex items-center gap-2">
+          <TextConfigDialog
+            trigger={
+              <Button
+                variant="outline"
+                size="default"
+                disabled={isAddingTextCard}
+              >
+                Add Text Card
+              </Button>
+            }
+            config={null}
+            onConfigChange={(newConfig) => {
+              void handleAddTextCard(newConfig);
+            }}
+          />
+          <DashboardSettingsDialog
+            isOpen={isSettingsOpen}
+            onOpenChange={setIsSettingsOpen}
+            columns={columns}
+            onColumnsChange={handleColumnsChange}
+            autoFitRows={autoFitRows}
+            onAutoFitChange={handleAutoFitChange}
+          />
+        </div>
+      </div>
+
+      <DashboardSlicersBar
+        dashboardId={dashboardId}
+        selectedChartId={selectedChartId}
+        onClearChartSelection={() => setSelectedChartId(null)}
+      />
+
+      <DashboardGrid
+        charts={charts}
+        chartData={chartData}
+        layoutRows={layoutRows}
+        onDragEnd={handleDragEnd}
+        onConfigChange={handleChartConfigChange}
+        onDelete={handleChartDelete}
+        expandedSqlChartId={expandedSqlChartId}
+        onToggleSql={handleToggleSql}
+        onSqlUpdate={handleSqlUpdate}
+        resizingChart={resizingChart}
+        onResizeChange={handleResizeChange}
+        selectedChartId={selectedChartId}
+        onChartSelect={setSelectedChartId}
+        onPreviewChart={setPreviewChartId}
+      />
+      <Dialog
+        open={Boolean(previewChartId)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewChartId(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>{previewChart?.title || "Chart preview"}</DialogTitle>
+            <DialogDescription>
+              Preview for this dashboard visual.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-auto">
+            {previewChart && previewConfig && previewRows.length > 0 ? (
+              isPreviewTable ? (
+                <SqlResultsTable
+                  dataOverride={{
+                    stage: "complete",
+                    columns: Object.keys(previewRows[0] || {}).map((name) => ({
+                      name,
+                    })),
+                    rows: previewRows as Record<string, unknown>[],
+                  }}
+                />
+              ) : isPreviewChart ? (
+                <DynamicChart
+                  chartData={previewRows}
+                  chartConfig={previewConfig as Config}
+                  className="w-full"
+                />
               ) : (
                 <div className="p-3 text-sm text-muted-foreground">
-                  Preview unavailable. The chart config or data could not be loaded.
+                  This visual type does not support preview.
                 </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-    </FilterProvider>
+              )
+            ) : (
+              <div className="p-3 text-sm text-muted-foreground">
+                Preview unavailable. The chart config or data could not be loaded.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

@@ -68,9 +68,17 @@ export default function Home() {
   return (
     <div className="h-full w-full flex items-center justify-center bg-background p-4 overflow-hidden">
       <div className="w-full max-w-7xl h-full flex flex-col font-mono justify-between py-4">
-        <div className="p-2 flex gap-2 py-2 justify-center">
-          <div className="flex flex-col items-center justify-center gap-2">
-            <div className="relative">
+        <div className="flex py-2 justify-center">
+          <div className="flex items-center justify-center">
+            <div className="relative flex items-center justify-center">
+              <div className="flex justify-center pointer-events-none z-10">
+                <span className="text-primary font-bold text-4xl font-mono mr-4">
+                  POND
+                </span>
+                <span className="text-4xl font-mono font-semibold text-sidebar-foreground">
+                  VIEW
+                </span>
+              </div>
               <svg
                 width="100%"
                 height="100%"
@@ -146,14 +154,6 @@ export default function Home() {
                   />
                 </g>
               </svg>
-              <div className="absolute inset-x-0 top-[30%] flex justify-center pointer-events-none z-10">
-                <span className="text-primary font-bold text-3xl font-mono">
-                  POND
-                </span>
-                <span className="text-3xl font-mono font-semibold text-sidebar-foreground">
-                  VIEW
-                </span>
-              </div>
             </div>
           </div>
         </div>

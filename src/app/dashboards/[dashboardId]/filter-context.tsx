@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { loadDashboardDimensions } from "@/lib/dashboard/browser-filter-engine";
 import { normalizeFilterPayload } from "@/lib/filters/normalize-filters";
 import type { AvailableDimension, Filter } from "@/lib/types/filters";
 
@@ -89,11 +90,31 @@ export function FilterProvider({
     setActiveScopeState({ kind: "dashboard" });
   }, [dashboardId]);
 
-  // Dimension discovery from server APIs is deferred in browser mode.
   useEffect(() => {
+    let cancelled = false;
     setIsLoading(true);
-    setAvailableDimensions([]);
-    setIsLoading(false);
+    (async () => {
+      try {
+        const dimensions = await loadDashboardDimensions(dashboardId);
+        if (cancelled) {
+          return;
+        }
+        setAvailableDimensions(dimensions);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("[Filters] Failed to load dashboard dimensions:", error);
+          setAvailableDimensions([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [dashboardId]);
 
   // Load dashboard-level filters from localStorage on mount.

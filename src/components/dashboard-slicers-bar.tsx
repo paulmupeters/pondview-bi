@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFilters } from "@/app/dashboards/[dashboardId]/filter-context";
 import { Slicer } from "@/components/slicer";
 import { Button } from "@/components/ui/button";
@@ -16,21 +16,39 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  addSlicerToChart,
+  addSlicerToDashboard,
+  listSlicersByChart,
+  listSlicersByDashboard,
+  removeSlicerFromChart,
+  removeSlicerFromDashboard,
+  type DbChartSlicer,
+  type DbDashboardSlicer,
+} from "@/lib/workspace/dashboard-repo";
 
-interface DashboardSlicer {
+type DashboardSlicer = {
   id: string;
-  dashboardId?: string;
-  chartId?: string;
   field: string;
   title: string | null;
   limit: number;
   position: number;
-}
+};
 
 interface DashboardSlicersBarProps {
   dashboardId: string;
   selectedChartId?: string | null;
   onClearChartSelection?: () => void;
+}
+
+function normalizeSlicer(row: DbDashboardSlicer | DbChartSlicer): DashboardSlicer {
+  return {
+    id: row.id,
+    field: row.field,
+    title: row.title,
+    limit: row.limit,
+    position: row.position,
+  };
 }
 
 export function DashboardSlicersBar({
@@ -45,10 +63,6 @@ export function DashboardSlicersBar({
   const [addSlicerOpen, setAddSlicerOpen] = useState(false);
   const [addSlicerSearch, setAddSlicerSearch] = useState("");
 
-  const slicersEndpoint = selectedChartId
-    ? `chart:${selectedChartId}`
-    : `dashboard:${dashboardId}`;
-
   useEffect(() => {
     if (selectedChartId) {
       setActiveScope({ kind: "chart", chartId: selectedChartId });
@@ -57,48 +71,88 @@ export function DashboardSlicersBar({
     }
   }, [selectedChartId, setActiveScope]);
 
-  // Server-backed slicer persistence is deferred in browser mode.
   useEffect(() => {
-    void slicersEndpoint;
-    setLoading(true);
-    setSlicers([]);
-    setLoading(false);
-  }, [slicersEndpoint]);
+    let cancelled = false;
 
-  // Filter available dimensions to exclude those already used as slicers
-  const usedFields = new Set(slicers.map((s) => s.field));
+    (async () => {
+      setLoading(true);
+      try {
+        const loaded = selectedChartId
+          ? await listSlicersByChart(selectedChartId)
+          : await listSlicersByDashboard(dashboardId);
+
+        if (!cancelled) {
+          setSlicers(loaded.map(normalizeSlicer));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("[DashboardSlicersBar] Failed to load slicers:", error);
+          setSlicers([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardId, selectedChartId]);
+
+  const usedFields = useMemo(() => new Set(slicers.map((s) => s.field)), [slicers]);
   const availableForSlicers = availableDimensions.filter(
-    (d) => !usedFields.has(d.field),
+    (dimension) => !usedFields.has(dimension.field),
   );
 
   const handleAddSlicer = async (field: string) => {
-    const maxPosition = slicers.reduce((max, item) => Math.max(max, item.position), -1);
-    setSlicers((prev) => [
-      ...prev,
-      {
-        id: `${Date.now()}-${field}`,
-        dashboardId: selectedChartId ? undefined : dashboardId,
-        chartId: selectedChartId ?? undefined,
-        field,
-        title: null,
-        limit: 50,
-        position: maxPosition + 1,
-      },
-    ]);
-    setAddSlicerOpen(false);
-    setAddSlicerSearch("");
+    try {
+      if (selectedChartId) {
+        await addSlicerToChart({
+          chartId: selectedChartId,
+          field,
+        });
+        const next = await listSlicersByChart(selectedChartId);
+        setSlicers(next.map(normalizeSlicer));
+      } else {
+        await addSlicerToDashboard({
+          dashboardId,
+          field,
+        });
+        const next = await listSlicersByDashboard(dashboardId);
+        setSlicers(next.map(normalizeSlicer));
+      }
+    } catch (error) {
+      console.error("[DashboardSlicersBar] Failed to add slicer:", error);
+    } finally {
+      setAddSlicerOpen(false);
+      setAddSlicerSearch("");
+    }
   };
 
   const handleRemoveSlicer = async (slicerId: string) => {
-    // Find the slicer to get its field
-    const slicer = slicers.find((s) => s.id === slicerId);
+    const slicer = slicers.find((item) => item.id === slicerId);
     if (slicer) {
-      const filterIndex = filters.findIndex((f) => f.field === slicer.field);
+      const filterIndex = filters.findIndex((filter) => filter.field === slicer.field);
       if (filterIndex >= 0) {
         removeFilter(filterIndex);
       }
     }
-    setSlicers((prev) => prev.filter((item) => item.id !== slicerId));
+
+    try {
+      if (selectedChartId) {
+        await removeSlicerFromChart(slicerId);
+        const next = await listSlicersByChart(selectedChartId);
+        setSlicers(next.map(normalizeSlicer));
+      } else {
+        await removeSlicerFromDashboard(slicerId);
+        const next = await listSlicersByDashboard(dashboardId);
+        setSlicers(next.map(normalizeSlicer));
+      }
+    } catch (error) {
+      console.error("[DashboardSlicersBar] Failed to remove slicer:", error);
+    }
   };
 
   if (loading) {
@@ -171,27 +225,29 @@ export function DashboardSlicersBar({
                 ) : (
                   <CommandGroup>
                     {availableForSlicers
-                      .filter((dim) => {
-                        if (!addSlicerSearch) return true;
+                      .filter((dimension) => {
+                        if (!addSlicerSearch) {
+                          return true;
+                        }
                         const searchLower = addSlicerSearch.toLowerCase();
                         return (
-                          dim.displayName.toLowerCase().includes(searchLower) ||
-                          dim.field.toLowerCase().includes(searchLower)
+                          dimension.displayName.toLowerCase().includes(searchLower) ||
+                          dimension.field.toLowerCase().includes(searchLower)
                         );
                       })
-                      .map((dim) => (
+                      .map((dimension) => (
                         <CommandItem
-                          key={dim.field}
-                          value={dim.field}
-                          onSelect={() => handleAddSlicer(dim.field)}
+                          key={dimension.field}
+                          value={dimension.field}
+                          onSelect={() => handleAddSlicer(dimension.field)}
                           className="cursor-pointer"
                         >
                           <div className="flex flex-col">
                             <span className="font-medium">
-                              {dim.displayName}
+                              {dimension.displayName}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {dim.field}
+                              {dimension.field}
                             </span>
                           </div>
                         </CommandItem>

@@ -5,7 +5,6 @@ import type { CSSProperties } from "react";
 import { CardConfigDialog } from "@/components/card-config-dialog";
 import { MetricCard } from "@/components/metric-card";
 import type { CardConfig, Config, TableConfig, TextConfig } from "@/lib/types";
-import { useFilters } from "../filter-context";
 import type { MetricCardInGroupProps } from "../types";
 import { isCardConfig } from "../utils";
 import { MetricCardSqlEditor } from "./MetricCardSqlEditor";
@@ -23,7 +22,7 @@ export function MetricCardInGroup({
   isSelected,
   onSelect,
 }: MetricCardInGroupProps) {
-  const { filters } = useFilters();
+  const appliedFilterCount = chart.appliedFiltersCount ?? 0;
   const {
     attributes,
     listeners,
@@ -81,10 +80,10 @@ export function MetricCardInGroup({
           <Funnel className="h-4 w-4" />
         </button>
       </div>
-      {chart.filtersApplied && filters.length > 0 && isFirst && (
+      {chart.filtersApplied && appliedFilterCount > 0 && isFirst && (
         <div className="absolute left-1/2 top-2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100">
           <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-            {filters.length} filter{filters.length !== 1 ? "s" : ""} applied
+            {appliedFilterCount} filter{appliedFilterCount !== 1 ? "s" : ""} applied
           </span>
         </div>
       )}

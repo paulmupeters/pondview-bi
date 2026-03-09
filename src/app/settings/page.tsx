@@ -60,6 +60,11 @@ import {
   setSqlBackendPreferenceInStorage,
 } from "@/lib/sql/sql-runtime";
 import {
+  clearJoinDefsInStorage,
+  readJoinDefsRawFromStorage,
+  saveJoinDefsRawToStorage,
+} from "@/lib/joins/browser-storage";
+import {
   useBridgeHealthStatus,
   useDuckDbHttpConfig,
   useDuckDbHttpHealthStatus,
@@ -122,6 +127,9 @@ export default function SettingsPage() {
   const [isExportingWorkspace, setIsExportingWorkspace] = useState(false);
   const [isImportingWorkspace, setIsImportingWorkspace] = useState(false);
   const [isResettingWorkspace, setIsResettingWorkspace] = useState(false);
+  const [joinDefsRaw, setJoinDefsRaw] = useState("[]");
+  const [joinDefsError, setJoinDefsError] = useState<string | null>(null);
+  const [joinDefsSuccess, setJoinDefsSuccess] = useState<string | null>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
   const sqlBackendPreference = useSqlBackendPreference();
@@ -153,6 +161,7 @@ export default function SettingsPage() {
     const hasSecret = hasSessionSecret();
     setHasBridgeSecret(hasSecret);
     setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
+    setJoinDefsRaw(readJoinDefsRawFromStorage());
 
     const savedDuckDbHttpConfig = getDuckDbHttpConfigFromStorage();
     setDuckDbHttpHost(savedDuckDbHttpConfig?.host ?? "");
@@ -487,6 +496,33 @@ export default function SettingsPage() {
     } finally {
       setIsResettingWorkspace(false);
     }
+  };
+
+  const handleSaveJoinDefs = () => {
+    try {
+      const joinDefs = saveJoinDefsRawToStorage(joinDefsRaw);
+      setJoinDefsRaw(readJoinDefsRawFromStorage());
+      setJoinDefsError(null);
+      setJoinDefsSuccess(
+        `Saved ${joinDefs.length} join definition${joinDefs.length === 1 ? "" : "s"}.`,
+      );
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      setJoinDefsSuccess(null);
+      setJoinDefsError(
+        error instanceof Error ? error.message : "Invalid join definitions JSON.",
+      );
+    }
+  };
+
+  const handleClearJoinDefs = () => {
+    clearJoinDefsInStorage();
+    setJoinDefsRaw("[]");
+    setJoinDefsError(null);
+    setJoinDefsSuccess("Cleared join definitions.");
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
   };
 
   const handleSaveAiSettings = async () => {
@@ -919,6 +955,69 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                 </div>
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6 mb-6">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold mb-2">
+                  Dashboard Join Definitions
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Configure cross-table dashboard filtering joins stored in{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                    bi.dashboard.joinDefs.v1
+                  </code>
+                  . Values must be a JSON array with{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                    leftTable
+                  </code>
+                  ,{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                    leftColumn
+                  </code>
+                  ,{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                    rightTable
+                  </code>
+                  ,{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                    rightColumn
+                  </code>
+                  , and optional{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                    type
+                  </code>
+                  .
+                </p>
+              </div>
+
+              <Textarea
+                value={joinDefsRaw}
+                onChange={(event) => setJoinDefsRaw(event.target.value)}
+                className="min-h-[220px] font-mono text-xs"
+                spellCheck={false}
+                placeholder="[]"
+              />
+
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={handleSaveJoinDefs}>Save Join Definitions</Button>
+                <Button variant="outline" onClick={handleClearJoinDefs}>
+                  Clear
+                </Button>
+              </div>
+
+              {joinDefsError && (
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {joinDefsError}
+                </p>
+              )}
+              {joinDefsSuccess && (
+                <p className="text-sm text-green-600 dark:text-green-400">
+                  {joinDefsSuccess}
+                </p>
               )}
             </div>
           </Card>

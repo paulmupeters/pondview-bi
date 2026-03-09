@@ -25,7 +25,6 @@ import { TableConfigDialog } from "@/components/table-config-dialog";
 import { TextConfigDialog } from "@/components/text-config-dialog";
 import { Button } from "@/components/ui/button";
 import type { CardConfig, Config, TableConfig, TextConfig } from "@/lib/types";
-import { useFilters } from "../filter-context";
 import type { SortableChartCardProps } from "../types";
 import {
   getColSpanClass,
@@ -50,7 +49,7 @@ export function SortableChartCard({
   onSelect,
   onPreviewChart,
 }: SortableChartCardProps) {
-  const { filters } = useFilters();
+  const appliedFilterCount = chart.appliedFiltersCount ?? 0;
   const [editedSql, setEditedSql] = useState(chart.sql);
   const [isSaving, setIsSaving] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -268,10 +267,10 @@ export function SortableChartCard({
           <Funnel className="h-4 w-4" />
         </button>
       </div>
-      {chart.filtersApplied && filters.length > 0 && (
+      {chart.filtersApplied && appliedFilterCount > 0 && (
         <div className="absolute left-1/2 top-2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100">
           <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-            {filters.length} filter{filters.length !== 1 ? "s" : ""} applied
+            {appliedFilterCount} filter{appliedFilterCount !== 1 ? "s" : ""} applied
           </span>
         </div>
       )}
