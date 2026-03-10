@@ -244,6 +244,13 @@ export function resolveSqlBackend(
   options: ResolveSqlBackendOptions,
   deps: RuntimeDeps = defaultDeps,
 ): SqlBackend {
+  if (
+    normalizeIdentifier(options.dbIdentifier).length > 0 &&
+    classifyDbIdentifier(options.dbIdentifier) === "local-wasm"
+  ) {
+    return "duckdb-wasm";
+  }
+
   const preference =
     options.backendPreference === undefined ||
     options.backendPreference === "auto"

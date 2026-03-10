@@ -570,18 +570,19 @@ export function ConnectedDataPanel({
             className={cn(
               "absolute left-0 top-4 z-20 -translate-x-1/2 transition-all duration-200 ease-out",
               className,
+              "bg-transparent",
             )}
           >
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="h-11 w-11 rounded-full border-border bg-background/95 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/85"
+              className="h-11 w-11 rounded-full! border-border bg-accent/80 shadow-lg ring-1 ring-black/5 gap-1"
               onClick={onToggleCollapse}
               aria-label="Expand explorer"
             >
-              <Database className="h-4 w-4" />
-              <ChevronRightIcon className="h-2.5 w-2.5 shrink-0" />
+              <Database className="size-4 shrink-0" />
+              <ChevronRightIcon className="size-2.5 shrink-0" />
             </Button>
           </div>
         );

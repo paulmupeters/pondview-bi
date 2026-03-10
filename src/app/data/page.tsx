@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import { DuckdbShellDialog } from "@/components/duckdb-shell";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,10 @@ import { useUploadedFiles } from "@/hooks/use-uploaded-files";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { removeConnectedTable } from "@/lib/connected-tables";
 import { buildDetachStatement } from "@/lib/duckdb/duckdb-attachments";
-import { refreshDuckDbHttpHealth, runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
+import {
+  refreshDuckDbHttpHealth,
+  runDuckDbHttpQuery,
+} from "@/lib/duckdb/duckdb-http-browser";
 import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import { refreshBridgeHealth, resolveSqlBackend } from "@/lib/sql/sql-runtime";
 import {
@@ -26,11 +29,15 @@ import {
   useSqlBackendPreference,
 } from "@/lib/sql/use-sql-backend";
 import { useTheme } from "@/lib/theme-provider";
-import { formatFileSize, removeUploadedFile } from "@/lib/uploaded-files";
+import {
+  formatFileSize,
+  persistUploadedFile,
+  removeUploadedFile,
+} from "@/lib/uploaded-files";
 import Image from "@/vite/next-image";
 
-const DEFERRED_MESSAGE =
-  "Uploads, semantic/materialized-table flows, and uploads are deferred in browser mode.";
+const BROWSER_UPLOAD_MESSAGE =
+  "Uploads now stay in the browser. CSV and Parquet files are imported into DuckDB WASM automatically; Excel files are stored locally for attachments and later processing.";
 
 export default function ViewDataPage() {
   const tables = useConnectedTables();
@@ -54,6 +61,16 @@ export default function ViewDataPage() {
   const isDarkMode = theme === "dark";
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [isShellDialogOpen, setIsShellDialogOpen] = useState(false);
+  const [uploadState, setUploadState] = useState<{
+    isUploading: boolean;
+    message: string | null;
+    tone: "muted" | "error";
+  }>({
+    isUploading: false,
+    message: null,
+    tone: "muted",
+  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void refreshBridgeHealth();
@@ -177,17 +194,75 @@ export default function ViewDataPage() {
           <Button
             type="button"
             variant="outline"
-            disabled
-            title={DEFERRED_MESSAGE}
+            disabled={uploadState.isUploading}
+            onClick={() => fileInputRef.current?.click()}
           >
-            Upload Data (Deferred)
+            {uploadState.isUploading ? "Uploading..." : "Upload Data"}
           </Button>
         </div>
       </header>
 
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,.xlsx,.xls,.parquet"
+        className="hidden"
+        onChange={async (event) => {
+          const nextFile = event.currentTarget.files?.[0];
+          if (!nextFile) {
+            return;
+          }
+
+          setUploadState({
+            isUploading: true,
+            message: null,
+            tone: "muted",
+          });
+
+          try {
+            const uploadedFile = await persistUploadedFile(nextFile);
+            const statusMessage =
+              uploadedFile.importStatus === "imported" &&
+              uploadedFile.schemaName &&
+              uploadedFile.tableName
+                ? `Imported as ${uploadedFile.schemaName}.${uploadedFile.tableName}`
+                : (uploadedFile.importError ?? "Stored in browser storage.");
+            setUploadState({
+              isUploading: false,
+              message: statusMessage,
+              tone: uploadedFile.importStatus === "error" ? "error" : "muted",
+            });
+          } catch (error) {
+            setUploadState({
+              isUploading: false,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to upload file.",
+              tone: "error",
+            });
+          } finally {
+            if (fileInputRef.current) {
+              fileInputRef.current.value = "";
+            }
+          }
+        }}
+      />
+
       <Card className="border-amber-500/40 bg-amber-500/5">
-        <CardContent className="pt-6 text-sm text-amber-700 dark:text-amber-300">
-          {DEFERRED_MESSAGE}
+        <CardContent className="space-y-2 pt-6 text-sm text-amber-700 dark:text-amber-300">
+          <p>{BROWSER_UPLOAD_MESSAGE}</p>
+          {uploadState.message ? (
+            <p
+              className={
+                uploadState.tone === "error"
+                  ? "text-destructive"
+                  : "text-amber-700 dark:text-amber-300"
+              }
+            >
+              {uploadState.message}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -337,12 +412,20 @@ export default function ViewDataPage() {
                                 confirm("Remove this connected source entry?")
                               ) {
                                 // Best-effort remote detach before removing local metadata
-                                if (entry.attachAs && effectiveSqlBackend !== "duckdb-wasm") {
+                                if (
+                                  entry.attachAs &&
+                                  effectiveSqlBackend !== "duckdb-wasm"
+                                ) {
                                   try {
-                                    const detachSql = buildDetachStatement(entry.attachAs, { ifExists: true });
+                                    const detachSql = buildDetachStatement(
+                                      entry.attachAs,
+                                      { ifExists: true },
+                                    );
                                     if (effectiveSqlBackend === "bridge") {
                                       await runBridgeQuery(detachSql);
-                                    } else if (effectiveSqlBackend === "duckdb-http") {
+                                    } else if (
+                                      effectiveSqlBackend === "duckdb-http"
+                                    ) {
                                       await runDuckDbHttpQuery(detachSql);
                                     }
                                   } catch {
@@ -371,8 +454,9 @@ export default function ViewDataPage() {
           Uploaded Files
         </h2>
         <p className="text-sm text-muted-foreground">
-          Existing uploaded file entries are visible here, but uploads and new
-          file connections are deferred in browser mode.
+          Browser-stored uploads remain available locally. Imported CSV and
+          Parquet files appear in DuckDB WASM under the <code>uploads</code>{" "}
+          schema.
         </p>
         {uploadedFiles.length === 0 ? (
           <Card>
@@ -391,6 +475,15 @@ export default function ViewDataPage() {
                       {formatFileSize(file.size)} • {file.type}
                     </p>
                     <p className="text-xs text-muted-foreground">
+                      {file.storageKind === "legacy-server"
+                        ? "Legacy server-backed upload"
+                        : file.importStatus === "imported" &&
+                            file.schemaName &&
+                            file.tableName
+                          ? `DuckDB table: ${file.schemaName}.${file.tableName}`
+                          : (file.importError ?? "Stored in browser")}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
                       {new Date(file.uploadedAt).toLocaleString()}
                     </p>
                   </div>
@@ -403,7 +496,7 @@ export default function ViewDataPage() {
                       if (
                         confirm(`Remove "${file.originalName}" from this list?`)
                       ) {
-                        removeUploadedFile(file.fileId);
+                        void removeUploadedFile(file.fileId);
                       }
                     }}
                   >
