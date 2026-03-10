@@ -35,6 +35,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
+import { getUploadedFileBlob, persistUploadedFile } from "@/lib/uploaded-files";
 import { cn } from "@/lib/utils";
 
 export type PromptMode = "ai" | "manual";
@@ -67,7 +68,8 @@ function FileAttachmentHoverCard() {
     new Set(),
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const deferredUploadsMessage = "File uploads are deferred in browser mode.";
+  const [isUploading, setIsUploading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Filter uploaded files based on search query
   const filteredFiles = uploadedFiles.filter((file) =>
     file.originalName.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -75,9 +77,18 @@ function FileAttachmentHoverCard() {
 
   // Handle adding an uploaded file as attachment
   const handleAddUploadedFile = async (file: (typeof uploadedFiles)[0]) => {
-    console.info(deferredUploadsMessage, file.fileId);
+    setErrorMessage(null);
+
+    const blob = await getUploadedFileBlob(file.fileId);
+    if (!blob) {
+      setErrorMessage(
+        "The browser copy of this file is no longer available. Remove it and upload again.",
+      );
+      return;
+    }
+
+    attachments.add([blob]);
     setSelectedFileIds((prev) => new Set(prev).add(file.fileId));
-    alert(deferredUploadsMessage);
   };
 
   // Handle uploading a new file
@@ -85,9 +96,30 @@ function FileAttachmentHoverCard() {
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     e.preventDefault();
-    alert(deferredUploadsMessage);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    const nextFile = e.currentTarget.files?.[0];
+    if (!nextFile) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsUploading(true);
+
+    try {
+      const uploadedFile = await persistUploadedFile(nextFile);
+      const browserFile = await getUploadedFileBlob(uploadedFile.fileId);
+      if (browserFile) {
+        attachments.add([browserFile]);
+        setSelectedFileIds((prev) => new Set(prev).add(uploadedFile.fileId));
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to upload file.",
+      );
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -102,7 +134,7 @@ function FileAttachmentHoverCard() {
           <PaperClipIcon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
         </PromptInputButton>
       </PromptInputHoverCardTrigger>
-      <PromptInputHoverCardContent className="w-[400px] p-0 transform translate-y-[-10px]">
+      <PromptInputHoverCardContent className="w-100 p-0 transform translate-y-[-10px]">
         <PromptInputCommand>
           <PromptInputCommandInput
             className="border-none focus-visible:ring-0"
@@ -164,6 +196,11 @@ function FileAttachmentHoverCard() {
 
             <PromptInputCommandSeparator />
             <div className="p-2">
+              {errorMessage ? (
+                <div className="pb-2 text-xs text-destructive">
+                  {errorMessage}
+                </div>
+              ) : null}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -176,9 +213,10 @@ function FileAttachmentHoverCard() {
                 variant="outline"
                 size="sm"
                 className="w-full"
+                disabled={isUploading}
                 onClick={() => fileInputRef.current?.click()}
               >
-                Upload New File
+                {isUploading ? "Uploading..." : "Upload New File"}
               </Button>
             </div>
           </PromptInputCommandList>

@@ -65,6 +65,15 @@ export interface WorkspacePreference {
   updatedAt: number;
 }
 
+export interface WorkspaceUploadedFileBlob {
+  id: string;
+  blob: Blob;
+  name: string;
+  type: string;
+  lastModified: number;
+  size: number;
+}
+
 export interface WorkspaceExportV1 {
   version: 1;
   exportedAt: string;
@@ -78,7 +87,7 @@ export interface WorkspaceExportV1 {
 }
 
 export const WORKSPACE_DB_NAME = "pondview-workspace";
-export const WORKSPACE_DB_VERSION = 1;
+export const WORKSPACE_DB_VERSION = 2;
 
 export const STORE_CHATS = "chats";
 export const STORE_MESSAGES = "messages";
@@ -87,6 +96,7 @@ export const STORE_CHARTS = "charts";
 export const STORE_DASHBOARD_SLICERS = "dashboardSlicers";
 export const STORE_CHART_SLICERS = "chartSlicers";
 export const STORE_PREFERENCES = "preferences";
+export const STORE_UPLOADED_FILE_BLOBS = "uploadedFileBlobs";
 
 type StoreName =
   | typeof STORE_CHATS
@@ -95,64 +105,94 @@ type StoreName =
   | typeof STORE_CHARTS
   | typeof STORE_DASHBOARD_SLICERS
   | typeof STORE_CHART_SLICERS
-  | typeof STORE_PREFERENCES;
+  | typeof STORE_PREFERENCES
+  | typeof STORE_UPLOADED_FILE_BLOBS;
 
 let openDbPromise: Promise<IDBDatabase> | null = null;
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
+    request.onerror = () =>
+      reject(request.error ?? new Error("IndexedDB request failed"));
   });
 }
 
 function transactionDone(transaction: IDBTransaction): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB transaction failed"));
-    transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB transaction aborted"));
+    transaction.onerror = () =>
+      reject(transaction.error ?? new Error("IndexedDB transaction failed"));
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error("IndexedDB transaction aborted"));
   });
 }
 
 function createStores(db: IDBDatabase): void {
-  const chats = db.createObjectStore(STORE_CHATS, { keyPath: "id" });
-  chats.createIndex("updatedAt", "updatedAt", { unique: false });
+  if (!db.objectStoreNames.contains(STORE_CHATS)) {
+    const chats = db.createObjectStore(STORE_CHATS, { keyPath: "id" });
+    chats.createIndex("updatedAt", "updatedAt", { unique: false });
+  }
 
-  const messages = db.createObjectStore(STORE_MESSAGES, { keyPath: "id" });
-  messages.createIndex("chatId", "chatId", { unique: false });
-  messages.createIndex("chatIdCreatedAt", ["chatId", "createdAt"], {
-    unique: false,
-  });
+  if (!db.objectStoreNames.contains(STORE_MESSAGES)) {
+    const messages = db.createObjectStore(STORE_MESSAGES, { keyPath: "id" });
+    messages.createIndex("chatId", "chatId", { unique: false });
+    messages.createIndex("chatIdCreatedAt", ["chatId", "createdAt"], {
+      unique: false,
+    });
+  }
 
-  const dashboards = db.createObjectStore(STORE_DASHBOARDS, { keyPath: "id" });
-  dashboards.createIndex("updatedAt", "updatedAt", { unique: false });
+  if (!db.objectStoreNames.contains(STORE_DASHBOARDS)) {
+    const dashboards = db.createObjectStore(STORE_DASHBOARDS, {
+      keyPath: "id",
+    });
+    dashboards.createIndex("updatedAt", "updatedAt", { unique: false });
+  }
 
-  const charts = db.createObjectStore(STORE_CHARTS, { keyPath: "id" });
-  charts.createIndex("dashboardId", "dashboardId", { unique: false });
-  charts.createIndex("dashboardIdPosition", ["dashboardId", "position"], {
-    unique: false,
-  });
+  if (!db.objectStoreNames.contains(STORE_CHARTS)) {
+    const charts = db.createObjectStore(STORE_CHARTS, { keyPath: "id" });
+    charts.createIndex("dashboardId", "dashboardId", { unique: false });
+    charts.createIndex("dashboardIdPosition", ["dashboardId", "position"], {
+      unique: false,
+    });
+  }
 
-  const dashboardSlicers = db.createObjectStore(STORE_DASHBOARD_SLICERS, {
-    keyPath: "id",
-  });
-  dashboardSlicers.createIndex("dashboardId", "dashboardId", { unique: false });
-  dashboardSlicers.createIndex("dashboardIdPosition", ["dashboardId", "position"], {
-    unique: false,
-  });
+  if (!db.objectStoreNames.contains(STORE_DASHBOARD_SLICERS)) {
+    const dashboardSlicers = db.createObjectStore(STORE_DASHBOARD_SLICERS, {
+      keyPath: "id",
+    });
+    dashboardSlicers.createIndex("dashboardId", "dashboardId", {
+      unique: false,
+    });
+    dashboardSlicers.createIndex(
+      "dashboardIdPosition",
+      ["dashboardId", "position"],
+      {
+        unique: false,
+      },
+    );
+  }
 
-  const chartSlicers = db.createObjectStore(STORE_CHART_SLICERS, {
-    keyPath: "id",
-  });
-  chartSlicers.createIndex("chartId", "chartId", { unique: false });
-  chartSlicers.createIndex("chartIdPosition", ["chartId", "position"], {
-    unique: false,
-  });
+  if (!db.objectStoreNames.contains(STORE_CHART_SLICERS)) {
+    const chartSlicers = db.createObjectStore(STORE_CHART_SLICERS, {
+      keyPath: "id",
+    });
+    chartSlicers.createIndex("chartId", "chartId", { unique: false });
+    chartSlicers.createIndex("chartIdPosition", ["chartId", "position"], {
+      unique: false,
+    });
+  }
 
-  const preferences = db.createObjectStore(STORE_PREFERENCES, {
-    keyPath: "key",
-  });
-  preferences.createIndex("updatedAt", "updatedAt", { unique: false });
+  if (!db.objectStoreNames.contains(STORE_PREFERENCES)) {
+    const preferences = db.createObjectStore(STORE_PREFERENCES, {
+      keyPath: "key",
+    });
+    preferences.createIndex("updatedAt", "updatedAt", { unique: false });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_UPLOADED_FILE_BLOBS)) {
+    db.createObjectStore(STORE_UPLOADED_FILE_BLOBS, { keyPath: "id" });
+  }
 }
 
 export async function openWorkspaceDb(): Promise<IDBDatabase> {
@@ -165,13 +205,12 @@ export async function openWorkspaceDb(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_CHATS)) {
-        createStores(db);
-      }
+      createStores(db);
     };
 
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("Failed to open workspace database"));
+    request.onerror = () =>
+      reject(request.error ?? new Error("Failed to open workspace database"));
   });
 
   return openDbPromise;
@@ -186,11 +225,16 @@ export async function getAllFromStore<T>(storeName: StoreName): Promise<T[]> {
   return rows;
 }
 
-export async function getByKey<T>(storeName: StoreName, key: IDBValidKey): Promise<T | undefined> {
+export async function getByKey<T>(
+  storeName: StoreName,
+  key: IDBValidKey,
+): Promise<T | undefined> {
   const db = await openWorkspaceDb();
   const tx = db.transaction(storeName, "readonly");
   const store = tx.objectStore(storeName);
-  const row = await requestToPromise(store.get(key) as IDBRequest<T | undefined>);
+  const row = await requestToPromise(
+    store.get(key) as IDBRequest<T | undefined>,
+  );
   await transactionDone(tx);
   return row;
 }
@@ -221,7 +265,10 @@ export async function putOne<T extends object>(
   await transactionDone(tx);
 }
 
-export async function deleteByKey(storeName: StoreName, key: IDBValidKey): Promise<void> {
+export async function deleteByKey(
+  storeName: StoreName,
+  key: IDBValidKey,
+): Promise<void> {
   const db = await openWorkspaceDb();
   const tx = db.transaction(storeName, "readwrite");
   tx.objectStore(storeName).delete(key);
@@ -246,6 +293,7 @@ export async function clearWorkspaceDb(): Promise<void> {
       STORE_DASHBOARD_SLICERS,
       STORE_CHART_SLICERS,
       STORE_PREFERENCES,
+      STORE_UPLOADED_FILE_BLOBS,
     ],
     "readwrite",
   );
@@ -257,6 +305,7 @@ export async function clearWorkspaceDb(): Promise<void> {
   tx.objectStore(STORE_DASHBOARD_SLICERS).clear();
   tx.objectStore(STORE_CHART_SLICERS).clear();
   tx.objectStore(STORE_PREFERENCES).clear();
+  tx.objectStore(STORE_UPLOADED_FILE_BLOBS).clear();
 
   await transactionDone(tx);
 }

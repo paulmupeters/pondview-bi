@@ -84,6 +84,23 @@ describe("resolveSqlBackend", () => {
       ),
     ).toBe("duckdb-wasm");
   });
+
+  test("forces duckdb-wasm for local wasm identifiers even when remote is preferred", () => {
+    expect(
+      resolveSqlBackend(
+        {
+          backendPreference: "bridge",
+          dbIdentifier: DEFAULT_WASM_DB_IDENTIFIER,
+        },
+        {
+          hasBridgeSecret: () => true,
+          getBridgeHealthStatus: () => "online",
+          hasDuckDbHttpConfig: () => true,
+          getDuckDbHttpHealthStatus: () => "online",
+        },
+      ),
+    ).toBe("duckdb-wasm");
+  });
 });
 
 describe("identifier classification", () => {
