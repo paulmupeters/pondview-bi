@@ -6,6 +6,7 @@ import { runQuery } from "@/lib/sql/run-query";
 import { resolveSqlRuntimeFingerprint } from "@/lib/sql/runtime-fingerprint";
 import {
   getSqlBackendPreference,
+  isWasmLocalIdentifier,
   resolveSqlBackend,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
@@ -176,7 +177,7 @@ export async function executeDashboardChartsWithFilters(
   depsOverride: Partial<BrowserFilterEngineDeps> = {},
 ): Promise<DashboardFilterExecutionResult> {
   const deps = resolveDeps(depsOverride);
-  const backend = deps.resolveBackend();
+  const backend = resolveDashboardBackend(options.charts, deps);
   const joinDefs = deps.readJoinDefs();
   const hasAnyFilters =
     options.dashboardFilters.length > 0 ||
@@ -304,9 +305,9 @@ export async function loadDashboardDimensions(
   depsOverride: Partial<BrowserFilterEngineDeps> = {},
 ): Promise<AvailableDimension[]> {
   const deps = resolveDeps(depsOverride);
-  const backend = deps.resolveBackend();
   const joinDefs = deps.readJoinDefs();
   const charts = await deps.listCharts(dashboardId);
+  const backend = resolveDashboardBackend(charts, deps);
   const materialization = await ensureDashboardMaterialization(
     dashboardId,
     charts,
@@ -378,9 +379,9 @@ export async function loadDashboardDimensionValues(
   const search = options.search?.trim() ?? "";
 
   const deps = resolveDeps(depsOverride);
-  const backend = deps.resolveBackend();
   const joinDefs = deps.readJoinDefs();
   const charts = await deps.listCharts(options.dashboardId);
+  const backend = resolveDashboardBackend(charts, deps);
   const materialization = await ensureDashboardMaterialization(
     options.dashboardId,
     charts,
@@ -632,12 +633,83 @@ async function runChartSql(
   chart: DbDashboardChart,
   backend: SqlBackend,
 ): Promise<Result[]> {
-  const result = await runQuery({
-    sql: chart.sql,
-    dbIdentifier: chart.dbIdentifier ?? undefined,
-    backendPreference: backend,
-  });
-  return result.rows as Result[];
+  const backendPreference = chart.sqlBackend ?? backend;
+  const dbIdentifier = resolveChartDbIdentifierForExecution(
+    chart.dbIdentifier,
+    backendPreference,
+  );
+
+  try {
+    const result = await runQuery({
+      sql: chart.sql,
+      dbIdentifier,
+      backendPreference,
+    });
+    return result.rows as Result[];
+  } catch (error) {
+    if (
+      !shouldRetryChartSqlOnDashboardBackend(chart, backend, backendPreference)
+    ) {
+      throw error;
+    }
+
+    console.warn(
+      `[dashboard-filters] Retrying chart ${chart.id} on ${backend} after local WASM resolution failed.`,
+      error,
+    );
+
+    const retryResult = await runQuery({
+      sql: chart.sql,
+      backendPreference: backend,
+    });
+    return retryResult.rows as Result[];
+  }
+}
+
+function resolveDashboardBackend(
+  charts: DbDashboardChart[],
+  deps: BrowserFilterEngineDeps,
+): SqlBackend {
+  const explicitBackends = Array.from(
+    new Set(
+      charts
+        .map((chart) => chart.sqlBackend)
+        .filter((backend): backend is SqlBackend => Boolean(backend)),
+    ),
+  );
+
+  if (explicitBackends.length === 1) {
+    return explicitBackends[0];
+  }
+
+  return deps.resolveBackend();
+}
+
+function resolveChartDbIdentifierForExecution(
+  dbIdentifier: string | null | undefined,
+  backend: SqlBackend,
+): string | undefined {
+  if (
+    (backend === "bridge" || backend === "duckdb-http") &&
+    isWasmLocalIdentifier(dbIdentifier ?? undefined)
+  ) {
+    return undefined;
+  }
+
+  return dbIdentifier ?? undefined;
+}
+
+function shouldRetryChartSqlOnDashboardBackend(
+  chart: DbDashboardChart,
+  dashboardBackend: SqlBackend,
+  attemptedBackend: SqlBackend,
+): boolean {
+  return (
+    !chart.sqlBackend &&
+    attemptedBackend === "duckdb-wasm" &&
+    dashboardBackend !== "duckdb-wasm" &&
+    isWasmLocalIdentifier(chart.dbIdentifier ?? undefined)
+  );
 }
 
 function resolveActiveBackend(): SqlBackend {

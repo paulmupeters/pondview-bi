@@ -1,3 +1,4 @@
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import type {
   CardConfig,
   Config,
@@ -19,6 +20,7 @@ export type DashboardChart = {
   description: string | null;
   sql: string;
   dbIdentifier: string | null;
+  sqlBackend?: SqlBackend | null;
   chartConfigJson: string;
   position: number;
   createdAt: number;

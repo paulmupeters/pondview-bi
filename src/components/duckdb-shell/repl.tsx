@@ -23,6 +23,7 @@ import { runQuery } from "@/lib/sql/run-query";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   resolveSqlBackend,
+  type SqlBackend,
 } from "@/lib/sql/sql-runtime";
 import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
 import type { Config } from "@/lib/types";
@@ -126,6 +127,7 @@ type DuckdbReplProps = {
       rows: Record<string, unknown>[];
       columns: { name: string; type?: string }[];
       durationMs: number;
+      backend?: SqlBackend;
     } | null,
   ) => void;
   showRunControls?: boolean;
@@ -157,6 +159,7 @@ export function DuckdbRepl({
     rows: Record<string, unknown>[];
     columns: { name: string; type?: string }[];
     durationMs: number;
+    backend?: SqlBackend;
   } | null>(null);
   const [internalApi, setInternalApi] = useState<SqlConsoleApi | null>(null);
   const [copiedSqlSnippet, setCopiedSqlSnippet] = useState(false);
@@ -399,8 +402,8 @@ export function DuckdbRepl({
             onCancelQueryAction={handleCancelQuery}
             showInlineResults={inlineResults}
             showRunControls={false}
-            onSuccessAction={({ sql, rows, columns, durationMs }) => {
-              setLastResult({ sql, rows, columns, durationMs });
+            onSuccessAction={({ sql, rows, columns, durationMs, backend }) => {
+              setLastResult({ sql, rows, columns, durationMs, backend });
               setExplorerRefreshToken((prev) => prev + 1);
             }}
           />

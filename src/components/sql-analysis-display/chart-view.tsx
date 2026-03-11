@@ -245,6 +245,7 @@ export function ChartView({
                   }
                   sql={data.query ?? ""}
                   dbIdentifier={data.dbIdentifier}
+                  sqlBackend={data.sqlBackend}
                   defaultTitle={cardConfig?.title ?? data.cardConfig?.title}
                   tooltip="Add to dashboard"
                   visualOptions={visualOptions}
@@ -266,7 +267,9 @@ export function ChartView({
             takeaway={cardConfig?.takeaway ?? data.cardConfig?.takeaway}
             editable={true}
             onTitleChange={(value) => updateCardMeta("title", value)}
-            onDescriptionChange={(value) => updateCardMeta("description", value)}
+            onDescriptionChange={(value) =>
+              updateCardMeta("description", value)
+            }
             onTakeawayChange={(value) => updateCardMeta("takeaway", value)}
             className="mx-auto w-fit border-0 shadow-none"
           />
@@ -291,6 +294,7 @@ export function ChartView({
                   defaultTitle={effectiveChartConfig.title}
                   tooltip="Add to dashboard"
                   dbIdentifier={data.dbIdentifier}
+                  sqlBackend={data.sqlBackend}
                   visualOptions={visualOptions}
                   defaultVisualType="chart"
                 />

@@ -1,7 +1,4 @@
-import {
-  ChatBubbleLeftRightIcon,
-  PlusCircleIcon,
-} from "@heroicons/react/24/outline";
+import { PlusCircleIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { InlineChartConfig } from "@/components/inline-chart-config";
 import { MetricCard } from "@/components/metric-card";
@@ -15,6 +12,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +22,7 @@ interface ManualModeResultsPanelProps {
     rows: Record<string, unknown>[];
     columns: { name: string; type?: string }[];
     durationMs: number;
+    backend?: SqlBackend;
   } | null;
   onSwitchToAiMode?: () => void;
   chartConfig?: Config | null;
@@ -164,6 +163,7 @@ export function ManualModeResultsPanel({
       progress: 1,
       query: sqlResult.sql,
       dbIdentifier: selectedDbIdentifier,
+      sqlBackend: sqlResult.backend,
       executionTime: sqlResult.durationMs,
       rowCount: sqlResult.rows.length,
       columns: sqlResult.columns,

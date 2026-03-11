@@ -12,6 +12,7 @@ function createChart(input: {
   id: string;
   dashboardId?: string;
   sql: string;
+  sqlBackend?: DbDashboardChart["sqlBackend"];
 }): DbDashboardChart {
   const now = Date.now();
   return {
@@ -21,6 +22,7 @@ function createChart(input: {
     description: null,
     sql: input.sql,
     dbIdentifier: null,
+    sqlBackend: input.sqlBackend ?? null,
     chartConfigJson: "{}",
     semanticQueryJson: null,
     exploreName: null,
@@ -323,5 +325,36 @@ describe("browser-filter-engine", () => {
     expect(runtimeSqlCalls[0]).toContain("SELECT DISTINCT table_name");
     expect(runtimeSqlCalls[0]).not.toContain("table_type = 'BASE TABLE'");
     expect(tables).toEqual(["orders", "customers"]);
+  });
+
+  test("prefers a chart's stored backend over the active runtime", async () => {
+    const backendCalls: string[] = [];
+    const chart = createChart({
+      id: "chart-1",
+      sql: "SELECT * FROM customer",
+      sqlBackend: "duckdb-http",
+    });
+
+    const result = await executeDashboardChartsWithFilters(
+      {
+        dashboardId: "dashboard-1",
+        charts: [chart],
+        dashboardFilters: [],
+        chartFiltersById: {},
+      },
+      {
+        resolveBackend: () => "duckdb-wasm",
+        readJoinDefs: () => [],
+        runRuntimeSql: async () => [],
+        runChartSql: async (_chart, backend) => {
+          backendCalls.push(backend);
+          return [{ source: backend }];
+        },
+      },
+    );
+
+    expect(backendCalls).toEqual(["duckdb-http"]);
+    expect(result.backend).toBe("duckdb-http");
+    expect(result.rowsByChartId[chart.id]).toEqual([{ source: "duckdb-http" }]);
   });
 });

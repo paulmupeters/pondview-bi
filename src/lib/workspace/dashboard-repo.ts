@@ -1,13 +1,14 @@
 import { nanoid } from "nanoid";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import {
   deleteByKey,
   getAllFromStore,
   getByKey,
   putOne,
-  STORE_CHARTS,
   STORE_CHART_SLICERS,
-  STORE_DASHBOARDS,
+  STORE_CHARTS,
   STORE_DASHBOARD_SLICERS,
+  STORE_DASHBOARDS,
   type WorkspaceChart,
   type WorkspaceChartSlicer,
   type WorkspaceDashboard,
@@ -27,7 +28,9 @@ async function upsertChart(chart: WorkspaceChart): Promise<void> {
   await putOne(STORE_CHARTS, chart);
 }
 
-async function upsertDashboardSlicer(slicer: WorkspaceDashboardSlicer): Promise<void> {
+async function upsertDashboardSlicer(
+  slicer: WorkspaceDashboardSlicer,
+): Promise<void> {
   await putOne(STORE_DASHBOARD_SLICERS, slicer);
 }
 
@@ -42,7 +45,8 @@ function sortByPosition<T extends { position: number }>(rows: T[]): T[] {
 export async function listDashboards(): Promise<
   { id: string; title: string; updatedAt: number }[]
 > {
-  const dashboards = await getAllFromStore<WorkspaceDashboard>(STORE_DASHBOARDS);
+  const dashboards =
+    await getAllFromStore<WorkspaceDashboard>(STORE_DASHBOARDS);
   return dashboards
     .sort((left, right) => right.updatedAt - left.updatedAt)
     .map((dashboard) => ({
@@ -52,7 +56,10 @@ export async function listDashboards(): Promise<
     }));
 }
 
-export async function createDashboard(title: string, now = Date.now()): Promise<{ id: string }> {
+export async function createDashboard(
+  title: string,
+  now = Date.now(),
+): Promise<{ id: string }> {
   const id = nanoid();
   await upsertDashboard({
     id,
@@ -68,7 +75,10 @@ export async function updateDashboardTitle(
   title: string,
   now = Date.now(),
 ): Promise<{ updated: boolean }> {
-  const existing = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, dashboardId);
+  const existing = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    dashboardId,
+  );
   if (!existing) {
     return { updated: false };
   }
@@ -82,14 +92,14 @@ export async function updateDashboardTitle(
   return { updated: true };
 }
 
-export async function getDashboardWithCharts(dashboardId: string): Promise<
-  | {
-      dashboard: WorkspaceDashboard;
-      charts: WorkspaceChart[];
-    }
-  | null
-> {
-  const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, dashboardId);
+export async function getDashboardWithCharts(dashboardId: string): Promise<{
+  dashboard: WorkspaceDashboard;
+  charts: WorkspaceChart[];
+} | null> {
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    dashboardId,
+  );
   if (!dashboard) {
     return null;
   }
@@ -98,12 +108,18 @@ export async function getDashboardWithCharts(dashboardId: string): Promise<
   return { dashboard, charts };
 }
 
-export async function listChartsByDashboard(dashboardId: string): Promise<WorkspaceChart[]> {
+export async function listChartsByDashboard(
+  dashboardId: string,
+): Promise<WorkspaceChart[]> {
   const charts = await getAllFromStore<WorkspaceChart>(STORE_CHARTS);
-  return sortByPosition(charts.filter((chart) => chart.dashboardId === dashboardId));
+  return sortByPosition(
+    charts.filter((chart) => chart.dashboardId === dashboardId),
+  );
 }
 
-export async function getChartById(chartId: string): Promise<WorkspaceChart | null> {
+export async function getChartById(
+  chartId: string,
+): Promise<WorkspaceChart | null> {
   return (await getByKey<WorkspaceChart>(STORE_CHARTS, chartId)) ?? null;
 }
 
@@ -113,12 +129,16 @@ export async function addChartToDashboard(input: {
   description?: string | null;
   sql: string;
   dbIdentifier?: string | null;
+  sqlBackend?: SqlBackend | null;
   chartConfigJson: string;
   semanticQueryJson?: string | null;
   exploreName?: string | null;
   now?: number;
 }): Promise<{ id: string }> {
-  const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, input.dashboardId);
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    input.dashboardId,
+  );
   if (!dashboard) {
     throw new Error("Dashboard not found");
   }
@@ -126,7 +146,10 @@ export async function addChartToDashboard(input: {
   const now = input.now ?? Date.now();
   const id = nanoid();
   const charts = await listChartsByDashboard(input.dashboardId);
-  const maxPosition = charts.reduce((max, chart) => Math.max(max, chart.position), -1);
+  const maxPosition = charts.reduce(
+    (max, chart) => Math.max(max, chart.position),
+    -1,
+  );
 
   await upsertChart({
     id,
@@ -135,6 +158,7 @@ export async function addChartToDashboard(input: {
     description: input.description ?? null,
     sql: input.sql,
     dbIdentifier: input.dbIdentifier ?? null,
+    sqlBackend: input.sqlBackend ?? null,
     chartConfigJson: input.chartConfigJson,
     semanticQueryJson: input.semanticQueryJson ?? null,
     exploreName: input.exploreName ?? null,
@@ -167,7 +191,10 @@ export async function updateChartConfig(
     updatedAt: now,
   });
 
-  const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, chart.dashboardId);
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    chart.dashboardId,
+  );
   if (dashboard) {
     await upsertDashboard({
       ...dashboard,
@@ -194,7 +221,10 @@ export async function updateChartSql(
     updatedAt: now,
   });
 
-  const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, chart.dashboardId);
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    chart.dashboardId,
+  );
   if (dashboard) {
     await upsertDashboard({
       ...dashboard,
@@ -233,7 +263,10 @@ export async function reorderDashboardCharts(
     });
   }
 
-  const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, dashboardId);
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    dashboardId,
+  );
   if (dashboard) {
     await upsertDashboard({
       ...dashboard,
@@ -253,14 +286,18 @@ export async function removeChartFromDashboard(
 
   await deleteByKey(STORE_CHARTS, chartId);
 
-  const chartSlicers = await getAllFromStore<WorkspaceChartSlicer>(STORE_CHART_SLICERS);
+  const chartSlicers =
+    await getAllFromStore<WorkspaceChartSlicer>(STORE_CHART_SLICERS);
   for (const slicer of chartSlicers) {
     if (slicer.chartId === chartId) {
       await deleteByKey(STORE_CHART_SLICERS, slicer.id);
     }
   }
 
-  const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, chart.dashboardId);
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    chart.dashboardId,
+  );
   if (dashboard) {
     await upsertDashboard({
       ...dashboard,
@@ -271,26 +308,36 @@ export async function removeChartFromDashboard(
   return { removed: true };
 }
 
-export async function deleteDashboard(dashboardId: string): Promise<{ deleted: boolean }> {
-  const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, dashboardId);
+export async function deleteDashboard(
+  dashboardId: string,
+): Promise<{ deleted: boolean }> {
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    dashboardId,
+  );
   if (!dashboard) {
     return { deleted: false };
   }
 
   const charts = await getAllFromStore<WorkspaceChart>(STORE_CHARTS);
-  const chartIds = charts.filter((chart) => chart.dashboardId === dashboardId).map((chart) => chart.id);
+  const chartIds = charts
+    .filter((chart) => chart.dashboardId === dashboardId)
+    .map((chart) => chart.id);
   for (const chartId of chartIds) {
     await deleteByKey(STORE_CHARTS, chartId);
   }
 
-  const dashboardSlicers = await getAllFromStore<WorkspaceDashboardSlicer>(STORE_DASHBOARD_SLICERS);
+  const dashboardSlicers = await getAllFromStore<WorkspaceDashboardSlicer>(
+    STORE_DASHBOARD_SLICERS,
+  );
   for (const slicer of dashboardSlicers) {
     if (slicer.dashboardId === dashboardId) {
       await deleteByKey(STORE_DASHBOARD_SLICERS, slicer.id);
     }
   }
 
-  const chartSlicers = await getAllFromStore<WorkspaceChartSlicer>(STORE_CHART_SLICERS);
+  const chartSlicers =
+    await getAllFromStore<WorkspaceChartSlicer>(STORE_CHART_SLICERS);
   for (const slicer of chartSlicers) {
     if (chartIds.includes(slicer.chartId)) {
       await deleteByKey(STORE_CHART_SLICERS, slicer.id);
@@ -301,9 +348,15 @@ export async function deleteDashboard(dashboardId: string): Promise<{ deleted: b
   return { deleted: true };
 }
 
-export async function listSlicersByDashboard(dashboardId: string): Promise<WorkspaceDashboardSlicer[]> {
-  const slicers = await getAllFromStore<WorkspaceDashboardSlicer>(STORE_DASHBOARD_SLICERS);
-  return sortByPosition(slicers.filter((slicer) => slicer.dashboardId === dashboardId));
+export async function listSlicersByDashboard(
+  dashboardId: string,
+): Promise<WorkspaceDashboardSlicer[]> {
+  const slicers = await getAllFromStore<WorkspaceDashboardSlicer>(
+    STORE_DASHBOARD_SLICERS,
+  );
+  return sortByPosition(
+    slicers.filter((slicer) => slicer.dashboardId === dashboardId),
+  );
 }
 
 export async function addSlicerToDashboard(input: {
@@ -313,7 +366,10 @@ export async function addSlicerToDashboard(input: {
   limit?: number;
   now?: number;
 }): Promise<{ id: string }> {
-  const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, input.dashboardId);
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    input.dashboardId,
+  );
   if (!dashboard) {
     throw new Error("Dashboard not found");
   }
@@ -321,7 +377,10 @@ export async function addSlicerToDashboard(input: {
   const now = input.now ?? Date.now();
   const id = nanoid();
   const slicers = await listSlicersByDashboard(input.dashboardId);
-  const maxPosition = slicers.reduce((max, slicer) => Math.max(max, slicer.position), -1);
+  const maxPosition = slicers.reduce(
+    (max, slicer) => Math.max(max, slicer.position),
+    -1,
+  );
 
   await upsertDashboardSlicer({
     id,
@@ -348,7 +407,10 @@ export async function updateSlicer(input: {
   limit?: number;
   now?: number;
 }): Promise<{ updated: boolean }> {
-  const slicer = await getByKey<WorkspaceDashboardSlicer>(STORE_DASHBOARD_SLICERS, input.slicerId);
+  const slicer = await getByKey<WorkspaceDashboardSlicer>(
+    STORE_DASHBOARD_SLICERS,
+    input.slicerId,
+  );
   if (!slicer) {
     return { updated: false };
   }
@@ -361,7 +423,10 @@ export async function updateSlicer(input: {
     updatedAt: now,
   });
 
-  const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, slicer.dashboardId);
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    slicer.dashboardId,
+  );
   if (dashboard) {
     await upsertDashboard({
       ...dashboard,
@@ -406,14 +471,20 @@ export async function removeSlicerFromDashboard(
   slicerId: string,
   now = Date.now(),
 ): Promise<{ removed: boolean }> {
-  const slicer = await getByKey<WorkspaceDashboardSlicer>(STORE_DASHBOARD_SLICERS, slicerId);
+  const slicer = await getByKey<WorkspaceDashboardSlicer>(
+    STORE_DASHBOARD_SLICERS,
+    slicerId,
+  );
   if (!slicer) {
     return { removed: false };
   }
 
   await deleteByKey(STORE_DASHBOARD_SLICERS, slicerId);
 
-  const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, slicer.dashboardId);
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    slicer.dashboardId,
+  );
   if (dashboard) {
     await upsertDashboard({
       ...dashboard,
@@ -424,8 +495,11 @@ export async function removeSlicerFromDashboard(
   return { removed: true };
 }
 
-export async function listSlicersByChart(chartId: string): Promise<WorkspaceChartSlicer[]> {
-  const slicers = await getAllFromStore<WorkspaceChartSlicer>(STORE_CHART_SLICERS);
+export async function listSlicersByChart(
+  chartId: string,
+): Promise<WorkspaceChartSlicer[]> {
+  const slicers =
+    await getAllFromStore<WorkspaceChartSlicer>(STORE_CHART_SLICERS);
   return sortByPosition(slicers.filter((slicer) => slicer.chartId === chartId));
 }
 
@@ -444,7 +518,10 @@ export async function addSlicerToChart(input: {
   const now = input.now ?? Date.now();
   const id = nanoid();
   const slicers = await listSlicersByChart(input.chartId);
-  const maxPosition = slicers.reduce((max, slicer) => Math.max(max, slicer.position), -1);
+  const maxPosition = slicers.reduce(
+    (max, slicer) => Math.max(max, slicer.position),
+    -1,
+  );
 
   await upsertChartSlicer({
     id,
@@ -457,7 +534,10 @@ export async function addSlicerToChart(input: {
     updatedAt: now,
   });
 
-  const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, chart.dashboardId);
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    chart.dashboardId,
+  );
   if (dashboard) {
     await upsertDashboard({
       ...dashboard,
@@ -474,7 +554,10 @@ export async function updateChartSlicer(input: {
   limit?: number;
   now?: number;
 }): Promise<{ updated: boolean }> {
-  const slicer = await getByKey<WorkspaceChartSlicer>(STORE_CHART_SLICERS, input.slicerId);
+  const slicer = await getByKey<WorkspaceChartSlicer>(
+    STORE_CHART_SLICERS,
+    input.slicerId,
+  );
   if (!slicer) {
     return { updated: false };
   }
@@ -489,7 +572,10 @@ export async function updateChartSlicer(input: {
 
   const chart = await getByKey<WorkspaceChart>(STORE_CHARTS, slicer.chartId);
   if (chart) {
-    const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, chart.dashboardId);
+    const dashboard = await getByKey<WorkspaceDashboard>(
+      STORE_DASHBOARDS,
+      chart.dashboardId,
+    );
     if (dashboard) {
       await upsertDashboard({
         ...dashboard,
@@ -535,7 +621,10 @@ export async function removeSlicerFromChart(
   slicerId: string,
   now = Date.now(),
 ): Promise<{ removed: boolean }> {
-  const slicer = await getByKey<WorkspaceChartSlicer>(STORE_CHART_SLICERS, slicerId);
+  const slicer = await getByKey<WorkspaceChartSlicer>(
+    STORE_CHART_SLICERS,
+    slicerId,
+  );
   if (!slicer) {
     return { removed: false };
   }
@@ -544,7 +633,10 @@ export async function removeSlicerFromChart(
 
   const chart = await getByKey<WorkspaceChart>(STORE_CHARTS, slicer.chartId);
   if (chart) {
-    const dashboard = await getByKey<WorkspaceDashboard>(STORE_DASHBOARDS, chart.dashboardId);
+    const dashboard = await getByKey<WorkspaceDashboard>(
+      STORE_DASHBOARDS,
+      chart.dashboardId,
+    );
     if (dashboard) {
       await upsertDashboard({
         ...dashboard,

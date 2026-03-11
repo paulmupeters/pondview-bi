@@ -31,6 +31,7 @@ import { useExecuteSqlRawOutputPreference } from "@/lib/chat-display-preferences
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   resolveSqlBackend,
+  type SqlBackend,
 } from "@/lib/sql/sql-runtime";
 import {
   useBridgeHealthStatus,
@@ -223,6 +224,7 @@ export default function Chat({
     rows: Record<string, unknown>[];
     columns: { name: string; type?: string }[];
     durationMs: number;
+    backend?: SqlBackend;
   } | null>(null);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
   const [storedSqlQueries, setStoredSqlQueries] = useState<SavedSqlQuery[]>([]);
@@ -638,6 +640,10 @@ export default function Chat({
       progress: 1,
       query: "",
       dbIdentifier: defaultDatabase,
+      sqlBackend: resolveSqlBackend({
+        backendPreference: sqlBackendPreference,
+        dbIdentifier: defaultDatabase,
+      }),
       isSqlExpandedInitial: true,
       rowCount: 0,
       columns: [],
@@ -678,7 +684,7 @@ export default function Chat({
     } catch (error) {
       console.error("Failed to persist visual placeholder:", error);
     }
-  }, [connectedTables, persistArtifactMessage]);
+  }, [connectedTables, persistArtifactMessage, sqlBackendPreference]);
 
   useChatUrlParams({
     chatId,
@@ -717,6 +723,7 @@ export default function Chat({
         progress: payload.progress ?? 1,
         query: payload.query ?? "",
         dbIdentifier: payload.dbIdentifier,
+        sqlBackend: payload.sqlBackend,
         executionTime: payload.executionTime,
         rowCount:
           payload.rowCount ??
@@ -920,6 +927,8 @@ export default function Chat({
           onOpenChange={setIsDashboardBuilderOpen}
           messages={messages}
           embedded
+          selectedDbIdentifier={selectedDb}
+          selectedSqlBackend={effectiveSqlBackend}
         />
       </div>
     </div>

@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { runQuery } from "@/lib/sql/run-query";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { generateCardConfig } from "./generate-card-config-tool";
 import { generateChartConfig } from "./generate-chart-config-tool";
@@ -32,11 +33,12 @@ function normalizeRows(rows: Record<string, unknown>[]): Result[] {
 async function executeSqlForRuntime(
   databasePath: string,
   sql: string,
-): Promise<{ rows: Result[]; durationMs: number }> {
+): Promise<{ rows: Result[]; durationMs: number; backend: SqlBackend }> {
   const response = await runQuery({ sql, dbIdentifier: databasePath });
   return {
     rows: normalizeRows(response.rows),
     durationMs: response.durationMs,
+    backend: response.backend,
   };
 }
 
@@ -72,10 +74,12 @@ export const executeSqlTool = tool({
 
     let parsedResults: Result[] = [];
     let executionTime = 0;
+    let sqlBackend: SqlBackend | undefined;
     try {
       const queryResult = await executeSqlForRuntime(databasePath, sql);
       parsedResults = queryResult.rows;
       executionTime = queryResult.durationMs;
+      sqlBackend = queryResult.backend;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -202,6 +206,7 @@ export const executeSqlTool = tool({
       progress: 1 as const,
       query: sql,
       dbIdentifier: databasePath,
+      sqlBackend,
       executionTime,
       rowCount,
       columns,

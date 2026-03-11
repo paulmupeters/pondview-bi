@@ -3,6 +3,7 @@ import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import { runQuery } from "@/lib/sql/run-query";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 import { SqlCodeEditor, type SqlCodeEditorApi } from "./sql-code-editor";
 
@@ -24,6 +25,7 @@ export type ExecuteQueryFn = (params: {
 }) => Promise<{
   rows: Record<string, unknown>[];
   columns?: { name: string; type?: string }[];
+  backend?: SqlBackend;
 }>;
 
 export function createSqlExecuteQuery(options: {
@@ -31,14 +33,14 @@ export function createSqlExecuteQuery(options: {
   config?: HttpDuckDbConfig;
 }): ExecuteQueryFn {
   return async ({ sql, signal }) => {
-    const { rows, columns } = await runQuery({
+    const { rows, columns, backend } = await runQuery({
       sql,
       config: options.config,
       dbIdentifier: options.dbIdentifier,
       signal,
     });
 
-    return { rows, columns };
+    return { rows, columns, backend };
   };
 }
 
@@ -85,6 +87,7 @@ export type SqlConsoleProps = {
     rows: Record<string, unknown>[];
     columns: { name: string; type?: string }[];
     durationMs: number;
+    backend?: SqlBackend;
   }) => void;
   onApiChangeAction?: (api: SqlConsoleApi | null) => void;
   onCancelQueryAction?: () => Promise<void> | void;
@@ -200,7 +203,11 @@ export function SqlConsole({
     const startedAt = performance.now();
 
     try {
-      const { rows, columns: providedColumns } = await executeQueryAction({
+      const {
+        rows,
+        columns: providedColumns,
+        backend,
+      } = await executeQueryAction({
         sql: currentSql,
         signal: controller.signal,
       });
@@ -222,6 +229,7 @@ export function SqlConsole({
         rows,
         columns,
         durationMs: duration,
+        backend,
       });
     } catch (err) {
       if ((err as Error).name === "AbortError") {

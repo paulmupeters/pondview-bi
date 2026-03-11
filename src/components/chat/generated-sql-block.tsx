@@ -1,4 +1,4 @@
-import { Loader2, ChevronRight } from "lucide-react";
+import { ChevronRight, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useArtifactMutation } from "@/components/artifact-mutation-context";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
@@ -134,6 +134,7 @@ export function GeneratedSqlBlock({
         query: nextQuery,
         dbIdentifier:
           dbIdentifier ?? payload?.dbIdentifier ?? currentPayload?.dbIdentifier,
+        sqlBackend: result.backend,
         executionTime: result.durationMs,
         rowCount: nextRowCount,
         columns: result.columns,
