@@ -1,6 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { MinusCircleIcon, PlusCircleIcon, XIcon } from "lucide-react";
-import { useRouter } from '@/vite/next-navigation';
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import { SqlChart } from "@/components/sql-chart";
@@ -11,14 +10,25 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ArtifactData } from "@/hooks/types";
 import { useArtifacts } from "@/hooks/use-artifacts";
+import {
+  DEFAULT_WASM_DB_IDENTIFIER,
+  isWasmLocalIdentifier,
+  type SqlBackend,
+} from "@/lib/sql/sql-runtime";
 import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
-import { addChartToDashboard, createDashboard } from "@/lib/workspace/dashboard-repo";
+import {
+  addChartToDashboard,
+  createDashboard,
+} from "@/lib/workspace/dashboard-repo";
+import { useRouter } from "@/vite/next-navigation";
 
 type DashboardBuilderPanelProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   messages: UIMessage[];
   embedded?: boolean;
+  selectedDbIdentifier?: string;
+  selectedSqlBackend?: SqlBackend;
 };
 
 type VisualSnapshot = {
@@ -29,6 +39,26 @@ type VisualSnapshot = {
   rows: Result[];
   type: "chart" | "card" | "table";
 };
+
+function resolveStoredChartDbIdentifier(options: {
+  sqlBackend: SqlBackend | null;
+  payloadDbIdentifier?: string;
+  selectedDbIdentifier?: string;
+}): string | null {
+  const candidates = [options.payloadDbIdentifier, options.selectedDbIdentifier]
+    .map((value) => value?.trim() ?? "")
+    .filter((value): value is string => value.length > 0);
+
+  if (options.sqlBackend === "duckdb-wasm") {
+    return candidates[0] ?? DEFAULT_WASM_DB_IDENTIFIER;
+  }
+
+  if (options.sqlBackend === "bridge" || options.sqlBackend === "duckdb-http") {
+    return candidates.find((value) => !isWasmLocalIdentifier(value)) ?? null;
+  }
+
+  return candidates[0] ?? DEFAULT_WASM_DB_IDENTIFIER;
+}
 
 function buildFallbackChartConfig(payload: SqlAnalysisData): Config | null {
   const columns = payload.columns ?? [];
@@ -41,9 +71,7 @@ function buildFallbackChartConfig(payload: SqlAnalysisData): Config | null {
 
   const querySnippet = payload.query ?? "";
   const truncatedQuery =
-    querySnippet.length > 50
-      ? `${querySnippet.slice(0, 50)}...`
-      : querySnippet;
+    querySnippet.length > 50 ? `${querySnippet.slice(0, 50)}...` : querySnippet;
 
   return {
     visualType: "chart",
@@ -171,6 +199,8 @@ export function DashboardBuilderPanel({
   onOpenChange,
   messages,
   embedded = false,
+  selectedDbIdentifier,
+  selectedSqlBackend,
 }: DashboardBuilderPanelProps) {
   const router = useRouter();
   const [dashboardTitle, setDashboardTitle] = useState("New dashboard");
@@ -291,13 +321,19 @@ export function DashboardBuilderPanel({
         }
 
         const description = config?.description ?? null;
+        const sqlBackend = payload.sqlBackend ?? selectedSqlBackend ?? null;
 
         await addChartToDashboard({
           dashboardId,
           title,
           description,
           sql: payload.query ?? "",
-          dbIdentifier: payload.dbIdentifier ?? "md:my_db",
+          dbIdentifier: resolveStoredChartDbIdentifier({
+            sqlBackend,
+            payloadDbIdentifier: payload.dbIdentifier,
+            selectedDbIdentifier,
+          }),
+          sqlBackend,
           chartConfigJson: JSON.stringify(config ?? {}),
         });
       }

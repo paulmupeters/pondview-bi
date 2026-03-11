@@ -1,3 +1,4 @@
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
 
 export type SqlAnalysisStage =
@@ -13,6 +14,7 @@ export type SqlAnalysisData = {
   progress?: number;
   query?: string;
   dbIdentifier?: string;
+  sqlBackend?: SqlBackend;
   executionTime?: number;
   rowCount?: number;
   columns?: { name: string; type?: string }[];

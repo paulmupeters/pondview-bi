@@ -14,35 +14,61 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  DEFAULT_WASM_DB_IDENTIFIER,
+  isWasmLocalIdentifier,
+  type SqlBackend,
+} from "@/lib/sql/sql-runtime";
 import type { CardConfig, Config, TableConfig, VisualType } from "@/lib/types";
-import { addChartToDashboard, createDashboard, listDashboards } from "@/lib/workspace/dashboard-repo";
+import {
+  addChartToDashboard,
+  createDashboard,
+  listDashboards,
+} from "@/lib/workspace/dashboard-repo";
 
 export type AddToDashboardVisualOption =
   | {
-    type: "chart";
-    config: Config;
-    columns?: { name: string; type?: string }[];
-    rows?: Record<string, unknown>[];
-  }
+      type: "chart";
+      config: Config;
+      columns?: { name: string; type?: string }[];
+      rows?: Record<string, unknown>[];
+    }
   | {
-    type: "table";
-    config: TableConfig;
-    columns: { name: string; type?: string }[];
-    rows: Record<string, unknown>[];
-  }
+      type: "table";
+      config: TableConfig;
+      columns: { name: string; type?: string }[];
+      rows: Record<string, unknown>[];
+    }
   | {
-    type: "card";
-    config: CardConfig;
-    columns: { name: string; type?: string }[];
-    rows: Record<string, unknown>[];
-  };
+      type: "card";
+      config: CardConfig;
+      columns: { name: string; type?: string }[];
+      rows: Record<string, unknown>[];
+    };
 
 type DashboardLite = { id: string; title: string | null; updatedAt: number };
+
+function resolveStoredChartDbIdentifier(
+  dbIdentifier: string | null | undefined,
+  sqlBackend: SqlBackend | null,
+): string | null {
+  const normalized = dbIdentifier?.trim() ?? "";
+  if (sqlBackend === "duckdb-wasm") {
+    return normalized || DEFAULT_WASM_DB_IDENTIFIER;
+  }
+
+  if (sqlBackend === "bridge" || sqlBackend === "duckdb-http") {
+    return normalized && !isWasmLocalIdentifier(normalized) ? normalized : null;
+  }
+
+  return normalized || DEFAULT_WASM_DB_IDENTIFIER;
+}
 
 export function AddToDashboardDialog({
   trigger,
   sql,
   dbIdentifier,
+  sqlBackend,
   defaultTitle,
   tooltip,
   visualOptions,
@@ -50,11 +76,12 @@ export function AddToDashboardDialog({
 }: {
   trigger: React.ReactNode;
   sql: string;
-    dbIdentifier?: string | null;
+  dbIdentifier?: string | null;
+  sqlBackend?: SqlBackend;
   defaultTitle?: string;
   tooltip?: string;
-    visualOptions: AddToDashboardVisualOption[];
-    defaultVisualType?: VisualType;
+  visualOptions: AddToDashboardVisualOption[];
+  defaultVisualType?: VisualType;
 }) {
   const [open, setOpen] = useState(false);
   const [dashboards, setDashboards] = useState<DashboardLite[]>([]);
@@ -140,7 +167,7 @@ export function AddToDashboardDialog({
       try {
         const dashboardList = await listDashboards();
         if (!cancelled) setDashboards(dashboardList);
-      } catch { }
+      } catch {}
     })();
     return () => {
       cancelled = true;
@@ -199,7 +226,11 @@ export function AddToDashboardDialog({
         title: currentFormState.title,
         description: currentFormState.description,
         sql,
-        dbIdentifier: dbIdentifier ?? "md:my_db",
+        dbIdentifier: resolveStoredChartDbIdentifier(
+          dbIdentifier,
+          sqlBackend ?? null,
+        ),
+        sqlBackend: sqlBackend ?? null,
         chartConfigJson: JSON.stringify(configJson),
       });
       setOpen(false);
@@ -309,7 +340,7 @@ export function AddToDashboardDialog({
             <label htmlFor="visual-title" className="text-sm font-medium">
               {selectedVisualType
                 ? selectedVisualType.charAt(0).toUpperCase() +
-                selectedVisualType.slice(1)
+                  selectedVisualType.slice(1)
                 : "Visual"}{" "}
               title
             </label>
@@ -336,7 +367,7 @@ export function AddToDashboardDialog({
             <label htmlFor="visual-description" className="text-sm font-medium">
               {selectedVisualType
                 ? selectedVisualType.charAt(0).toUpperCase() +
-                selectedVisualType.slice(1)
+                  selectedVisualType.slice(1)
                 : "Visual"}{" "}
               description (optional)
             </label>

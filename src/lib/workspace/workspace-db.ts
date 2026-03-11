@@ -1,3 +1,5 @@
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
+
 export interface WorkspaceChat {
   id: string;
   title: string | null;
@@ -29,6 +31,7 @@ export interface WorkspaceChart {
   description: string | null;
   sql: string;
   dbIdentifier: string | null;
+  sqlBackend?: SqlBackend | null;
   chartConfigJson: string;
   semanticQueryJson: string | null;
   exploreName: string | null;
