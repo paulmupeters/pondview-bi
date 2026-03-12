@@ -69,7 +69,7 @@ export const themeCss = `
   --secondary-foreground: oklch(0.9702 0 0);
   --muted: oklch(0.2056 0.0271 7.4948);
   --muted-foreground: oklch(0.7058 0 0);
-  --accent: oklch(0.3854 0.0371 286.5980);
+  --accent: oklch(40.98% 0.061627587515050895 282.1304520376974);
   --accent-foreground: oklch(0.9702 0 0);
   --destructive: oklch(0.5006 0.1429 348.3981);
   --destructive-foreground: oklch(1.0000 0 0);

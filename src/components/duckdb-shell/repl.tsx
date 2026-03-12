@@ -4,6 +4,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -18,24 +19,39 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cancelBridgeQuery } from "@/lib/bridge/pondview-bridge";
+import {
+  cancelBridgeQuery,
+  runBridgeQuery,
+} from "@/lib/bridge/pondview-bridge";
+import {
+  readConnectedTablesFromStorage,
+  type ConnectedTable,
+} from "@/lib/connected-tables";
+import {
+  buildAttachmentPlan,
+  buildDetachStatement,
+} from "@/lib/duckdb/duckdb-attachments";
+import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
+import { rewriteSqlForAttachedDatabase } from "@/lib/duckdb/rewrite-sql";
 import { runQuery } from "@/lib/sql/run-query";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
+  isWasmLocalIdentifier,
   resolveSqlBackend,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
 import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
+import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const SQL_SAMPLE_SQL = `-- Create a sample table with two columns (col1, col2)
-SELECT 
+SELECT
     range1 AS col1,
     range2 AS col2
-FROM 
+FROM
     (SELECT UNNEST(GENERATE_SERIES(1, 10)) AS range1) t1
-CROSS JOIN 
+CROSS JOIN
     (SELECT UNNEST(GENERATE_SERIES(11, 20)) AS range2) t2;
 `;
 
@@ -64,8 +80,10 @@ const _SQL_SAMPLE_LINES: {
     content: (
       <>
         count(
-        <span className="text-purple-600 font-bold">DISTINCT</span> user_id){" "}
-        <span className="text-purple-600 font-bold">AS</span> active_users
+        <span className="text-purple-600 font-bold">
+          DISTINCT
+        </span> user_id) <span className="text-purple-600 font-bold">AS</span>{" "}
+        active_users
       </>
     ),
   },
@@ -174,19 +192,87 @@ export function DuckdbRepl({
     backendPreference: sqlBackendPreference,
   });
 
+  const connectedEntry = useMemo((): ConnectedTable | undefined => {
+    if (!selectedDb || isWasmLocalIdentifier(selectedDb)) return undefined;
+    const tables = readConnectedTablesFromStorage();
+    return tables.find(
+      (t) =>
+        t.connectionId === selectedDb ||
+        t.databasePath === selectedDb ||
+        t.attachAs === selectedDb,
+    );
+  }, [selectedDb]);
+
   const executeQuery: ExecuteQueryFn = async ({ sql, signal }) => {
-    if (onRunSqlAction) {
-      return onRunSqlAction({
-        sql,
-        dbIdentifier: selectedDbIdentifier,
-        signal,
-      });
+    const effectiveDb = selectedDb ?? selectedDbIdentifier;
+
+    // If there's a connected external entry, wrap the query with ATTACH / DETACH
+    if (
+      connectedEntry &&
+      connectedEntry.databasePath &&
+      connectedEntry.type !== "duckdb"
+    ) {
+      const connectionConfig: SourceConnectionConfig = {
+        type: connectedEntry.type,
+        identifier: connectedEntry.databasePath,
+        alias: connectedEntry.attachAs || "source",
+        readOnly: connectedEntry.readOnly,
+        duckdbExtension: connectedEntry.duckdbExtension,
+      };
+      const plan = buildAttachmentPlan(connectionConfig);
+
+      const runRemote = async (stmt: string) => {
+        if (effectiveSqlBackend === "bridge") {
+          await runBridgeQuery(stmt, signal);
+        } else if (effectiveSqlBackend === "duckdb-http") {
+          await runDuckDbHttpQuery(stmt, signal);
+        } else {
+          await runQuery({ sql: stmt, signal });
+        }
+      };
+
+      // INSTALL / LOAD / ATTACH
+      for (const stmt of plan.statements) {
+        await runRemote(stmt);
+      }
+
+      try {
+        const aliasedSql = rewriteSqlForAttachedDatabase(sql, plan.alias);
+
+        if (onRunSqlAction) {
+          return await onRunSqlAction({
+            sql: aliasedSql,
+            dbIdentifier: effectiveDb,
+            signal,
+          });
+        }
+        if (effectiveSqlBackend === "bridge") {
+          const result = await runBridgeQuery(aliasedSql, signal);
+          return { ...result, backend: "bridge" as SqlBackend };
+        }
+        if (effectiveSqlBackend === "duckdb-http") {
+          const result = await runDuckDbHttpQuery(aliasedSql, signal);
+          return { ...result, backend: "duckdb-http" as SqlBackend };
+        }
+        return await runQuery({
+          sql: aliasedSql,
+          dbIdentifier: effectiveDb,
+          signal,
+        });
+      } finally {
+        try {
+          await runRemote(buildDetachStatement(plan.alias, { ifExists: true }));
+        } catch {
+          // Best-effort detach
+        }
+      }
     }
-    return runQuery({
-      sql,
-      dbIdentifier: selectedDbIdentifier,
-      signal,
-    });
+
+    // Default path: local WASM or no external connection
+    if (onRunSqlAction) {
+      return onRunSqlAction({ sql, dbIdentifier: effectiveDb, signal });
+    }
+    return runQuery({ sql, dbIdentifier: effectiveDb, signal });
   };
 
   const handleCopySqlSnippet = () => {

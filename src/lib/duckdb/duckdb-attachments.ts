@@ -33,12 +33,17 @@ export function quoteIdentifier(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
+const RESERVED_DUCKDB_NAMES = new Set(["main", "system", "temp", "temporary"]);
+
 function deriveAlias(connection: SourceConnectionConfig): string {
   if (connection.alias) {
     // Sanitize the explicitly provided alias to ensure it's a valid DuckDB identifier
     const sanitized = connection.alias.replace(/[^A-Za-z0-9_]/g, "_");
     const withoutLeadingUnderscore = sanitized.replace(/^_+/, "");
-    return withoutLeadingUnderscore || "source";
+    const alias = withoutLeadingUnderscore || "source";
+    return RESERVED_DUCKDB_NAMES.has(alias.toLowerCase())
+      ? `${alias}_db`
+      : alias;
   }
 
   const identifier = connection.identifier ?? "";
@@ -46,7 +51,8 @@ function deriveAlias(connection: SourceConnectionConfig): string {
   const candidate = segments[segments.length - 1] || "source";
   const sanitized = candidate.replace(/[^A-Za-z0-9_]/g, "_");
   const withoutLeadingUnderscore = sanitized.replace(/^_+/, "");
-  return withoutLeadingUnderscore || "source";
+  const alias = withoutLeadingUnderscore || "source";
+  return RESERVED_DUCKDB_NAMES.has(alias.toLowerCase()) ? `${alias}_db` : alias;
 }
 
 function buildAttachStatement(

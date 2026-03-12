@@ -346,7 +346,7 @@ export function SqlConsole({
       </div>
       {showInlineResults && results && (
         <div className="border border-border bg-background rounded-sm min-w-0 overflow-hidden flex-1 min-h-0">
-          <SqlResultsTable dataOverride={results} pageSize={50} />
+          <SqlResultsTable dataOverride={results} pageSize={50} expandable />
         </div>
       )}
       {error && (

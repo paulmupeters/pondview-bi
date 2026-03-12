@@ -7,35 +7,51 @@ import {
   type PaginationState,
   useReactTable,
 } from "@tanstack/react-table";
+import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_PAGE_SIZE = 10;
 const DEFAULT_COLUMN_SIZE = 180;
 const MIN_COLUMN_SIZE = 120;
 const MAX_COLUMN_SIZE = 640;
+const EXPANDED_PAGE_SIZE = 100;
+
+type SqlResultsTableDataOverride = {
+  stage?: "loading" | "processing" | "analyzing" | "visualizing" | "complete";
+  columns: { name: string; type?: string }[];
+  rows: Record<string, unknown>[];
+  summary?: {
+    totalRows: number;
+    executionTimeMs?: number;
+    insights: string[];
+    queryType?: string;
+  };
+};
 
 export function SqlResultsTable({
   dataOverride,
   className,
   pageSize = DEFAULT_PAGE_SIZE,
+  expandable = false,
+  expandTitle = "Query Results",
 }: {
-  dataOverride?: {
-    stage?: "loading" | "processing" | "analyzing" | "visualizing" | "complete";
-    columns: { name: string; type?: string }[];
-    rows: Record<string, unknown>[];
-    summary?: {
-      totalRows: number;
-      executionTimeMs?: number;
-      insights: string[];
-      queryType?: string;
-    };
-  };
+  dataOverride?: SqlResultsTableDataOverride;
   className?: string;
   pageSize?: number;
+  expandable?: boolean;
+  expandTitle?: string;
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const payload = dataOverride; // parent supplies data; avoid extra subscription
 
   // Create column definitions for TanStack Table
@@ -76,7 +92,9 @@ export function SqlResultsTable({
   // Update pageSize when rows change
   useEffect(() => {
     const newPageSize =
-      rows.length > resolvedPageSize ? resolvedPageSize : Math.max(rows.length, 1);
+      rows.length > resolvedPageSize
+        ? resolvedPageSize
+        : Math.max(rows.length, 1);
     setPagination({
       pageIndex: 0, // Reset to first page when data changes
       pageSize: newPageSize,
@@ -131,18 +149,33 @@ export function SqlResultsTable({
 
   return (
     <div className="flex flex-col h-full w-full min-w-0 gap-4 p-4">
-      {/* Summary */}
-      {summary && (
-        <div className="shrink-0 space-y-2">
-          <div className="flex gap-4 text-sm text-muted-foreground">
-            <span>{summary.totalRows} rows</span>
-            {summary.executionTimeMs && (
-              <span>{summary.executionTimeMs}ms</span>
-            )}
-            {summary.queryType && <span>{summary.queryType}</span>}
+      {/* Summary + Expand button */}
+      <div className="shrink-0 flex items-center justify-between">
+        {summary ? (
+          <div className="space-y-2">
+            <div className="flex gap-4 text-sm text-muted-foreground">
+              <span>{summary.totalRows} rows</span>
+              {summary.executionTimeMs && (
+                <span>{summary.executionTimeMs}ms</span>
+              )}
+              {summary.queryType && <span>{summary.queryType}</span>}
+            </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div />
+        )}
+        {expandable && (
+          <button
+            type="button"
+            onClick={() => setIsExpanded(true)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Expand table"
+            title="Expand table"
+          >
+            <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+          </button>
+        )}
+      </div>
 
       {/* Table */}
       <div
@@ -169,9 +202,9 @@ export function SqlResultsTable({
                         {header.isPlaceholder
                           ? null
                           : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )}
                       </div>
                       {header.column.getCanResize() && (
                         <button
@@ -230,12 +263,12 @@ export function SqlResultsTable({
             ) : (
               <tr>
                 <td
-                    colSpan={tableColumns.length}
-                    className="h-24 text-center p-2"
-                  >
-                    No results.
-                  </td>
-                </tr>
+                  colSpan={tableColumns.length}
+                  className="h-24 text-center p-2"
+                >
+                  No results.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -245,7 +278,8 @@ export function SqlResultsTable({
       {shouldPaginate && (
         <div className="shrink-0 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            Showing {table.getState().pagination.pageIndex * resolvedPageSize + 1} to{" "}
+            Showing{" "}
+            {table.getState().pagination.pageIndex * resolvedPageSize + 1} to{" "}
             {Math.min(
               (table.getState().pagination.pageIndex + 1) * resolvedPageSize,
               rows.length,
@@ -292,6 +326,28 @@ export function SqlResultsTable({
             ))}
           </ul>
         </div>
+      )}
+
+      {/* Expanded dialog */}
+      {expandable && (
+        <Dialog open={isExpanded} onOpenChange={setIsExpanded}>
+          <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden">
+            <DialogHeader>
+              <DialogTitle>{expandTitle}</DialogTitle>
+              <DialogDescription>
+                Showing {rows.length} row{rows.length !== 1 ? "s" : ""} across{" "}
+                {columns.length} column{columns.length !== 1 ? "s" : ""}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[70vh] overflow-auto">
+              <SqlResultsTable
+                dataOverride={dataOverride}
+                pageSize={EXPANDED_PAGE_SIZE}
+                expandable={false}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
