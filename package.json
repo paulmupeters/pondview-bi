@@ -75,7 +75,7 @@
     "@types/node": "^20.19.33",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.4",
+    "@vitejs/plugin-react": "^6.0.0",
     "drizzle-kit": "^0.31.9",
     "playwright": "^1.58.2",
     "tailwindcss": "^4.1.18",
