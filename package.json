@@ -18,7 +18,7 @@
     "@ai-sdk/anthropic": "^3.0.58",
     "@ai-sdk/open-responses": "^1.0.6",
     "@ai-sdk/openai": "^3.0.41",
-    "@ai-sdk/react": "^3.0.108",
+    "@ai-sdk/react": "^3.0.118",
     "@ai-sdk/xai": "^3.0.67",
     "@codemirror/lang-sql": "^6.10.0",
     "@codemirror/theme-one-dark": "^6.1.3",
