@@ -339,6 +339,7 @@ export function ManualModeResultsPanel({
             ) : (
               <SqlResultsTable
                 className="w-full h-full"
+                expandable
                 dataOverride={{
                   stage: "complete",
                   columns: sqlResult.columns,

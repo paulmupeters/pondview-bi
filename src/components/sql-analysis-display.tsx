@@ -173,12 +173,7 @@ export function SqlAnalysisDisplay({
       }
       lastVisualTypeRef.current = currentVisualType;
     }
-  }, [
-    data?.query,
-    data?.visualType,
-    data?.chartConfig,
-    data?.cardConfig,
-  ]);
+  }, [data?.query, data?.visualType, data?.chartConfig, data?.cardConfig]);
 
   useEffect(() => {
     if (activeView !== "chart") {
@@ -207,13 +202,7 @@ export function SqlAnalysisDisplay({
       chartConfig: resolvedConfig ?? undefined,
       summary: data.summary,
     };
-  }, [
-    chartConfig,
-    data?.stage,
-    data?.rows,
-    data?.chartConfig,
-    data?.summary,
-  ]);
+  }, [chartConfig, data?.stage, data?.rows, data?.chartConfig, data?.summary]);
 
   const selectedForTable = useMemo((): SelectedForTable | undefined => {
     return data?.stage === "complete"
@@ -224,14 +213,10 @@ export function SqlAnalysisDisplay({
           summary: data.summary,
         }
       : undefined;
-  }, [
-    data?.stage,
-    data?.columns,
-    data?.rows,
-    data?.summary,
-  ]);
+  }, [data?.stage, data?.columns, data?.rows, data?.summary]);
 
-  const cardSourceRows = data?.stage === "complete" ? (data.rows ?? null) : null;
+  const cardSourceRows =
+    data?.stage === "complete" ? (data.rows ?? null) : null;
   const cardSourceColumns =
     data?.stage === "complete" ? (data.columns ?? null) : null;
 
@@ -320,12 +305,7 @@ export function SqlAnalysisDisplay({
             }
           : undefined),
     };
-  }, [
-    data,
-    chartConfig,
-    cardConfig,
-    activeView,
-  ]);
+  }, [data, chartConfig, cardConfig, activeView]);
 
   const showAddToChatButton =
     Boolean(onAddToChat) &&
@@ -346,7 +326,8 @@ export function SqlAnalysisDisplay({
   // Keep clear controls limited to interactive/initial states.
   const isInteractive = data?.stage === "initial";
 
-  const showClearButton = isInteractive && Boolean(data && data.stage !== "complete");
+  const showClearButton =
+    isInteractive && Boolean(data && data.stage !== "complete");
 
   return (
     <div className={cn("space-y-6 w-full", className)}>
@@ -514,7 +495,7 @@ export function SqlAnalysisDisplay({
 
       {data && activeView === "table" && (
         <div className="group relative">
-          <SqlResultsTable dataOverride={selectedForTable} />
+          <SqlResultsTable dataOverride={selectedForTable} expandable />
         </div>
       )}
 

@@ -19,12 +19,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
-import { useMaterializedTables } from "@/hooks/use-materialized-tables";
 import { useWasmTables } from "@/hooks/use-wasm-tables";
-import {
-  isMaterializedTableIdentifier,
-  MATERIALIZED_SCHEMA,
-} from "@/lib/duckdb/materialized-tables";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
@@ -70,7 +65,6 @@ export function ConnectedDataPanel({
   showStoredSqlQueries = false,
 }: ConnectedDataPanelProps) {
   const connectedTables = useConnectedTables();
-  const { tables: materializedTables } = useMaterializedTables();
   const {
     tables: wasmTables,
     isLoading: isLoadingWasmTables,
@@ -188,24 +182,6 @@ export function ConnectedDataPanel({
     }
   };
 
-  const handleInsertMaterializedTable = (tableName: string) => {
-    const qualifiedName = `${MATERIALIZED_SCHEMA}.${tableName}`;
-    onInsertTable?.(qualifiedName);
-    if (mode === "popover") {
-      setIsOpen(false);
-    }
-  };
-
-  const handleSelectMaterialized = () => {
-    // Select the materialized schema - use a generic identifier
-    // The actual table selection happens via onInsertTable
-    const identifier = `materialized:${MATERIALIZED_SCHEMA}`;
-    onSelect(identifier);
-    if (mode === "popover") {
-      setIsOpen(false);
-    }
-  };
-
   const handleSelectWasm = () => {
     onSelect(DEFAULT_WASM_DB_IDENTIFIER);
     if (mode === "popover") {
@@ -287,7 +263,6 @@ export function ConnectedDataPanel({
 
   const renderDatabaseList = () => {
     const hasConnectedTables = connectedTables.length > 0;
-    const hasMaterializedTables = materializedTables.length > 0;
     const hasWasmTables = groupedWasmTables.length > 0;
     const isWasmSelected = !selectedDb || isWasmLocalIdentifier(selectedDb);
 
@@ -505,58 +480,6 @@ export function ConnectedDataPanel({
               </div>
             );
           })}
-        {/* Materialized Tables Section */}
-        {hasMaterializedTables && (
-          <>
-            <Separator />
-            <div className="space-y-1 mt-2">
-              <div
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
-                  selectedDb &&
-                    isMaterializedTableIdentifier(selectedDb) &&
-                    "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
-                  mode === "sidebar" && "hover:bg-sidebar-accent/50",
-                )}
-              >
-                <button
-                  type="button"
-                  className="flex items-center gap-2 flex-1 text-left cursor-pointer"
-                  onClick={handleSelectMaterialized}
-                >
-                  <Database className="h-4 w-4 shrink-0 text-sidebar-primary" />
-                  <span className="truncate">
-                    Materialized ({materializedTables.length})
-                  </span>
-                </button>
-              </div>
-
-              <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
-                {materializedTables.map((tableName, idx) => {
-                  const colors = [
-                    "bg-blue-400",
-                    "bg-purple-400",
-                    "bg-amber-400",
-                  ];
-                  const color = colors[idx % colors.length];
-                  return (
-                    <button
-                      key={tableName}
-                      type="button"
-                      className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-                      onClick={() => handleInsertMaterializedTable(tableName)}
-                    >
-                      <span
-                        className={cn("w-1.5 h-1.5 rounded-full", color)}
-                      ></span>
-                      <span className="truncate">{tableName}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        )}
       </div>
     );
   };
@@ -577,7 +500,7 @@ export function ConnectedDataPanel({
               type="button"
               variant="outline"
               size="icon"
-              className="h-11 w-11 rounded-full! border-border bg-accent/80 shadow-lg ring-1 ring-black/5 gap-1"
+              className="h-11 w-11 rounded-full! border-border dark:bg-accent/80 bg-accent shadow-lg ring-1 ring-black/5 dark:ring-white/10 gap-1"
               onClick={onToggleCollapse}
               aria-label="Expand explorer"
             >
@@ -647,11 +570,7 @@ export function ConnectedDataPanel({
   }
 
   // Popover mode: existing hover card behavior
-  if (
-    connectedTables.length === 0 &&
-    materializedTables.length === 0 &&
-    wasmTables.length === 0
-  ) {
+  if (connectedTables.length === 0 && wasmTables.length === 0) {
     return (
       <PromptInputHoverCard open={isOpen} onOpenChange={setIsOpen}>
         <Tooltip>
