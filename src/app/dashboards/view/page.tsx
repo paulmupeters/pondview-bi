@@ -1,6 +1,6 @@
 import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { useSearchParams } from '@/vite/next-navigation';
+import { useSearchParams } from "@/vite/next-navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { TextConfigDialog } from "@/components/text-config-dialog";
 import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
@@ -46,7 +46,11 @@ import type {
   DashboardChart,
   ResizeState,
 } from "../[dashboardId]/types";
-import { isCardConfig, isTableConfig, isTextConfig } from "../[dashboardId]/utils";
+import {
+  isCardConfig,
+  isTableConfig,
+  isTextConfig,
+} from "../[dashboardId]/utils";
 import { buildRows, groupConsecutiveMetricCards } from "../[dashboardId]/utils";
 
 const PREF_COLUMNS_PREFIX = "dashboard:columns:";
@@ -54,7 +58,11 @@ const PREF_AUTOFIT_PREFIX = "dashboard:auto-fit:";
 
 export default function DashboardViewPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="p-6 text-sm text-muted-foreground">Loading...</div>
+      }
+    >
       <DashboardViewPageContent />
     </Suspense>
   );
@@ -104,10 +112,18 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const savedColumns = await getPreference<number>(`${PREF_COLUMNS_PREFIX}${dashboardId}`);
-      const savedAutoFit = await getPreference<boolean>(`${PREF_AUTOFIT_PREFIX}${dashboardId}`);
+      const savedColumns = await getPreference<number>(
+        `${PREF_COLUMNS_PREFIX}${dashboardId}`,
+      );
+      const savedAutoFit = await getPreference<boolean>(
+        `${PREF_AUTOFIT_PREFIX}${dashboardId}`,
+      );
       if (cancelled) return;
-      if (typeof savedColumns === "number" && savedColumns >= 1 && savedColumns <= 6) {
+      if (
+        typeof savedColumns === "number" &&
+        savedColumns >= 1 &&
+        savedColumns <= 6
+      ) {
         setColumns(savedColumns);
       }
       if (typeof savedAutoFit === "boolean") {
@@ -126,7 +142,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       setLoading(true);
       try {
         const dashboards = await listDashboards();
-        const selected = dashboards.find((item) => item.id === dashboardId) ?? null;
+        const selected =
+          dashboards.find((item) => item.id === dashboardId) ?? null;
         if (!cancelled) {
           setDashboard(selected as Dashboard | null);
         }
@@ -145,7 +162,9 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   const refreshDashboardData = useCallback(async () => {
     try {
       const dashboardCharts = await listChartsByDashboard(dashboardId);
-      const sortedCharts = [...dashboardCharts].sort((a, b) => a.position - b.position);
+      const sortedCharts = [...dashboardCharts].sort(
+        (a, b) => a.position - b.position,
+      );
       const execution = await executeDashboardChartsWithFilters({
         dashboardId,
         charts: sortedCharts,
@@ -432,6 +451,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       <DashboardSlicersBar
         dashboardId={dashboardId}
         selectedChartId={selectedChartId}
+        charts={charts}
         onClearChartSelection={() => setSelectedChartId(null)}
       />
 
@@ -489,7 +509,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
               )
             ) : (
               <div className="p-3 text-sm text-muted-foreground">
-                Preview unavailable. The chart config or data could not be loaded.
+                Preview unavailable. The chart config or data could not be
+                loaded.
               </div>
             )}
           </div>

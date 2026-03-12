@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildMaterializationTableRefs,
   executeDashboardChartsWithFilters,
+  getRelevantTablesForChart,
   listMaterializedTablesForBackend,
   loadDashboardDimensionValues,
 } from "@/lib/dashboard/browser-filter-engine";
@@ -64,6 +65,31 @@ describe("browser-filter-engine", () => {
         tableName: "orders",
         sourceReference: '"main"."orders"',
       },
+    ]);
+  });
+
+  test("collects relevant tables across multi-hop joins", () => {
+    const tables = getRelevantTablesForChart("SELECT * FROM orders", [
+      {
+        leftTable: "orders",
+        leftColumn: "customer_id",
+        rightTable: "customers",
+        rightColumn: "id",
+        type: "left",
+      },
+      {
+        leftTable: "customers",
+        leftColumn: "region_id",
+        rightTable: "regions",
+        rightColumn: "id",
+        type: "left",
+      },
+    ]);
+
+    expect(Array.from(tables).sort()).toEqual([
+      "customers",
+      "orders",
+      "regions",
     ]);
   });
 
