@@ -16,6 +16,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { getRelevantTablesForChart } from "@/lib/dashboard/browser-filter-engine";
+import { readJoinDefsFromStorage } from "@/lib/joins/browser-storage";
 import {
   addSlicerToChart,
   addSlicerToDashboard,
@@ -38,10 +40,13 @@ type DashboardSlicer = {
 interface DashboardSlicersBarProps {
   dashboardId: string;
   selectedChartId?: string | null;
+  charts?: Array<{ id: string; sql: string }>;
   onClearChartSelection?: () => void;
 }
 
-function normalizeSlicer(row: DbDashboardSlicer | DbChartSlicer): DashboardSlicer {
+function normalizeSlicer(
+  row: DbDashboardSlicer | DbChartSlicer,
+): DashboardSlicer {
   return {
     id: row.id,
     field: row.field,
@@ -54,6 +59,7 @@ function normalizeSlicer(row: DbDashboardSlicer | DbChartSlicer): DashboardSlice
 export function DashboardSlicersBar({
   dashboardId,
   selectedChartId = null,
+  charts = [],
   onClearChartSelection,
 }: DashboardSlicersBarProps) {
   const { availableDimensions, filters, removeFilter, setActiveScope } =
@@ -101,8 +107,29 @@ export function DashboardSlicersBar({
     };
   }, [dashboardId, selectedChartId]);
 
-  const usedFields = useMemo(() => new Set(slicers.map((s) => s.field)), [slicers]);
-  const availableForSlicers = availableDimensions.filter(
+  const usedFields = useMemo(
+    () => new Set(slicers.map((s) => s.field)),
+    [slicers],
+  );
+
+  const relevantDimensions = useMemo(() => {
+    if (!selectedChartId) return availableDimensions;
+
+    const selectedChart = charts.find((c) => c.id === selectedChartId);
+    if (!selectedChart) return availableDimensions;
+
+    const joinDefs = readJoinDefsFromStorage();
+    const relevantTables = getRelevantTablesForChart(
+      selectedChart.sql,
+      joinDefs,
+    );
+
+    return availableDimensions.filter((dimension) =>
+      relevantTables.has(dimension.exploreName),
+    );
+  }, [availableDimensions, selectedChartId, charts]);
+
+  const availableForSlicers = relevantDimensions.filter(
     (dimension) => !usedFields.has(dimension.field),
   );
 
@@ -134,7 +161,9 @@ export function DashboardSlicersBar({
   const handleRemoveSlicer = async (slicerId: string) => {
     const slicer = slicers.find((item) => item.id === slicerId);
     if (slicer) {
-      const filterIndex = filters.findIndex((filter) => filter.field === slicer.field);
+      const filterIndex = filters.findIndex(
+        (filter) => filter.field === slicer.field,
+      );
       if (filterIndex >= 0) {
         removeFilter(filterIndex);
       }
@@ -231,7 +260,9 @@ export function DashboardSlicersBar({
                         }
                         const searchLower = addSlicerSearch.toLowerCase();
                         return (
-                          dimension.displayName.toLowerCase().includes(searchLower) ||
+                          dimension.displayName
+                            .toLowerCase()
+                            .includes(searchLower) ||
                           dimension.field.toLowerCase().includes(searchLower)
                         );
                       })

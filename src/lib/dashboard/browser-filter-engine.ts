@@ -121,6 +121,51 @@ export function buildMaterializationSignature(
   return `${chartSignature}__${joinSignature}`;
 }
 
+/**
+ * Returns the set of canonical table names relevant to a single chart,
+ * including all tables reachable through the join graph.
+ */
+export function getRelevantTablesForChart(
+  chartSql: string,
+  joinDefs: JoinDefinition[],
+): Set<string> {
+  const tables = new Set<string>();
+  const pending: string[] = [];
+  const refs = extractTableReferencesFromSql(chartSql);
+  for (const ref of refs) {
+    const tableName = canonicalTable(ref.tableName);
+    if (tableName && !tables.has(tableName)) {
+      tables.add(tableName);
+      pending.push(tableName);
+    }
+  }
+
+  while (pending.length > 0) {
+    const current = pending.shift();
+    if (!current) {
+      continue;
+    }
+
+    for (const joinDef of joinDefs) {
+      const left = canonicalTable(joinDef.leftTable);
+      const right = canonicalTable(joinDef.rightTable);
+      if (!left || !right) {
+        continue;
+      }
+      if (left === current && !tables.has(right)) {
+        tables.add(right);
+        pending.push(right);
+      }
+      if (right === current && !tables.has(left)) {
+        tables.add(left);
+        pending.push(left);
+      }
+    }
+  }
+
+  return tables;
+}
+
 export function buildMaterializationTableRefs(
   charts: Array<{ sql: string }>,
   joinDefs: JoinDefinition[],
