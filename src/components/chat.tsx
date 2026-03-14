@@ -963,7 +963,7 @@ export default function Chat({
                     }}
                     showStoredSqlQueries
                   />
-                  <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+                  <div className="relative flex-1 min-h-0 min-w-0 flex flex-col">
                     {isAiMode ? (
                       <ChatMessageThread
                         messages={messages}
@@ -1003,6 +1003,29 @@ export default function Chat({
                         </div>
                       </div>
                     )}
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 px-4 pb-4">
+                      <div className="pointer-events-auto w-full">
+                        {promptError ? (
+                          <p className="mb-2 text-xs text-destructive">
+                            {promptError}
+                          </p>
+                        ) : null}
+                        <PromptInputWrapper
+                          onSubmit={handlePromptSubmit}
+                          mode={promptMode}
+                          onModeChange={setPromptMode}
+                          pendingMode={
+                            status === "submitted" || status === "streaming"
+                              ? "ai"
+                              : null
+                          }
+                          status={status}
+                          compact
+                          showAiInput
+                          onCreateDashboard={handleOpenDashboardBuilder}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1028,25 +1051,7 @@ export default function Chat({
             <div className="h-[400px] p-6">{rightPanelContent}</div>
           </div>
         </div>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 px-4 pb-4">
-          <div className="pointer-events-auto mx-auto w-full max-w-5xl">
-            {promptError ? (
-              <p className="mb-2 text-xs text-destructive">{promptError}</p>
-            ) : null}
-            <PromptInputWrapper
-              onSubmit={handlePromptSubmit}
-              mode={promptMode}
-              onModeChange={setPromptMode}
-              pendingMode={
-                status === "submitted" || status === "streaming" ? "ai" : null
-              }
-              status={status}
-              compact
-              showAiInput
-              onCreateDashboard={handleOpenDashboardBuilder}
-            />
-          </div>
-        </div>
+
         <Dialog
           open={isDashboardBuilderOpen}
           onOpenChange={setIsDashboardBuilderOpen}

@@ -35,6 +35,28 @@ export function quoteIdentifier(value: string): string {
 
 const RESERVED_DUCKDB_NAMES = new Set(["main", "system", "temp", "temporary"]);
 
+function stripQueryString(identifier: string): string {
+  const queryIndex = identifier.indexOf("?");
+  return queryIndex >= 0 ? identifier.slice(0, queryIndex) : identifier;
+}
+
+function normalizeMotherduckIdentifier(identifier: string): {
+  attachIdentifier: string;
+} {
+  const trimmed = identifier.trim();
+  if (!trimmed.startsWith("md:")) {
+    return { attachIdentifier: trimmed };
+  }
+
+  const queryIndex = trimmed.indexOf("?");
+  if (queryIndex < 0) {
+    return { attachIdentifier: trimmed };
+  }
+
+  const baseIdentifier = trimmed.slice(0, queryIndex);
+  return { attachIdentifier: baseIdentifier };
+}
+
 function deriveAlias(connection: SourceConnectionConfig): string {
   if (connection.alias) {
     // Sanitize the explicitly provided alias to ensure it's a valid DuckDB identifier
@@ -47,7 +69,7 @@ function deriveAlias(connection: SourceConnectionConfig): string {
   }
 
   const identifier = connection.identifier ?? "";
-  const segments = identifier.split(/[/:]/).filter(Boolean);
+  const segments = stripQueryString(identifier).split(/[/:]/).filter(Boolean);
   const candidate = segments[segments.length - 1] || "source";
   const sanitized = candidate.replace(/[^A-Za-z0-9_]/g, "_");
   const withoutLeadingUnderscore = sanitized.replace(/^_+/, "");
@@ -90,6 +112,10 @@ export function buildAttachmentPlan(
 ): AttachmentPlan {
   const alias = deriveAlias(connection);
   const statements: string[] = [];
+  const motherduckConfig =
+    connection.type === "motherduck" && connection.identifier
+      ? normalizeMotherduckIdentifier(connection.identifier)
+      : null;
 
   const extension =
     connection.duckdbExtension || DEFAULT_EXTENSION_BY_SOURCE[connection.type];
@@ -99,7 +125,15 @@ export function buildAttachmentPlan(
     statements.push(`LOAD ${sanitizedExtension};`);
   }
 
-  statements.push(buildAttachStatement(connection, alias));
+  const attachConnection =
+    motherduckConfig === null
+      ? connection
+      : {
+          ...connection,
+          identifier: motherduckConfig.attachIdentifier,
+        };
+
+  statements.push(buildAttachStatement(attachConnection, alias));
 
   return {
     alias,

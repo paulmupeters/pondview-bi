@@ -96,6 +96,52 @@ describe("runQuery routing", () => {
     expect(result.columns).toEqual([{ name: "value" }]);
   });
 
+  test("routes MotherDuck identifiers through the server query endpoint", async () => {
+    let receivedSql: string | undefined;
+    let receivedIdentifier: string | undefined;
+    let receivedSignal: AbortSignal | undefined;
+
+    const runQuery = createRunQuery({
+      resolveBackend: () => "duckdb-http",
+      runServerDuckDbQuery: async (sql, dbIdentifier, signal) => {
+        receivedSql = sql;
+        receivedIdentifier = dbIdentifier;
+        receivedSignal = signal;
+        return {
+          rows: [{ company: "Stripe", valuation: "$95B" }],
+        };
+      },
+      runDuckDbHttp: async () => {
+        throw new Error("should not reach duckdb-http");
+      },
+      runBridge: async () => {
+        throw new Error("should not reach bridge");
+      },
+      runWasm: async () => {
+        throw new Error("should not reach wasm");
+      },
+      assertWasmCompatibleIdentifier: () => {},
+    });
+
+    const controller = new AbortController();
+    const result = await runQuery({
+      sql: "SELECT * FROM unicorns",
+      dbIdentifier: "md:my_db?motherduck_token=abc123",
+      signal: controller.signal,
+      backendPreference: "duckdb-http",
+    });
+
+    expect(receivedSql).toBe("SELECT * FROM unicorns");
+    expect(receivedIdentifier).toBe("md:my_db?motherduck_token=abc123");
+    expect(receivedSignal).toBe(controller.signal);
+    expect(result.backend).toBe("bridge");
+    expect(result.columns).toEqual([
+      { name: "company" },
+      { name: "valuation" },
+    ]);
+    expect(result.rows).toEqual([{ company: "Stripe", valuation: "$95B" }]);
+  });
+
   test("does not fallback when bridge execution fails", async () => {
     let wasmCalled = false;
 

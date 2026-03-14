@@ -19,7 +19,7 @@ An intelligent chat application that enables natural language interaction with y
 ### 💾 Multi-Database Support
 - **DuckDB Integration**: Native support for DuckDB databases
 - **MotherDuck Cloud**: Connect to MotherDuck cloud databases
-- **SQLite Support**: Local SQLite database for chat history
+- **SQLite Sources**: Query SQLite files through DuckDB attachments
 - **Flexible Data Sources**: Easy connection to various data sources
 
 ### 💬 Conversational Interface
@@ -42,7 +42,7 @@ An intelligent chat application that enables natural language interaction with y
 - **Code Editor**: CodeMirror 6 with SQL language support
 - **AI**: Vercel AI SDK v5 with OpenAI
 - **Database**: DuckDB (WASM + Node API), SQLite, MotherDuck
-- **ORM**: Drizzle ORM
+- **Persistence**: Sidecar JSON files and browser IndexedDB
 - **Runtime**: Bun (recommended) or Node.js
 
 ## Getting Started
@@ -74,7 +74,6 @@ npm install
 # Create a .env.local file
 OPENAI_API_KEY=your_openai_api_key
 MOTHERDUCK_TOKEN=your_motherduck_token  # Optional, for MotherDuck integration
-DATABASE_PATH=./sqlite.db              # Optional, custom SQLite path
 ```
 
 4. Run the development server:
@@ -145,17 +144,15 @@ bi-chat/
 │   │   ├── dynamic-chart.tsx # Chart visualization
 │   │   └── sql-*.tsx        # SQL-related components
 │   ├── lib/                  # Utility libraries
-│   │   ├── db/              # Database configuration (Drizzle)
+│   │   ├── db/              # Query router + adapter types
 │   │   ├── duckdb/          # DuckDB integration
 │   │   ├── filters/         # Cross-panel filter logic
 │   │   ├── joins/           # Join graph utilities
 │   │   └── utils.ts         # Shared utility functions
 │   ├── hooks/               # Custom React hooks
 │   └── types/               # Shared TypeScript types
-├── semantic-layer/           # Semantic model configuration
-│   ├── context/             # Business/domain context for AI
-│   ├── models/              # Source-to-table mappings
-│   └── joins.yml            # Global join graph
+├── docs/                    # Architecture notes and datasource context
+│   └── datasource-context/  # Optional business/domain context for AI SQL generation
 ├── public/                  # Static assets
 ├── index.html               # Vite entry HTML
 └── vite.config.ts           # Vite configuration
@@ -176,11 +173,6 @@ bun run serve:extension    # Start the extension sidecar server
 bun run lint               # Run Biome linter
 bun run format             # Format code with Biome
 bun run typecheck          # Type-check with tsc
-
-# Database
-bun run drizzle:generate   # Generate database migrations
-bun run drizzle:push       # Apply schema migrations
-bun run migrate            # Run migration script
 ```
 
 ### Key Components
@@ -200,23 +192,20 @@ bun run migrate            # Run migration script
 |---|---|---|
 | `OPENAI_API_KEY` | ✅ | API key for AI functionality |
 | `MOTHERDUCK_TOKEN` | Optional | Token for MotherDuck cloud integration |
-| `DATABASE_PATH` | Optional | Custom SQLite database path (default: `./sqlite.db`) |
 | `DUCKDB_PERSIST_PATH` | Optional | Path for persisting materialized DuckDB tables |
 | `DUCKDB_HTTP_HOST` | Optional | Host for the DuckDB HTTP adapter |
 | `DUCKDB_HTTP_PORT` | Optional | Port for the DuckDB HTTP adapter |
 
-### Semantic Layer
+### Dashboard Filtering
 
-The `semantic-layer/` directory holds lightweight configuration consumed by the AI and query engine:
+Dashboard filtering is browser-first:
 
-- **`context/context.md`**: Business/domain context injected into AI prompts
-- **`joins.yml`**: Global join graph for cross-table filter injection
-- **`models/sources.yml`**: Source-to-physical-table mappings and connection metadata
+- join definitions are edited in Settings and stored in `localStorage` under `bi.dashboard.joinDefs.v1`
+- chart SQL is rewritten in the browser with those joins when slicers are active
+- referenced tables are exposed through runtime-local `mat.*` aliases
+- simple table references become lightweight views, while harder references can fall back to direct refs or copied tables
 
-Browser-first dashboard filters use selective materialization:
-- simple reusable table refs are exposed as lightweight `mat.*` views,
-- filtered SQL can fall back to direct source refs when alias creation is unavailable,
-- physical `mat.*` tables remain a fallback for harder-to-reuse source refs.
+Optional datasource context for AI lives under `docs/datasource-context/` and is exposed through the datasource context tool.
 
 ## Contributing
 

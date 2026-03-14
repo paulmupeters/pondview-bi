@@ -287,13 +287,12 @@ export function DashboardFilterPane() {
 			)}
 
 			{/* Empty State */}
-			{availableDimensions.length === 0 && (
-				<p className="text-sm italic text-muted-foreground">
-					No filterable dimensions available. Charts must use the semantic layer to enable filtering.
-				</p>
-			)}
-		</div>
-	);
-}
-
+				{availableDimensions.length === 0 && (
+					<p className="text-sm italic text-muted-foreground">
+						No filterable dimensions available. Charts need detectable table references to enable dashboard filtering.
+					</p>
+				)}
+			</div>
+		);
+	}
 

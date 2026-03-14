@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const datasource = url.searchParams.get("datasource") ?? undefined;
 
-    const contextDir = join(process.cwd(), "semantic-layer", "context");
+    const contextDir = join(process.cwd(), "docs", "datasource-context");
     if (!existsSync(contextDir)) {
       return Response.json({ content: "" });
     }
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
 
     return Response.json({ content: combined });
   } catch (error) {
-    console.error("[Semantic Layer Context] Failed to read context:", error);
+    console.error("[Datasource Context] Failed to read context:", error);
     return Response.json(
       {
         error: "Failed to read context",

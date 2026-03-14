@@ -22,9 +22,6 @@ import * as chatRoute from "../app/api/chat/[chatId]/route";
 import * as legacyChatRoute from "../app/api/chat/route";
 import * as chatsRoute from "../app/api/chats/route";
 import * as dashboardChartsRoute from "../app/api/dashboard/[dashboardId]/charts/route";
-import * as dashboardDataRoute from "../app/api/dashboard/[dashboardId]/data/route";
-import * as dashboardDimensionValuesRoute from "../app/api/dashboard/[dashboardId]/dimension-values/route";
-import * as dashboardDimensionsRoute from "../app/api/dashboard/[dashboardId]/dimensions/route";
 import * as dashboardSlicersRoute from "../app/api/dashboard/[dashboardId]/slicers/route";
 import * as dashboardsIdRoute from "../app/api/dashboards/[dashboardId]/route";
 import * as dashboardsRoute from "../app/api/dashboards/route";
@@ -32,8 +29,6 @@ import * as duckdbConfigRoute from "../app/api/duckdb/config/route";
 import * as duckdbQueryRoute from "../app/api/duckdb/query/route";
 import * as duckdbSecretsRoute from "../app/api/duckdb/secrets/route";
 import * as duckdbTablesRoute from "../app/api/duckdb/tables/route";
-import * as materializedTablesRoute from "../app/api/semantic-layer/materialized-tables/route";
-import * as semanticSourcesRoute from "../app/api/semantic-layer/sources/route";
 import * as tablesRoute from "../app/api/tables/route";
 import * as uploadFileRoute from "../app/api/upload/[fileId]/route";
 import * as uploadRoute from "../app/api/upload/route";
@@ -322,39 +317,6 @@ const routes: Route[] = [
   },
   {
     method: "GET",
-    pattern: /^\/api\/dashboard\/([^/]+)\/data$/,
-    handler: (request, params) =>
-      dashboardDataRoute.GET(
-        request as any,
-        {
-          params: Promise.resolve({ dashboardId: params.dashboardId }),
-        } as any,
-      ),
-  },
-  {
-    method: "GET",
-    pattern: /^\/api\/dashboard\/([^/]+)\/dimensions$/,
-    handler: (request, params) =>
-      dashboardDimensionsRoute.GET(
-        request as any,
-        {
-          params: Promise.resolve({ dashboardId: params.dashboardId }),
-        } as any,
-      ),
-  },
-  {
-    method: "GET",
-    pattern: /^\/api\/dashboard\/([^/]+)\/dimension-values$/,
-    handler: (request, params) =>
-      dashboardDimensionValuesRoute.GET(
-        request as any,
-        {
-          params: Promise.resolve({ dashboardId: params.dashboardId }),
-        } as any,
-      ),
-  },
-  {
-    method: "GET",
     pattern: /^\/api\/duckdb\/config$/,
     handler: (request) => duckdbConfigRoute.GET(request as any),
   },
@@ -372,21 +334,6 @@ const routes: Route[] = [
     method: "GET",
     pattern: /^\/api\/duckdb\/secrets$/,
     handler: () => duckdbSecretsRoute.GET(),
-  },
-  {
-    method: "GET",
-    pattern: /^\/api\/semantic-layer\/sources$/,
-    handler: (request) => semanticSourcesRoute.GET(request as any),
-  },
-  {
-    method: "POST",
-    pattern: /^\/api\/semantic-layer\/sources$/,
-    handler: (request) => semanticSourcesRoute.POST(request as any),
-  },
-  {
-    method: "GET",
-    pattern: /^\/api\/semantic-layer\/materialized-tables$/,
-    handler: (request) => materializedTablesRoute.GET(request as any),
   },
   {
     method: "POST",

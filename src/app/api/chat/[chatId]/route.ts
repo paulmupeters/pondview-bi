@@ -12,13 +12,14 @@ import { CHAT_MODEL } from "@/ai/models";
 import { analysisPrompt } from "@/ai/prompts";
 import { tools } from "@/ai/tools/server";
 import type { ConnectedTable } from "@/lib/connected-tables";
-import type { messages } from "@/lib/db/schema";
 import {
   appendAssistantMessage,
   appendUserMessageTx,
   deleteChat,
   listMessagesByChatId,
 } from "@/lib/repositories/chat";
+
+type StoredMessageRow = Awaited<ReturnType<typeof listMessagesByChatId>>[number];
 
 export const runtime = "nodejs";
 // export const dynamic = "force-dynamic";
@@ -38,7 +39,7 @@ export async function GET(
   const rows = await listMessagesByChatId(chatId);
 
   const uiMessages: UIMessage[] = rows.map(
-    (row: typeof messages.$inferSelect) => {
+    (row: StoredMessageRow) => {
       return {
         id: row.id,
         role: row.role as UIMessage["role"],
