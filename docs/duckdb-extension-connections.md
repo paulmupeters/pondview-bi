@@ -45,14 +45,14 @@ To support an additional backend (MySQL, Google Sheets, etc.), follow these step
    - The materializer and metadata helpers already rely on those maps to issue `ATTACH` statements.
 
 3. **Descriptions & metadata**  
-   - When storing connected tables (localStorage/sources.yml), ensure the connection entry includes `type`, `identifier`, and `duckdbExtension`.  
-   - `connectedTableToSources()` and `updateSourcesFromConnectedTable()` already propagate those fields.
+   - When storing connected tables, ensure the connection entry includes `type`, `identifier`, and `duckdbExtension`.  
+   - Browser mode currently persists connected-source metadata in local storage rather than syncing it into YAML.
 
 4. **Query rewriting**  
    - The current `rewriteSqlForAttachedDatabase()` will prepend `alias.schema.table` heuristically. This works for most cases; adjust the regex if your source uses different naming conventions.
 
 5. **Tests & documentation**  
-   - Update `semantic-layer/README.md` to mention the new extension and any required env vars.  
+   - Update the relevant docs under `docs/` to mention the new extension and any required env vars.  
    - Add integration tests or manual runs using a PostgreSQL/MySQL/Google Sheets source to verify the attach/ query/ detach lifecycle completes cleanly.
 
 ## Example: PostgreSQL
@@ -73,4 +73,3 @@ To support an additional backend (MySQL, Google Sheets, etc.), follow these step
 - If you need write access, remove `readOnly: true` from the `SourceConnectionConfig` and drop the `READ_ONLY` flag from the `ATTACH` clause.
 
 With this approach you can eventually support any DuckDB extension by teaching the detection logic about the identifier format and registering the extension once.
-

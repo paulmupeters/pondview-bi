@@ -98,12 +98,6 @@ export function writeConnectedTablesToStorage(tables: ConnectedTable[]) {
   }
 }
 
-export async function updateSemanticLayerSources(
-  _entry: ConnectedTable,
-): Promise<void> {
-  // Semantic layer sync is deferred in browser mode.
-}
-
 export async function appendConnectedTable(
   entry: ConnectedTable,
 ): Promise<void> {
@@ -111,7 +105,7 @@ export async function appendConnectedTable(
     return;
   }
 
-  // Store in localStorage (semantic-layer sync is deferred in browser mode)
+  // Store in localStorage; browser mode does not sync connected sources to YAML.
   const storageEntry: ConnectedTable = {
     type: entry.type,
     connectionId: entry.connectionId,

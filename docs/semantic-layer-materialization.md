@@ -1,78 +1,51 @@
-# Materialization Architecture (Context + Joins)
+# Dashboard Materialization
 
-This project no longer uses semantic explore YAML models, query compilation, or model-edit APIs.
+The current dashboard path is browser-first. It does not depend on checked-in semantic-layer YAML.
 
-The runtime model is now:
+## Runtime Model
 
-- `semantic-layer/context/context.md` for AI/business context
-- `semantic-layer/models/sources.yml` for physical source mappings and attachment metadata
-- `semantic-layer/joins.yml` for global join definitions
-- per-table materialization into DuckDB schema `mat`
+- Dashboard join definitions are edited in Settings and stored in browser `localStorage` under `bi.dashboard.joinDefs.v1`.
+- Chart SQL is inspected in the browser to find table references.
+- When filters are active, the dashboard runtime creates per-table aliases in DuckDB schema `mat`.
+- The filter engine rewrites chart SQL with a filtered base CTE and join-path expansion.
 
 ## Core Files
 
-- Materializer: `src/lib/materialization/table-materializer.ts`
-- Materialized query runner: `src/lib/materialization/query.ts`
-- Join loader/path resolver: `src/lib/joins/loader.ts`
-- Filter SQL engine: `src/lib/filters/apply-filters.ts`
+- Browser filter engine: `src/lib/dashboard/browser-filter-engine.ts`
+- Filter SQL rewriter: `src/lib/filters/apply-filters.ts`
 - SQL table parser: `src/lib/filters/parse-tables.ts`
+- Join storage: `src/lib/joins/browser-storage.ts`
+- Dashboard page execution: `src/app/dashboards/view/page.tsx`
 
-## Materialization Schema and Tracking
+## Materialization Strategies
 
-Materialized tables are written to schema `mat`:
+Per table reference, the browser runtime chooses one of three strategies:
 
-```sql
-CREATE OR REPLACE TABLE "mat"."orders" AS
-SELECT * FROM <source reference>;
-```
+1. `view`
+   For simple reusable references such as `main.orders`, create `CREATE OR REPLACE VIEW "mat"."orders" AS SELECT * FROM ...`.
+2. `direct`
+   For references that should be used as-is, skip alias creation and point filter rewriting at the original source reference.
+3. `table-materialize`
+   For harder-to-reuse references, create `CREATE OR REPLACE TABLE "mat"."orders" AS SELECT * FROM ...`.
 
-Runs are tracked in:
+These aliases are cached per dashboard, backend, and runtime fingerprint.
 
-```sql
-CREATE TABLE IF NOT EXISTS main.table_materialization_runs (
-  table_name   TEXT PRIMARY KEY,
-  source_name  TEXT NOT NULL,
-  source_hash  TEXT NOT NULL,
-  target_table TEXT NOT NULL,
-  row_count    BIGINT,
-  updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
+## Filter Execution
 
-The hash is computed from source config (`sources.yml`) metadata. If unchanged, rebuild is skipped.
+When dashboard or chart filters are present:
 
-## Source Attachments
+1. The dashboard runtime ensures the relevant `mat.*` aliases exist.
+2. `applyFiltersToSql(...)` rewrites the chart SQL.
+3. Same-table filters apply to the base alias.
+4. Cross-table filters walk the join graph stored in browser settings and inject `LEFT JOIN` steps as needed.
+5. If filtered execution fails, the dashboard falls back to the chart's stored SQL.
 
-`sources.yml` can define optional connection metadata per source:
+## Dimension Loading
 
-```yaml
-version: 1
-sources:
-  - name: orders
-    table: main.orders
-    connection:
-      type: motherduck
-      identifier: md:my_db
-      alias: orders_source
-      readOnly: true
-      duckdbExtension: motherduck
-```
+- Available slicer dimensions come from `loadDashboardDimensions(...)` in the browser filter engine.
+- Slicer value lookups come from `loadDashboardDimensionValues(...)`.
+- Both paths reuse the same runtime alias/materialization logic as chart execution.
 
-Attachment statements are generated via `src/lib/duckdb/duckdb-attachments.ts` (`INSTALL`/`LOAD` + `ATTACH`, plus cleanup `DETACH`).
+## AI Context
 
-## Dashboard Filter Execution
-
-For dashboard data requests:
-
-1. tables referenced by chart SQL are detected,
-2. those tables (plus join-neighbor tables) are materialized into `mat.*`,
-3. dashboard filters are applied by rewriting chart SQL through `applyFiltersToSql(...)`,
-4. filtered SQL is executed against the materialization DuckDB runtime.
-
-Same-table filters and cross-table filters are supported. Cross-table filters use `joins.yml` path resolution.
-
-## Runtime Notes
-
-- Materialization uses in-process DuckDB Node API.
-- `DUCKDB_PERSIST_PATH` can persist the materialized runtime DB to disk.
-- If unset, materialization state is in-memory.
+Datasource-specific business context is no longer stored in `semantic-layer/`. It now lives in `docs/datasource-context/` and is read by the datasource context tool/API.

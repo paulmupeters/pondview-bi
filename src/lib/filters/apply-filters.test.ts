@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { applyFiltersToSql } from "@/lib/filters/apply-filters";
-import type { JoinDefinition } from "@/lib/joins/loader";
+import type { JoinDefinition } from "@/lib/joins/graph";
 import type { Filter } from "@/lib/types/filters";
 
 describe("applyFiltersToSql", () => {

@@ -24,8 +24,8 @@ import {
   runBridgeQuery,
 } from "@/lib/bridge/pondview-bridge";
 import {
-  readConnectedTablesFromStorage,
   type ConnectedTable,
+  readConnectedTablesFromStorage,
 } from "@/lib/connected-tables";
 import {
   buildAttachmentPlan,
@@ -33,6 +33,7 @@ import {
 } from "@/lib/duckdb/duckdb-attachments";
 import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
 import { rewriteSqlForAttachedDatabase } from "@/lib/duckdb/rewrite-sql";
+import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 import { runQuery } from "@/lib/sql/run-query";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
@@ -41,7 +42,6 @@ import {
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
 import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
-import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -80,10 +80,8 @@ const _SQL_SAMPLE_LINES: {
     content: (
       <>
         count(
-        <span className="text-purple-600 font-bold">
-          DISTINCT
-        </span> user_id) <span className="text-purple-600 font-bold">AS</span>{" "}
-        active_users
+        <span className="text-purple-600 font-bold">DISTINCT</span> user_id){" "}
+        <span className="text-purple-600 font-bold">AS</span> active_users
       </>
     ),
   },
@@ -208,9 +206,9 @@ export function DuckdbRepl({
 
     // If there's a connected external entry, wrap the query with ATTACH / DETACH
     if (
-      connectedEntry &&
-      connectedEntry.databasePath &&
-      connectedEntry.type !== "duckdb"
+      connectedEntry?.databasePath &&
+      connectedEntry.type !== "duckdb" &&
+      connectedEntry.type !== "motherduck"
     ) {
       const connectionConfig: SourceConnectionConfig = {
         type: connectedEntry.type,

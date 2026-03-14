@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const readSkillsMdTool = tool({
   description:
-    "Read the business logic documentation (skills.md) for a datasource. Call this FIRST before writing any SQL to understand mandatory filters, table mappings, business rules, and quirks.",
+    "Read datasource business context before writing SQL so you understand required filters, table mappings, business rules, and quirks.",
   inputSchema: z.object({
     datasource: z
       .string()

@@ -18,6 +18,7 @@ import {
   buildPostgresConnectionString,
   type PostgresUrlComponents,
 } from "@/lib/duckdb/path";
+import { runQuery } from "@/lib/sql/run-query";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 
@@ -54,32 +55,32 @@ const DATABASE_OPTIONS: Array<{
   value: Exclude<DatabaseType, null>;
   description?: string;
 }> = [
-    {
-      label: "Postgres",
-      value: "postgres",
-      description: "Connect with a Postgres database",
-    },
-    {
-      label: "MotherDuck",
-      value: "motherduck",
-      description: "Connect with a MotherDuck database",
-    },
-    {
-      label: "MySQL",
-      value: "mysql",
-      description: "Connect with a MySQL database",
-    },
-    {
-      label: "SQLite",
-      value: "sqlite",
-      description: "Attach a SQLite database file",
-    },
-    // {
-    //   label: "Custom Extension",
-    //   value: "extension",
-    //   description: "Install + attach a DuckDB extension (advanced)",
-    // },
-  ];
+  {
+    label: "Postgres",
+    value: "postgres",
+    description: "Connect with a Postgres database",
+  },
+  {
+    label: "MotherDuck",
+    value: "motherduck",
+    description: "Connect with a MotherDuck database",
+  },
+  {
+    label: "MySQL",
+    value: "mysql",
+    description: "Connect with a MySQL database",
+  },
+  {
+    label: "SQLite",
+    value: "sqlite",
+    description: "Attach a SQLite database file",
+  },
+  // {
+  //   label: "Custom Extension",
+  //   value: "extension",
+  //   description: "Install + attach a DuckDB extension (advanced)",
+  // },
+];
 
 const resolveDuckdbExtension = (dbType: DatabaseType): string | undefined => {
   switch (dbType) {
@@ -335,6 +336,16 @@ export function ConnectDataDialog({
         if (motherduckToken.trim()) {
           dbPath = `${dbPath}?motherduck_token=${encodeURIComponent(motherduckToken.trim())}`;
         }
+        const schemaResult = await runQuery({
+          sql: `SELECT DISTINCT table_schema FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') ORDER BY 1`,
+          dbIdentifier: dbPath,
+        });
+        const fetchedSchemas = schemaResult.rows
+          .map((r) => String(r.table_schema ?? ""))
+          .filter(Boolean);
+        setSchemas(fetchedSchemas);
+        setHasConnected(true);
+        return;
       } else {
         dbPath = databasePath.trim();
       }
@@ -430,6 +441,17 @@ export function ConnectDataDialog({
           if (motherduckToken.trim()) {
             dbPath = `${dbPath}?motherduck_token=${encodeURIComponent(motherduckToken.trim())}`;
           }
+          const safeSchema = schema.replace(/'/g, "''");
+          const tableResult = await runQuery({
+            sql: `SELECT table_name FROM information_schema.tables WHERE table_schema = '${safeSchema}' AND table_type = 'BASE TABLE' ORDER BY table_name LIMIT 20`,
+            dbIdentifier: dbPath,
+          });
+          setSchemaTablesPreview(
+            tableResult.rows
+              .map((r) => String(r.table_name ?? ""))
+              .filter(Boolean),
+          );
+          return;
         } else if (selectedDatabase === "sqlite") {
           dbPath = `sqlite:${sqlitePath.trim()}`;
         } else {
@@ -873,7 +895,7 @@ export function ConnectDataDialog({
         <div className="space-y-3">
           <h3 className="text-sm font-semibold">MotherDuck</h3>
           <Input
-            placeholder="Database name (leave blank for default)"
+            placeholder="Database name (e.g. my_db)"
             value={databasePath}
             onChange={(e) => setDatabasePath(e.target.value)}
           />
@@ -883,6 +905,12 @@ export function ConnectDataDialog({
             value={motherduckToken}
             onChange={(e) => setMotherduckToken(e.target.value)}
           />
+          <p className="text-xs text-muted-foreground">
+            Paste an access token to skip browser login. If you leave this
+            blank, MotherDuck auth is triggered by the DuckDB process, so the
+            login link and device code will appear in your local DuckDB shell or
+            HTTP server logs instead of this dialog.
+          </p>
         </div>
       );
     }
@@ -1108,69 +1136,69 @@ export function ConnectDataDialog({
               {/* Step 1: Source type */}
               {!selectedDatabase && (
                 <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      Choose a data source to connect. The selected DuckDB
-                      extension will be installed and loaded on the active
-                      runtime.
-                    </p>
-                    {renderDatabaseSelector()}
+                  <p className="text-sm text-muted-foreground">
+                    Choose a data source to connect. The selected DuckDB
+                    extension will be installed and loaded on the active
+                    runtime.
+                  </p>
+                  {renderDatabaseSelector()}
+                </div>
+              )}
+
+              {/* Selected source + connection form */}
+              {selectedDatabase && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold capitalize">
+                      {DATABASE_OPTIONS.find(
+                        (o) => o.value === selectedDatabase,
+                      )?.label ?? selectedDatabase}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setSelectedDatabase(null);
+                        setHasConnected(false);
+                        setSchemas([]);
+                        setSelectedSchema("");
+                        setSchemaTablesPreview([]);
+                        setErrorMessage(null);
+                      }}
+                    >
+                      ← Back
+                    </button>
                   </div>
-                )}
 
-                {/* Selected source + connection form */}
-                {selectedDatabase && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold capitalize">
-                        {DATABASE_OPTIONS.find(
-                          (o) => o.value === selectedDatabase,
-                        )?.label ?? selectedDatabase}
-                      </span>
-                      <button
-                        type="button"
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => {
-                          setSelectedDatabase(null);
-                          setHasConnected(false);
-                          setSchemas([]);
-                          setSelectedSchema("");
-                          setSchemaTablesPreview([]);
-                          setErrorMessage(null);
-                        }}
-                      >
-                        ← Back
-                      </button>
-                    </div>
+                  {renderConnectionForm()}
 
-                    {renderConnectionForm()}
+                  {errorMessage && (
+                    <p className="text-sm text-destructive">{errorMessage}</p>
+                  )}
 
-                    {errorMessage && (
-                      <p className="text-sm text-destructive">{errorMessage}</p>
-                    )}
+                  {!hasConnected && (
+                    <Button
+                      type="button"
+                      disabled={isConnectDisabled || isLoadingSchemas}
+                      onClick={handleConnectClick}
+                      className="w-full"
+                    >
+                      {isLoadingSchemas ? "Connecting…" : "Connect"}
+                    </Button>
+                  )}
 
-                    {!hasConnected && (
-                      <Button
-                        type="button"
-                        disabled={isConnectDisabled || isLoadingSchemas}
-                        onClick={handleConnectClick}
-                        className="w-full"
-                      >
-                        {isLoadingSchemas ? "Connecting…" : "Connect"}
-                      </Button>
-                    )}
-
-                    {hasConnected && (
-                      <>
-                        <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-                          <CheckCircleIcon className="h-4 w-4" />
-                          Connected
-                        </div>
-                        {renderSchemaAndTableSelection()}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
+                  {hasConnected && (
+                    <>
+                      <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+                        <CheckCircleIcon className="h-4 w-4" />
+                        Connected
+                      </div>
+                      {renderSchemaAndTableSelection()}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Footer (only shown in enabled state and when something is selected) */}

@@ -10,7 +10,7 @@ function parseFrontmatterName(content: string): string | undefined {
 
 export const readSkillsMdToolServer = tool({
   description:
-    "Read the business logic documentation (skills.md) for a datasource. Call this FIRST before writing any SQL to understand mandatory filters, table mappings, business rules, and quirks.",
+    "Read datasource business context before writing SQL so you understand required filters, table mappings, business rules, and quirks.",
   inputSchema: z.object({
     datasource: z
       .string()
@@ -20,7 +20,7 @@ export const readSkillsMdToolServer = tool({
       ),
   }),
   execute: async ({ datasource }) => {
-    const contextDir = join(process.cwd(), "semantic-layer", "context");
+    const contextDir = join(process.cwd(), "docs", "datasource-context");
 
     if (!existsSync(contextDir)) {
       return { content: "No business logic documentation found." };
