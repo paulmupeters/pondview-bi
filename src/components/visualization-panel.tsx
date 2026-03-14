@@ -71,15 +71,17 @@ export function VisualizationPanel({
         <div className="flex-1 flex flex-col min-h-0 bg-background border border-border shadow-xl">
           {/* Visualization Display */}
           <div className="flex-1 overflow-y-auto p-0 min-h-0">
-            <SqlAnalysisDisplay
-              key={currentViz.id}
-              data={currentViz.data}
-              stage={currentViz.stage}
-              progress={currentViz.progress}
-              showStageIndicator={true}
-              className="w-full"
-              artifactId={currentViz.id}
-            />
+            <div className="min-h-full flex flex-col items-center justify-center">
+              <SqlAnalysisDisplay
+                key={currentViz.id}
+                data={currentViz.data}
+                stage={currentViz.stage}
+                progress={currentViz.progress}
+                showStageIndicator={true}
+                className="w-full"
+                artifactId={currentViz.id}
+              />
+            </div>
           </div>
         </div>
       )}

@@ -11,9 +11,7 @@ import {
 import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
-  useCallback,
   useEffect,
-  useRef,
   useState,
 } from "react";
 import { CardConfigDialog } from "@/components/card-config-dialog";
@@ -45,7 +43,8 @@ export function SortableChartCard({
   onSqlUpdate,
   totalColumns,
   isInGroup: _isInGroup = false,
-  onResizeChange,
+  onResizeOpen,
+  previewColSpan,
   isSelected = false,
   onSelect,
   onPreviewChart,
@@ -53,36 +52,31 @@ export function SortableChartCard({
   const appliedFilterCount = chart.appliedFiltersCount ?? 0;
   const [editedSql, setEditedSql] = useState(chart.sql);
   const [isSaving, setIsSaving] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
-  const [tempColSpan, setTempColSpan] = useState<number | null>(null);
-  const [resizeStartX, setResizeStartX] = useState(0);
-  const [resizeStartWidth, setResizeStartWidth] = useState(0);
-  const [pointerId, setPointerId] = useState<number | null>(null);
-  const resizeRef = useRef<HTMLDivElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
   const isExpanded = expandedSqlChartId === chart.id;
 
   // Get colSpan from config, default to 1
   const currentColSpan =
     config &&
     !isCardConfig(config) &&
-    !isTableConfig(config) &&
     !isTextConfig(config) &&
     "colSpan" in config
-      ? ((config as Config).colSpan ?? 1)
+      ? ((config as Config | TableConfig).colSpan ?? 1)
       : 1;
 
-  const pendingColSpan = Math.min(
+  const displayColSpan = Math.min(
     totalColumns,
-    Math.max(1, tempColSpan ?? currentColSpan),
+    Math.max(1, previewColSpan ?? currentColSpan),
   );
-  const displayColSpan = pendingColSpan;
 
   const isChart =
     config &&
     !isCardConfig(config) &&
     !isTableConfig(config) &&
     !isTextConfig(config);
+  const isTable = Boolean(config && isTableConfig(config));
+  const isResizable = Boolean(
+    config && !isCardConfig(config) && !isTextConfig(config),
+  );
   const canPreview = Boolean(config && (isChart || isTableConfig(config)));
   const {
     attributes,
@@ -103,102 +97,6 @@ export function SortableChartCard({
       setEditedSql(chart.sql);
     }
   }, [isExpanded, chart.sql]);
-
-  // Resize handlers
-  const handleResizeStart = useCallback(
-    (e: React.PointerEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsResizing(true);
-      setResizeStartX(e.clientX);
-      setPointerId(e.pointerId);
-      if (cardRef.current) {
-        setResizeStartWidth(cardRef.current.getBoundingClientRect().width);
-      }
-      setTempColSpan(currentColSpan);
-      onResizeChange?.(currentColSpan);
-      if (resizeRef.current) {
-        resizeRef.current.setPointerCapture(e.pointerId);
-      }
-    },
-    [currentColSpan, onResizeChange],
-  );
-
-  const handleResizeMove = useCallback(
-    (e: PointerEvent) => {
-      if (!isResizing || !cardRef.current) return;
-
-      const cardElement = cardRef.current;
-      const gridContainer = cardElement.closest(".grid") as HTMLElement;
-      if (!gridContainer) return;
-
-      const gridRect = gridContainer.getBoundingClientRect();
-      const gridGap = 16; // gap-4 = 16px (md:gap-4)
-      const gridColumnWidth =
-        (gridRect.width - gridGap * (totalColumns - 1)) / totalColumns;
-
-      // Calculate new width based on mouse movement
-      const deltaX = e.clientX - resizeStartX;
-      const newWidth = Math.max(gridColumnWidth, resizeStartWidth + deltaX);
-
-      // Convert width to column span
-      // For S columns: width = S * columnWidth + (S-1) * gap
-      // Solving for S: S = (width + gap) / (columnWidth + gap)
-      const newColSpan = Math.max(
-        1,
-        Math.min(
-          totalColumns,
-          Math.round((newWidth + gridGap) / (gridColumnWidth + gridGap)),
-        ),
-      );
-
-      setTempColSpan(newColSpan);
-      onResizeChange?.(newColSpan);
-    },
-    [isResizing, resizeStartX, resizeStartWidth, totalColumns, onResizeChange],
-  );
-
-  const handleResizeEnd = useCallback(async () => {
-    if (
-      tempColSpan !== null &&
-      tempColSpan !== currentColSpan &&
-      isChart &&
-      config
-    ) {
-      const updatedConfig = { ...(config as Config), colSpan: tempColSpan };
-      await onConfigChange(JSON.stringify(updatedConfig));
-    }
-    setIsResizing(false);
-    setTempColSpan(null);
-    onResizeChange?.(null);
-    if (resizeRef.current && pointerId !== null) {
-      resizeRef.current.releasePointerCapture(pointerId);
-    }
-    setPointerId(null);
-  }, [
-    tempColSpan,
-    currentColSpan,
-    isChart,
-    config,
-    onConfigChange,
-    pointerId,
-    onResizeChange,
-  ]);
-
-  useEffect(() => {
-    if (isResizing) {
-      const handleMove = (e: PointerEvent) => handleResizeMove(e);
-      const handleEnd = () => void handleResizeEnd();
-
-      window.addEventListener("pointermove", handleMove);
-      window.addEventListener("pointerup", handleEnd);
-
-      return () => {
-        window.removeEventListener("pointermove", handleMove);
-        window.removeEventListener("pointerup", handleEnd);
-      };
-    }
-  }, [isResizing, handleResizeMove, handleResizeEnd]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -223,22 +121,17 @@ export function SortableChartCard({
     }
   };
 
-  const colSpanClass = isChart
+  const colSpanClass = isResizable
     ? getColSpanClass(displayColSpan, totalColumns)
     : "";
 
   return (
     <div
-      ref={(node) => {
-        setNodeRef(node);
-        if (node) {
-          cardRef.current = node;
-        }
-      }}
+      ref={setNodeRef}
       style={style}
       onClick={handleCardClick}
       data-chart-card-id={chart.id}
-      className={`group relative flex flex-col rounded-xl border border-border bg-card shadow-md p-4 md:p-2 ring-1 ring-inset ${colSpanClass} ${isResizing ? "ring-primary/50" : isSelected ? "ring-primary bg-primary/5" : "ring-transparent"}`}
+      className={`group relative flex flex-col rounded-xl border border-border bg-card shadow-md p-4 md:p-2 ring-1 ring-inset ${colSpanClass} ${previewColSpan !== null ? "ring-primary/50" : isSelected ? "ring-primary bg-primary/5" : "ring-transparent"}`}
     >
       <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
         <button
@@ -421,7 +314,7 @@ export function SortableChartCard({
             takeaway={config.takeaway}
             className="w-full h-full flex flex-col border-0 shadow-none"
           />
-        ) : isTableConfig(config) && rows.length > 0 ? (
+        ) : isTable && rows.length > 0 ? (
           <div className="w-full">
             <SqlResultsTable
               dataOverride={{
@@ -453,19 +346,19 @@ export function SortableChartCard({
       ) : (
         <div className="text-xs text-muted-foreground">No data</div>
       )}
-      {isChart && (
-        <div
-          ref={resizeRef}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            handleResizeStart(e);
+      {isResizable && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onResizeOpen?.(chart.id, currentColSpan);
           }}
-          className="absolute bottom-0 right-0 cursor-nwse-resize opacity-0 transition-opacity group-hover:opacity-100 z-40 p-2 bg-background/80 rounded-tl-md"
-          style={{ cursor: isResizing ? "nwse-resize" : "nwse-resize" }}
-          title="Drag to resize chart width"
+          className="absolute bottom-0 right-0 opacity-0 transition-opacity group-hover:opacity-100 z-40 p-2 bg-background/80 rounded-tl-md"
+          title={`Resize ${isTable ? "table" : "chart"} width`}
         >
           <MoveDiagonal2 className="h-4 w-4 text-muted-foreground" />
-        </div>
+        </button>
       )}
       {isExpanded && (
         <div className="mt-4 border-t pt-4 transition-all duration-200">

@@ -223,6 +223,7 @@ export function DashboardSlicersBar({
   return (
     <div
       ref={containerRef}
+      data-slicer-bar
       style={
         loading && reservedHeight > 0
           ? { minHeight: reservedHeight }

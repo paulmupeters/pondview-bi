@@ -173,6 +173,13 @@ export const tableConfigSchema = z
       .enum(["asc", "desc"])
       .describe("Default sort direction")
       .optional(),
+    colSpan: z
+      .number()
+      .int()
+      .min(1)
+      .max(6)
+      .describe("Number of grid columns this table should span")
+      .optional(),
   })
   .describe("Table configuration object for tabular data display");
 

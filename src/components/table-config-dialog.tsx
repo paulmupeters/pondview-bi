@@ -47,6 +47,7 @@ export function TableConfigDialog({
       takeaway: (formData.get("takeaway") as string) || undefined,
       sortColumn: sortColumn || undefined,
       sortDirection: sortDirection || undefined,
+      colSpan: config?.colSpan,
     };
 
     onConfigChange(newConfig);
