@@ -495,7 +495,13 @@ export function SqlAnalysisDisplay({
 
       {data && activeView === "table" && (
         <div className="group relative">
-          <SqlResultsTable dataOverride={selectedForTable} expandable />
+          <SqlResultsTable
+            dataOverride={selectedForTable}
+            expandable
+            query={data.query}
+            dbIdentifier={data.dbIdentifier}
+            backendPreference={data.sqlBackend ?? undefined}
+          />
         </div>
       )}
 

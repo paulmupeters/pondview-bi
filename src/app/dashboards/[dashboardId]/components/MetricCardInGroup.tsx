@@ -51,8 +51,11 @@ export function MetricCardInGroup({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex-1 flex flex-col p-4 md:p-2 relative group/item transition-colors ${
-        isSelected ? "bg-primary/5 ring-1 ring-primary/40" : ""
+      data-chart-group-card-id={chart.id}
+      className={`flex-1 flex flex-col p-4 md:p-2 relative group/item transition-colors ring-1 ring-inset ${
+        isSelected
+          ? "bg-primary/5 ring-primary/40"
+          : "bg-transparent ring-transparent"
       }`}
     >
       <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-30">
@@ -83,7 +86,8 @@ export function MetricCardInGroup({
       {chart.filtersApplied && appliedFilterCount > 0 && isFirst && (
         <div className="absolute left-1/2 top-2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100">
           <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-            {appliedFilterCount} filter{appliedFilterCount !== 1 ? "s" : ""} applied
+            {appliedFilterCount} filter{appliedFilterCount !== 1 ? "s" : ""}{" "}
+            applied
           </span>
         </div>
       )}

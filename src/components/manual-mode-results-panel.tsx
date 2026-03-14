@@ -340,6 +340,9 @@ export function ManualModeResultsPanel({
               <SqlResultsTable
                 className="w-full h-full"
                 expandable
+                query={sqlResult.sql}
+                dbIdentifier={selectedDbIdentifier}
+                backendPreference={sqlResult.backend ?? undefined}
                 dataOverride={{
                   stage: "complete",
                   columns: sqlResult.columns,
