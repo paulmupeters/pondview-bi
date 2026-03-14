@@ -1,4 +1,5 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { type ChatTransport, DirectChatTransport } from "ai";
 import { Pencil } from "lucide-react";
 import { nanoid } from "nanoid";
@@ -27,7 +28,10 @@ import {
   getRandomVerbAiIsThinking,
   showRandomAnimation,
 } from "@/lib/animations";
-import { useExecuteSqlRawOutputPreference } from "@/lib/chat-display-preferences";
+import {
+  useExecuteSqlRawOutputPreference,
+  useShowToolCallsPreference,
+} from "@/lib/chat-display-preferences";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   resolveSqlBackend,
@@ -238,6 +242,7 @@ export default function Chat({
   const executeSqlArtifactType = "data-execute-sql";
   const [animationFrame, setAnimationFrame] = useState("");
   const [verbAiIsThinking, setVerbAiIsThinking] = useState("is thinking");
+  const showToolCalls = useShowToolCallsPreference();
   const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
   const {
     visualizations,
@@ -882,10 +887,10 @@ export default function Chat({
         </div>
       </div>
       <div
-        aria-hidden={!isAiMode || isDashboardBuilderOpen}
+        aria-hidden={!isAiMode}
         className={cn(
           "absolute inset-x-0 bottom-0 top-9 flex flex-col transition-all duration-300 ease-out",
-          isAiMode && !isDashboardBuilderOpen
+          isAiMode
             ? "opacity-100 translate-y-0 pointer-events-auto"
             : "opacity-0 translate-y-2 pointer-events-none",
         )}
@@ -896,10 +901,10 @@ export default function Chat({
         />
       </div>
       <div
-        aria-hidden={isAiMode || isDashboardBuilderOpen}
+        aria-hidden={isAiMode}
         className={cn(
           "absolute inset-x-0 bottom-0 top-9 flex flex-col transition-all duration-300 ease-out",
-          isAiMode || isDashboardBuilderOpen
+          isAiMode
             ? "opacity-0 translate-y-2 pointer-events-none"
             : "opacity-100 translate-y-0 pointer-events-auto",
         )}
@@ -911,24 +916,6 @@ export default function Chat({
           onChartConfigChange={setManualChartConfig}
           onAddToChatAction={handleAddSqlResultToChat}
           selectedDbIdentifier={selectedDb}
-        />
-      </div>
-      <div
-        aria-hidden={!isDashboardBuilderOpen}
-        className={cn(
-          "absolute inset-x-0 bottom-0 top-9 flex flex-col transition-all duration-300 ease-out",
-          isDashboardBuilderOpen
-            ? "opacity-100 translate-y-0 pointer-events-auto"
-            : "opacity-0 translate-y-2 pointer-events-none",
-        )}
-      >
-        <DashboardBuilderPanel
-          open={isDashboardBuilderOpen}
-          onOpenChange={setIsDashboardBuilderOpen}
-          messages={messages}
-          embedded
-          selectedDbIdentifier={selectedDb}
-          selectedSqlBackend={effectiveSqlBackend}
         />
       </div>
     </div>
@@ -994,6 +981,7 @@ export default function Chat({
                         contentSpacingClassName="space-y-2 pb-36 lg:pb-40"
                         messagePaddingClassName="p-3"
                         userResponsePaddingClassName="p-1"
+                        showToolCalls={showToolCalls}
                         showExecuteSqlRawOutput={showExecuteSqlRawOutput}
                       />
                     ) : (
@@ -1059,6 +1047,20 @@ export default function Chat({
             />
           </div>
         </div>
+        <Dialog
+          open={isDashboardBuilderOpen}
+          onOpenChange={setIsDashboardBuilderOpen}
+        >
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+            <DashboardBuilderPanel
+              open={isDashboardBuilderOpen}
+              onOpenChange={setIsDashboardBuilderOpen}
+              messages={messages}
+              selectedDbIdentifier={selectedDb}
+              selectedSqlBackend={effectiveSqlBackend}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
     </ArtifactMutationProvider>
   );

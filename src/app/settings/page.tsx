@@ -34,8 +34,10 @@ import {
   setSessionSecret,
 } from "@/lib/bridge/pondview-bridge";
 import {
+  setShowToolCallsPreference,
   setExecuteSqlRawOutputPreference,
   useExecuteSqlRawOutputPreference,
+  useShowToolCallsPreference,
 } from "@/lib/chat-display-preferences";
 import {
   applyCustomCss,
@@ -136,6 +138,7 @@ export default function SettingsPage() {
   const bridgeHealthStatus = useBridgeHealthStatus();
   const duckDbHttpConfig = useDuckDbHttpConfig();
   const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
+  const showToolCalls = useShowToolCallsPreference();
   const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
   const isBridgeAvailable = hasBridgeSecret && bridgeHealthStatus === "online";
   const isDuckDbHttpConfigured = Boolean(duckDbHttpConfig);
@@ -1075,8 +1078,30 @@ export default function SettingsPage() {
               </div>
 
               <label
-                htmlFor="show-execute-sql-raw-output"
+                htmlFor="show-tool-calls"
                 className="flex items-center justify-between gap-4 rounded-md border border-border p-3"
+              >
+                <div>
+                  <p className="text-sm font-medium">Show tool calls</p>
+                  <p className="text-xs text-muted-foreground">
+                    When disabled, chat hides `tool-*` cards entirely while
+                    keeping SQL result blocks and visuals visible.
+                  </p>
+                </div>
+                <input
+                  id="show-tool-calls"
+                  type="checkbox"
+                  checked={showToolCalls}
+                  onChange={(event) =>
+                    setShowToolCallsPreference(event.target.checked)
+                  }
+                  className="h-4 w-4 rounded border-border"
+                />
+              </label>
+
+              <label
+                htmlFor="show-execute-sql-raw-output"
+                className="flex items-center justify-between gap-4 rounded-md border border-border p-3 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <div>
                   <p className="text-sm font-medium">
@@ -1084,13 +1109,15 @@ export default function SettingsPage() {
                   </p>
                   <p className="text-xs text-muted-foreground">
                     When enabled, the tool card shows raw `tool-executeSql`
-                    output in addition to the SQL result block.
+                    output in addition to the SQL result block. This only
+                    applies when tool calls are visible.
                   </p>
                 </div>
                 <input
                   id="show-execute-sql-raw-output"
                   type="checkbox"
                   checked={showExecuteSqlRawOutput}
+                  disabled={!showToolCalls}
                   onChange={(event) =>
                     setExecuteSqlRawOutputPreference(event.target.checked)
                   }

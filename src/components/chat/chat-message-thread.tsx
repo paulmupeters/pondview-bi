@@ -45,6 +45,7 @@ type ChatMessageThreadProps = {
   contentSpacingClassName: string;
   messagePaddingClassName: string;
   userResponsePaddingClassName: string;
+  showToolCalls: boolean;
   showExecuteSqlRawOutput: boolean;
 };
 
@@ -58,22 +59,75 @@ type ToolMessagePart = UIMessage["parts"][number] & {
   error?: unknown;
 };
 
-function hasNoRenderableAssistantContent(
+type SqlArtifactEntry = {
+  partIndex: number;
+  data: {
+    id?: string;
+    status?: string;
+    progress?: number;
+    error?: string;
+    payload?: SqlAnalysisData;
+  };
+};
+
+function getSqlArtifactsByTopLevelPartIndex(
+  parts: UIMessage["parts"] | undefined,
+  executeSqlArtifactType: string,
+): Map<number, SqlArtifactEntry[]> {
+  const sqlArtifactParts = extractSqlArtifactParts(parts, executeSqlArtifactType);
+  const sqlArtifactsByTopLevelPartIndex = new Map<number, SqlArtifactEntry[]>();
+
+  sqlArtifactParts.forEach(({ partIndex, artifactData }) => {
+    const topLevelPartIndex = getTopLevelPartIndex(partIndex);
+    const existing = sqlArtifactsByTopLevelPartIndex.get(topLevelPartIndex);
+    const nextEntry = {
+      partIndex,
+      data: artifactData,
+    };
+    if (existing) {
+      existing.push(nextEntry);
+      return;
+    }
+    sqlArtifactsByTopLevelPartIndex.set(topLevelPartIndex, [nextEntry]);
+  });
+
+  return sqlArtifactsByTopLevelPartIndex;
+}
+
+function hasRenderableAssistantContent(
   message: UIMessage,
   executeSqlArtifactType: string,
-) {
-  return (
-    !message.parts ||
-    message.parts.length === 0 ||
-    message.parts.every(
-      (part) =>
-        (part.type === "text" &&
-          (!(part as { text?: string }).text ||
-            (part as { text?: string }).text?.trim() === "")) ||
-        (part.type === executeSqlArtifactType &&
-          !(part as { data?: unknown }).data),
-    )
-  );
+  showToolCalls: boolean,
+  sqlArtifactsByTopLevelPartIndex: Map<number, SqlArtifactEntry[]>,
+): boolean {
+  if (!message.parts || message.parts.length === 0) {
+    return false;
+  }
+
+  return message.parts.some((part, partIndex) => {
+    if (part.type === "text") {
+      const text = (part as { text?: string }).text;
+      return Boolean(text?.trim());
+    }
+
+    if (part.type === executeSqlArtifactType) {
+      return Boolean((part as { data?: unknown }).data);
+    }
+
+    if (isToolMessagePart(part)) {
+      if (showToolCalls) {
+        return true;
+      }
+
+      return (
+        part.type === "tool-executeSql" &&
+        ((sqlArtifactsByTopLevelPartIndex.get(partIndex)?.length ?? 0) > 0 ||
+          Boolean(getToolErrorText(part)))
+      );
+    }
+
+    return false;
+  });
 }
 
 function isToolMessagePart(
@@ -139,17 +193,27 @@ export function ChatMessageThread({
   contentSpacingClassName,
   messagePaddingClassName,
   userResponsePaddingClassName,
+  showToolCalls,
   showExecuteSqlRawOutput,
 }: ChatMessageThreadProps) {
   const isConversationEmpty = messages.length === 0;
   const isAssistantThinking = status === "streaming" || status === "submitted";
   const lastMessage = messages[messages.length - 1];
+  const lastMessageSqlArtifacts = getSqlArtifactsByTopLevelPartIndex(
+    lastMessage?.parts,
+    executeSqlArtifactType,
+  );
   const hasInlineThinkingPlaceholder =
     isAssistantThinking &&
     Boolean(
       lastMessage &&
         lastMessage.role === "assistant" &&
-        hasNoRenderableAssistantContent(lastMessage, executeSqlArtifactType),
+        !hasRenderableAssistantContent(
+          lastMessage,
+          executeSqlArtifactType,
+          showToolCalls,
+          lastMessageSqlArtifacts,
+        ),
     );
 
   const renderThinkingMessage = (key: string) => (
@@ -185,7 +249,15 @@ export function ChatMessageThread({
             isLastMessage &&
             message.role === "assistant" &&
             isAssistantThinking &&
-            hasNoRenderableAssistantContent(message, executeSqlArtifactType);
+            !hasRenderableAssistantContent(
+              message,
+              executeSqlArtifactType,
+              showToolCalls,
+              getSqlArtifactsByTopLevelPartIndex(
+                message.parts,
+                executeSqlArtifactType,
+              ),
+            );
           const messageVisualizationId =
             getLastSelectableVisualizationIdForMessage(message);
           const isSelectableMessage =
@@ -200,38 +272,18 @@ export function ChatMessageThread({
             }
           };
 
-          const sqlArtifactParts = extractSqlArtifactParts(
+          const sqlArtifactsByTopLevelPartIndex = getSqlArtifactsByTopLevelPartIndex(
             message.parts,
             executeSqlArtifactType,
           );
-          const sqlArtifactsByTopLevelPartIndex = new Map<
-            number,
-            Array<{
-              partIndex: number;
-              data: {
-                id?: string;
-                status?: string;
-                progress?: number;
-                error?: string;
-                payload?: SqlAnalysisData;
-              };
-            }>
-          >();
-
-          sqlArtifactParts.forEach(({ partIndex, artifactData }) => {
-            const topLevelPartIndex = getTopLevelPartIndex(partIndex);
-            const existing =
-              sqlArtifactsByTopLevelPartIndex.get(topLevelPartIndex);
-            const nextEntry = {
-              partIndex,
-              data: artifactData,
-            };
-            if (existing) {
-              existing.push(nextEntry);
-              return;
-            }
-            sqlArtifactsByTopLevelPartIndex.set(topLevelPartIndex, [nextEntry]);
-          });
+          const hasRenderableMessageContent =
+            message.role !== "assistant" ||
+            hasRenderableAssistantContent(
+              message,
+              executeSqlArtifactType,
+              showToolCalls,
+              sqlArtifactsByTopLevelPartIndex,
+            );
 
           const renderSqlBlock = ({
             artifactData,
@@ -298,6 +350,10 @@ export function ChatMessageThread({
             return renderThinkingMessage(message.id);
           }
 
+          if (!hasRenderableMessageContent) {
+            return null;
+          }
+
           return (
             <Message from={message.role} key={message.id}>
               <MessageContent
@@ -306,7 +362,7 @@ export function ChatMessageThread({
                   messagePaddingClassName,
                   isSelectableMessage && "cursor-pointer",
                   isSelectedMessage &&
-                    "group-[.is-assistant]:border-primary/60 group-[.is-assistant]:bg-accent/20",
+                    "group-[.is-assistant]:border-primary/60 group-[.is-assistant]:bg-accent/10",
                 )}
                 onClick={
                   isSelectableMessage ? handleMessageSelection : undefined
@@ -375,6 +431,21 @@ export function ChatMessageThread({
                           partIndex: entry.partIndex,
                         }),
                       );
+                    }
+
+                    if (!showToolCalls) {
+                      if (toolErrorText) {
+                        return (
+                          <div
+                            key={`${message.id}-part-${partIndex}-error`}
+                            className="mt-4 max-w-full text-sm text-destructive"
+                          >
+                            {toolErrorText}
+                          </div>
+                        );
+                      }
+
+                      return executeSqlBlocks;
                     }
 
                     return (

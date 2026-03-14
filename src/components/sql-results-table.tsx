@@ -1,15 +1,25 @@
 import {
+  ArrowTopRightOnSquareIcon,
+  FunnelIcon,
+} from "@heroicons/react/24/outline";
+import {
   type ColumnDef,
+  type ColumnFiltersState,
   type ColumnSizingState,
   flexRender,
   getCoreRowModel,
+  getFilteredRowModel,
   getPaginationRowModel,
   type PaginationState,
+  type Updater,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  SqlPreviewPanel,
+  type SqlPreviewRunResult,
+} from "@/components/sql-preview-panel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +28,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import type { SqlBackendPreference } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -25,6 +37,12 @@ const DEFAULT_COLUMN_SIZE = 180;
 const MIN_COLUMN_SIZE = 120;
 const MAX_COLUMN_SIZE = 640;
 const EXPANDED_PAGE_SIZE = 100;
+
+function normalizeFilterValue(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
 
 type SqlResultsTableDataOverride = {
   stage?: "loading" | "processing" | "analyzing" | "visualizing" | "complete";
@@ -44,14 +62,29 @@ export function SqlResultsTable({
   pageSize = DEFAULT_PAGE_SIZE,
   expandable = false,
   expandTitle = "Query Results",
+  enableColumnFilters = true,
+  expandedDialogEnableColumnFilters = true,
+  query,
+  dbIdentifier,
+  backendPreference,
+  onSqlSave,
 }: {
   dataOverride?: SqlResultsTableDataOverride;
   className?: string;
   pageSize?: number;
   expandable?: boolean;
   expandTitle?: string;
+  enableColumnFilters?: boolean;
+  expandedDialogEnableColumnFilters?: boolean;
+  query?: string;
+  dbIdentifier?: string;
+  backendPreference?: SqlBackendPreference;
+  onSqlSave?: (newSql: string) => Promise<void>;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [runDataOverride, setRunDataOverride] = useState<
+    SqlResultsTableDataOverride | undefined
+  >(undefined);
   const payload = dataOverride; // parent supplies data; avoid extra subscription
 
   // Create column definitions for TanStack Table
@@ -65,6 +98,16 @@ export function SqlResultsTable({
       columns.map((column) => ({
         accessorKey: column.name,
         header: column.name,
+        filterFn: (row, columnId, filterValue) => {
+          const filterText = normalizeFilterValue(filterValue);
+
+          if (!filterText) {
+            return true;
+          }
+
+          const cellValue = normalizeFilterValue(row.getValue(columnId));
+          return cellValue.includes(filterText);
+        },
         cell: ({ getValue }) => {
           const value = getValue();
           const stringValue = String(value ?? "");
@@ -79,14 +122,18 @@ export function SqlResultsTable({
   );
 
   const resolvedPageSize = Math.max(1, pageSize);
-  const shouldPaginate = rows.length > resolvedPageSize;
+  const shouldPaginateByDefault = rows.length > resolvedPageSize;
 
   // Controlled pagination state - resets when rows change
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
-    pageSize: shouldPaginate ? resolvedPageSize : Math.max(rows.length, 1),
+    pageSize: shouldPaginateByDefault
+      ? resolvedPageSize
+      : Math.max(rows.length, 1),
   });
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [openFilterColumnIds, setOpenFilterColumnIds] = useState<string[]>([]);
   const previousColumnNamesSignature = useRef<string>("");
 
   // Update pageSize when rows change
@@ -101,7 +148,12 @@ export function SqlResultsTable({
     });
   }, [rows.length, resolvedPageSize]);
 
-  // Reset custom widths when result columns change.
+  useEffect(() => {
+    if (!enableColumnFilters && columnFilters.length > 0) {
+      setColumnFilters([]);
+    }
+  }, [columnFilters, enableColumnFilters]);
+
   useEffect(() => {
     const nextColumnNamesSignature = columns
       .map((column) => column.name)
@@ -113,7 +165,17 @@ export function SqlResultsTable({
 
     previousColumnNamesSignature.current = nextColumnNamesSignature;
     setColumnSizing({});
+    setColumnFilters([]);
+    setOpenFilterColumnIds([]);
   }, [columns]);
+
+  const handleColumnFiltersChange = (updater: Updater<ColumnFiltersState>) => {
+    setColumnFilters(updater);
+    setPagination((current) => ({
+      ...current,
+      pageIndex: 0,
+    }));
+  };
 
   const table = useReactTable({
     data: rows,
@@ -124,16 +186,38 @@ export function SqlResultsTable({
       maxSize: MAX_COLUMN_SIZE,
     },
     enableColumnResizing: true,
+    enableColumnFilters,
     columnResizeMode: "onEnd",
     getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: enableColumnFilters
+      ? getFilteredRowModel()
+      : undefined,
     getPaginationRowModel: getPaginationRowModel(),
     state: {
       pagination,
       columnSizing,
+      columnFilters,
     },
     onPaginationChange: setPagination,
     onColumnSizingChange: setColumnSizing,
+    onColumnFiltersChange: handleColumnFiltersChange,
   });
+  const filteredRowCount = table.getFilteredRowModel().rows.length;
+  const pageRowCount = table.getRowModel().rows.length;
+  const pageStart =
+    filteredRowCount === 0
+      ? 0
+      : table.getState().pagination.pageIndex *
+          table.getState().pagination.pageSize +
+        1;
+  const pageEnd =
+    filteredRowCount === 0
+      ? 0
+      : Math.min(pageStart + pageRowCount - 1, filteredRowCount);
+  const shouldPaginate =
+    filteredRowCount > table.getState().pagination.pageSize;
+  const shouldRenderFilterRow =
+    enableColumnFilters && openFilterColumnIds.length > 0;
 
   if (!payload || payload.stage !== "complete") {
     return null;
@@ -198,13 +282,39 @@ export function SqlResultsTable({
                       className="h-10 px-2 text-left align-middle font-medium text-foreground relative"
                       style={{ width: header.getSize() }}
                     >
-                      <div className="truncate pr-3">
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
+                      <div className="flex items-center gap-1 pr-3">
+                        <div className="min-w-0 flex-1 truncate">
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                        </div>
+                        {enableColumnFilters && !header.isPlaceholder && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenFilterColumnIds((current) =>
+                                current.includes(header.column.id)
+                                  ? current.filter(
+                                      (id) => id !== header.column.id,
+                                    )
+                                  : [...current, header.column.id],
+                              );
+                            }}
+                            className={cn(
+                              "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                              (openFilterColumnIds.includes(header.column.id) ||
+                                header.column.getIsFiltered()) &&
+                                "bg-muted text-foreground",
                             )}
+                            aria-label={`Toggle filter for ${String(header.column.columnDef.header ?? header.id)}`}
+                            title={`Filter ${String(header.column.columnDef.header ?? header.id)}`}
+                          >
+                            <FunnelIcon className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                       {header.column.getCanResize() && (
                         <button
@@ -235,6 +345,29 @@ export function SqlResultsTable({
                 })}
               </tr>
             ))}
+            {shouldRenderFilterRow && table.getFlatHeaders().length > 0 && (
+              <tr className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                {table.getFlatHeaders().map((header) => (
+                  <th
+                    key={`${header.id}-filter`}
+                    className="p-2 align-middle"
+                    style={{ width: header.getSize() }}
+                  >
+                    {header.isPlaceholder ||
+                    !openFilterColumnIds.includes(header.column.id) ? null : (
+                      <Input
+                        value={(header.column.getFilterValue() as string) ?? ""}
+                        onChange={(event) =>
+                          header.column.setFilterValue(event.target.value)
+                        }
+                        aria-label={`Filter ${String(header.column.columnDef.header ?? header.id)}`}
+                        className="h-8 border-border/80 bg-background text-xs shadow-none"
+                      />
+                    )}
+                  </th>
+                ))}
+              </tr>
+            )}
           </thead>
           <tbody>
             {table.getRowModel().rows?.length ? (
@@ -278,13 +411,7 @@ export function SqlResultsTable({
       {shouldPaginate && (
         <div className="shrink-0 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            Showing{" "}
-            {table.getState().pagination.pageIndex * resolvedPageSize + 1} to{" "}
-            {Math.min(
-              (table.getState().pagination.pageIndex + 1) * resolvedPageSize,
-              rows.length,
-            )}{" "}
-            of {rows.length} results
+            Showing {pageStart} to {pageEnd} of {filteredRowCount} results
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -330,20 +457,61 @@ export function SqlResultsTable({
 
       {/* Expanded dialog */}
       {expandable && (
-        <Dialog open={isExpanded} onOpenChange={setIsExpanded}>
+        <Dialog
+          open={isExpanded}
+          onOpenChange={(open) => {
+            setIsExpanded(open);
+            if (!open) setRunDataOverride(undefined);
+          }}
+        >
           <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden">
             <DialogHeader>
               <DialogTitle>{expandTitle}</DialogTitle>
               <DialogDescription>
-                Showing {rows.length} row{rows.length !== 1 ? "s" : ""} across{" "}
-                {columns.length} column{columns.length !== 1 ? "s" : ""}.
+                Showing {(runDataOverride?.rows ?? rows).length} row
+                {(runDataOverride?.rows ?? rows).length !== 1 ? "s" : ""} across{" "}
+                {(runDataOverride?.columns ?? columns).length} column
+                {(runDataOverride?.columns ?? columns).length !== 1 ? "s" : ""}.
               </DialogDescription>
             </DialogHeader>
+            {query && (
+              <SqlPreviewPanel
+                query={query}
+                dbIdentifier={dbIdentifier}
+                backendPreference={backendPreference}
+                onSave={
+                  onSqlSave
+                    ? async (newSql) => {
+                        await onSqlSave(newSql);
+                        setRunDataOverride(undefined);
+                      }
+                    : undefined
+                }
+                onRunStart={() => {
+                  setRunDataOverride({
+                    stage: "complete",
+                    columns: [],
+                    rows: [],
+                  });
+                }}
+                onRun={(result: SqlPreviewRunResult) => {
+                  setRunDataOverride({
+                    stage: "complete",
+                    columns: result.columns,
+                    rows: result.rows,
+                  });
+                }}
+                onCancel={() => {
+                  setRunDataOverride(undefined);
+                }}
+              />
+            )}
             <div className="max-h-[70vh] overflow-auto">
               <SqlResultsTable
-                dataOverride={dataOverride}
+                dataOverride={runDataOverride ?? dataOverride}
                 pageSize={EXPANDED_PAGE_SIZE}
                 expandable={false}
+                enableColumnFilters={expandedDialogEnableColumnFilters}
               />
             </div>
           </DialogContent>

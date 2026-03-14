@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import {
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
   useRef,
@@ -216,6 +217,12 @@ export function SortableChartCard({
     onToggleSql(chart.id);
   };
 
+  const handleCardClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (isSelected && e.target === e.currentTarget) {
+      onSelect?.("");
+    }
+  };
+
   const colSpanClass = isChart
     ? getColSpanClass(displayColSpan, totalColumns)
     : "";
@@ -229,7 +236,9 @@ export function SortableChartCard({
         }
       }}
       style={style}
-      className={`group relative flex flex-col rounded-xl bg-card border border-border shadow-md p-4 md:p-2 ${colSpanClass} ${isResizing ? "ring-2 ring-primary/50" : ""} ${isSelected ? "ring-1 ring-primary/50 bg-primary/5" : ""}`}
+      onClick={handleCardClick}
+      data-chart-card-id={chart.id}
+      className={`group relative flex flex-col rounded-xl border border-border bg-card shadow-md p-4 md:p-2 ring-1 ring-inset ${colSpanClass} ${isResizing ? "ring-primary/50" : isSelected ? "ring-primary bg-primary/5" : "ring-transparent"}`}
     >
       <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
         <button
@@ -270,7 +279,8 @@ export function SortableChartCard({
       {chart.filtersApplied && appliedFilterCount > 0 && (
         <div className="absolute left-1/2 top-2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100">
           <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-            {appliedFilterCount} filter{appliedFilterCount !== 1 ? "s" : ""} applied
+            {appliedFilterCount} filter{appliedFilterCount !== 1 ? "s" : ""}{" "}
+            applied
           </span>
         </div>
       )}
@@ -419,6 +429,7 @@ export function SortableChartCard({
                 columns: Object.keys(rows[0] || {}).map((name) => ({ name })),
                 rows: rows as Record<string, unknown>[],
               }}
+              enableColumnFilters={false}
             />
           </div>
         ) : isTextConfig(config) ? (

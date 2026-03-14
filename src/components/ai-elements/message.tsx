@@ -1,8 +1,4 @@
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import type { UIMessage } from "ai";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -17,7 +13,7 @@ export const Message = ({ className, from, ...props }: MessageProps) => (
     className={cn(
       "group flex w-full items-end justify-end gap-2 py-4",
       from === "user" ? "is-user" : "is-assistant flex-row-reverse justify-end",
-      className
+      className,
     )}
     {...props}
   />
@@ -29,9 +25,9 @@ const messageContentVariants = cva(
     variants: {
       variant: {
         contained: [
-          "max-w-[80%] px-4 py-3",
+          "group-[.is-user]:max-w-[80%] px-4 py-3",
           "group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground",
-          "group-[.is-assistant]:bg-secondary group-[.is-assistant]:text-foreground",
+          "group-[.is-assistant]:w-full group-[.is-assistant]:bg-secondary group-[.is-assistant]:text-foreground",
         ],
         flat: [
           "group-[.is-user]:max-w-[80%] group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
@@ -42,7 +38,7 @@ const messageContentVariants = cva(
     defaultVariants: {
       variant: "contained",
     },
-  }
+  },
 );
 
 export type MessageContentProps = HTMLAttributes<HTMLDivElement> &
