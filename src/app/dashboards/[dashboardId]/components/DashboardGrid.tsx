@@ -6,15 +6,9 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { rectSortingStrategy, SortableContext } from "@dnd-kit/sortable";
-import type {
-  CardConfig,
-  Config,
-  Result,
-  TableConfig,
-  TextConfig,
-} from "@/lib/types";
+import type { Result } from "@/lib/types";
 import type { DashboardChart, LayoutRow, ResizeState } from "../types";
-import { getGridColsClass } from "../utils";
+import { getGridColsClass, parseChartConfig } from "../utils";
 import { MetricCardGroup } from "./MetricCardGroup";
 import { SortableChartCard } from "./SortableChartCard";
 
@@ -22,6 +16,7 @@ type DashboardGridProps = {
   charts: DashboardChart[];
   chartData: Record<string, Result[]>;
   layoutRows: LayoutRow[];
+  dashboardColumns: number;
   onDragEnd: (event: DragEndEvent) => void;
   onConfigChange: (chartId: string, newJson: string) => Promise<void>;
   onDelete: (chartId: string) => Promise<void>;
@@ -29,7 +24,13 @@ type DashboardGridProps = {
   onToggleSql: (chartId: string) => void;
   onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
   resizingChart: ResizeState;
-  onResizeChange: (chartId: string, tempColSpan: number | null) => void;
+  onResizeOpen: (chartId: string, currentColSpan: number) => void;
+  onResizeClose: () => void;
+  onResizeSelect: (
+    chartId: string,
+    mode: "single" | "equalize" | "fit",
+    targetColSpan?: number,
+  ) => Promise<void> | void;
   selectedChartId: string | null;
   onChartSelect: (chartId: string) => void;
   onPreviewChart: (chartId: string) => void;
@@ -39,6 +40,7 @@ export function DashboardGrid({
   charts,
   chartData,
   layoutRows,
+  dashboardColumns,
   onDragEnd,
   onConfigChange,
   onDelete,
@@ -46,7 +48,9 @@ export function DashboardGrid({
   onToggleSql,
   onSqlUpdate,
   resizingChart,
-  onResizeChange,
+  onResizeOpen,
+  onResizeClose,
+  onResizeSelect,
   selectedChartId,
   onChartSelect,
   onPreviewChart,
@@ -74,37 +78,115 @@ export function DashboardGrid({
           );
           const isRowResizing =
             resizingChart && rowChartIds.includes(resizingChart.chartId);
+          const previewItems = isRowResizing ? resizingChart.previewSpans : [];
+          const previewMap = new Map(
+            previewItems
+              .filter((item) => item.chartId)
+              .map((item) => [item.chartId as string, item.colSpan]),
+          );
+          const equalizedSpans = previewItems
+            .filter((item) => item.kind === "single" && item.chartId)
+            .map((item) => item.colSpan);
           return (
             <div key={rowKey} className="relative mb-6 last:mb-0">
               {/* Row-level resize snap indicator overlay */}
               {isRowResizing && (
-                <div className="pointer-events-none absolute inset-x-0 top-0 bottom-0 z-50">
-                  <div className="sticky top-2 flex justify-center mb-2">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-primary/50 bg-background/95 px-3 py-1.5 text-sm font-medium shadow-lg">
-                      {resizingChart.tempColSpan} / {row.columns} columns
-                    </span>
-                  </div>
+                <>
                   <div
-                    className="grid h-full w-full gap-2 md:gap-4"
-                    style={{
-                      gridTemplateColumns: `repeat(${row.columns}, minmax(0, 1fr))`,
+                    className="fixed inset-0 z-40"
+                    onClick={onResizeClose}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") onResizeClose();
                     }}
-                  >
-                    {Array.from({ length: row.columns }).map((_, idx) => {
-                      const guideKey = `snap-guide-${rowKey}-col-${idx + 1}`;
-                      return (
-                        <div
-                          key={guideKey}
-                          className={`rounded-lg border-2 border-dashed transition-colors ${
-                            idx < resizingChart.tempColSpan
-                              ? "border-primary bg-primary/10"
-                              : "border-muted-foreground/30 bg-muted/20"
-                          }`}
-                        />
-                      );
-                    })}
+                    role="button"
+                    tabIndex={-1}
+                    aria-label="Cancel resize"
+                  />
+                  <div className="pointer-events-none absolute inset-x-0 top-0 bottom-0 z-50">
+                    <div className="sticky top-2 flex justify-center mb-2">
+                      <div className="pointer-events-auto flex max-w-[min(100%,calc(100vw-3rem))] flex-wrap items-center justify-center gap-2 rounded-2xl border border-primary/50 bg-background/95 px-3 py-2 text-sm font-medium shadow-lg">
+                        <span className="px-1 text-center">
+                          {resizingChart.mode === "equalize"
+                            ? `Split evenly: ${equalizedSpans.join(" + ")}`
+                            : resizingChart.mode === "fit"
+                              ? `Fit row: ${equalizedSpans.join(" + ")}`
+                              : `${previewMap.get(resizingChart.chartId) ?? 1} / ${dashboardColumns} columns`}
+                        </span>
+                        <div className="flex flex-wrap items-center justify-center gap-1">
+                          {Array.from({ length: dashboardColumns }).map(
+                            (_, index) => {
+                              const nextSpan = index + 1;
+                              const isActive =
+                                resizingChart.mode === "single" &&
+                                (previewMap.get(resizingChart.chartId) ?? 0) ===
+                                  nextSpan;
+                              return (
+                                <button
+                                  key={`resize-span-${rowKey}-${nextSpan}`}
+                                  type="button"
+                                  className={`rounded-md border px-2 py-1 text-xs font-semibold transition-colors ${
+                                    isActive
+                                      ? "border-primary bg-primary text-primary-foreground"
+                                      : "border-border bg-background text-foreground hover:bg-muted"
+                                  }`}
+                                  onClick={() =>
+                                    void onResizeSelect(
+                                      resizingChart.chartId,
+                                      "single",
+                                      nextSpan,
+                                    )
+                                  }
+                                >
+                                  {nextSpan}/{dashboardColumns}
+                                </button>
+                              );
+                            },
+                          )}
+                        </div>
+                        {resizingChart.canFit ? (
+                          <button
+                            type="button"
+                            className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                              resizingChart.mode === "fit"
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-background text-foreground hover:bg-muted"
+                            }`}
+                            onClick={() =>
+                              void onResizeSelect(resizingChart.chartId, "fit")
+                            }
+                          >
+                            Fill
+                          </button>
+                        ) : null}
+                        {resizingChart.canEqualize ? (
+                          <button
+                            type="button"
+                            className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                              resizingChart.mode === "equalize"
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-background text-foreground hover:bg-muted"
+                            }`}
+                            onClick={() =>
+                              void onResizeSelect(
+                                resizingChart.chartId,
+                                "equalize",
+                              )
+                            }
+                          >
+                            Equalize
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="rounded-full border border-border bg-background px-2.5 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+                          onClick={onResizeClose}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </>
               )}
               <div
                 className={`grid gap-2 md:gap-4 ${getGridColsClass(row.columns)}`}
@@ -129,22 +211,7 @@ export function DashboardGrid({
                   }
                   // Render single chart/table/card as before
                   const chart = group.items[0];
-                  let config:
-                    | Config
-                    | CardConfig
-                    | TableConfig
-                    | TextConfig
-                    | null = null;
-                  try {
-                    const parsed = JSON.parse(chart.chartConfigJson);
-                    config = parsed as
-                      | Config
-                      | CardConfig
-                      | TableConfig
-                      | TextConfig;
-                  } catch {
-                    config = null;
-                  }
+                  const config = parseChartConfig(chart);
                   const rows = chartData[chart.id] || [];
                   return (
                     <SortableChartCard
@@ -160,9 +227,8 @@ export function DashboardGrid({
                       onToggleSql={onToggleSql}
                       onSqlUpdate={onSqlUpdate}
                       totalColumns={row.columns}
-                      onResizeChange={(tempColSpan) =>
-                        onResizeChange(chart.id, tempColSpan)
-                      }
+                      onResizeOpen={onResizeOpen}
+                      previewColSpan={previewMap.get(chart.id) ?? null}
                       isSelected={selectedChartId === chart.id}
                       onSelect={onChartSelect}
                       onPreviewChart={onPreviewChart}

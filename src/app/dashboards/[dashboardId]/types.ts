@@ -40,9 +40,21 @@ export type LayoutRow = {
   groups: ChartGroup[];
 };
 
+export type ResizeMode = "single" | "equalize" | "fit";
+
+export type ResizePreviewItem = {
+  itemId: string;
+  chartId: string | null;
+  colSpan: number;
+  kind: ChartGroup["type"];
+};
+
 export type ResizeState = {
   chartId: string;
-  tempColSpan: number;
+  mode: ResizeMode;
+  previewSpans: ResizePreviewItem[];
+  canFit: boolean;
+  canEqualize: boolean;
 } | null;
 
 export type SortableChartCardProps = {
@@ -56,7 +68,8 @@ export type SortableChartCardProps = {
   onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
   totalColumns: number;
   isInGroup?: boolean;
-  onResizeChange?: (tempColSpan: number | null) => void;
+  onResizeOpen?: (chartId: string, currentColSpan: number) => void;
+  previewColSpan?: number | null;
   isSelected?: boolean;
   onSelect?: (chartId: string) => void;
   onPreviewChart?: (chartId: string) => void;

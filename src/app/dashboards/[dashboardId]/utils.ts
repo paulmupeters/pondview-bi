@@ -5,7 +5,13 @@ import type {
   TableConfig,
   TextConfig,
 } from "@/lib/types";
-import type { ChartGroup, DashboardChart, LayoutRow } from "./types";
+import type {
+  ChartGroup,
+  DashboardChart,
+  LayoutRow,
+  ResizeMode,
+  ResizePreviewItem,
+} from "./types";
 
 // Helper function to check if config is a card config
 export function isCardConfig(
@@ -48,6 +54,27 @@ export function isTextConfig(
   return "configType" in config && config.configType === "text";
 }
 
+export function isResizableConfig(
+  config: Config | CardConfig | TableConfig | TextConfig | null,
+): config is Config | TableConfig {
+  if (!config) return false;
+  return !isCardConfig(config) && !isTextConfig(config);
+}
+
+export function parseChartConfig(
+  chart: DashboardChart,
+): Config | CardConfig | TableConfig | TextConfig | null {
+  try {
+    return JSON.parse(chart.chartConfigJson) as
+      | Config
+      | CardConfig
+      | TableConfig
+      | TextConfig;
+  } catch {
+    return null;
+  }
+}
+
 // Group consecutive metric cards together
 export function groupConsecutiveMetricCards(
   charts: DashboardChart[],
@@ -57,14 +84,7 @@ export function groupConsecutiveMetricCards(
   let currentMetricGroup: DashboardChart[] = [];
 
   for (const chart of charts) {
-    let config: Config | CardConfig | TableConfig | TextConfig | null = null;
-    try {
-      const parsed = JSON.parse(chart.chartConfigJson);
-      config = parsed as Config | CardConfig | TableConfig | TextConfig;
-    } catch {
-      config = null;
-    }
-
+    const config = parseChartConfig(chart);
     const rows = chartData[chart.id] || [];
     const isMetricCard = config && rows.length > 0 && isCardConfig(config);
 
@@ -107,19 +127,9 @@ export function getChartColSpan(
 ): number {
   let span = 1;
   try {
-    const parsed = JSON.parse(chart.chartConfigJson) as
-      | Config
-      | CardConfig
-      | TableConfig
-      | TextConfig;
-    const isChartConfig =
-      parsed &&
-      !isCardConfig(parsed) &&
-      !isTableConfig(parsed) &&
-      !isTextConfig(parsed) &&
-      "colSpan" in parsed;
-    if (isChartConfig) {
-      span = (parsed as Config).colSpan ?? 1;
+    const parsed = parseChartConfig(chart);
+    if (parsed && isResizableConfig(parsed) && "colSpan" in parsed) {
+      span = (parsed as Config | TableConfig).colSpan ?? 1;
     }
   } catch {
     span = 1;
@@ -141,6 +151,7 @@ export function getGroupColSpan(group: ChartGroup, maxColumns: number): number {
 export function buildRows(
   groups: ChartGroup[],
   maxColumns: number,
+  shrinkRows = true,
 ): LayoutRow[] {
   const rows: LayoutRow[] = [];
   let currentGroups: ChartGroup[] = [];
@@ -150,7 +161,9 @@ export function buildRows(
     const span = getGroupColSpan(group, maxColumns);
     if (currentGroups.length > 0 && usedColumns + span > maxColumns) {
       rows.push({
-        columns: Math.min(maxColumns, Math.max(1, usedColumns)),
+        columns: shrinkRows
+          ? Math.min(maxColumns, Math.max(1, usedColumns))
+          : maxColumns,
         groups: currentGroups,
       });
       currentGroups = [];
@@ -162,7 +175,9 @@ export function buildRows(
 
   if (currentGroups.length > 0) {
     rows.push({
-      columns: Math.min(maxColumns, Math.max(1, usedColumns || 1)),
+      columns: shrinkRows
+        ? Math.min(maxColumns, Math.max(1, usedColumns || 1))
+        : maxColumns,
       groups: currentGroups,
     });
   }
@@ -213,4 +228,158 @@ export function getGridColsClass(cols: number): string {
     6: "md:grid-cols-2 lg:grid-cols-6",
   };
   return colMap[cols] || colMap[3];
+}
+
+export function canEqualizeRow(row: LayoutRow): boolean {
+  return (
+    row.groups.length > 1 &&
+    row.groups.every((group) => {
+      if (group.type !== "single") return false;
+      const chart = group.items[0];
+      return Boolean(chart && isResizableConfig(parseChartConfig(chart)));
+    })
+  );
+}
+
+export function canFitRow(row: LayoutRow): boolean {
+  return canEqualizeRow(row);
+}
+
+export function getEvenSplit(
+  totalColumns: number,
+  itemCount: number,
+): number[] {
+  if (itemCount <= 0) return [];
+  const base = Math.floor(totalColumns / itemCount);
+  let remainder = totalColumns % itemCount;
+
+  return Array.from({ length: itemCount }, () => {
+    const next = base + (remainder > 0 ? 1 : 0);
+    remainder = Math.max(0, remainder - 1);
+    return next;
+  });
+}
+
+export function getRowBasePreview(
+  row: LayoutRow,
+  totalColumns: number,
+): ResizePreviewItem[] {
+  const previewItems = row.groups.map((group, index) => {
+    if (group.type === "metric-group") {
+      return {
+        itemId: `metric-group-${group.items[0]?.id ?? index}`,
+        chartId: null,
+        colSpan: Math.min(group.items.length, totalColumns),
+        kind: group.type,
+      };
+    }
+
+    const chart = group.items[0];
+    const config = chart ? parseChartConfig(chart) : null;
+    const explicitColSpan =
+      chart && config && isResizableConfig(config)
+        ? getChartColSpan(chart, totalColumns)
+        : null;
+
+    return {
+      itemId: chart?.id ?? `single-${index}`,
+      chartId: chart?.id ?? null,
+      colSpan: explicitColSpan ?? 0,
+      kind: group.type,
+    };
+  });
+
+  const allocated = previewItems.reduce((sum, item) => sum + item.colSpan, 0);
+  const flexibleIndexes = previewItems
+    .map((item, index) =>
+      item.kind === "single" && item.colSpan === 0 ? index : -1,
+    )
+    .filter((index) => index >= 0);
+  const remaining = Math.max(0, totalColumns - allocated);
+
+  if (flexibleIndexes.length > 0) {
+    const split = getEvenSplit(remaining, flexibleIndexes.length);
+    flexibleIndexes.forEach((itemIndex, splitIndex) => {
+      previewItems[itemIndex] = {
+        ...previewItems[itemIndex],
+        colSpan: split[splitIndex] ?? 1,
+      };
+    });
+    return previewItems;
+  }
+
+  if (remaining > 0 && previewItems.length > 0) {
+    const extra = getEvenSplit(remaining, previewItems.length);
+    return previewItems.map((item, index) => ({
+      ...item,
+      colSpan: item.colSpan + (extra[index] ?? 0),
+    }));
+  }
+
+  return previewItems;
+}
+
+export function buildResizePreview(
+  row: LayoutRow,
+  activeChartId: string,
+  mode: ResizeMode,
+  totalColumns: number,
+  activeColSpan?: number,
+): ResizePreviewItem[] {
+  if (mode === "fit" && canFitRow(row)) {
+    return getRowBasePreview(row, totalColumns);
+  }
+
+  const shouldEqualize = mode === "equalize" && canEqualizeRow(row);
+  if (shouldEqualize) {
+    const evenSplit = getEvenSplit(totalColumns, row.groups.length);
+
+    return row.groups.map((group, index) => {
+      if (group.type === "metric-group") {
+        return {
+          itemId: `metric-group-${group.items[0]?.id ?? index}`,
+          chartId: null,
+          colSpan: Math.min(group.items.length, totalColumns),
+          kind: group.type,
+        };
+      }
+
+      const chart = group.items[0];
+      return {
+        itemId: chart?.id ?? `single-${index}`,
+        chartId: chart?.id ?? null,
+        colSpan: evenSplit[index] ?? 1,
+        kind: group.type,
+      };
+    });
+  }
+
+  const basePreview = getRowBasePreview(row, totalColumns);
+  const currentColSpan =
+    basePreview.find((item) => item.chartId === activeChartId)?.colSpan ?? 1;
+
+  return [
+    {
+      itemId: activeChartId,
+      chartId: activeChartId,
+      colSpan: Math.min(
+        Math.max(1, activeColSpan ?? currentColSpan),
+        totalColumns,
+      ),
+      kind: "single",
+    },
+  ];
+}
+
+export function findLayoutRowForChart(
+  layoutRows: LayoutRow[],
+  chartId: string,
+): LayoutRow | null {
+  return (
+    layoutRows.find((row) =>
+      row.groups.some((group) =>
+        group.items.some((item) => item.id === chartId),
+      ),
+    ) ?? null
+  );
 }

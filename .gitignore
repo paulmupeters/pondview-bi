@@ -56,7 +56,14 @@ semantic-layer/data
 semantic-layer/models
 
 landing/
-docs/
+docs/*
+!docs/README.md
+!docs/ai-provider-configuration.md
+!docs/connected-data-sources.md
+!docs/extension-server-and-api-routes.md
+!docs/sql-runtime-backends.md
+!docs/uploads-and-browser-storage.md
+!docs/workspace-persistence.md
 semantic-layer/models/sources.yml
 
 # ai
