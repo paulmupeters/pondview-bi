@@ -212,7 +212,7 @@ export function DashboardMeasureCardDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden bg-card">
         <DialogHeader>
-          <DialogTitle>Add Metric / Measure Card</DialogTitle>
+          <DialogTitle>Add Measure Card</DialogTitle>
         </DialogHeader>
 
         <div className="flex max-h-[80vh] flex-col gap-4 overflow-hidden">
@@ -255,12 +255,6 @@ export function DashboardMeasureCardDialog({
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <div className="font-medium">{measure.label}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {`{{${measure.key}}}`}
-                              </div>
-                            </div>
-                            <div className="text-right text-sm font-medium">
-                              {measureValuesById[measure.id] || "(empty)"}
                             </div>
                           </div>
                           <p className="mt-2 truncate text-xs text-muted-foreground">
@@ -339,6 +333,22 @@ export function DashboardMeasureCardDialog({
             <TabsContent value="new" className="min-h-0 flex-1">
               <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
                 <div className="space-y-4 overflow-auto rounded-xl border border-border bg-background p-4">
+                  <SqlPreviewPanel
+                    query={measureSql}
+                    dbIdentifier={resolvedDbIdentifier ?? undefined}
+                    backendPreference={resolvedSqlBackend}
+                    onQueryChange={setMeasureSql}
+                    onSave={async (newSql) => {
+                      setMeasureSql(newSql);
+                    }}
+                    onRunStart={() => setPreviewRows([])}
+                    onRun={(result: SqlPreviewRunResult) => {
+                      setPreviewRows(result.rows as Result[]);
+                    }}
+                    onCancel={() => {
+                      setPreviewRows([]);
+                    }}
+                  />
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <label
@@ -417,23 +427,6 @@ export function DashboardMeasureCardDialog({
                       placeholder="Optional summary insight"
                     />
                   </div>
-
-                  <SqlPreviewPanel
-                    query={measureSql}
-                    dbIdentifier={resolvedDbIdentifier ?? undefined}
-                    backendPreference={resolvedSqlBackend}
-                    onQueryChange={setMeasureSql}
-                    onSave={async (newSql) => {
-                      setMeasureSql(newSql);
-                    }}
-                    onRunStart={() => setPreviewRows([])}
-                    onRun={(result: SqlPreviewRunResult) => {
-                      setPreviewRows(result.rows as Result[]);
-                    }}
-                    onCancel={() => {
-                      setPreviewRows([]);
-                    }}
-                  />
                 </div>
 
                 <div className="rounded-xl border border-border bg-muted/20 p-3">
