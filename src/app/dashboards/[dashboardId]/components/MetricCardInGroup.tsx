@@ -49,6 +49,10 @@ export function MetricCardInGroup({
   }
   const rows = chartData[chart.id] || [];
   const isExpanded = expandedSqlChartId === chart.id;
+  const emptyStateMessage = chart.errorMessage?.trim() || "No data";
+  const emptyStateClassName = chart.errorMessage
+    ? "text-xs text-destructive"
+    : "text-xs text-muted-foreground";
 
   return (
     <div
@@ -140,7 +144,7 @@ export function MetricCardInGroup({
           className="w-full h-full flex flex-col border-0 shadow-none"
         />
       ) : (
-        <div className="text-xs text-muted-foreground">No data</div>
+        <div className={emptyStateClassName}>{emptyStateMessage}</div>
       )}
       {isExpanded && (
         <div className="mt-4 border-t pt-4 transition-all duration-200">

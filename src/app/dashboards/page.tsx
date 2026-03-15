@@ -1,14 +1,20 @@
 import { LayoutDashboard, Plus, Trash2 } from "lucide-react";
-import Link from '@/vite/next-link';
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { createDashboard, deleteDashboard, listDashboards } from "@/lib/workspace/dashboard-repo";
+import {
+  createDashboard,
+  deleteDashboard,
+  listDashboards,
+} from "@/lib/workspace/dashboard-repo";
+import { switchToFreshWorkspaceDatabase } from "@/lib/workspace/workspace-db";
+import Link from "@/vite/next-link";
 
 type DashboardLite = { id: string; title: string | null; updatedAt: number };
 
@@ -31,12 +37,19 @@ export default function DashboardsPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [resettingDb, setResettingDb] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const dashboardsList = await listDashboards();
       setDashboards(dashboardsList);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Failed to load dashboards.",
+      );
     } finally {
       setLoading(false);
     }
@@ -55,6 +68,16 @@ export default function DashboardsPage() {
       await load();
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleResetWorkspaceDb = async () => {
+    setResettingDb(true);
+    try {
+      switchToFreshWorkspaceDatabase();
+      window.location.reload();
+    } catch {
+      setResettingDb(false);
     }
   };
 
@@ -112,6 +135,25 @@ export default function DashboardsPage() {
             </p>
           </div>
         </div>
+      ) : loadError ? (
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle>Workspace database unavailable</CardTitle>
+            <CardDescription>{loadError}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-3">
+            <Button variant="outline" onClick={() => void load()}>
+              Retry
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleResetWorkspaceDb()}
+              disabled={resettingDb}
+            >
+              {resettingDb ? "Resetting..." : "Reset local workspace data"}
+            </Button>
+          </CardContent>
+        </Card>
       ) : dashboards.length === 0 ? (
         <Card className="border-dashed">
           <CardHeader className="flex flex-col items-center justify-center py-12 text-center">
@@ -123,11 +165,7 @@ export default function DashboardsPage() {
               Get started by creating your first dashboard. You can add visuals
               from your chat conversations.
             </CardDescription>
-            <Button
-              onClick={handleCreate}
-              disabled={creating}
-              className="mt-6"
-            >
+            <Button onClick={handleCreate} disabled={creating} className="mt-6">
               <Plus className="mr-2 h-4 w-4" />
               Create Your First Dashboard
             </Button>
