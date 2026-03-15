@@ -730,7 +730,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
               <DropdownMenuItem
                 onSelect={() => setIsMeasureCardDialogOpen(true)}
               >
-                Metric / Measure card
+                Measure card
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => setIsVisualCardDialogOpen(true)}
