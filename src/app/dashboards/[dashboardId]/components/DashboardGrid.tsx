@@ -6,6 +6,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { rectSortingStrategy, SortableContext } from "@dnd-kit/sortable";
+import type { MeasuresByName } from "@/lib/dashboard/measures";
 import type { Result } from "@/lib/types";
 import type { DashboardChart, LayoutRow, ResizeState } from "../types";
 import { getGridColsClass, parseChartConfig } from "../utils";
@@ -15,6 +16,7 @@ import { SortableChartCard } from "./SortableChartCard";
 type DashboardGridProps = {
   charts: DashboardChart[];
   chartData: Record<string, Result[]>;
+  measures: MeasuresByName;
   layoutRows: LayoutRow[];
   dashboardColumns: number;
   onDragEnd: (event: DragEndEvent) => void;
@@ -39,6 +41,7 @@ type DashboardGridProps = {
 export function DashboardGrid({
   charts,
   chartData,
+  measures,
   layoutRows,
   dashboardColumns,
   onDragEnd,
@@ -219,6 +222,7 @@ export function DashboardGrid({
                       chart={chart}
                       config={config}
                       rows={rows}
+                      measures={measures}
                       onConfigChange={(newJson) =>
                         onConfigChange(chart.id, newJson)
                       }

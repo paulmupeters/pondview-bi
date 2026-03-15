@@ -12,6 +12,7 @@ import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import { CardConfigDialog } from "@/components/card-config-dialog";
@@ -23,6 +24,7 @@ import { SqlResultsTable } from "@/components/sql-results-table";
 import { TableConfigDialog } from "@/components/table-config-dialog";
 import { TextConfigDialog } from "@/components/text-config-dialog";
 import { Button } from "@/components/ui/button";
+import { interpolateMeasurePlaceholders } from "@/lib/dashboard/measures";
 import type { CardConfig, Config, TableConfig, TextConfig } from "@/lib/types";
 import type { SortableChartCardProps } from "../types";
 import {
@@ -36,6 +38,7 @@ export function SortableChartCard({
   chart,
   config,
   rows,
+  measures,
   onConfigChange,
   onDelete,
   expandedSqlChartId,
@@ -114,6 +117,13 @@ export function SortableChartCard({
     setEditedSql(chart.sql);
     onToggleSql(chart.id);
   };
+
+  const renderedTextContent = useMemo(() => {
+    if (!config || !isTextConfig(config)) {
+      return "";
+    }
+    return interpolateMeasurePlaceholders(config.content, measures);
+  }, [config, measures]);
 
   const handleCardClick = (e: ReactMouseEvent<HTMLDivElement>) => {
     if (isSelected && e.target === e.currentTarget) {
@@ -289,6 +299,7 @@ export function SortableChartCard({
               </button>
             }
             config={config as TextConfig}
+            measures={measures}
             onConfigChange={async (newConfig) => {
               const newJson = JSON.stringify(newConfig);
               await onConfigChange(newJson);
@@ -332,7 +343,7 @@ export function SortableChartCard({
                 {config.title}
               </h3>
             ) : null}
-            <MarkdownRenderer>{config.content}</MarkdownRenderer>
+            <MarkdownRenderer>{renderedTextContent}</MarkdownRenderer>
           </div>
         ) : rows.length > 0 ? (
           <DynamicChart

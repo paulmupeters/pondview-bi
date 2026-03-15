@@ -1,4 +1,5 @@
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
+import type { MeasuresByName } from "@/lib/dashboard/measures";
 import type {
   CardConfig,
   Config,
@@ -61,6 +62,7 @@ export type SortableChartCardProps = {
   chart: DashboardChart & { filtersApplied?: boolean };
   config: Config | CardConfig | TableConfig | TextConfig | null;
   rows: Result[];
+  measures: MeasuresByName;
   onConfigChange: (newChartJson: string) => Promise<void>;
   onDelete: () => Promise<void>;
   expandedSqlChartId: string | null;
