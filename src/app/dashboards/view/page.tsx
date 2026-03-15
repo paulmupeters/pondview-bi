@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { executeDashboardChartsWithFilters } from "@/lib/dashboard/browser-filter-engine";
+import { extractMeasuresFromMetricCards } from "@/lib/dashboard/measures";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import type {
   CardConfig,
@@ -421,6 +422,10 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     () => groupConsecutiveMetricCards(charts, chartData),
     [charts, chartData],
   );
+  const measuresByName = useMemo(
+    () => extractMeasuresFromMetricCards(charts, chartData),
+    [charts, chartData],
+  );
 
   const layoutRows = useMemo(
     () => buildRows(chartGroups, columns, autoFitRows),
@@ -577,6 +582,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
               </Button>
             }
             config={null}
+            measures={measuresByName}
             onConfigChange={(newConfig) => {
               void handleAddTextCard(newConfig);
             }}
@@ -602,6 +608,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       <DashboardGrid
         charts={charts}
         chartData={chartData}
+        measures={measuresByName}
         layoutRows={layoutRows}
         dashboardColumns={columns}
         onDragEnd={handleDragEnd}

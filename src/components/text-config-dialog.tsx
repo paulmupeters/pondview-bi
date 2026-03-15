@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,6 +9,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import type { MeasuresByName } from "@/lib/dashboard/measures";
 import {
   Tooltip,
   TooltipContent,
@@ -21,6 +27,7 @@ type TextConfigDialogProps = {
   config: TextConfig | null;
   onConfigChange: (config: TextConfig) => void;
   tooltip?: string;
+  measures?: MeasuresByName;
 };
 
 export function TextConfigDialog({
@@ -28,11 +35,14 @@ export function TextConfigDialog({
   config,
   onConfigChange,
   tooltip,
+  measures = {},
 }: TextConfigDialogProps) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState<string>(config?.title ?? "");
   const [content, setContent] = useState<string>(config?.content ?? "");
   const [showPreview, setShowPreview] = useState(false);
+  const [isMeasurePopoverOpen, setIsMeasurePopoverOpen] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Reset state when dialog opens or config changes
   useEffect(() => {
@@ -46,6 +56,13 @@ export function TextConfigDialog({
     () => content.trim().length > 0,
     [content],
   );
+  const measureEntries = useMemo(
+    () =>
+      Object.entries(measures).sort(([leftKey], [rightKey]) =>
+        leftKey.localeCompare(rightKey),
+      ),
+    [measures],
+  );
 
   const handleApply = () => {
     if (!canSave) return;
@@ -55,6 +72,42 @@ export function TextConfigDialog({
       content,
     });
     setOpen(false);
+  };
+
+  const insertMeasureToken = (measureName: string) => {
+    const token = `{{${measureName}}}`;
+    setShowPreview(false);
+    setContent((previousContent) => {
+      const textarea = textareaRef.current;
+      const hasActiveSelection =
+        textarea !== null && document.activeElement === textarea;
+      const selectionStart = hasActiveSelection
+        ? textarea.selectionStart
+        : previousContent.length;
+      const selectionEnd = hasActiveSelection
+        ? textarea.selectionEnd
+        : previousContent.length;
+
+      const nextContent =
+        previousContent.slice(0, selectionStart) +
+        token +
+        previousContent.slice(selectionEnd);
+
+      const nextCaretPosition = selectionStart + token.length;
+      requestAnimationFrame(() => {
+        if (!textareaRef.current) {
+          return;
+        }
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(
+          nextCaretPosition,
+          nextCaretPosition,
+        );
+      });
+
+      return nextContent;
+    });
+    setIsMeasurePopoverOpen(false);
   };
 
   const dialogBody = (
@@ -76,14 +129,56 @@ export function TextConfigDialog({
           <label htmlFor="text-card-content" className="text-sm font-medium">
             Markdown content
           </label>
-          <Button
-            type="button"
-            variant={showPreview ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowPreview((prev) => !prev)}
-          >
-            {showPreview ? "Edit" : "Preview"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Popover
+              open={isMeasurePopoverOpen}
+              onOpenChange={setIsMeasurePopoverOpen}
+            >
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={measureEntries.length === 0}
+                >
+                  Insert measure
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-2" align="end">
+                {measureEntries.length > 0 ? (
+                  <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                    {measureEntries.map(([measureName, measureValue]) => (
+                      <button
+                        key={measureName}
+                        type="button"
+                        className="flex w-full flex-col rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted"
+                        onClick={() => insertMeasureToken(measureName)}
+                      >
+                        <span className="text-sm font-medium">
+                          {`{{${measureName}}}`}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          Current value: {measureValue || "(empty)"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                    No measures available yet.
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
+            <Button
+              type="button"
+              variant={showPreview ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowPreview((prev) => !prev)}
+            >
+              {showPreview ? "Edit" : "Preview"}
+            </Button>
+          </div>
         </div>
         {showPreview ? (
           <div className="min-h-[200px] rounded-md border border-input bg-background p-3 text-sm">
@@ -95,6 +190,7 @@ export function TextConfigDialog({
           </div>
         ) : (
           <textarea
+            ref={textareaRef}
             id="text-card-content"
             value={content}
             onChange={(e) => setContent(e.target.value)}

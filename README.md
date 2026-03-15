@@ -16,6 +16,7 @@ BI Chat is an AI-assisted analytics app for exploring connected data sources wit
 - Render line, area, bar, and pie charts from query results
 - Adjust chart settings inline or through config dialogs
 - Save visuals to dashboards with tables, metric cards, and text blocks
+- Reference metric SQL aliases in text cards with `{{measure_alias}}` placeholders
 - Filter dashboards in the browser with shared slicers and join definitions
 
 ### Data connectivity
@@ -146,6 +147,7 @@ The checked-in template lives at [env.local.example](/Users/paulpeters/Developer
 ```text
 bi-chat/
 ├── docs/                    # Architecture notes, docs index, and datasource context
+├── docs-site/               # Standalone VitePress docs app (deploy to docs subdomain)
 ├── public/                  # Static assets
 ├── src/
 │   ├── ai/                  # Model config, prompts, tools, client helpers
@@ -160,7 +162,7 @@ bi-chat/
 └── vite.config.ts           # Vite configuration
 ```
 
-See [docs/README.md](/Users/paulpeters/Developer/bi-chat/docs/README.md) for the docs map.
+See [docs-site/guide/index.md](docs-site/guide/index.md) for the published docs map.
 
 ## Development
 
@@ -172,6 +174,11 @@ bun dev
 bun build
 bun preview
 bun run serve:extension
+
+# Docs (VitePress)
+bun run docs:dev
+bun run docs:build
+bun run docs:preview
 
 # Code Quality
 bun run lint
@@ -211,12 +218,24 @@ Optional datasource-specific AI context lives in [docs/datasource-context](/User
 
 ## Docs
 
-The `docs/` folder currently contains:
+The project ships a standalone VitePress docs app under `docs-site/` so docs can be deployed independently from the main web app.
 
-- DuckDB/runtime notes
-- dashboard materialization notes
-- datasource-specific AI context
-- placeholder docs for uncovered topics that still need fuller documentation
+### Local docs workflow
+
+- `bun run docs:dev` starts the VitePress dev server
+- `bun run docs:build` builds static docs output
+- `bun run docs:preview` previews the built docs locally
+
+### Subdomain deployment (`docs.<your-domain>`)
+
+Use any static host as a separate deploy target:
+
+- **Root directory**: `docs-site`
+- **Build command**: `bun run docs:build`
+- **Output directory**: `docs-site/.vitepress/dist`
+- **Custom domain**: map `docs.<your-domain>` to the docs project
+
+This keeps docs releases decoupled from the main app deployment.
 
 ## Contributing
 

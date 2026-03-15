@@ -68,3 +68,6 @@ semantic-layer/models/sources.yml
 
 # ai
 .rules/
+
+# vitepress
+.vitepress/
