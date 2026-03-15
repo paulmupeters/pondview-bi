@@ -1,9 +1,14 @@
-import type { Result } from "@/lib/types";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
+import type { CardConfig, Result } from "@/lib/types";
 import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
 
 type DashboardMeasureSourceChart = {
   id: string;
   chartConfigJson: string;
+  sql?: string | null;
+  title?: string | null;
+  dbIdentifier?: string | null;
+  sqlBackend?: SqlBackend | null;
 };
 
 export type MeasurePrimitive =
@@ -21,6 +26,9 @@ export type MeasureOption = {
   source: "saved" | "legacy";
   measureId?: string;
   sql?: string;
+  dbIdentifier?: string | null;
+  sqlBackend?: SqlBackend | null;
+  sourceChartId?: string;
 };
 
 const MEASURE_TOKEN_PATTERN = /{{\s*([^{}]+?)\s*}}/g;
@@ -50,6 +58,14 @@ function isCardConfig(config: unknown): boolean {
     "title" in candidate &&
     "description" in candidate
   );
+}
+
+function coerceCardConfig(config: unknown): CardConfig | null {
+  if (!isCardConfig(config)) {
+    return null;
+  }
+
+  return config as CardConfig;
 }
 
 function hasOwnMeasureKey(
@@ -137,10 +153,83 @@ export function extractMeasuresFromMetricCards(
   return measures;
 }
 
+function formatLegacyMeasureLabel(input: {
+  config: CardConfig | null;
+  chartTitle?: string | null;
+  firstColumnName: string;
+}): string {
+  const configTitle = input.config?.title?.trim();
+  if (configTitle) {
+    return configTitle;
+  }
+
+  const chartTitle = input.chartTitle?.trim();
+  if (chartTitle) {
+    return chartTitle;
+  }
+
+  return input.firstColumnName
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((segment) => segment[0]?.toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+export function extractLegacyMeasureOptionsFromMetricCards(
+  charts: DashboardMeasureSourceChart[],
+  chartData: Record<string, Result[]>,
+): MeasureOption[] {
+  const optionsByKey = new Map<string, MeasureOption>();
+
+  for (const chart of charts) {
+    const parsedConfig = parseChartConfig(chart.chartConfigJson);
+    const config = coerceCardConfig(parsedConfig);
+    if (!config) {
+      continue;
+    }
+
+    const rows = chartData[chart.id] ?? [];
+    const firstRow = rows[0];
+    if (!firstRow) {
+      continue;
+    }
+
+    const firstColumnName = Object.keys(firstRow)[0];
+    if (!firstColumnName) {
+      continue;
+    }
+
+    const key = normalizeMeasureName(firstColumnName);
+    if (!key || optionsByKey.has(key)) {
+      continue;
+    }
+
+    optionsByKey.set(key, {
+      key,
+      label: formatLegacyMeasureLabel({
+        config,
+        chartTitle: chart.title,
+        firstColumnName,
+      }),
+      value: formatFirstRowMeasureValue(rows),
+      source: "legacy",
+      sql: chart.sql ?? undefined,
+      dbIdentifier: chart.dbIdentifier ?? null,
+      sqlBackend: chart.sqlBackend ?? null,
+      sourceChartId: chart.id,
+    });
+  }
+
+  return Array.from(optionsByKey.values()).sort((left, right) =>
+    left.label.localeCompare(right.label),
+  );
+}
+
 export function buildMeasureOptions(input: {
   savedMeasures: WorkspaceDashboardMeasure[];
   savedValuesByMeasureId: Record<string, string>;
   legacyMeasures?: MeasuresByName;
+  legacyMeasureOptions?: MeasureOption[];
 }): MeasureOption[] {
   const optionsByKey = new Map<string, MeasureOption>();
 
@@ -152,7 +241,17 @@ export function buildMeasureOptions(input: {
       source: "saved",
       measureId: measure.id,
       sql: measure.sql,
+      dbIdentifier: measure.dbIdentifier,
+      sqlBackend: measure.sqlBackend,
     });
+  }
+
+  for (const measure of input.legacyMeasureOptions ?? []) {
+    if (optionsByKey.has(measure.key)) {
+      continue;
+    }
+
+    optionsByKey.set(measure.key, measure);
   }
 
   for (const [key, value] of Object.entries(input.legacyMeasures ?? {})) {

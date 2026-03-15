@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   formatFirstRowMeasureValue,
+  type MeasureOption,
   normalizeMeasureName,
 } from "@/lib/dashboard/measures";
 import {
@@ -27,17 +28,27 @@ import type { CardConfig, Result } from "@/lib/types";
 import {
   addChartToDashboard,
   createDashboardMeasure,
-  type DbDashboardMeasure,
 } from "@/lib/workspace/dashboard-repo";
 
 type DashboardMeasureCardDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   dashboardId: string;
-  dashboardMeasures: DbDashboardMeasure[];
-  measureValuesById: Record<string, string>;
+  existingMeasures: MeasureOption[];
   onSaved?: () => Promise<void> | void;
 };
+
+function getExistingMeasureId(measure: MeasureOption): string {
+  if (measure.measureId) {
+    return measure.measureId;
+  }
+
+  if (measure.sourceChartId) {
+    return `legacy:${measure.sourceChartId}`;
+  }
+
+  return `legacy:${measure.key}`;
+}
 
 function resolveStoredDbIdentifier(
   sqlBackend: SqlBackend | null,
@@ -57,8 +68,7 @@ export function DashboardMeasureCardDialog({
   open,
   onOpenChange,
   dashboardId,
-  dashboardMeasures,
-  measureValuesById,
+  existingMeasures,
   onSaved,
 }: DashboardMeasureCardDialogProps) {
   const sqlBackendPreference = useSqlBackendPreference();
@@ -80,9 +90,11 @@ export function DashboardMeasureCardDialog({
       return;
     }
 
-    const defaultMeasure = dashboardMeasures[0] ?? null;
+    const defaultMeasure = existingMeasures[0] ?? null;
     setMode(defaultMeasure ? "existing" : "new");
-    setSelectedMeasureId(defaultMeasure?.id ?? null);
+    setSelectedMeasureId(
+      defaultMeasure ? getExistingMeasureId(defaultMeasure) : null,
+    );
     setMeasureLabel("");
     setMeasureSql("");
     setPreviewRows([]);
@@ -91,13 +103,14 @@ export function DashboardMeasureCardDialog({
     setTakeaway("");
     setError(null);
     setIsSaving(false);
-  }, [dashboardMeasures, open]);
+  }, [existingMeasures, open]);
 
   const selectedMeasure = useMemo(
     () =>
-      dashboardMeasures.find((measure) => measure.id === selectedMeasureId) ??
-      null,
-    [dashboardMeasures, selectedMeasureId],
+      existingMeasures.find(
+        (measure) => getExistingMeasureId(measure) === selectedMeasureId,
+      ) ?? null,
+    [existingMeasures, selectedMeasureId],
   );
 
   useEffect(() => {
@@ -118,11 +131,8 @@ export function DashboardMeasureCardDialog({
     () => formatFirstRowMeasureValue(previewRows),
     [previewRows],
   );
-  const selectedMeasureValue = selectedMeasure
-    ? (measureValuesById[selectedMeasure.id] ?? "")
-    : "";
   const previewValue =
-    mode === "existing" ? selectedMeasureValue : newMeasureValue;
+    mode === "existing" ? (selectedMeasure?.value ?? "") : newMeasureValue;
   const resolvedSqlBackend = resolveSqlBackend({
     backendPreference: sqlBackendPreference,
     dbIdentifier: undefined,
@@ -133,7 +143,7 @@ export function DashboardMeasureCardDialog({
     !isSaving &&
     title.trim().length > 0 &&
     (mode === "existing"
-      ? Boolean(selectedMeasure)
+      ? Boolean(selectedMeasure?.sql?.trim().length)
       : measureLabel.trim().length > 0 &&
         newMeasureKey.length > 0 &&
         measureSql.trim().length > 0 &&
@@ -161,15 +171,14 @@ export function DashboardMeasureCardDialog({
         });
 
         measure = {
-          id: created.id,
-          dashboardId,
           key: newMeasureKey,
           label: measureLabel.trim(),
+          value: newMeasureValue,
+          source: "saved",
+          measureId: created.id,
           sql: measureSql.trim(),
           dbIdentifier: resolvedDbIdentifier,
           sqlBackend: resolvedSqlBackend,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
         };
       }
 
@@ -179,18 +188,24 @@ export function DashboardMeasureCardDialog({
 
       const cardConfig: CardConfig = {
         configType: "card",
-        measureId: measure.id,
         title: title.trim(),
         description: description.trim(),
         takeaway: takeaway.trim() ? takeaway.trim() : undefined,
       };
+      if (measure.source === "saved" && measure.measureId) {
+        cardConfig.measureId = measure.measureId;
+      }
+
+      if (!measure.sql?.trim()) {
+        throw new Error("The selected measure is missing its SQL query.");
+      }
 
       await addChartToDashboard({
         dashboardId,
         title: cardConfig.title,
         description: cardConfig.description,
         sql: measure.sql,
-        dbIdentifier: measure.dbIdentifier,
+        dbIdentifier: measure.dbIdentifier ?? null,
         sqlBackend: measure.sqlBackend ?? null,
         chartConfigJson: JSON.stringify(cardConfig),
       });
@@ -228,7 +243,7 @@ export function DashboardMeasureCardDialog({
             <TabsList>
               <TabsTrigger
                 value="existing"
-                disabled={dashboardMeasures.length === 0}
+                disabled={existingMeasures.length === 0}
               >
                 Existing measures
               </TabsTrigger>
@@ -238,14 +253,15 @@ export function DashboardMeasureCardDialog({
             <TabsContent value="existing" className="min-h-0 flex-1">
               <div className="grid min-h-0 gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
                 <div className="space-y-2 overflow-auto rounded-xl border border-border bg-muted/15 p-3">
-                  {dashboardMeasures.length > 0 ? (
-                    dashboardMeasures.map((measure) => {
-                      const isSelected = measure.id === selectedMeasureId;
+                  {existingMeasures.length > 0 ? (
+                    existingMeasures.map((measure) => {
+                      const measureId = getExistingMeasureId(measure);
+                      const isSelected = measureId === selectedMeasureId;
                       return (
                         <button
-                          key={measure.id}
+                          key={measureId}
                           type="button"
-                          onClick={() => setSelectedMeasureId(measure.id)}
+                          onClick={() => setSelectedMeasureId(measureId)}
                           className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
                             isSelected
                               ? "border-primary bg-primary/5"
@@ -254,19 +270,32 @@ export function DashboardMeasureCardDialog({
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <div className="font-medium">{measure.label}</div>
+                              <div className="flex items-center gap-2 font-medium">
+                                <span>{measure.label}</span>
+                                <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  {measure.source === "saved"
+                                    ? "Reusable"
+                                    : "From card"}
+                                </span>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {`{{${measure.key}}}`}
+                              </div>
+                            </div>
+                            <div className="text-right text-sm font-medium">
+                              {measure.value || "(empty)"}
                             </div>
                           </div>
                           <p className="mt-2 truncate text-xs text-muted-foreground">
-                            {measure.sql}
+                            {measure.sql || "No SQL available"}
                           </p>
                         </button>
                       );
                     })
                   ) : (
                     <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      No reusable measures yet. Create your first one in the New
-                      measure tab.
+                      No measures available yet. Create your first one in the
+                      New measure tab.
                     </div>
                   )}
                 </div>
