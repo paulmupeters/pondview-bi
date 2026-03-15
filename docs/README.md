@@ -18,7 +18,6 @@ This folder currently has good coverage for DuckDB internals and dashboard mater
 - [connected-data-sources.md](/Users/paulpeters/Developer/bi-chat/docs/connected-data-sources.md)
 - [uploads-and-browser-storage.md](/Users/paulpeters/Developer/bi-chat/docs/uploads-and-browser-storage.md)
 - [workspace-persistence.md](/Users/paulpeters/Developer/bi-chat/docs/workspace-persistence.md)
-- [extension-server-and-api-routes.md](/Users/paulpeters/Developer/bi-chat/docs/extension-server-and-api-routes.md)
 
 ## Why these were gaps
 
@@ -26,4 +25,4 @@ This folder currently has good coverage for DuckDB internals and dashboard mater
 - Runtime selection across WASM, Bridge, and DuckDB over HTTP is spread across code and Settings UI.
 - Data-source support has expanded beyond the docs.
 - Upload behavior and browser-local persistence are important product behaviors but were undocumented.
-- The workspace import/export model and extension-side API surface are both real maintenance topics with no dedicated doc.
+- The workspace import/export model is a real maintenance topic with no dedicated doc.

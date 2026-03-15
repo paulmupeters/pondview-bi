@@ -22,7 +22,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173).
+Open `http://localhost:5173`.
 
 ## 2) Configure AI settings
 
@@ -71,7 +71,6 @@ Use these guides to debug:
 - [AI Provider Configuration](/guide/ai-provider-configuration)
 - [Connected Data Sources](/guide/connected-data-sources)
 - [SQL Runtime Backends](/guide/sql-runtime-backends)
-- [Extension Server and API Routes](/guide/extension-server-and-api-routes)
 
 ## Next steps
 
