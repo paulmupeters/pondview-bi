@@ -1,6 +1,6 @@
 # Docs Map
 
-This docs set covers setup, runtime behavior, connected data, uploads, persistence, and extension-server API wiring.
+This docs set covers setup, runtime behavior, connected data, uploads, and persistence.
 
 ## Existing docs
 
@@ -17,7 +17,6 @@ This docs set covers setup, runtime behavior, connected data, uploads, persisten
 - [Connected Data Sources](/guide/connected-data-sources)
 - [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
 - [Workspace Persistence](/guide/workspace-persistence)
-- [Extension Server and API Routes](/guide/extension-server-and-api-routes)
 
 ## Suggested reading path
 
@@ -25,4 +24,3 @@ This docs set covers setup, runtime behavior, connected data, uploads, persisten
 2. Review [AI Provider Configuration](/guide/ai-provider-configuration) and [SQL Runtime Backends](/guide/sql-runtime-backends).
 3. Add data with [Connected Data Sources](/guide/connected-data-sources) and [Uploads and Browser Storage](/guide/uploads-and-browser-storage).
 4. Understand state management in [Workspace Persistence](/guide/workspace-persistence).
-5. Use [Extension Server and API Routes](/guide/extension-server-and-api-routes) when working on extension-hosted integrations.

@@ -47,20 +47,11 @@ Validation is enforced by `getMissingRequiredSetting()` before saving and when m
 - Default model fallback: `CHAT_MODEL` from `src/ai/models.ts` (`zai/glm-5`)
 - If `AI_MODEL` is empty, the fallback model is used
 
-## Runtime behavior: browser vs server
+## Runtime behavior: browser only
 
 ### Primary chat flow (browser)
 
 The main chat UI uses `DirectChatTransport` with `createPondviewAgent(...)`. Model resolution comes from `resolveGatewayModel(...)`, which reads settings from browser local storage.
-
-### Compatibility API routes (server)
-
-`/api/chat` and `/api/chat/[chatId]` remain for compatibility/external callers. These routes are server-side and do **not** use browser local storage settings.
-
-- `/api/chat` uses `LEGACY_CHAT_MODEL` (`openai/gpt-5-mini`)
-- `/api/chat/[chatId]` uses `CHAT_MODEL` (`zai/glm-5`)
-
-Treat these routes as separate from the browser-configured chat transport.
 
 ## Common failures and fixes
 

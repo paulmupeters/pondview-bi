@@ -15,9 +15,4 @@ export const CHAT_MODEL = "zai/glm-5";
  * (lightweight tasks requiring structured output)
  */
 export const VISUALIZATION_MODEL = "zai/glm-5";
-
-/**
- * Legacy chat model (used in backward compatibility route)
- */
-export const LEGACY_CHAT_MODEL = "openai/gpt-5-mini";
  

@@ -69,6 +69,6 @@ Non-imported files remain available as chat attachments.
 2. Deletes blob from IndexedDB.
 3. If imported, drops the DuckDB WASM table and unregisters browser file mapping.
 
-## Legacy server upload routes
+## Server upload routes
 
-Server routes (`/api/upload`, `/api/upload/[fileId]`) still exist for compatibility/extension flows and write files to disk under `uploads/`. The primary in-app UX is browser-local.
+Server routes (`/api/upload`, `/api/upload/[fileId]`) still exist for app-side API workflows and write files to disk under `uploads/`, but the primary in-app UX is browser-local.

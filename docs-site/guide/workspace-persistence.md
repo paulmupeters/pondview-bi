@@ -36,7 +36,7 @@ Examples of browser storage keys outside IndexedDB:
 There are two persistence layers in the codebase:
 
 - Browser repositories (`src/lib/workspace/*-repo.ts`) for app-local state.
-- Server repositories (`src/lib/repositories/*.ts`) used by API routes and extension-server compatibility endpoints.
+- Server repositories (`src/lib/repositories/*.ts`) used by the remaining server-side dashboard/chart APIs.
 
 Server repositories store JSON sidecar files on disk; browser repositories store in IndexedDB.
 

@@ -12,7 +12,7 @@ Uploads are now part of the main data flow, and browser-local file persistence i
 - What gets imported into DuckDB WASM vs stored as a blob attachment
 - Size limits and validation rules
 - How uploaded files are surfaced in the Data page and prompt input
-- Legacy server-backed upload behavior vs current browser-first behavior
+- Server upload APIs vs current browser-first behavior
 
 ## Relevant files
 
