@@ -40,6 +40,18 @@ export interface WorkspaceChart {
   updatedAt: number;
 }
 
+export interface WorkspaceDashboardMeasure {
+  id: string;
+  dashboardId: string;
+  key: string;
+  label: string;
+  sql: string;
+  dbIdentifier: string | null;
+  sqlBackend?: SqlBackend | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface WorkspaceDashboardSlicer {
   id: string;
   dashboardId: string;
@@ -89,13 +101,29 @@ export interface WorkspaceExportV1 {
   preferences: WorkspacePreference[];
 }
 
+export interface WorkspaceExportV2 {
+  version: 2;
+  exportedAt: string;
+  chats: WorkspaceChat[];
+  messages: WorkspaceMessage[];
+  dashboards: WorkspaceDashboard[];
+  charts: WorkspaceChart[];
+  dashboardMeasures: WorkspaceDashboardMeasure[];
+  dashboardSlicers: WorkspaceDashboardSlicer[];
+  chartSlicers: WorkspaceChartSlicer[];
+  preferences: WorkspacePreference[];
+}
+
+export type WorkspaceExport = WorkspaceExportV1 | WorkspaceExportV2;
+
 export const WORKSPACE_DB_NAME = "pondview-workspace";
-export const WORKSPACE_DB_VERSION = 2;
+export const WORKSPACE_DB_VERSION = 3;
 
 export const STORE_CHATS = "chats";
 export const STORE_MESSAGES = "messages";
 export const STORE_DASHBOARDS = "dashboards";
 export const STORE_CHARTS = "charts";
+export const STORE_DASHBOARD_MEASURES = "dashboardMeasures";
 export const STORE_DASHBOARD_SLICERS = "dashboardSlicers";
 export const STORE_CHART_SLICERS = "chartSlicers";
 export const STORE_PREFERENCES = "preferences";
@@ -106,6 +134,7 @@ type StoreName =
   | typeof STORE_MESSAGES
   | typeof STORE_DASHBOARDS
   | typeof STORE_CHARTS
+  | typeof STORE_DASHBOARD_MEASURES
   | typeof STORE_DASHBOARD_SLICERS
   | typeof STORE_CHART_SLICERS
   | typeof STORE_PREFERENCES
@@ -157,6 +186,18 @@ function createStores(db: IDBDatabase): void {
     charts.createIndex("dashboardId", "dashboardId", { unique: false });
     charts.createIndex("dashboardIdPosition", ["dashboardId", "position"], {
       unique: false,
+    });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_DASHBOARD_MEASURES)) {
+    const dashboardMeasures = db.createObjectStore(STORE_DASHBOARD_MEASURES, {
+      keyPath: "id",
+    });
+    dashboardMeasures.createIndex("dashboardId", "dashboardId", {
+      unique: false,
+    });
+    dashboardMeasures.createIndex("dashboardIdKey", ["dashboardId", "key"], {
+      unique: true,
     });
   }
 
@@ -293,6 +334,7 @@ export async function clearWorkspaceDb(): Promise<void> {
       STORE_MESSAGES,
       STORE_DASHBOARDS,
       STORE_CHARTS,
+      STORE_DASHBOARD_MEASURES,
       STORE_DASHBOARD_SLICERS,
       STORE_CHART_SLICERS,
       STORE_PREFERENCES,
@@ -305,6 +347,7 @@ export async function clearWorkspaceDb(): Promise<void> {
   tx.objectStore(STORE_MESSAGES).clear();
   tx.objectStore(STORE_DASHBOARDS).clear();
   tx.objectStore(STORE_CHARTS).clear();
+  tx.objectStore(STORE_DASHBOARD_MEASURES).clear();
   tx.objectStore(STORE_DASHBOARD_SLICERS).clear();
   tx.objectStore(STORE_CHART_SLICERS).clear();
   tx.objectStore(STORE_PREFERENCES).clear();

@@ -15,11 +15,11 @@ import {
   useMemo,
   useState,
 } from "react";
-import { CardConfigDialog } from "@/components/card-config-dialog";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { DynamicChart } from "@/components/dynamic-chart";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { MetricCard } from "@/components/metric-card";
+import { MetricCardSettingsDialog } from "@/components/metric-card-settings-dialog";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { TableConfigDialog } from "@/components/table-config-dialog";
 import { TextConfigDialog } from "@/components/text-config-dialog";
@@ -39,7 +39,11 @@ export function SortableChartCard({
   config,
   rows,
   measures,
+  measureOptions,
+  measure,
+  measureValue,
   onConfigChange,
+  onMeasureChange,
   onDelete,
   expandedSqlChartId,
   onToggleSql,
@@ -131,6 +135,17 @@ export function SortableChartCard({
     }
   };
 
+  const handleCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!isSelected || event.target !== event.currentTarget) {
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect?.("");
+    }
+  };
+
   const colSpanClass = isResizable
     ? getColSpanClass(displayColSpan, totalColumns)
     : "";
@@ -140,7 +155,10 @@ export function SortableChartCard({
       ref={setNodeRef}
       style={style}
       onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
       data-chart-card-id={chart.id}
+      role="button"
+      tabIndex={0}
       className={`group relative flex flex-col rounded-xl border border-border bg-card shadow-md p-4 md:p-2 ring-1 ring-inset ${colSpanClass} ${previewColSpan !== null ? "ring-primary/50" : isSelected ? "ring-primary bg-primary/5" : "ring-transparent"}`}
     >
       <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
@@ -258,7 +276,7 @@ export function SortableChartCard({
         </div>
       ) : config && rows.length > 0 && isCardConfig(config) ? (
         <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <CardConfigDialog
+          <MetricCardSettingsDialog
             trigger={
               <button
                 type="button"
@@ -270,10 +288,19 @@ export function SortableChartCard({
               </button>
             }
             config={config as CardConfig}
+            measure={measure}
+            currentMeasureValue={measureValue}
             onConfigChange={async (newConfig) => {
               const newJson = JSON.stringify(newConfig);
               await onConfigChange(newJson);
             }}
+            onMeasureChange={
+              measure && onMeasureChange
+                ? async (updates) => {
+                    await onMeasureChange(measure.id, updates);
+                  }
+                : undefined
+            }
           />
           <button
             type="button"
@@ -300,6 +327,7 @@ export function SortableChartCard({
             }
             config={config as TextConfig}
             measures={measures}
+            measureOptions={measureOptions}
             onConfigChange={async (newConfig) => {
               const newJson = JSON.stringify(newConfig);
               await onConfigChange(newJson);

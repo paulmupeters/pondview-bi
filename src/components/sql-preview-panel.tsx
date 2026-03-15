@@ -21,6 +21,7 @@ export interface SqlPreviewPanelProps {
   query: string;
   dbIdentifier?: string;
   backendPreference?: SqlBackendPreference;
+  onQueryChange?: (newSql: string) => void;
   onSave?: (newSql: string) => Promise<void>;
   onRunStart?: () => void;
   onRun?: (result: SqlPreviewRunResult) => void;
@@ -31,6 +32,7 @@ export function SqlPreviewPanel({
   query,
   dbIdentifier,
   backendPreference,
+  onQueryChange,
   onSave,
   onRunStart,
   onRun,
@@ -123,7 +125,11 @@ export function SqlPreviewPanel({
       <CollapsibleContent className="space-y-2 pt-2">
         <Textarea
           value={editedSql}
-          onChange={(event) => setEditedSql(event.target.value)}
+          onChange={(event) => {
+            const nextSql = event.target.value;
+            setEditedSql(nextSql);
+            onQueryChange?.(nextSql);
+          }}
           readOnly={!onSave}
           className={cn(
             "min-h-35 font-mono text-sm",

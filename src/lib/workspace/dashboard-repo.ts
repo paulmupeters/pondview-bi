@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
+import type { CardConfig } from "@/lib/types";
 import {
   deleteByKey,
   getAllFromStore,
@@ -7,16 +8,19 @@ import {
   putOne,
   STORE_CHART_SLICERS,
   STORE_CHARTS,
+  STORE_DASHBOARD_MEASURES,
   STORE_DASHBOARD_SLICERS,
   STORE_DASHBOARDS,
   type WorkspaceChart,
   type WorkspaceChartSlicer,
   type WorkspaceDashboard,
+  type WorkspaceDashboardMeasure,
   type WorkspaceDashboardSlicer,
 } from "@/lib/workspace/workspace-db";
 
 export type DbDashboard = WorkspaceDashboard;
 export type DbDashboardChart = WorkspaceChart;
+export type DbDashboardMeasure = WorkspaceDashboardMeasure;
 export type DbDashboardSlicer = WorkspaceDashboardSlicer;
 export type DbChartSlicer = WorkspaceChartSlicer;
 
@@ -26,6 +30,12 @@ async function upsertDashboard(dashboard: WorkspaceDashboard): Promise<void> {
 
 async function upsertChart(chart: WorkspaceChart): Promise<void> {
   await putOne(STORE_CHARTS, chart);
+}
+
+async function upsertDashboardMeasure(
+  measure: WorkspaceDashboardMeasure,
+): Promise<void> {
+  await putOne(STORE_DASHBOARD_MEASURES, measure);
 }
 
 async function upsertDashboardSlicer(
@@ -40,6 +50,33 @@ async function upsertChartSlicer(slicer: WorkspaceChartSlicer): Promise<void> {
 
 function sortByPosition<T extends { position: number }>(rows: T[]): T[] {
   return [...rows].sort((left, right) => left.position - right.position);
+}
+
+function parseCardConfig(chartConfigJson: string): CardConfig | null {
+  try {
+    const parsed = JSON.parse(chartConfigJson) as CardConfig;
+    if (!parsed || parsed.configType !== "card") {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function touchDashboard(dashboardId: string, now: number): Promise<void> {
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    dashboardId,
+  );
+  if (!dashboard) {
+    return;
+  }
+
+  await upsertDashboard({
+    ...dashboard,
+    updatedAt: now,
+  });
 }
 
 export async function listDashboards(): Promise<
@@ -123,6 +160,126 @@ export async function getChartById(
   return (await getByKey<WorkspaceChart>(STORE_CHARTS, chartId)) ?? null;
 }
 
+export async function listMeasuresByDashboard(
+  dashboardId: string,
+): Promise<WorkspaceDashboardMeasure[]> {
+  const measures = await getAllFromStore<WorkspaceDashboardMeasure>(
+    STORE_DASHBOARD_MEASURES,
+  );
+  return measures
+    .filter((measure) => measure.dashboardId === dashboardId)
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+export async function getMeasureById(
+  measureId: string,
+): Promise<WorkspaceDashboardMeasure | null> {
+  return (
+    (await getByKey<WorkspaceDashboardMeasure>(
+      STORE_DASHBOARD_MEASURES,
+      measureId,
+    )) ?? null
+  );
+}
+
+export async function createDashboardMeasure(input: {
+  dashboardId: string;
+  key: string;
+  label: string;
+  sql: string;
+  dbIdentifier?: string | null;
+  sqlBackend?: SqlBackend | null;
+  now?: number;
+}): Promise<{ id: string }> {
+  const dashboard = await getByKey<WorkspaceDashboard>(
+    STORE_DASHBOARDS,
+    input.dashboardId,
+  );
+  if (!dashboard) {
+    throw new Error("Dashboard not found");
+  }
+
+  const existingMeasures = await listMeasuresByDashboard(input.dashboardId);
+  if (existingMeasures.some((measure) => measure.key === input.key)) {
+    throw new Error("Measure key already exists on this dashboard");
+  }
+
+  const now = input.now ?? Date.now();
+  const id = nanoid();
+  await upsertDashboardMeasure({
+    id,
+    dashboardId: input.dashboardId,
+    key: input.key,
+    label: input.label,
+    sql: input.sql,
+    dbIdentifier: input.dbIdentifier ?? null,
+    sqlBackend: input.sqlBackend ?? null,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await touchDashboard(input.dashboardId, now);
+
+  return { id };
+}
+
+export async function updateDashboardMeasure(
+  measureId: string,
+  input: {
+    label?: string;
+    sql?: string;
+    dbIdentifier?: string | null;
+    sqlBackend?: SqlBackend | null;
+    now?: number;
+  },
+): Promise<{ updated: boolean }> {
+  const measure = await getByKey<WorkspaceDashboardMeasure>(
+    STORE_DASHBOARD_MEASURES,
+    measureId,
+  );
+  if (!measure) {
+    return { updated: false };
+  }
+
+  const now = input.now ?? Date.now();
+  const nextMeasure: WorkspaceDashboardMeasure = {
+    ...measure,
+    label: input.label ?? measure.label,
+    sql: input.sql ?? measure.sql,
+    dbIdentifier:
+      input.dbIdentifier === undefined
+        ? measure.dbIdentifier
+        : input.dbIdentifier,
+    sqlBackend:
+      input.sqlBackend === undefined ? measure.sqlBackend : input.sqlBackend,
+    updatedAt: now,
+  };
+
+  await upsertDashboardMeasure(nextMeasure);
+
+  const charts = await listChartsByDashboard(measure.dashboardId);
+  const measureBackedCharts = charts.filter((chart) => {
+    const config = parseCardConfig(chart.chartConfigJson);
+    return config?.measureId === measureId;
+  });
+
+  await Promise.all(
+    measureBackedCharts.map((chart) =>
+      upsertChart({
+        ...chart,
+        sql: nextMeasure.sql,
+        dbIdentifier: nextMeasure.dbIdentifier,
+        sqlBackend: nextMeasure.sqlBackend ?? null,
+        updatedAt: now,
+      }),
+    ),
+  );
+
+  await touchDashboard(measure.dashboardId, now);
+
+  return { updated: true };
+}
+
 export async function addChartToDashboard(input: {
   dashboardId: string;
   title?: string | null;
@@ -191,16 +348,7 @@ export async function updateChartConfig(
     updatedAt: now,
   });
 
-  const dashboard = await getByKey<WorkspaceDashboard>(
-    STORE_DASHBOARDS,
-    chart.dashboardId,
-  );
-  if (dashboard) {
-    await upsertDashboard({
-      ...dashboard,
-      updatedAt: now,
-    });
-  }
+  await touchDashboard(chart.dashboardId, now);
 
   return { updated: true };
 }
@@ -221,16 +369,7 @@ export async function updateChartSql(
     updatedAt: now,
   });
 
-  const dashboard = await getByKey<WorkspaceDashboard>(
-    STORE_DASHBOARDS,
-    chart.dashboardId,
-  );
-  if (dashboard) {
-    await upsertDashboard({
-      ...dashboard,
-      updatedAt: now,
-    });
-  }
+  await touchDashboard(chart.dashboardId, now);
 
   return { updated: true };
 }
@@ -263,16 +402,7 @@ export async function reorderDashboardCharts(
     });
   }
 
-  const dashboard = await getByKey<WorkspaceDashboard>(
-    STORE_DASHBOARDS,
-    dashboardId,
-  );
-  if (dashboard) {
-    await upsertDashboard({
-      ...dashboard,
-      updatedAt: now,
-    });
-  }
+  await touchDashboard(dashboardId, now);
 }
 
 export async function removeChartFromDashboard(
@@ -294,16 +424,7 @@ export async function removeChartFromDashboard(
     }
   }
 
-  const dashboard = await getByKey<WorkspaceDashboard>(
-    STORE_DASHBOARDS,
-    chart.dashboardId,
-  );
-  if (dashboard) {
-    await upsertDashboard({
-      ...dashboard,
-      updatedAt: now,
-    });
-  }
+  await touchDashboard(chart.dashboardId, now);
 
   return { removed: true };
 }
@@ -325,6 +446,15 @@ export async function deleteDashboard(
     .map((chart) => chart.id);
   for (const chartId of chartIds) {
     await deleteByKey(STORE_CHARTS, chartId);
+  }
+
+  const measures = await getAllFromStore<WorkspaceDashboardMeasure>(
+    STORE_DASHBOARD_MEASURES,
+  );
+  for (const measure of measures) {
+    if (measure.dashboardId === dashboardId) {
+      await deleteByKey(STORE_DASHBOARD_MEASURES, measure.id);
+    }
   }
 
   const dashboardSlicers = await getAllFromStore<WorkspaceDashboardSlicer>(

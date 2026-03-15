@@ -14,20 +14,23 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import type { MeasuresByName } from "@/lib/dashboard/measures";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { MeasureOption, MeasuresByName } from "@/lib/dashboard/measures";
 import type { TextConfig } from "@/lib/types";
 
 type TextConfigDialogProps = {
-  trigger: React.ReactNode;
+  trigger?: React.ReactNode;
   config: TextConfig | null;
   onConfigChange: (config: TextConfig) => void;
   tooltip?: string;
   measures?: MeasuresByName;
+  measureOptions?: MeasureOption[];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function TextConfigDialog({
@@ -36,8 +39,13 @@ export function TextConfigDialog({
   onConfigChange,
   tooltip,
   measures = {},
+  measureOptions,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: TextConfigDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = controlledOnOpenChange ?? setUncontrolledOpen;
   const [title, setTitle] = useState<string>(config?.title ?? "");
   const [content, setContent] = useState<string>(config?.content ?? "");
   const [showPreview, setShowPreview] = useState(false);
@@ -52,17 +60,21 @@ export function TextConfigDialog({
     }
   }, [open, config?.title, config?.content]);
 
-  const canSave = useMemo(
-    () => content.trim().length > 0,
-    [content],
-  );
-  const measureEntries = useMemo(
-    () =>
-      Object.entries(measures).sort(([leftKey], [rightKey]) =>
-        leftKey.localeCompare(rightKey),
-      ),
-    [measures],
-  );
+  const canSave = useMemo(() => content.trim().length > 0, [content]);
+  const measureEntries = useMemo(() => {
+    if (measureOptions && measureOptions.length > 0) {
+      return measureOptions;
+    }
+
+    return Object.entries(measures)
+      .map<MeasureOption>(([key, value]) => ({
+        key,
+        label: key,
+        value,
+        source: "legacy",
+      }))
+      .sort((left, right) => left.key.localeCompare(right.key));
+  }, [measureOptions, measures]);
 
   const handleApply = () => {
     if (!canSave) return;
@@ -74,8 +86,8 @@ export function TextConfigDialog({
     setOpen(false);
   };
 
-  const insertMeasureToken = (measureName: string) => {
-    const token = `{{${measureName}}}`;
+  const insertMeasureToken = (measureKey: string) => {
+    const token = `{{${measureKey}}}`;
     setShowPreview(false);
     setContent((previousContent) => {
       const textarea = textareaRef.current;
@@ -147,18 +159,18 @@ export function TextConfigDialog({
               <PopoverContent className="w-80 p-2" align="end">
                 {measureEntries.length > 0 ? (
                   <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
-                    {measureEntries.map(([measureName, measureValue]) => (
+                    {measureEntries.map((measure) => (
                       <button
-                        key={measureName}
+                        key={measure.measureId ?? measure.key}
                         type="button"
                         className="flex w-full flex-col rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted"
-                        onClick={() => insertMeasureToken(measureName)}
+                        onClick={() => insertMeasureToken(measure.key)}
                       >
                         <span className="text-sm font-medium">
-                          {`{{${measureName}}}`}
+                          {measure.label} {`{{${measure.key}}}`}
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
-                          Current value: {measureValue || "(empty)"}
+                          Current value: {measure.value || "(empty)"}
                         </span>
                       </button>
                     ))}
@@ -201,11 +213,7 @@ export function TextConfigDialog({
       </div>
 
       <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setOpen(false)}
-        >
+        <Button type="button" variant="outline" onClick={() => setOpen(false)}>
           Cancel
         </Button>
         <Button type="button" onClick={handleApply} disabled={!canSave}>
@@ -217,18 +225,20 @@ export function TextConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {tooltip ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DialogTrigger asChild>{trigger}</DialogTrigger>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{tooltip}</p>
-          </TooltipContent>
-        </Tooltip>
-      ) : (
-        <DialogTrigger asChild>{trigger}</DialogTrigger>
-      )}
+      {trigger ? (
+        tooltip ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DialogTrigger asChild>{trigger}</DialogTrigger>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{tooltip}</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <DialogTrigger asChild>{trigger}</DialogTrigger>
+        )
+      ) : null}
       <DialogContent className="max-w-2xl bg-card">
         <DialogHeader>
           <DialogTitle>Text Card</DialogTitle>

@@ -16,7 +16,7 @@ export const configSchema = z
     description: z
       .string()
       .describe(
-        "Describe the chart. What is it showing? What is interesting about the way the data is displayed?"
+        "Describe the chart. What is it showing? What is interesting about the way the data is displayed?",
       ),
     takeaway: z
       .string()
@@ -28,12 +28,12 @@ export const configSchema = z
     yKeys: z
       .array(z.string())
       .describe(
-        "Key(s) for y-axis values this is typically the quantitative column"
+        "Key(s) for y-axis values this is typically the quantitative column",
       ),
     multipleLines: z
       .boolean()
       .describe(
-        "For line charts only: whether the chart is comparing groups of data."
+        "For line charts only: whether the chart is comparing groups of data.",
       )
       .optional()
       .default(false),
@@ -41,7 +41,7 @@ export const configSchema = z
       .string()
       .nullish()
       .describe(
-        "For line charts only: key for quantitative y-axis column to measure against (eg. values, counts etc.)"
+        "For line charts only: key for quantitative y-axis column to measure against (eg. values, counts etc.)",
       )
       .optional(),
     categoryColumn: z
@@ -53,13 +53,13 @@ export const configSchema = z
       .array(z.string())
       .nullish()
       .describe(
-        "For line charts only: Categories used to compare different lines or data series. Each category represents a distinct line in the chart."
+        "For line charts only: Categories used to compare different lines or data series. Each category represents a distinct line in the chart.",
       )
       .optional(),
     colors: z
       .record(
         z.string().describe("Any of the yKeys"),
-        z.string().describe("Color value in CSS format (e.g., hex, rgb, hsl)")
+        z.string().describe("Color value in CSS format (e.g., hex, rgb, hsl)"),
       )
       .describe("Mapping of data keys to color values for chart elements")
       .optional(),
@@ -67,7 +67,7 @@ export const configSchema = z
     countMode: z
       .boolean()
       .describe(
-        "For bar charts: whether to count occurrences of xKey values instead of using yKeys"
+        "For bar charts: whether to count occurrences of xKey values instead of using yKeys",
       )
       .optional()
       .default(false),
@@ -134,14 +134,21 @@ export const normalizeChartConfig = (config: Config): Config => ({
 
 export const cardConfigSchema = z
   .object({
-    configType: z.literal("card").describe("Discriminator field for card config").default("card"),
+    configType: z
+      .literal("card")
+      .describe("Discriminator field for card config")
+      .default("card"),
+    measureId: z
+      .string()
+      .describe("Optional reusable measure backing this metric card")
+      .optional(),
     title: z
       .string()
       .describe("Title for the card displaying the single value"),
     description: z
       .string()
       .describe(
-        "Description of what the card value represents and what it shows"
+        "Description of what the card value represents and what it shows",
       ),
     takeaway: z
       .string()
@@ -154,10 +161,11 @@ export type CardConfig = z.infer<typeof cardConfigSchema>;
 
 export const tableConfigSchema = z
   .object({
-    configType: z.literal("table").describe("Discriminator field for table config").default("table"),
-    title: z
-      .string()
-      .describe("Title for the table"),
+    configType: z
+      .literal("table")
+      .describe("Discriminator field for table config")
+      .default("table"),
+    title: z.string().describe("Title for the table"),
     description: z
       .string()
       .describe("Description of what the table shows and its purpose"),
@@ -165,10 +173,7 @@ export const tableConfigSchema = z
       .string()
       .describe("Main insight or takeaway from the data in the table")
       .optional(),
-    sortColumn: z
-      .string()
-      .describe("Column to sort by default")
-      .optional(),
+    sortColumn: z.string().describe("Column to sort by default").optional(),
     sortDirection: z
       .enum(["asc", "desc"])
       .describe("Default sort direction")
@@ -199,10 +204,7 @@ export const textConfigSchema = z
 export type TextConfig = z.infer<typeof textConfigSchema>;
 
 // Data model types
-export type RelationshipType =
-  | "one-to-one"
-  | "one-to-many"
-  | "many-to-many";
+export type RelationshipType = "one-to-one" | "one-to-many" | "many-to-many";
 
 export type TableIdentifier = {
   type: string; // e.g., "duckdb" | "postgres"
