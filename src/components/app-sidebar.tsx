@@ -12,6 +12,7 @@ import { useChatHistory } from "@/hooks/use-chat-history";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 import { deleteChat } from "@/lib/workspace/chat-repo";
+import { switchToFreshWorkspaceDatabase } from "@/lib/workspace/workspace-db";
 import Link from "@/vite/next-link";
 import {
   usePathname,
@@ -32,9 +33,10 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   const router = useRouter();
   const activeChatId =
     pathname === "/chat" ? (searchParams.get("id") ?? null) : null;
-  const { chats, isLoading, loadChats } = useChatHistory(initialChats);
+  const { chats, isLoading, error, loadChats } = useChatHistory(initialChats);
   const [isChatHistoryPopoverOpen, setIsChatHistoryPopoverOpen] =
     useState(false);
+  const [resettingDb, setResettingDb] = useState(false);
 
   const isDashboardsRoute = pathname?.startsWith("/dashboards");
   const isDataRoute = pathname === "/data";
@@ -115,6 +117,16 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   };
 
   const shouldShowBlockingLoading = isLoading && chats.length === 0;
+
+  const handleResetWorkspaceDb = async () => {
+    setResettingDb(true);
+    try {
+      switchToFreshWorkspaceDatabase();
+      window.location.reload();
+    } catch {
+      setResettingDb(false);
+    }
+  };
 
   return (
     <div className="relative flex h-full w-20 flex-col border-r border-border bg-sidebar px-2 py-4">
@@ -242,6 +254,29 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
             <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
               {shouldShowBlockingLoading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
+              ) : error ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">{error}</p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void loadChats({ showLoading: true })}
+                    >
+                      Retry
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => void handleResetWorkspaceDb()}
+                      disabled={resettingDb}
+                    >
+                      {resettingDb ? "Resetting..." : "Reset local data"}
+                    </Button>
+                  </div>
+                </div>
               ) : chats.length > 0 ? (
                 chats.map((chat) => (
                   <div

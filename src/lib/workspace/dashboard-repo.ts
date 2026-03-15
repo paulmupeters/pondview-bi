@@ -82,15 +82,20 @@ async function touchDashboard(dashboardId: string, now: number): Promise<void> {
 export async function listDashboards(): Promise<
   { id: string; title: string; updatedAt: number }[]
 > {
+  console.info("[dashboard-repo] listDashboards start");
   const dashboards =
     await getAllFromStore<WorkspaceDashboard>(STORE_DASHBOARDS);
-  return dashboards
+  const result = dashboards
     .sort((left, right) => right.updatedAt - left.updatedAt)
     .map((dashboard) => ({
       id: dashboard.id,
       title: dashboard.title,
       updatedAt: dashboard.updatedAt,
     }));
+  console.info("[dashboard-repo] listDashboards done", {
+    count: result.length,
+  });
+  return result;
 }
 
 export async function createDashboard(
