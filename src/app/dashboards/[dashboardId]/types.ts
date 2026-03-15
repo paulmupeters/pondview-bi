@@ -1,5 +1,5 @@
+import type { MeasureOption, MeasuresByName } from "@/lib/dashboard/measures";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
-import type { MeasuresByName } from "@/lib/dashboard/measures";
 import type {
   CardConfig,
   Config,
@@ -7,6 +7,7 @@ import type {
   TableConfig,
   TextConfig,
 } from "@/lib/types";
+import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
 
 export type Dashboard = {
   id: string;
@@ -63,7 +64,14 @@ export type SortableChartCardProps = {
   config: Config | CardConfig | TableConfig | TextConfig | null;
   rows: Result[];
   measures: MeasuresByName;
+  measureOptions?: MeasureOption[];
+  measure?: WorkspaceDashboardMeasure | null;
+  measureValue?: string;
   onConfigChange: (newChartJson: string) => Promise<void>;
+  onMeasureChange?: (
+    measureId: string,
+    updates: Pick<WorkspaceDashboardMeasure, "label" | "sql">,
+  ) => Promise<void>;
   onDelete: () => Promise<void>;
   expandedSqlChartId: string | null;
   onToggleSql: (chartId: string) => void;
@@ -80,7 +88,13 @@ export type SortableChartCardProps = {
 export type MetricCardGroupProps = {
   charts: DashboardChart[];
   chartData: Record<string, Result[]>;
+  measuresById: Record<string, WorkspaceDashboardMeasure>;
+  measureValuesById: Record<string, string>;
   onConfigChange: (chartId: string, newJson: string) => Promise<void>;
+  onMeasureChange: (
+    measureId: string,
+    updates: Pick<WorkspaceDashboardMeasure, "label" | "sql">,
+  ) => Promise<void>;
   onDelete: (chartId: string) => Promise<void>;
   expandedSqlChartId: string | null;
   onToggleSql: (chartId: string) => void;
@@ -93,7 +107,13 @@ export type MetricCardGroupProps = {
 export type MetricCardInGroupProps = {
   chart: DashboardChart;
   chartData: Record<string, Result[]>;
+  measure?: WorkspaceDashboardMeasure | null;
+  measureValue?: string;
   onConfigChange: (chartId: string, newJson: string) => Promise<void>;
+  onMeasureChange: (
+    measureId: string,
+    updates: Pick<WorkspaceDashboardMeasure, "label" | "sql">,
+  ) => Promise<void>;
   onDelete: (chartId: string) => Promise<void>;
   expandedSqlChartId: string | null;
   onToggleSql: (chartId: string) => void;

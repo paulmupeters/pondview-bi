@@ -8,7 +8,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { DashboardMeasureCardDialog } from "@/components/dashboard-measure-card-dialog";
 import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
+import { DashboardVisualCardDialog } from "@/components/dashboard-visual-card-dialog";
 import { DynamicChart } from "@/components/dynamic-chart";
 import {
   SqlPreviewPanel,
@@ -24,8 +26,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { executeDashboardChartsWithFilters } from "@/lib/dashboard/browser-filter-engine";
-import { extractMeasuresFromMetricCards } from "@/lib/dashboard/measures";
+import {
+  buildMeasureOptions,
+  buildMeasuresByName,
+  extractMeasuresFromMetricCards,
+  formatFirstRowMeasureValue,
+} from "@/lib/dashboard/measures";
+import { runQuery } from "@/lib/sql/run-query";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import type {
   CardConfig,
@@ -38,13 +52,16 @@ import {
   addChartToDashboard,
   listChartsByDashboard,
   listDashboards,
+  listMeasuresByDashboard,
   removeChartFromDashboard,
   reorderDashboardCharts,
   updateChartConfig,
   updateChartSql,
+  updateDashboardMeasure,
   updateDashboardTitle,
 } from "@/lib/workspace/dashboard-repo";
 import { getPreference, setPreference } from "@/lib/workspace/preferences-repo";
+import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
 import { useSearchParams } from "@/vite/next-navigation";
 import {
   DashboardGrid,
@@ -128,6 +145,15 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   const [previewChartId, setPreviewChartId] = useState<string | null>(null);
   const [previewRunRows, setPreviewRunRows] = useState<Result[] | null>(null);
   const [isAddingTextCard, setIsAddingTextCard] = useState(false);
+  const [isTextCardDialogOpen, setIsTextCardDialogOpen] = useState(false);
+  const [isMeasureCardDialogOpen, setIsMeasureCardDialogOpen] = useState(false);
+  const [isVisualCardDialogOpen, setIsVisualCardDialogOpen] = useState(false);
+  const [dashboardMeasures, setDashboardMeasures] = useState<
+    WorkspaceDashboardMeasure[]
+  >([]);
+  const [measureValuesById, setMeasureValuesById] = useState<
+    Record<string, string>
+  >({});
 
   useEffect(() => {
     let cancelled = false;
@@ -179,6 +205,40 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     };
   }, [dashboardId]);
 
+  const refreshDashboardMeasures = useCallback(async () => {
+    try {
+      const measures = await listMeasuresByDashboard(dashboardId);
+      setDashboardMeasures(measures);
+
+      const valueEntries = await Promise.all(
+        measures.map(async (measure) => {
+          try {
+            const result = await runQuery({
+              sql: measure.sql,
+              dbIdentifier: measure.dbIdentifier ?? undefined,
+              backendPreference: measure.sqlBackend ?? undefined,
+            });
+
+            return [
+              measure.id,
+              formatFirstRowMeasureValue(result.rows as Result[]),
+            ] as const;
+          } catch (error) {
+            console.error(
+              `Failed to resolve value for dashboard measure ${measure.id}:`,
+              error,
+            );
+            return [measure.id, ""] as const;
+          }
+        }),
+      );
+
+      setMeasureValuesById(Object.fromEntries(valueEntries));
+    } catch (error) {
+      console.error("Failed to refresh dashboard measures:", error);
+    }
+  }, [dashboardId]);
+
   const refreshDashboardData = useCallback(async () => {
     try {
       const dashboardCharts = await listChartsByDashboard(dashboardId);
@@ -211,6 +271,10 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   useEffect(() => {
     void refreshDashboardData();
   }, [refreshDashboardData]);
+
+  useEffect(() => {
+    void refreshDashboardMeasures();
+  }, [refreshDashboardMeasures]);
 
   const handleTitleUpdate = useCallback(
     async (newTitle: string) => {
@@ -276,6 +340,21 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     [],
   );
 
+  const handleDashboardMeasureUpdate = useCallback(
+    async (
+      measureId: string,
+      updates: Pick<WorkspaceDashboardMeasure, "label" | "sql">,
+    ) => {
+      const result = await updateDashboardMeasure(measureId, updates);
+      if (!result.updated) {
+        throw new Error("Failed to update measure");
+      }
+
+      await Promise.all([refreshDashboardData(), refreshDashboardMeasures()]);
+    },
+    [refreshDashboardData, refreshDashboardMeasures],
+  );
+
   const handleAddTextCard = useCallback(
     async (textConfig: TextConfig) => {
       setIsAddingTextCard(true);
@@ -289,6 +368,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
           chartConfigJson: JSON.stringify(textConfig),
         });
         await refreshDashboardData();
+        setIsTextCardDialogOpen(false);
       } catch (error) {
         console.error("Failed to add text card:", error);
       } finally {
@@ -425,6 +505,30 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   const measuresByName = useMemo(
     () => extractMeasuresFromMetricCards(charts, chartData),
     [charts, chartData],
+  );
+  const measureOptions = useMemo(
+    () =>
+      buildMeasureOptions({
+        savedMeasures: dashboardMeasures,
+        savedValuesByMeasureId: measureValuesById,
+        legacyMeasures: measuresByName,
+      }),
+    [dashboardMeasures, measureValuesById, measuresByName],
+  );
+  const allMeasuresByName = useMemo(
+    () => buildMeasuresByName(measureOptions),
+    [measureOptions],
+  );
+  const measuresById = useMemo(
+    () =>
+      dashboardMeasures.reduce<Record<string, WorkspaceDashboardMeasure>>(
+        (accumulator, measure) => {
+          accumulator[measure.id] = measure;
+          return accumulator;
+        },
+        {},
+      ),
+    [dashboardMeasures],
   );
 
   const layoutRows = useMemo(
@@ -571,22 +675,31 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
           onTitleUpdate={handleTitleUpdate}
         />
         <div className="flex items-center gap-2">
-          <TextConfigDialog
-            trigger={
-              <Button
-                variant="outline"
-                size="default"
-                disabled={isAddingTextCard}
-              >
-                Add Text Card
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="default">
+                Add Card
               </Button>
-            }
-            config={null}
-            measures={measuresByName}
-            onConfigChange={(newConfig) => {
-              void handleAddTextCard(newConfig);
-            }}
-          />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem
+                onSelect={() => setIsMeasureCardDialogOpen(true)}
+              >
+                Metric / Measure card
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => setIsVisualCardDialogOpen(true)}
+              >
+                Visual card
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isAddingTextCard}
+                onSelect={() => setIsTextCardDialogOpen(true)}
+              >
+                Text card
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <DashboardSettingsDialog
             isOpen={isSettingsOpen}
             onOpenChange={setIsSettingsOpen}
@@ -608,11 +721,15 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       <DashboardGrid
         charts={charts}
         chartData={chartData}
-        measures={measuresByName}
+        measures={allMeasuresByName}
+        measureOptions={measureOptions}
+        measuresById={measuresById}
+        measureValuesById={measureValuesById}
         layoutRows={layoutRows}
         dashboardColumns={columns}
         onDragEnd={handleDragEnd}
         onConfigChange={handleChartConfigChange}
+        onMeasureChange={handleDashboardMeasureUpdate}
         onDelete={handleChartDelete}
         expandedSqlChartId={expandedSqlChartId}
         onToggleSql={handleToggleSql}
@@ -624,6 +741,37 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         selectedChartId={selectedChartId}
         onChartSelect={setSelectedChartId}
         onPreviewChart={setPreviewChartId}
+      />
+      <DashboardMeasureCardDialog
+        open={isMeasureCardDialogOpen}
+        onOpenChange={setIsMeasureCardDialogOpen}
+        dashboardId={dashboardId}
+        dashboardMeasures={dashboardMeasures}
+        measureValuesById={measureValuesById}
+        onSaved={async () => {
+          await Promise.all([
+            refreshDashboardData(),
+            refreshDashboardMeasures(),
+          ]);
+        }}
+      />
+      <DashboardVisualCardDialog
+        open={isVisualCardDialogOpen}
+        onOpenChange={setIsVisualCardDialogOpen}
+        dashboardId={dashboardId}
+        onSaved={async () => {
+          await refreshDashboardData();
+        }}
+      />
+      <TextConfigDialog
+        open={isTextCardDialogOpen}
+        onOpenChange={setIsTextCardDialogOpen}
+        config={null}
+        measures={allMeasuresByName}
+        measureOptions={measureOptions}
+        onConfigChange={(newConfig) => {
+          void handleAddTextCard(newConfig);
+        }}
       />
       <Dialog
         open={Boolean(previewChartId)}

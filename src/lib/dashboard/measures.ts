@@ -1,12 +1,27 @@
 import type { Result } from "@/lib/types";
+import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
 
 type DashboardMeasureSourceChart = {
   id: string;
   chartConfigJson: string;
 };
 
-export type MeasurePrimitive = string | number | boolean | Date | null | undefined;
+export type MeasurePrimitive =
+  | string
+  | number
+  | boolean
+  | Date
+  | null
+  | undefined;
 export type MeasuresByName = Record<string, string>;
+export type MeasureOption = {
+  key: string;
+  label: string;
+  value: string;
+  source: "saved" | "legacy";
+  measureId?: string;
+  sql?: string;
+};
 
 const MEASURE_TOKEN_PATTERN = /{{\s*([^{}]+?)\s*}}/g;
 
@@ -74,6 +89,20 @@ export function formatMeasureValue(value: MeasurePrimitive): string {
   return String(value);
 }
 
+export function formatFirstRowMeasureValue(rows: Result[]): string {
+  const firstRow = rows[0];
+  if (!firstRow) {
+    return "";
+  }
+
+  const firstColumnName = Object.keys(firstRow)[0];
+  if (!firstColumnName) {
+    return "";
+  }
+
+  return formatMeasureValue(firstRow[firstColumnName] as MeasurePrimitive);
+}
+
 export function extractMeasuresFromMetricCards(
   charts: DashboardMeasureSourceChart[],
   chartData: Record<string, Result[]>,
@@ -102,10 +131,59 @@ export function extractMeasuresFromMetricCards(
       continue;
     }
 
-    measures[key] = formatMeasureValue(firstRow[firstColumnName] as MeasurePrimitive);
+    measures[key] = formatFirstRowMeasureValue(rows);
   }
 
   return measures;
+}
+
+export function buildMeasureOptions(input: {
+  savedMeasures: WorkspaceDashboardMeasure[];
+  savedValuesByMeasureId: Record<string, string>;
+  legacyMeasures?: MeasuresByName;
+}): MeasureOption[] {
+  const optionsByKey = new Map<string, MeasureOption>();
+
+  for (const measure of input.savedMeasures) {
+    optionsByKey.set(measure.key, {
+      key: measure.key,
+      label: measure.label,
+      value: input.savedValuesByMeasureId[measure.id] ?? "",
+      source: "saved",
+      measureId: measure.id,
+      sql: measure.sql,
+    });
+  }
+
+  for (const [key, value] of Object.entries(input.legacyMeasures ?? {})) {
+    if (optionsByKey.has(key)) {
+      continue;
+    }
+
+    optionsByKey.set(key, {
+      key,
+      label: key
+        .split("_")
+        .filter(Boolean)
+        .map((segment) => segment[0]?.toUpperCase() + segment.slice(1))
+        .join(" "),
+      value,
+      source: "legacy",
+    });
+  }
+
+  return Array.from(optionsByKey.values()).sort((left, right) =>
+    left.label.localeCompare(right.label),
+  );
+}
+
+export function buildMeasuresByName(
+  measureOptions: MeasureOption[],
+): MeasuresByName {
+  return measureOptions.reduce<MeasuresByName>((accumulator, option) => {
+    accumulator[option.key] = option.value;
+    return accumulator;
+  }, {});
 }
 
 export function interpolateMeasurePlaceholders(

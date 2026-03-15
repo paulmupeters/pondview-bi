@@ -6,10 +6,15 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { rectSortingStrategy, SortableContext } from "@dnd-kit/sortable";
-import type { MeasuresByName } from "@/lib/dashboard/measures";
+import {
+  formatFirstRowMeasureValue,
+  type MeasureOption,
+  type MeasuresByName,
+} from "@/lib/dashboard/measures";
 import type { Result } from "@/lib/types";
+import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
 import type { DashboardChart, LayoutRow, ResizeState } from "../types";
-import { getGridColsClass, parseChartConfig } from "../utils";
+import { getGridColsClass, isCardConfig, parseChartConfig } from "../utils";
 import { MetricCardGroup } from "./MetricCardGroup";
 import { SortableChartCard } from "./SortableChartCard";
 
@@ -17,10 +22,17 @@ type DashboardGridProps = {
   charts: DashboardChart[];
   chartData: Record<string, Result[]>;
   measures: MeasuresByName;
+  measureOptions: MeasureOption[];
+  measuresById: Record<string, WorkspaceDashboardMeasure>;
+  measureValuesById: Record<string, string>;
   layoutRows: LayoutRow[];
   dashboardColumns: number;
   onDragEnd: (event: DragEndEvent) => void;
   onConfigChange: (chartId: string, newJson: string) => Promise<void>;
+  onMeasureChange: (
+    measureId: string,
+    updates: Pick<WorkspaceDashboardMeasure, "label" | "sql">,
+  ) => Promise<void>;
   onDelete: (chartId: string) => Promise<void>;
   expandedSqlChartId: string | null;
   onToggleSql: (chartId: string) => void;
@@ -42,10 +54,14 @@ export function DashboardGrid({
   charts,
   chartData,
   measures,
+  measureOptions,
+  measuresById,
+  measureValuesById,
   layoutRows,
   dashboardColumns,
   onDragEnd,
   onConfigChange,
+  onMeasureChange,
   onDelete,
   expandedSqlChartId,
   onToggleSql,
@@ -95,14 +111,13 @@ export function DashboardGrid({
               {/* Row-level resize snap indicator overlay */}
               {isRowResizing && (
                 <>
-                  <div
-                    className="fixed inset-0 z-40"
+                  <button
+                    type="button"
+                    className="fixed inset-0 z-40 cursor-default"
                     onClick={onResizeClose}
                     onKeyDown={(e) => {
                       if (e.key === "Escape") onResizeClose();
                     }}
-                    role="button"
-                    tabIndex={-1}
                     aria-label="Cancel resize"
                   />
                   <div className="pointer-events-none absolute inset-x-0 top-0 bottom-0 z-50">
@@ -201,7 +216,10 @@ export function DashboardGrid({
                         key={`group-${group.items[0]?.id ?? groupIndex}-${rowKey}`}
                         charts={group.items}
                         chartData={chartData}
+                        measuresById={measuresById}
+                        measureValuesById={measureValuesById}
                         onConfigChange={onConfigChange}
+                        onMeasureChange={onMeasureChange}
                         onDelete={onDelete}
                         expandedSqlChartId={expandedSqlChartId}
                         onToggleSql={onToggleSql}
@@ -216,6 +234,19 @@ export function DashboardGrid({
                   const chart = group.items[0];
                   const config = parseChartConfig(chart);
                   const rows = chartData[chart.id] || [];
+                  const measureId =
+                    config && isCardConfig(config)
+                      ? config.measureId
+                      : undefined;
+                  const measure = measureId
+                    ? (measuresById[measureId] ?? null)
+                    : null;
+                  const measureValue =
+                    measure && measureValuesById[measure.id] !== undefined
+                      ? measureValuesById[measure.id]
+                      : measure
+                        ? formatFirstRowMeasureValue(rows)
+                        : undefined;
                   return (
                     <SortableChartCard
                       key={chart.id}
@@ -223,8 +254,17 @@ export function DashboardGrid({
                       config={config}
                       rows={rows}
                       measures={measures}
+                      measureOptions={measureOptions}
+                      measure={measure}
+                      measureValue={measureValue}
                       onConfigChange={(newJson) =>
                         onConfigChange(chart.id, newJson)
+                      }
+                      onMeasureChange={
+                        measure
+                          ? (nextMeasureId, updates) =>
+                              onMeasureChange(nextMeasureId, updates)
+                          : undefined
                       }
                       onDelete={() => onDelete(chart.id)}
                       expandedSqlChartId={expandedSqlChartId}
