@@ -149,6 +149,10 @@ export function SortableChartCard({
   const colSpanClass = isResizable
     ? getColSpanClass(displayColSpan, totalColumns)
     : "";
+  const emptyStateMessage = chart.errorMessage?.trim() || "No data";
+  const emptyStateClassName = chart.errorMessage
+    ? "text-xs text-destructive"
+    : "text-xs text-muted-foreground";
 
   return (
     <div
@@ -380,10 +384,10 @@ export function SortableChartCard({
             className="w-full"
           />
         ) : (
-          <div className="text-xs text-muted-foreground">No data</div>
+          <div className={emptyStateClassName}>{emptyStateMessage}</div>
         )
       ) : (
-        <div className="text-xs text-muted-foreground">No data</div>
+        <div className={emptyStateClassName}>{emptyStateMessage}</div>
       )}
       {isResizable && (
         <button

@@ -34,8 +34,8 @@ import {
   setSessionSecret,
 } from "@/lib/bridge/pondview-bridge";
 import {
-  setShowToolCallsPreference,
   setExecuteSqlRawOutputPreference,
+  setShowToolCallsPreference,
   useExecuteSqlRawOutputPreference,
   useShowToolCallsPreference,
 } from "@/lib/chat-display-preferences";
@@ -56,16 +56,16 @@ import {
   setDuckDbHttpSessionAuth,
 } from "@/lib/duckdb/duckdb-http-browser";
 import {
+  clearJoinDefsInStorage,
+  readJoinDefsRawFromStorage,
+  saveJoinDefsRawToStorage,
+} from "@/lib/joins/browser-storage";
+import {
   getSqlBackendPreferenceFromStorage,
   refreshBridgeHealth,
   type SqlBackend,
   setSqlBackendPreferenceInStorage,
 } from "@/lib/sql/sql-runtime";
-import {
-  clearJoinDefsInStorage,
-  readJoinDefsRawFromStorage,
-  saveJoinDefsRawToStorage,
-} from "@/lib/joins/browser-storage";
 import {
   useBridgeHealthStatus,
   useDuckDbHttpConfig,
@@ -75,9 +75,9 @@ import {
 import {
   exportWorkspace,
   importWorkspace,
-  resetWorkspace,
   validateWorkspaceImport,
 } from "@/lib/workspace/export-import";
+import { switchToFreshWorkspaceDatabase } from "@/lib/workspace/workspace-db";
 import { getAllThemes } from "@/themes";
 
 const CSS_PLACEHOLDER = `:root{
@@ -494,9 +494,14 @@ export default function SettingsPage() {
 
     setIsResettingWorkspace(true);
     try {
-      await resetWorkspace();
+      switchToFreshWorkspaceDatabase();
       location.reload();
-    } finally {
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to reset workspace data.";
+      setSecretsError(message);
       setIsResettingWorkspace(false);
     }
   };
@@ -514,7 +519,9 @@ export default function SettingsPage() {
     } catch (error) {
       setJoinDefsSuccess(null);
       setJoinDefsError(
-        error instanceof Error ? error.message : "Invalid join definitions JSON.",
+        error instanceof Error
+          ? error.message
+          : "Invalid join definitions JSON.",
       );
     }
   };
@@ -1006,7 +1013,9 @@ export default function SettingsPage() {
               />
 
               <div className="flex flex-wrap gap-2">
-                <Button onClick={handleSaveJoinDefs}>Save Join Definitions</Button>
+                <Button onClick={handleSaveJoinDefs}>
+                  Save Join Definitions
+                </Button>
                 <Button variant="outline" onClick={handleClearJoinDefs}>
                   Clear
                 </Button>

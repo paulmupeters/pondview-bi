@@ -9,6 +9,7 @@ type LoadChatsOptions = {
 export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
   const [chats, setChats] = useState<ChatHistoryEntry[]>(initialChats);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setChats(initialChats);
@@ -20,6 +21,7 @@ export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
       if (showLoading) {
         setIsLoading(true);
       }
+      setError(null);
 
       try {
         const chatList = await listRecentChats();
@@ -27,6 +29,9 @@ export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
         return chatList;
       } catch (error) {
         console.error("Failed to load chats:", error);
+        setError(
+          error instanceof Error ? error.message : "Failed to load chats.",
+        );
       } finally {
         if (showLoading) {
           setIsLoading(false);
@@ -38,5 +43,5 @@ export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
     [],
   );
 
-  return { chats, isLoading, loadChats };
+  return { chats, isLoading, error, loadChats };
 }

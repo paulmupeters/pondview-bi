@@ -32,8 +32,9 @@ async function putMessage(entry: WorkspaceMessage): Promise<void> {
 }
 
 export async function listRecentChats(limit = 12): Promise<ChatHistoryEntry[]> {
+  console.info("[chat-repo] listRecentChats start", { limit });
   const chats = await getAllFromStore<WorkspaceChat>(STORE_CHATS);
-  return chats
+  const result = chats
     .sort((left, right) => right.updatedAt - left.updatedAt)
     .slice(0, Math.max(0, limit))
     .map((item) => ({
@@ -41,6 +42,8 @@ export async function listRecentChats(limit = 12): Promise<ChatHistoryEntry[]> {
       title: item.title,
       updatedAt: item.updatedAt,
     }));
+  console.info("[chat-repo] listRecentChats done", { count: result.length });
+  return result;
 }
 
 export async function getChatTitleById(chatId: string): Promise<string | null> {
