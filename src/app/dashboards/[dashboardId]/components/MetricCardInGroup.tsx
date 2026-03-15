@@ -2,8 +2,8 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Funnel, GripVertical, Settings, Trash2 } from "lucide-react";
 import type { CSSProperties } from "react";
-import { CardConfigDialog } from "@/components/card-config-dialog";
 import { MetricCard } from "@/components/metric-card";
+import { MetricCardSettingsDialog } from "@/components/metric-card-settings-dialog";
 import type { CardConfig, Config, TableConfig, TextConfig } from "@/lib/types";
 import type { MetricCardInGroupProps } from "../types";
 import { isCardConfig } from "../utils";
@@ -12,7 +12,10 @@ import { MetricCardSqlEditor } from "./MetricCardSqlEditor";
 export function MetricCardInGroup({
   chart,
   chartData,
+  measure,
+  measureValue,
   onConfigChange,
+  onMeasureChange,
   onDelete,
   expandedSqlChartId,
   onToggleSql,
@@ -92,7 +95,7 @@ export function MetricCardInGroup({
         </div>
       )}
       <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-20">
-        <CardConfigDialog
+        <MetricCardSettingsDialog
           trigger={
             <button
               type="button"
@@ -104,10 +107,19 @@ export function MetricCardInGroup({
             </button>
           }
           config={config as CardConfig}
+          measure={measure}
+          currentMeasureValue={measureValue}
           onConfigChange={async (newConfig) => {
             const newJson = JSON.stringify(newConfig);
             await onConfigChange(chart.id, newJson);
           }}
+          onMeasureChange={
+            measure
+              ? async (updates) => {
+                  await onMeasureChange(measure.id, updates);
+                }
+              : undefined
+          }
         />
         <button
           type="button"

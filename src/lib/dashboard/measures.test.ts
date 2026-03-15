@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildMeasureOptions,
+  buildMeasuresByName,
   extractMeasuresFromMetricCards,
   formatMeasureValue,
   interpolateMeasurePlaceholders,
-  normalizeMeasureName,
   type MeasuresByName,
+  normalizeMeasureName,
 } from "@/lib/dashboard/measures";
 import type { Result } from "@/lib/types";
 
@@ -70,7 +72,9 @@ describe("dashboard measures", () => {
   });
 
   test("skips metric cards that do not have data rows", () => {
-    const charts: MeasureTestChart[] = [createChart("metric-1", CARD_CONFIG_JSON)];
+    const charts: MeasureTestChart[] = [
+      createChart("metric-1", CARD_CONFIG_JSON),
+    ];
     const chartData: Record<string, Result[]> = {
       "metric-1": [],
     };
@@ -119,5 +123,52 @@ describe("dashboard measures", () => {
     expect(normalizeMeasureName("orders.total-sales")).toBe(
       "orders_total_sales",
     );
+  });
+
+  test("prefers saved measures over legacy metric-card measures on key collisions", () => {
+    const options = buildMeasureOptions({
+      savedMeasures: [
+        {
+          id: "measure-1",
+          dashboardId: "dashboard-1",
+          key: "revenue",
+          label: "Revenue",
+          sql: "select 1 as revenue",
+          dbIdentifier: null,
+          sqlBackend: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      savedValuesByMeasureId: {
+        "measure-1": "2,500",
+      },
+      legacyMeasures: {
+        revenue: "1,000",
+        orders: "120",
+      },
+    });
+
+    expect(options).toEqual([
+      {
+        key: "orders",
+        label: "Orders",
+        value: "120",
+        source: "legacy",
+      },
+      {
+        key: "revenue",
+        label: "Revenue",
+        value: "2,500",
+        source: "saved",
+        measureId: "measure-1",
+        sql: "select 1 as revenue",
+      },
+    ]);
+
+    expect(buildMeasuresByName(options)).toEqual({
+      orders: "120",
+      revenue: "2,500",
+    });
   });
 });

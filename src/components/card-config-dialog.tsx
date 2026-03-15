@@ -1,4 +1,5 @@
-import React, { useState, useRef } from "react";
+import type React from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,13 +8,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import type { CardConfig } from "@/lib/types";
 
 interface CardConfigFormProps {
@@ -36,9 +37,10 @@ export function CardConfigForm({
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     const newConfig: CardConfig = {
       configType: "card",
+      measureId: config?.measureId,
       title: titleRef.current?.value || "",
       description: descriptionRef.current?.value || "",
       takeaway: takeawayRef.current?.value || undefined,
@@ -50,6 +52,7 @@ export function CardConfigForm({
   const handleButtonClick = () => {
     const newConfig: CardConfig = {
       configType: "card",
+      measureId: config?.measureId,
       title: titleRef.current?.value || "",
       description: descriptionRef.current?.value || "",
       takeaway: takeawayRef.current?.value || undefined,
@@ -124,16 +127,14 @@ export function CardConfigForm({
 
       <div className="flex justify-end gap-2 pt-4">
         {onCancel && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-          >
+          <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
         )}
         {inline ? (
-          <Button type="button" onClick={handleButtonClick}>Apply</Button>
+          <Button type="button" onClick={handleButtonClick}>
+            Apply
+          </Button>
         ) : (
           <Button type="submit">Apply</Button>
         )}
@@ -145,11 +146,7 @@ export function CardConfigForm({
     return formContent;
   }
 
-  return (
-    <form onSubmit={handleSubmit}>
-      {formContent}
-    </form>
-  );
+  return <form onSubmit={handleSubmit}>{formContent}</form>;
 }
 
 interface CardConfigDialogProps {
@@ -174,7 +171,7 @@ export function CardConfigDialog({
 
   // Create a key based on config to reset form when config changes or dialog opens
   const formKey = open
-    ? `${config?.title || ""}-${config?.description || ""}-${config?.takeaway || ""}`
+    ? `${config?.measureId || ""}-${config?.title || ""}-${config?.description || ""}-${config?.takeaway || ""}`
     : "";
 
   return (
