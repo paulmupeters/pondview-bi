@@ -30,6 +30,7 @@ export type DashboardChart = {
   filtersApplied?: boolean;
   appliedFiltersCount?: number;
   skippedFilters?: Array<{ field: string; reason: string }>;
+  errorMessage?: string;
 };
 
 export type ChartGroup = {

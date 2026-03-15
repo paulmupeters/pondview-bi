@@ -48,6 +48,7 @@ export type DashboardFilterExecutionMetadata = {
   filtersApplied: boolean;
   appliedFiltersCount: number;
   skippedFilters: Array<{ field: string; reason: string }>;
+  errorMessage?: string;
 };
 
 export type DashboardFilterExecutionResult = {
@@ -71,6 +72,14 @@ export type BrowserFilterEngineDeps = {
   listCharts: (dashboardId: string) => Promise<DbDashboardChart[]>;
   getMaterializationCache: () => Map<string, MaterializationCacheEntry>;
 };
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "Failed to execute dashboard query.";
+}
 
 function defaultDeps(): BrowserFilterEngineDeps {
   return {
@@ -320,6 +329,14 @@ export async function executeDashboardChartsWithFilters(
               `[dashboard-filters] Fallback execution failed for chart ${chart.id}:`,
               fallbackError,
             );
+            rowsByChartId[chart.id] = [];
+            metadataByChartId[chart.id] = {
+              filtersApplied: false,
+              appliedFiltersCount: 0,
+              skippedFilters,
+              errorMessage: getErrorMessage(fallbackError),
+            };
+            return;
           }
         } else {
           console.error(
@@ -333,6 +350,7 @@ export async function executeDashboardChartsWithFilters(
           filtersApplied: false,
           appliedFiltersCount: 0,
           skippedFilters,
+          errorMessage: getErrorMessage(error),
         };
       }
     }),

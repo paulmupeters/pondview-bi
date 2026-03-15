@@ -62,6 +62,7 @@ import {
 } from "@/lib/workspace/dashboard-repo";
 import { getPreference, setPreference } from "@/lib/workspace/preferences-repo";
 import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
+import Link from "@/vite/next-link";
 import { useSearchParams } from "@/vite/next-navigation";
 import {
   DashboardGrid,
@@ -91,6 +92,20 @@ import {
 
 const PREF_COLUMNS_PREFIX = "dashboard:columns:";
 const PREF_AUTOFIT_PREFIX = "dashboard:auto-fit:";
+const DASHBOARD_AUTH_ERROR_MESSAGE =
+  "Dashboard queries need DuckDB HTTP authentication. Re-enter your DuckDB HTTP auth in Settings to load data.";
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "Failed to load dashboard data.";
+}
+
+function isUnauthorizedMessage(message: string | null | undefined): boolean {
+  return Boolean(message && /unauthorized/i.test(message));
+}
 
 export default function DashboardViewPage() {
   return (
@@ -154,6 +169,10 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   const [measureValuesById, setMeasureValuesById] = useState<
     Record<string, string>
   >({});
+  const [chartQueryError, setChartQueryError] = useState<string | null>(null);
+  const [measureQueryError, setMeasureQueryError] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -209,6 +228,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     try {
       const measures = await listMeasuresByDashboard(dashboardId);
       setDashboardMeasures(measures);
+      let nextMeasureError: string | null = null;
 
       const valueEntries = await Promise.all(
         measures.map(async (measure) => {
@@ -224,6 +244,12 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
               formatFirstRowMeasureValue(result.rows as Result[]),
             ] as const;
           } catch (error) {
+            const message = getErrorMessage(error);
+            if (!nextMeasureError) {
+              nextMeasureError = isUnauthorizedMessage(message)
+                ? DASHBOARD_AUTH_ERROR_MESSAGE
+                : message;
+            }
             console.error(
               `Failed to resolve value for dashboard measure ${measure.id}:`,
               error,
@@ -234,8 +260,13 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       );
 
       setMeasureValuesById(Object.fromEntries(valueEntries));
+      setMeasureQueryError(nextMeasureError);
     } catch (error) {
       console.error("Failed to refresh dashboard measures:", error);
+      const message = getErrorMessage(error);
+      setMeasureQueryError(
+        isUnauthorizedMessage(message) ? DASHBOARD_AUTH_ERROR_MESSAGE : message,
+      );
     }
   }, [dashboardId]);
 
@@ -251,6 +282,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         dashboardFilters,
         chartFiltersById,
       });
+      const metadataEntries = Object.values(execution.metadataByChartId);
+      const firstError = metadataEntries.find((entry) => entry.errorMessage);
 
       setCharts(
         sortedCharts.map((chart) => ({
@@ -263,8 +296,19 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         })),
       );
       setChartData(execution.rowsByChartId);
+      setChartQueryError(
+        firstError
+          ? isUnauthorizedMessage(firstError.errorMessage)
+            ? DASHBOARD_AUTH_ERROR_MESSAGE
+            : (firstError.errorMessage ?? null)
+          : null,
+      );
     } catch (error) {
       console.error("Failed to refresh dashboard data:", error);
+      const message = getErrorMessage(error);
+      setChartQueryError(
+        isUnauthorizedMessage(message) ? DASHBOARD_AUTH_ERROR_MESSAGE : message,
+      );
     }
   }, [chartFiltersById, dashboardFilters, dashboardId]);
 
@@ -654,6 +698,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     !isCardConfig(previewConfig) &&
     !isTableConfig(previewConfig) &&
     !isTextConfig(previewConfig);
+  const dashboardWarningMessage = chartQueryError ?? measureQueryError;
 
   if (loading)
     return <div className="p-6 text-sm text-muted-foreground">Loading...</div>;
@@ -717,6 +762,18 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         charts={charts}
         onClearChartSelection={() => setSelectedChartId(null)}
       />
+      {dashboardWarningMessage ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div>{dashboardWarningMessage}</div>
+          {isUnauthorizedMessage(dashboardWarningMessage) ? (
+            <div className="mt-3">
+              <Button asChild size="sm" variant="outline">
+                <Link href="/settings">Open Settings</Link>
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <DashboardGrid
         charts={charts}

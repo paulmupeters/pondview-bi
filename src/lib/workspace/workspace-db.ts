@@ -118,6 +118,7 @@ export type WorkspaceExport = WorkspaceExportV1 | WorkspaceExportV2;
 
 export const WORKSPACE_DB_NAME = "pondview-workspace";
 export const WORKSPACE_DB_VERSION = 3;
+const WORKSPACE_DB_NAME_OVERRIDE_KEY = "pondview-workspace-name-override";
 
 export const STORE_CHATS = "chats";
 export const STORE_MESSAGES = "messages";
@@ -141,6 +142,83 @@ type StoreName =
   | typeof STORE_UPLOADED_FILE_BLOBS;
 
 let openDbPromise: Promise<IDBDatabase> | null = null;
+let workspaceTraceId = 0;
+const WORKSPACE_DB_OPEN_TIMEOUT_MS = 4000;
+
+function readWorkspaceDbNameOverride(): string | null {
+  try {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    const value = window.localStorage.getItem(WORKSPACE_DB_NAME_OVERRIDE_KEY);
+    return value && value.length > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeWorkspaceDbNameOverride(value: string | null): void {
+  try {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (value) {
+      window.localStorage.setItem(WORKSPACE_DB_NAME_OVERRIDE_KEY, value);
+    } else {
+      window.localStorage.removeItem(WORKSPACE_DB_NAME_OVERRIDE_KEY);
+    }
+  } catch {
+    // Ignore localStorage failures and fall back to the default DB name.
+  }
+}
+
+export function getActiveWorkspaceDbName(): string {
+  return readWorkspaceDbNameOverride() ?? WORKSPACE_DB_NAME;
+}
+
+export function switchToFreshWorkspaceDatabase(): string {
+  const previousDbName = getActiveWorkspaceDbName();
+  const nextDbName = `${WORKSPACE_DB_NAME}-recovery-${Date.now()}`;
+  writeWorkspaceDbNameOverride(nextDbName);
+  resetOpenDbPromise();
+  console.warn("[workspace-db] switched to a fresh workspace database", {
+    previousDbName,
+    nextDbName,
+  });
+  return nextDbName;
+}
+
+function resetOpenDbPromise(): void {
+  openDbPromise = null;
+}
+
+function beginWorkspaceTrace(
+  operation: string,
+  details?: Record<string, unknown>,
+): {
+  finish: (status: "ok" | "error", extra?: Record<string, unknown>) => void;
+} {
+  const id = ++workspaceTraceId;
+  const startedAt = Date.now();
+  const timeoutId = globalThis.setTimeout(() => {
+    console.warn(`[workspace-db:${id}] still pending: ${operation}`, details);
+  }, 2000);
+
+  console.info(`[workspace-db:${id}] start ${operation}`, details);
+
+  return {
+    finish: (status, extra) => {
+      globalThis.clearTimeout(timeoutId);
+      console.info(`[workspace-db:${id}] ${status} ${operation}`, {
+        ...details,
+        ...extra,
+        durationMs: Date.now() - startedAt,
+      });
+    },
+  };
+}
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -241,46 +319,160 @@ function createStores(db: IDBDatabase): void {
 
 export async function openWorkspaceDb(): Promise<IDBDatabase> {
   if (openDbPromise) {
+    console.info("[workspace-db] reusing existing open promise");
     return openDbPromise;
   }
 
+  const dbName = getActiveWorkspaceDbName();
   openDbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(WORKSPACE_DB_NAME, WORKSPACE_DB_VERSION);
+    const trace = beginWorkspaceTrace("openWorkspaceDb", {
+      dbName,
+      version: WORKSPACE_DB_VERSION,
+    });
+    const request = indexedDB.open(dbName, WORKSPACE_DB_VERSION);
+    const timeoutId = globalThis.setTimeout(() => {
+      resetOpenDbPromise();
+      trace.finish("error", { event: "timeout" });
+      reject(
+        new Error(
+          "Timed out opening the workspace database. The browser's IndexedDB state appears stuck.",
+        ),
+      );
+    }, WORKSPACE_DB_OPEN_TIMEOUT_MS);
 
     request.onupgradeneeded = () => {
       const db = request.result;
+      console.info("[workspace-db] onupgradeneeded", {
+        dbName: db.name,
+        version: db.version,
+        objectStoreNames: Array.from(db.objectStoreNames),
+      });
       createStores(db);
     };
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () =>
+    request.onblocked = () => {
+      globalThis.clearTimeout(timeoutId);
+      resetOpenDbPromise();
+      trace.finish("error", { event: "blocked" });
+      reject(
+        new Error(
+          "Workspace database upgrade is blocked by another open tab or stale connection. Reload the app and close other Pondview tabs.",
+        ),
+      );
+    };
+
+    request.onsuccess = () => {
+      globalThis.clearTimeout(timeoutId);
+      const db = request.result;
+      trace.finish("ok", {
+        event: "success",
+        objectStoreNames: Array.from(db.objectStoreNames),
+      });
+
+      db.onversionchange = () => {
+        console.warn("[workspace-db] versionchange received, closing db");
+        db.close();
+        resetOpenDbPromise();
+      };
+
+      db.onclose = () => {
+        console.warn("[workspace-db] database connection closed");
+        resetOpenDbPromise();
+      };
+
+      resolve(db);
+    };
+
+    request.onerror = () => {
+      globalThis.clearTimeout(timeoutId);
+      resetOpenDbPromise();
+      trace.finish("error", {
+        event: "error",
+        message: request.error?.message ?? "unknown",
+      });
       reject(request.error ?? new Error("Failed to open workspace database"));
+    };
   });
 
   return openDbPromise;
 }
 
+export async function deleteWorkspaceDatabase(): Promise<void> {
+  const dbName = getActiveWorkspaceDbName();
+  resetOpenDbPromise();
+
+  await new Promise<void>((resolve, reject) => {
+    const trace = beginWorkspaceTrace("deleteWorkspaceDatabase", {
+      dbName,
+    });
+    const request = indexedDB.deleteDatabase(dbName);
+
+    request.onblocked = () => {
+      trace.finish("error", { event: "blocked" });
+      reject(
+        new Error(
+          "Workspace database reset is blocked by another open tab or stale connection.",
+        ),
+      );
+    };
+
+    request.onsuccess = () => {
+      trace.finish("ok", { event: "success" });
+      resolve();
+    };
+
+    request.onerror = () => {
+      trace.finish("error", {
+        event: "error",
+        message: request.error?.message ?? "unknown",
+      });
+      reject(request.error ?? new Error("Failed to delete workspace database"));
+    };
+  });
+}
+
 export async function getAllFromStore<T>(storeName: StoreName): Promise<T[]> {
+  const trace = beginWorkspaceTrace("getAllFromStore", { storeName });
   const db = await openWorkspaceDb();
   const tx = db.transaction(storeName, "readonly");
   const store = tx.objectStore(storeName);
-  const rows = await requestToPromise(store.getAll() as IDBRequest<T[]>);
-  await transactionDone(tx);
-  return rows;
+  try {
+    const rows = await requestToPromise(store.getAll() as IDBRequest<T[]>);
+    trace.finish("ok", {
+      rowCount: Array.isArray(rows) ? rows.length : undefined,
+    });
+    return rows;
+  } catch (error) {
+    trace.finish("error", {
+      message: error instanceof Error ? error.message : "unknown",
+    });
+    throw error;
+  }
 }
 
 export async function getByKey<T>(
   storeName: StoreName,
   key: IDBValidKey,
 ): Promise<T | undefined> {
+  const trace = beginWorkspaceTrace("getByKey", {
+    storeName,
+    key: String(key),
+  });
   const db = await openWorkspaceDb();
   const tx = db.transaction(storeName, "readonly");
   const store = tx.objectStore(storeName);
-  const row = await requestToPromise(
-    store.get(key) as IDBRequest<T | undefined>,
-  );
-  await transactionDone(tx);
-  return row;
+  try {
+    const row = await requestToPromise(
+      store.get(key) as IDBRequest<T | undefined>,
+    );
+    trace.finish("ok", { found: row !== undefined });
+    return row;
+  } catch (error) {
+    trace.finish("error", {
+      message: error instanceof Error ? error.message : "unknown",
+    });
+    throw error;
+  }
 }
 
 export async function putMany<T extends object>(
