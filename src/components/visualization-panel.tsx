@@ -71,7 +71,7 @@ export function VisualizationPanel({
         <div className="flex-1 flex flex-col min-h-0 bg-background border border-border shadow-xl">
           {/* Visualization Display */}
           <div className="flex-1 overflow-y-auto p-0 min-h-0">
-            <div className="min-h-full flex flex-col items-center justify-center">
+            <div className="min-h-full flex flex-col items-center justify-start">
               <SqlAnalysisDisplay
                 key={currentViz.id}
                 data={currentViz.data}

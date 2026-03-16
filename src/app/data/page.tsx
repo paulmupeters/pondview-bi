@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import { DuckdbShellDialog } from "@/components/duckdb-shell";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
-import { useUploadedFiles } from "@/hooks/use-uploaded-files";
+
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { removeConnectedTable } from "@/lib/connected-tables";
 import { buildDetachStatement } from "@/lib/duckdb/duckdb-attachments";
@@ -29,19 +29,12 @@ import {
   useSqlBackendPreference,
 } from "@/lib/sql/use-sql-backend";
 import { useTheme } from "@/lib/theme-provider";
-import {
-  formatFileSize,
-  persistUploadedFile,
-  removeUploadedFile,
-} from "@/lib/uploaded-files";
-import Image from "@/vite/next-image";
 
-const BROWSER_UPLOAD_MESSAGE =
-  "Uploads now stay in the browser. CSV and Parquet files are imported into DuckDB WASM automatically; Excel files are stored locally for attachments and later processing.";
+import Image from "@/vite/next-image";
 
 export default function ViewDataPage() {
   const tables = useConnectedTables();
-  const uploadedFiles = useUploadedFiles();
+
   const sqlBackendPreference = useSqlBackendPreference();
   const bridgeHealthStatus = useBridgeHealthStatus();
   const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
@@ -61,16 +54,6 @@ export default function ViewDataPage() {
   const isDarkMode = theme === "dark";
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [isShellDialogOpen, setIsShellDialogOpen] = useState(false);
-  const [uploadState, setUploadState] = useState<{
-    isUploading: boolean;
-    message: string | null;
-    tone: "muted" | "error";
-  }>({
-    isUploading: false,
-    message: null,
-    tone: "muted",
-  });
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void refreshBridgeHealth();
@@ -191,82 +174,8 @@ export default function ViewDataPage() {
           >
             Connect Data Source
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={uploadState.isUploading}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {uploadState.isUploading ? "Uploading..." : "Upload Data"}
-          </Button>
         </div>
       </header>
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,.xlsx,.xls,.parquet"
-        className="hidden"
-        onChange={async (event) => {
-          const nextFile = event.currentTarget.files?.[0];
-          if (!nextFile) {
-            return;
-          }
-
-          setUploadState({
-            isUploading: true,
-            message: null,
-            tone: "muted",
-          });
-
-          try {
-            const uploadedFile = await persistUploadedFile(nextFile);
-            const statusMessage =
-              uploadedFile.importStatus === "imported" &&
-              uploadedFile.schemaName &&
-              uploadedFile.tableName
-                ? `Imported as ${uploadedFile.schemaName}.${uploadedFile.tableName}`
-                : (uploadedFile.importError ?? "Stored in browser storage.");
-            setUploadState({
-              isUploading: false,
-              message: statusMessage,
-              tone: uploadedFile.importStatus === "error" ? "error" : "muted",
-            });
-          } catch (error) {
-            setUploadState({
-              isUploading: false,
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Failed to upload file.",
-              tone: "error",
-            });
-          } finally {
-            if (fileInputRef.current) {
-              fileInputRef.current.value = "";
-            }
-          }
-        }}
-      />
-
-      <Card className="border-amber-500/40 bg-amber-500/5">
-        <CardContent className="space-y-2 pt-6 text-sm text-amber-700 dark:text-amber-300">
-          <p>{BROWSER_UPLOAD_MESSAGE}</p>
-          {uploadState.message ? (
-            <p
-              className={
-                uploadState.tone === "error"
-                  ? "text-destructive"
-                  : "text-amber-700 dark:text-amber-300"
-              }
-            >
-              {uploadState.message}
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Separator />
 
       <section className="space-y-3">
         <h2 className="text-base font-semibold text-foreground">
@@ -348,7 +257,7 @@ export default function ViewDataPage() {
 
       <section className="space-y-3">
         <h2 className="text-base font-semibold text-foreground">
-          Connected Sources
+          External Connected Sources
         </h2>
         {groupedConnectedSources.length === 0 ? (
           <Card>
@@ -445,66 +354,6 @@ export default function ViewDataPage() {
                 </Card>
               );
             })}
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold text-foreground">
-          Uploaded Files
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Browser-stored uploads remain available locally. Imported CSV and
-          Parquet files appear in DuckDB WASM under the <code>uploads</code>{" "}
-          schema.
-        </p>
-        {uploadedFiles.length === 0 ? (
-          <Card>
-            <CardContent className="pt-6 text-sm text-muted-foreground">
-              No uploaded files recorded.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-3">
-            {uploadedFiles.map((file) => (
-              <Card key={file.fileId}>
-                <CardContent className="pt-6">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">{file.originalName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatFileSize(file.size)} • {file.type}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {file.storageKind === "legacy-server"
-                        ? "Legacy server-backed upload"
-                        : file.importStatus === "imported" &&
-                            file.schemaName &&
-                            file.tableName
-                          ? `DuckDB table: ${file.schemaName}.${file.tableName}`
-                          : (file.importError ?? "Stored in browser")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(file.uploadedAt).toLocaleString()}
-                    </p>
-                  </div>
-                </CardContent>
-                <CardFooter className="justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (
-                        confirm(`Remove "${file.originalName}" from this list?`)
-                      ) {
-                        void removeUploadedFile(file.fileId);
-                      }
-                    }}
-                  >
-                    Remove
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
           </div>
         )}
       </section>

@@ -1,5 +1,11 @@
 import { ChevronRight, Loader2, Play } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -17,6 +23,64 @@ export type SqlPreviewRunResult = {
   durationMs: number;
 };
 
+export type SqlPreviewPanelHandle = {
+  insertText: (text: string) => void;
+  focus: () => void;
+};
+
+type SqlInsertState = {
+  value: string;
+  selectionStart: number;
+  selectionEnd: number;
+};
+
+function needsLeadingSpace(value: string, insertionStart: number): boolean {
+  if (insertionStart <= 0) {
+    return false;
+  }
+
+  const previousCharacter = value[insertionStart - 1];
+  return !/\s/.test(previousCharacter);
+}
+
+export function insertSqlTextAtSelection(params: {
+  value: string;
+  text: string;
+  selectionStart?: number | null;
+  selectionEnd?: number | null;
+}): SqlInsertState {
+  const { value, text, selectionStart, selectionEnd } = params;
+  const normalizedStart =
+    typeof selectionStart === "number" ? selectionStart : value.length;
+  const normalizedEnd =
+    typeof selectionEnd === "number" ? selectionEnd : normalizedStart;
+  const insertionStart = Math.max(0, Math.min(normalizedStart, value.length));
+  const insertionEnd = Math.max(
+    insertionStart,
+    Math.min(normalizedEnd, value.length),
+  );
+  const prefix = value.slice(0, insertionStart);
+  const suffix = value.slice(insertionEnd);
+  const insertedText = `${needsLeadingSpace(value, insertionStart) ? " " : ""}${text}`;
+  const nextValue = `${prefix}${insertedText}${suffix}`;
+  const nextSelection = prefix.length + insertedText.length;
+
+  return {
+    value: nextValue,
+    selectionStart: nextSelection,
+    selectionEnd: nextSelection,
+  };
+}
+
+function scheduleCaretSync(callback: () => void) {
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(callback);
+    return;
+  }
+
+  setTimeout(callback, 0);
+}
+
 export interface SqlPreviewPanelProps {
   query: string;
   dbIdentifier?: string;
@@ -29,26 +93,70 @@ export interface SqlPreviewPanelProps {
   onCancel?: () => void;
 }
 
-export function SqlPreviewPanel({
-  query,
-  dbIdentifier,
-  backendPreference,
-  defaultOpen = false,
-  onQueryChange,
-  onSave,
-  onRunStart,
-  onRun,
-  onCancel,
-}: SqlPreviewPanelProps) {
+export const SqlPreviewPanel = forwardRef<
+  SqlPreviewPanelHandle,
+  SqlPreviewPanelProps
+>(function SqlPreviewPanel(
+  {
+    query,
+    dbIdentifier,
+    backendPreference,
+    defaultOpen = false,
+    onQueryChange,
+    onSave,
+    onRunStart,
+    onRun,
+    onCancel,
+  },
+  ref,
+) {
   const [editedSql, setEditedSql] = useState(query);
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastRunDuration, setLastRunDuration] = useState<number | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     setEditedSql(query);
   }, [query]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertText(text: string) {
+        setEditedSql((current) => {
+          const textarea = textareaRef.current;
+          const nextState = insertSqlTextAtSelection({
+            value: current,
+            text,
+            selectionStart: textarea?.selectionStart,
+            selectionEnd: textarea?.selectionEnd,
+          });
+
+          scheduleCaretSync(() => {
+            const activeTextarea = textareaRef.current;
+            if (!activeTextarea) {
+              return;
+            }
+
+            activeTextarea.focus();
+            activeTextarea.setSelectionRange(
+              nextState.selectionStart,
+              nextState.selectionEnd,
+            );
+          });
+
+          onQueryChange?.(nextState.value);
+          return nextState.value;
+        });
+      },
+      focus() {
+        textareaRef.current?.focus();
+      },
+    }),
+    [onQueryChange],
+  );
 
   const handleRun = async () => {
     const trimmed = editedSql.trim();
@@ -126,6 +234,7 @@ export function SqlPreviewPanel({
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-2 pt-2">
         <Textarea
+          ref={textareaRef}
           value={editedSql}
           onChange={(event) => {
             const nextSql = event.target.value;
@@ -218,4 +327,4 @@ export function SqlPreviewPanel({
       </CollapsibleContent>
     </Collapsible>
   );
-}
+});
