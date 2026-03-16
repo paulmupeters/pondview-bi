@@ -341,167 +341,177 @@ export function SqlAnalysisDisplay({
       )}
 
       {data && (
-        <div className="flex items-center justify-between gap-2 px-4 pt-4 lg:w-[300px] xl:w-[500px] w-full overflow-y-auto">
-          <div className="flex gap-2">
-            <Button
-              variant={activeView === "table" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setActiveView("table")}
-              className="flex items-center gap-2"
-              disabled={!canShowTable}
-            >
-              <Table className="w-4 h-4" />
-              Data
-            </Button>
-            <Button
-              variant={activeView === "chart" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setActiveView("chart")}
-              className="flex items-center gap-2"
-            >
-              <ChartBar className="w-4 h-4" />
-              Visual
-            </Button>
-            {canShowVisualOptionsToggle && (
+        <div className="flex flex-col gap-4 w-full">
+          <div className="px-4 pt-2">
+            <div className="flex flex-wrap gap-2">
               <Button
-                type="button"
-                variant="outline"
+                variant={activeView === "table" ? "default" : "outline"}
                 size="sm"
-                className="flex items-center gap-2 text-xs font-mono"
-                onClick={() => setShowVisualOptions((prev) => !prev)}
-                aria-expanded={showVisualOptions}
-                aria-controls="chart-visual-options"
+                onClick={() => setActiveView("table")}
+                className="flex items-center gap-2"
+                disabled={!canShowTable}
               >
-                Visual options
-                <ChevronDown
-                  className={cn(
-                    "h-3.5 w-3.5 transition-transform",
-                    showVisualOptions && "rotate-180",
-                  )}
-                />
+                <Table className="w-4 h-4" />
+                Data
               </Button>
-            )}
-            {showAddToChatButton && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-2"
-                    onClick={handleAddToChatClick}
-                  >
-                    <PlusCircleIcon className="w-4 h-4" />
-                    Add to chat
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Share this result</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2"
-                >
-                  <ChatBubbleBottomCenterTextIcon className="w-4 h-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Edit with AI</p>
-              </TooltipContent>
-            </Tooltip>
-            {showClearButton ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-2"
-                    onClick={handleClear}
-                  >
-                    Clear
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Clear analysis</p>
-                </TooltipContent>
-              </Tooltip>
-            ) : null}
-          </div>
-          {history && history.total > 0 && (
-            <div className="flex items-center gap-2">
               <Button
-                variant="outline"
+                variant={activeView === "chart" ? "default" : "outline"}
                 size="sm"
-                onClick={history.onPrev}
-                disabled={history.currentIndex <= 0}
+                onClick={() => setActiveView("chart")}
                 className="flex items-center gap-2"
               >
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <span className="text-xs text-muted-foreground min-w-[60px] text-center">
-                {history.currentIndex + 1} / {history.total}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={history.onNext}
-                disabled={history.currentIndex >= history.total - 1}
-                className="flex items-center gap-2"
-              >
-                <ChevronRight className="w-4 h-4" />
+                <ChartBar className="w-4 h-4" />
+                Visual
               </Button>
             </div>
-          )}
-        </div>
-      )}
+          </div>
 
-      {(data || (effectiveStage === "initial" && activeView === "chart")) &&
-        activeView === "chart" &&
-        (() => {
-          const dbIdentifier = data?.dbIdentifier;
-          const isSqlExpandedInitial = data?.isSqlExpandedInitial;
-          return (
-            <ChartView
-              data={
-                data ?? {
-                  stage: "initial",
-                  progress: 0,
-                  executionTime: 0,
-                  rowCount: 0,
-                  columns: [],
-                  rows: [],
-                  dbIdentifier,
-                  visualType: "chart",
-                  isSqlExpandedInitial: isSqlExpandedInitial ?? false,
-                }
-              }
-              selectedForChart={selectedForChart}
-              selectedForCard={selectedForCard}
-              selectedForTable={selectedForTable}
-              chartConfig={chartConfig}
-              cardConfig={cardConfig}
-              columnsForDialog={columnsForDialog}
-              onChartConfigChange={handleChartConfigChange}
-              onCardConfigChange={handleCardConfigChange}
-              showVisualOptions={showVisualOptions}
-              onShowVisualOptionsChange={setShowVisualOptions}
-            />
-          );
-        })()}
+          <div className="flex justify-end px-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {canShowVisualOptionsToggle && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2 text-xs font-mono"
+                  onClick={() => setShowVisualOptions((prev) => !prev)}
+                  aria-expanded={showVisualOptions}
+                  aria-controls="chart-visual-options"
+                >
+                  Visual options
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 transition-transform",
+                      showVisualOptions && "rotate-180",
+                    )}
+                  />
+                </Button>
+              )}
+              {showAddToChatButton && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                      onClick={handleAddToChatClick}
+                    >
+                      <PlusCircleIcon className="w-4 h-4" />
+                      Add to chat
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Share this result</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                  >
+                    <ChatBubbleBottomCenterTextIcon className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Edit with AI</p>
+                </TooltipContent>
+              </Tooltip>
+              {showClearButton ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                      onClick={handleClear}
+                    >
+                      Clear
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Clear analysis</p>
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
+              {history && history.total > 0 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={history.onPrev}
+                    disabled={history.currentIndex <= 0}
+                    className="flex items-center gap-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground min-w-[60px] text-center">
+                    {history.currentIndex + 1} / {history.total}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={history.onNext}
+                    disabled={history.currentIndex >= history.total - 1}
+                    className="flex items-center gap-2"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
 
-      {data && activeView === "table" && (
-        <div className="group relative">
-          <SqlResultsTable
-            dataOverride={selectedForTable}
-            expandable
-            query={data.query}
-            dbIdentifier={data.dbIdentifier}
-            backendPreference={data.sqlBackend ?? undefined}
-          />
+          <div className="w-full px-4">
+            {(data ||
+              (effectiveStage === "initial" && activeView === "chart")) &&
+              activeView === "chart" &&
+              (() => {
+                const dbIdentifier = data?.dbIdentifier;
+                const isSqlExpandedInitial = data?.isSqlExpandedInitial;
+                return (
+                  <ChartView
+                    data={
+                      data ?? {
+                        stage: "initial",
+                        progress: 0,
+                        executionTime: 0,
+                        rowCount: 0,
+                        columns: [],
+                        rows: [],
+                        dbIdentifier,
+                        visualType: "chart",
+                        isSqlExpandedInitial: isSqlExpandedInitial ?? false,
+                      }
+                    }
+                    selectedForChart={selectedForChart}
+                    selectedForCard={selectedForCard}
+                    selectedForTable={selectedForTable}
+                    chartConfig={chartConfig}
+                    cardConfig={cardConfig}
+                    columnsForDialog={columnsForDialog}
+                    onChartConfigChange={handleChartConfigChange}
+                    onCardConfigChange={handleCardConfigChange}
+                    showVisualOptions={showVisualOptions}
+                    onShowVisualOptionsChange={setShowVisualOptions}
+                  />
+                );
+              })()}
+
+            {data && activeView === "table" && (
+              <div className="group relative">
+                <SqlResultsTable
+                  dataOverride={selectedForTable}
+                  expandable
+                  query={data.query}
+                  dbIdentifier={data.dbIdentifier}
+                  backendPreference={data.sqlBackend ?? undefined}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
 

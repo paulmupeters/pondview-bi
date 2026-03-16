@@ -1,10 +1,12 @@
 import { ChevronDown } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DynamicChart } from "@/components/dynamic-chart";
 import { InlineChartConfig } from "@/components/inline-chart-config";
 import { MetricCard } from "@/components/metric-card";
 import {
   SqlPreviewPanel,
+  type SqlPreviewPanelHandle,
   type SqlPreviewRunResult,
 } from "@/components/sql-preview-panel";
 import { SqlResultsTable } from "@/components/sql-results-table";
@@ -306,9 +308,15 @@ export function DashboardDataCardDialog({
     description: "",
     takeaway: "",
   });
+  const [selectedExplorerDb, setSelectedExplorerDb] = useState<string>(
+    DEFAULT_WASM_DB_IDENTIFIER,
+  );
+  const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false);
+  const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
   const [showVisualOptions, setShowVisualOptions] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sqlPreviewRef = useRef<SqlPreviewPanelHandle | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -333,6 +341,9 @@ export function DashboardDataCardDialog({
     setChartMeta({ title: "", description: "" });
     setTableMeta({ title: "", description: "" });
     setSqlCardMeta({ title: "", description: "", takeaway: "" });
+    setSelectedExplorerDb(DEFAULT_WASM_DB_IDENTIFIER);
+    setIsExplorerCollapsed(false);
+    setExplorerRefreshToken(0);
     setShowVisualOptions(false);
     setError(null);
     setIsSaving(false);
@@ -421,6 +432,10 @@ export function DashboardDataCardDialog({
         : tableMeta.title.trim().length > 0);
 
   const canSave = sourceMode === "measure" ? canSaveMeasure : canSaveSql;
+
+  const handleInsertExplorerTable = (tableName: string) => {
+    sqlPreviewRef.current?.insertText(tableName);
+  };
 
   const handleSave = async () => {
     if (!canSave) {
@@ -649,32 +664,68 @@ export function DashboardDataCardDialog({
 
             <TabsContent value="sql" className="mt-0 min-h-0 flex-1">
               <div className="space-y-4">
-                <div className="rounded-xl border border-border bg-background p-4">
-                  <SqlPreviewPanel
-                    query={sql}
-                    dbIdentifier={
-                      resolvedDbIdentifier &&
-                      !isWasmLocalIdentifier(resolvedDbIdentifier)
-                        ? resolvedDbIdentifier
-                        : undefined
-                    }
-                    backendPreference={resolvedSqlBackend}
-                    defaultOpen
-                    onQueryChange={setSql}
-                    onSave={async (newSql) => {
-                      setSql(newSql);
-                    }}
-                    onRunStart={() => {
-                      setRunResult(null);
-                      setError(null);
-                    }}
-                    onRun={(result) => {
-                      setRunResult(result);
-                    }}
-                    onCancel={() => {
-                      setRunResult(null);
-                    }}
-                  />
+                <div className="overflow-hidden rounded-xl border border-border bg-background">
+                  <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 md:hidden">
+                    <div>
+                      <div className="text-sm font-medium">SQL editor</div>
+                      <div className="text-xs text-muted-foreground">
+                        Browse tables and insert names while writing your query.
+                      </div>
+                    </div>
+                    <ConnectedDataPanel
+                      selectedDb={selectedExplorerDb}
+                      onSelect={setSelectedExplorerDb}
+                      onInsertTable={handleInsertExplorerTable}
+                      refreshToken={explorerRefreshToken}
+                      sqlBackend={resolvedSqlBackend}
+                    />
+                  </div>
+
+                  <div className="flex min-h-[22rem] min-w-0">
+                    <ConnectedDataPanel
+                      selectedDb={selectedExplorerDb}
+                      onSelect={setSelectedExplorerDb}
+                      mode="sidebar"
+                      onInsertTable={handleInsertExplorerTable}
+                      refreshToken={explorerRefreshToken}
+                      collapsed={isExplorerCollapsed}
+                      onToggleCollapse={() =>
+                        setIsExplorerCollapsed((prev) => !prev)
+                      }
+                      className="hidden shrink-0 bg-background md:flex"
+                      sqlBackend={resolvedSqlBackend}
+                    />
+
+                    <div className="min-w-0 flex-1 p-4">
+                      <SqlPreviewPanel
+                        ref={sqlPreviewRef}
+                        query={sql}
+                        dbIdentifier={
+                          resolvedDbIdentifier &&
+                          !isWasmLocalIdentifier(resolvedDbIdentifier)
+                            ? resolvedDbIdentifier
+                            : undefined
+                        }
+                        backendPreference={resolvedSqlBackend}
+                        defaultOpen
+                        onQueryChange={setSql}
+                        onSave={async (newSql) => {
+                          setSql(newSql);
+                        }}
+                        onRunStart={() => {
+                          setRunResult(null);
+                          setError(null);
+                        }}
+                        onRun={(result) => {
+                          setRunResult(result);
+                          setExplorerRefreshToken((prev) => prev + 1);
+                        }}
+                        onCancel={() => {
+                          setRunResult(null);
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {runResult ? (
