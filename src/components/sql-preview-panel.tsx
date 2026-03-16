@@ -21,6 +21,7 @@ export interface SqlPreviewPanelProps {
   query: string;
   dbIdentifier?: string;
   backendPreference?: SqlBackendPreference;
+  defaultOpen?: boolean;
   onQueryChange?: (newSql: string) => void;
   onSave?: (newSql: string) => Promise<void>;
   onRunStart?: () => void;
@@ -32,6 +33,7 @@ export function SqlPreviewPanel({
   query,
   dbIdentifier,
   backendPreference,
+  defaultOpen = false,
   onQueryChange,
   onSave,
   onRunStart,
@@ -106,7 +108,7 @@ export function SqlPreviewPanel({
   const hasChanges = editedSql !== query;
 
   return (
-    <Collapsible defaultOpen={false} className="inline-block w-full">
+    <Collapsible defaultOpen={defaultOpen} className="inline-block w-full">
       <CollapsibleTrigger asChild>
         <button
           type="button"
@@ -116,7 +118,7 @@ export function SqlPreviewPanel({
         >
           <span className="shrink-0 font-mono text-xs text-muted-foreground transition-colors group-hover:text-foreground">
             <span className="inline-flex items-center gap-1">
-              View / Edit SQL
+              View SQL
               <ChevronRight className="h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]:rotate-90" />
             </span>
           </span>
