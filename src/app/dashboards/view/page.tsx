@@ -8,9 +8,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { DashboardMeasureCardDialog } from "@/components/dashboard-measure-card-dialog";
+import { DashboardDataCardDialog } from "@/components/dashboard-data-card-dialog";
 import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
-import { DashboardVisualCardDialog } from "@/components/dashboard-visual-card-dialog";
 import { DynamicChart } from "@/components/dynamic-chart";
 import {
   SqlPreviewPanel,
@@ -161,8 +160,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   const [previewRunRows, setPreviewRunRows] = useState<Result[] | null>(null);
   const [isAddingTextCard, setIsAddingTextCard] = useState(false);
   const [isTextCardDialogOpen, setIsTextCardDialogOpen] = useState(false);
-  const [isMeasureCardDialogOpen, setIsMeasureCardDialogOpen] = useState(false);
-  const [isVisualCardDialogOpen, setIsVisualCardDialogOpen] = useState(false);
+  const [isDataCardDialogOpen, setIsDataCardDialogOpen] = useState(false);
   const [dashboardMeasures, setDashboardMeasures] = useState<
     WorkspaceDashboardMeasure[]
   >([]);
@@ -557,7 +555,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         savedValuesByMeasureId: measureValuesById,
         legacyMeasureOptions,
       }),
-    [dashboardMeasures, legacyMeasureOptions, measureValuesById],
+    [dashboardMeasures, measureValuesById, legacyMeasureOptions],
   );
   const allMeasuresByName = useMemo(
     () => buildMeasuresByName(measureOptions),
@@ -727,15 +725,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem
-                onSelect={() => setIsMeasureCardDialogOpen(true)}
-              >
-                Measure card
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => setIsVisualCardDialogOpen(true)}
-              >
-                Visual card
+              <DropdownMenuItem onSelect={() => setIsDataCardDialogOpen(true)}>
+                Metric / Visual card
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={isAddingTextCard}
@@ -799,9 +790,9 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         onChartSelect={setSelectedChartId}
         onPreviewChart={setPreviewChartId}
       />
-      <DashboardMeasureCardDialog
-        open={isMeasureCardDialogOpen}
-        onOpenChange={setIsMeasureCardDialogOpen}
+      <DashboardDataCardDialog
+        open={isDataCardDialogOpen}
+        onOpenChange={setIsDataCardDialogOpen}
         dashboardId={dashboardId}
         existingMeasures={measureOptions}
         onSaved={async () => {
@@ -809,14 +800,6 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
             refreshDashboardData(),
             refreshDashboardMeasures(),
           ]);
-        }}
-      />
-      <DashboardVisualCardDialog
-        open={isVisualCardDialogOpen}
-        onOpenChange={setIsVisualCardDialogOpen}
-        dashboardId={dashboardId}
-        onSaved={async () => {
-          await refreshDashboardData();
         }}
       />
       <TextConfigDialog
