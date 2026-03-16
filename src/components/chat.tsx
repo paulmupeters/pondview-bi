@@ -329,17 +329,13 @@ export default function Chat({
   }, [connectedTables, selectedDb]);
 
   useEffect(() => {
-    hydratedChatIdRef.current =
-      resolvedInitialMessages.length > 0 ? chatId : null;
+    if (hydratedChatIdRef.current === chatId) {
+      return;
+    }
+
     if (resolvedInitialMessages.length > 0) {
       setMessages(resolvedInitialMessages);
-    } else {
-      setMessages([]);
-    }
-  }, [chatId, resolvedInitialMessages, setMessages]);
-
-  useEffect(() => {
-    if (hydratedChatIdRef.current === chatId) {
+      hydratedChatIdRef.current = chatId;
       return;
     }
 
@@ -349,9 +345,7 @@ export default function Chat({
       try {
         const rows = await listMessagesByChatId(chatId);
         if (!cancelled) {
-          setMessages((previous) =>
-            previous.length > 0 ? previous : toUiMessages(rows),
-          );
+          setMessages(toUiMessages(rows));
           hydratedChatIdRef.current = chatId;
         }
       } catch (error) {
@@ -366,7 +360,7 @@ export default function Chat({
     return () => {
       cancelled = true;
     };
-  }, [chatId, setMessages]);
+  }, [chatId, resolvedInitialMessages, setMessages]);
 
   const handleOpenDashboardBuilder = () => {
     setIsDashboardBuilderOpen(true);

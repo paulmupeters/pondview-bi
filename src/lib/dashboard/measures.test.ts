@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildMeasureOptions,
   buildMeasuresByName,
+  extractLegacyMeasureOptionsFromMetricCards,
   extractMeasuresFromMetricCards,
   formatMeasureValue,
   interpolateMeasurePlaceholders,
@@ -83,6 +84,47 @@ describe("dashboard measures", () => {
     expect(measures).toEqual({});
   });
 
+  test("extracts legacy measure options from metric cards with sql metadata", () => {
+    const charts = [
+      {
+        id: "metric-1",
+        chartConfigJson: JSON.stringify({
+          configType: "card",
+          title: "Revenue",
+          description: "Revenue metric",
+        }),
+        sql: "select 1000 as total_revenue",
+        dbIdentifier: "warehouse",
+        sqlBackend: "bridge" as const,
+      },
+      {
+        id: "table-1",
+        chartConfigJson: TABLE_CONFIG_JSON,
+        sql: "select 1",
+      },
+    ];
+
+    const chartData: Record<string, Result[]> = {
+      "metric-1": [{ total_revenue: 1000 }],
+      "table-1": [{ ignored: "value" }],
+    };
+
+    expect(
+      extractLegacyMeasureOptionsFromMetricCards(charts, chartData),
+    ).toEqual([
+      {
+        key: "total_revenue",
+        label: "Revenue",
+        value: "1,000",
+        source: "legacy",
+        sql: "select 1000 as total_revenue",
+        dbIdentifier: "warehouse",
+        sqlBackend: "bridge",
+        sourceChartId: "metric-1",
+      },
+    ]);
+  });
+
   test("interpolates known placeholders and preserves unknown placeholders", () => {
     const content =
       "Highest category: {{highest_category}}. Missing: {{missing_measure}}.";
@@ -143,10 +185,24 @@ describe("dashboard measures", () => {
       savedValuesByMeasureId: {
         "measure-1": "2,500",
       },
-      legacyMeasures: {
-        revenue: "1,000",
-        orders: "120",
-      },
+      legacyMeasureOptions: [
+        {
+          key: "revenue",
+          label: "Revenue (Legacy)",
+          value: "1,000",
+          source: "legacy",
+          sql: "select 1000 as revenue",
+          sourceChartId: "chart-1",
+        },
+        {
+          key: "orders",
+          label: "Orders",
+          value: "120",
+          source: "legacy",
+          sql: "select 120 as orders",
+          sourceChartId: "chart-2",
+        },
+      ],
     });
 
     expect(options).toEqual([
@@ -155,6 +211,8 @@ describe("dashboard measures", () => {
         label: "Orders",
         value: "120",
         source: "legacy",
+        sql: "select 120 as orders",
+        sourceChartId: "chart-2",
       },
       {
         key: "revenue",
@@ -163,6 +221,8 @@ describe("dashboard measures", () => {
         source: "saved",
         measureId: "measure-1",
         sql: "select 1 as revenue",
+        dbIdentifier: null,
+        sqlBackend: null,
       },
     ]);
 
