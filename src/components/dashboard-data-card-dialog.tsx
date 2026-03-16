@@ -26,7 +26,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   formatFirstRowMeasureValue,
   type MeasureOption,
-  normalizeMeasureName,
 } from "@/lib/dashboard/measures";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
@@ -37,10 +36,7 @@ import {
 import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import {
-  addChartToDashboard,
-  createDashboardMeasure,
-} from "@/lib/workspace/dashboard-repo";
+import { addChartToDashboard } from "@/lib/workspace/dashboard-repo";
 
 type DashboardDataCardDialogProps = {
   open: boolean;
@@ -51,7 +47,6 @@ type DashboardDataCardDialogProps = {
 };
 
 type SourceMode = "measure" | "sql";
-type MeasureMode = "existing" | "new";
 type SqlVisualType = "card" | "chart" | "table";
 
 type VisualMeta = {
@@ -286,13 +281,9 @@ export function DashboardDataCardDialog({
   const sqlBackendPreference = useSqlBackendPreference();
   const [sourceMode, setSourceMode] =
     useState<SourceMode>(getDefaultSourceMode);
-  const [measureMode, setMeasureMode] = useState<MeasureMode>("existing");
   const [selectedMeasureId, setSelectedMeasureId] = useState<string | null>(
     null,
   );
-  const [measureLabel, setMeasureLabel] = useState("");
-  const [measureSql, setMeasureSql] = useState("");
-  const [measurePreviewRows, setMeasurePreviewRows] = useState<Result[]>([]);
   const [measureCardMeta, setMeasureCardMeta] = useState<VisualMeta>({
     title: "",
     description: "",
@@ -326,13 +317,10 @@ export function DashboardDataCardDialog({
 
     const defaultMeasure = existingMeasures[0] ?? null;
     setSourceMode(getDefaultSourceMode());
-    setMeasureMode(defaultMeasure ? "existing" : "new");
+
     setSelectedMeasureId(
       defaultMeasure ? getExistingMeasureId(defaultMeasure) : null,
     );
-    setMeasureLabel("");
-    setMeasureSql("");
-    setMeasurePreviewRows([]);
     setMeasureCardMeta({
       title: defaultMeasure?.label ?? "",
       description: "",
@@ -359,16 +347,12 @@ export function DashboardDataCardDialog({
   );
 
   useEffect(() => {
-    if (measureMode !== "existing") {
-      return;
-    }
-
     setMeasureCardMeta({
       title: selectedMeasure?.label ?? "",
       description: "",
       takeaway: "",
     });
-  }, [measureMode, selectedMeasure]);
+  }, [selectedMeasure]);
 
   const resolvedSqlBackend = resolveSqlBackend({
     backendPreference: sqlBackendPreference,
@@ -376,17 +360,7 @@ export function DashboardDataCardDialog({
   });
   const resolvedDbIdentifier = resolveStoredDbIdentifier(resolvedSqlBackend);
 
-  const newMeasureKey = useMemo(
-    () => normalizeMeasureName(measureLabel),
-    [measureLabel],
-  );
-  const newMeasureValue = useMemo(
-    () => formatFirstRowMeasureValue(measurePreviewRows),
-    [measurePreviewRows],
-  );
-  const selectedMeasureValue = selectedMeasure?.value ?? "";
-  const measurePreviewValue =
-    measureMode === "existing" ? selectedMeasureValue : newMeasureValue;
+  const measurePreviewValue = selectedMeasure?.value ?? null;
 
   const columns = runResult?.columns ?? [];
   const rows = (runResult?.rows ?? []) as Result[];
@@ -434,12 +408,7 @@ export function DashboardDataCardDialog({
   const canSaveMeasure =
     !isSaving &&
     measureCardMeta.title.trim().length > 0 &&
-    (measureMode === "existing"
-      ? (selectedMeasure?.sql?.trim().length ?? 0) > 0
-      : measureLabel.trim().length > 0 &&
-        newMeasureKey.length > 0 &&
-        measureSql.trim().length > 0 &&
-        measurePreviewRows.length > 0);
+    (selectedMeasure?.sql?.trim().length ?? 0) > 0;
 
   const canSaveSql =
     !isSaving &&
@@ -463,29 +432,7 @@ export function DashboardDataCardDialog({
 
     try {
       if (sourceMode === "measure") {
-        let measure = selectedMeasure;
-
-        if (measureMode === "new") {
-          const created = await createDashboardMeasure({
-            dashboardId,
-            key: newMeasureKey,
-            label: measureLabel.trim(),
-            sql: measureSql.trim(),
-            dbIdentifier: resolvedDbIdentifier,
-            sqlBackend: resolvedSqlBackend,
-          });
-
-          measure = {
-            key: newMeasureKey,
-            label: measureLabel.trim(),
-            value: newMeasureValue,
-            source: "saved",
-            measureId: created.id,
-            sql: measureSql.trim(),
-            dbIdentifier: resolvedDbIdentifier,
-            sqlBackend: resolvedSqlBackend,
-          };
-        }
+        const measure = selectedMeasure;
 
         if (!measure) {
           throw new Error("Select or create a measure before saving.");
@@ -620,210 +567,83 @@ export function DashboardDataCardDialog({
             className="flex min-h-0 flex-col gap-4"
           >
             <TabsList className="w-fit">
-              <TabsTrigger value="measure">Measure</TabsTrigger>
+              <TabsTrigger value="measure">Measures</TabsTrigger>
               <TabsTrigger value="sql">SQL</TabsTrigger>
             </TabsList>
 
             <TabsContent value="measure" className="mt-0 min-h-0 flex-1">
               <div className="space-y-4">
-                <Tabs
-                  value={measureMode}
-                  onValueChange={(nextValue) => {
-                    if (nextValue === "existing" || nextValue === "new") {
-                      setMeasureMode(nextValue);
-                      setError(null);
-                    }
-                  }}
-                >
-                  <TabsList>
-                    <TabsTrigger
-                      value="existing"
-                      disabled={existingMeasures.length === 0}
-                    >
-                      Existing measures
-                    </TabsTrigger>
-                    <TabsTrigger value="new">New measure</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="existing" className="mt-4 space-y-4">
-                    <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-                      <div className="max-h-[320px] space-y-2 overflow-y-auto rounded-xl border border-border bg-muted/15 p-3">
-                        {existingMeasures.length > 0 ? (
-                          existingMeasures.map((measure) => {
-                            const measureId = getExistingMeasureId(measure);
-                            const isSelected = measureId === selectedMeasureId;
-                            return (
-                              <button
-                                key={measureId}
-                                type="button"
-                                onClick={() => setSelectedMeasureId(measureId)}
-                                className={cn(
-                                  "w-full rounded-xl border px-3 py-3 text-left transition-colors",
-                                  isSelected
-                                    ? "border-primary bg-primary/5"
-                                    : "border-border bg-background hover:bg-muted/40",
-                                )}
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <div className="flex items-center gap-2 font-medium">
-                                      <span>{measure.label}</span>
-                                      <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                                        {measure.source === "saved"
-                                          ? "Reusable"
-                                          : "From card"}
-                                      </span>
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {`{{${measure.key}}}`}
-                                    </div>
-                                  </div>
-                                  <div className="text-right text-sm font-medium">
-                                    {measure.value || "(empty)"}
-                                  </div>
-                                </div>
-                                <p className="mt-2 truncate text-xs text-muted-foreground">
-                                  {measure.sql || "No SQL available"}
-                                </p>
-                              </button>
-                            );
-                          })
-                        ) : (
-                          <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                            No measures available yet. Create your first one in
-                            the New measure tab.
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="rounded-xl border border-border bg-background p-4">
-                          <MetaFields
-                            titleId="existing-measure-card-title"
-                            descriptionId="existing-measure-card-description"
-                            takeawayId="existing-measure-card-takeaway"
-                            meta={measureCardMeta}
-                            onChange={setMeasureCardMeta}
-                            showTakeaway={true}
-                            titlePlaceholder="Metric title"
-                            descriptionPlaceholder="What this metric represents"
-                          />
-                        </div>
-
-                        <div className="rounded-2xl border border-border bg-muted/20 p-4">
-                          <MetricCard
-                            value={measurePreviewValue}
-                            title={
-                              measureCardMeta.title.trim() ||
-                              selectedMeasure?.label ||
-                              "Metric"
-                            }
-                            description={
-                              measureCardMeta.description.trim() ||
-                              "Measure preview"
-                            }
-                            takeaway={
-                              measureCardMeta.takeaway?.trim()
-                                ? measureCardMeta.takeaway.trim()
-                                : undefined
-                            }
-                            className="border-0 bg-transparent shadow-none"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="new" className="mt-4 space-y-4">
-                    <div className="rounded-xl border border-border bg-background p-4">
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                          <label
-                            htmlFor="new-measure-label"
-                            className="text-sm font-medium"
+                {existingMeasures.length > 0 ? (
+                  <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+                    <div className="max-h-[320px] space-y-1 overflow-y-auto rounded-xl border border-border bg-muted/15 p-2">
+                      {existingMeasures.map((measure) => {
+                        const measureId = getExistingMeasureId(measure);
+                        const isSelected = measureId === selectedMeasureId;
+                        return (
+                          <button
+                            key={measureId}
+                            type="button"
+                            onClick={() => setSelectedMeasureId(measureId)}
+                            className={cn(
+                              "w-full rounded-lg border px-3 py-2 text-left transition-colors",
+                              isSelected
+                                ? "border-primary bg-primary/5"
+                                : "border-transparent hover:bg-muted/40",
+                            )}
                           >
-                            Shared measure label
-                          </label>
-                          <Input
-                            id="new-measure-label"
-                            value={measureLabel}
-                            onChange={(event) =>
-                              setMeasureLabel(event.target.value)
-                            }
-                            placeholder="Revenue"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label
-                            htmlFor="new-measure-key"
-                            className="text-sm font-medium"
-                          >
-                            Measure token
-                          </label>
-                          <Input
-                            id="new-measure-key"
-                            value={newMeasureKey}
-                            readOnly
-                            placeholder="revenue"
-                          />
-                        </div>
+                            <div className="text-sm font-medium leading-tight">
+                              {measure.label}
+                            </div>
+                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                              {measure.sql || "No SQL available"}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="rounded-xl border border-border bg-background p-4">
+                        <MetaFields
+                          titleId="existing-measure-card-title"
+                          descriptionId="existing-measure-card-description"
+                          takeawayId="existing-measure-card-takeaway"
+                          meta={measureCardMeta}
+                          onChange={setMeasureCardMeta}
+                          showTakeaway={true}
+                          titlePlaceholder="Metric title"
+                          descriptionPlaceholder="What this metric represents"
+                        />
+                      </div>
+
+                      <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                        <MetricCard
+                          value={measurePreviewValue}
+                          title={
+                            measureCardMeta.title.trim() ||
+                            selectedMeasure?.label ||
+                            "Metric"
+                          }
+                          description={
+                            measureCardMeta.description.trim() ||
+                            "Measure preview"
+                          }
+                          takeaway={
+                            measureCardMeta.takeaway?.trim()
+                              ? measureCardMeta.takeaway.trim()
+                              : undefined
+                          }
+                          className="border-0 bg-transparent shadow-none"
+                        />
                       </div>
                     </div>
-
-                    <div className="rounded-xl border border-border bg-background p-4">
-                      <MetaFields
-                        titleId="new-measure-card-title"
-                        descriptionId="new-measure-card-description"
-                        takeawayId="new-measure-card-takeaway"
-                        meta={measureCardMeta}
-                        onChange={setMeasureCardMeta}
-                        showTakeaway={true}
-                        titlePlaceholder="Metric title"
-                        descriptionPlaceholder="What this metric represents"
-                      />
-                    </div>
-
-                    <div className="rounded-xl border border-border bg-background p-4">
-                      <SqlPreviewPanel
-                        query={measureSql}
-                        dbIdentifier={resolvedDbIdentifier ?? undefined}
-                        backendPreference={resolvedSqlBackend}
-                        onQueryChange={setMeasureSql}
-                        onSave={async (newSql) => {
-                          setMeasureSql(newSql);
-                        }}
-                        onRunStart={() => setMeasurePreviewRows([])}
-                        onRun={(result: SqlPreviewRunResult) => {
-                          setMeasurePreviewRows(result.rows as Result[]);
-                        }}
-                        onCancel={() => {
-                          setMeasurePreviewRows([]);
-                        }}
-                      />
-                    </div>
-
-                    <div className="rounded-2xl border border-border bg-muted/20 p-4">
-                      <MetricCard
-                        value={measurePreviewValue}
-                        title={
-                          measureCardMeta.title.trim() ||
-                          measureLabel.trim() ||
-                          "Metric"
-                        }
-                        description={
-                          measureCardMeta.description.trim() ||
-                          "Measure preview"
-                        }
-                        takeaway={
-                          measureCardMeta.takeaway?.trim()
-                            ? measureCardMeta.takeaway.trim()
-                            : undefined
-                        }
-                        className="border-0 bg-transparent shadow-none"
-                      />
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                    No measures available yet. Create one using the SQL tab
+                    first.
+                  </div>
+                )}
               </div>
             </TabsContent>
 
@@ -839,6 +659,7 @@ export function DashboardDataCardDialog({
                         : undefined
                     }
                     backendPreference={resolvedSqlBackend}
+                    defaultOpen
                     onQueryChange={setSql}
                     onSave={async (newSql) => {
                       setSql(newSql);
@@ -986,7 +807,7 @@ export function DashboardDataCardDialog({
                         />
                       ) : sqlVisualType === "chart" ? (
                         chartAllowed ? (
-                          <div className="min-h-[360px] overflow-auto rounded-xl bg-background p-4">
+                          <div className="min-h-90 overflow-auto rounded-xl bg-background p-4">
                             <DynamicChart
                               chartData={rows}
                               chartConfig={{
