@@ -106,7 +106,7 @@ export function SqlPreviewPanel({
   const hasChanges = editedSql !== query;
 
   return (
-    <Collapsible defaultOpen={false} className="inline-block">
+    <Collapsible defaultOpen={false} className="inline-block w-full">
       <CollapsibleTrigger asChild>
         <button
           type="button"

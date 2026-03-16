@@ -35,7 +35,7 @@ import { executeDashboardChartsWithFilters } from "@/lib/dashboard/browser-filte
 import {
   buildMeasureOptions,
   buildMeasuresByName,
-  extractMeasuresFromMetricCards,
+  extractLegacyMeasureOptionsFromMetricCards,
   formatFirstRowMeasureValue,
 } from "@/lib/dashboard/measures";
 import { runQuery } from "@/lib/sql/run-query";
@@ -544,8 +544,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     () => groupConsecutiveMetricCards(charts, chartData),
     [charts, chartData],
   );
-  const measuresByName = useMemo(
-    () => extractMeasuresFromMetricCards(charts, chartData),
+  const legacyMeasureOptions = useMemo(
+    () => extractLegacyMeasureOptionsFromMetricCards(charts, chartData),
     [charts, chartData],
   );
   const measureOptions = useMemo(
@@ -553,9 +553,9 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       buildMeasureOptions({
         savedMeasures: dashboardMeasures,
         savedValuesByMeasureId: measureValuesById,
-        legacyMeasures: measuresByName,
+        legacyMeasureOptions,
       }),
-    [dashboardMeasures, measureValuesById, measuresByName],
+    [dashboardMeasures, measureValuesById, legacyMeasureOptions],
   );
   const allMeasuresByName = useMemo(
     () => buildMeasuresByName(measureOptions),
@@ -794,8 +794,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         open={isDataCardDialogOpen}
         onOpenChange={setIsDataCardDialogOpen}
         dashboardId={dashboardId}
-        dashboardMeasures={dashboardMeasures}
-        measureValuesById={measureValuesById}
+        existingMeasures={measureOptions}
         onSaved={async () => {
           await Promise.all([
             refreshDashboardData(),
