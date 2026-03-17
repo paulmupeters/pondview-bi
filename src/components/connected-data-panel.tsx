@@ -20,6 +20,7 @@ import {
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
 import { useWasmTables } from "@/hooks/use-wasm-tables";
+import { buildExplorerTableReference } from "@/lib/duckdb/table-reference";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
@@ -28,6 +29,12 @@ import {
 import { cn } from "@/lib/utils";
 import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 import { Separator } from "./ui/separator";
+
+type ExplorerTableGroup = {
+  catalog: string;
+  schema: string;
+  tables: string[];
+};
 
 interface ConnectedDataPanelProps {
   selectedDb?: string;
@@ -86,45 +93,58 @@ export function ConnectedDataPanel({
     void refreshWasmTables();
   }, [refreshToken, refreshWasmTables]);
 
-  const groupedWasmTables = useMemo(() => {
-    const grouped = new Map<string, string[]>();
-    for (const table of wasmTables) {
-      const schema = table.schema || "main";
-      const existing = grouped.get(schema);
-      if (existing) {
-        existing.push(table.name);
-      } else {
-        grouped.set(schema, [table.name]);
-      }
-    }
+  const groupExplorerTables = useMemo(
+    () =>
+      (
+        tables: Array<{
+          catalog?: string;
+          schema: string;
+          name: string;
+        }>,
+      ): ExplorerTableGroup[] => {
+        const grouped = new Map<string, string[]>();
 
-    return Array.from(grouped.entries())
-      .map(([schema, tables]) => ({
-        schema,
-        tables: Array.from(new Set(tables)).sort((a, b) => a.localeCompare(b)),
-      }))
-      .sort((a, b) => a.schema.localeCompare(b.schema));
-  }, [wasmTables]);
+        for (const table of tables) {
+          const catalog = table.catalog?.trim() || "";
+          const schema = table.schema?.trim() || "main";
+          const key = `${catalog}::${schema}`;
+          const existing = grouped.get(key);
+          if (existing) {
+            existing.push(table.name);
+          } else {
+            grouped.set(key, [table.name]);
+          }
+        }
 
-  const groupedRemoteTables = useMemo(() => {
-    const grouped = new Map<string, string[]>();
-    for (const table of remoteTables) {
-      const schema = table.schema || "main";
-      const existing = grouped.get(schema);
-      if (existing) {
-        existing.push(table.name);
-      } else {
-        grouped.set(schema, [table.name]);
-      }
-    }
+        return Array.from(grouped.entries())
+          .map(([key, tablesForGroup]) => {
+            const [catalog, schema] = key.split("::");
+            return {
+              catalog,
+              schema,
+              tables: Array.from(new Set(tablesForGroup)).sort((a, b) =>
+                a.localeCompare(b),
+              ),
+            };
+          })
+          .sort(
+            (a, b) =>
+              a.catalog.localeCompare(b.catalog) ||
+              a.schema.localeCompare(b.schema),
+          );
+      },
+    [],
+  );
 
-    return Array.from(grouped.entries())
-      .map(([schema, tables]) => ({
-        schema,
-        tables: Array.from(new Set(tables)).sort((a, b) => a.localeCompare(b)),
-      }))
-      .sort((a, b) => a.schema.localeCompare(b.schema));
-  }, [remoteTables]);
+  const groupedWasmTables = useMemo(
+    () => groupExplorerTables(wasmTables),
+    [groupExplorerTables, wasmTables],
+  );
+
+  const groupedRemoteTables = useMemo(
+    () => groupExplorerTables(remoteTables),
+    [groupExplorerTables, remoteTables],
+  );
 
   const isRemoteBackend =
     sqlBackend === "bridge" || sqlBackend === "duckdb-http";
@@ -151,11 +171,16 @@ export function ConnectedDataPanel({
 
   const getDbDisplayName = (entry: (typeof connectedTables)[0]): string => {
     const parts: string[] = [];
+    if (entry.attachAs) parts.push(entry.attachAs);
     if (entry.schema) parts.push(entry.schema);
     if (entry.table) parts.push(entry.table);
     if (parts.length === 0) {
       parts.push(
-        entry.attachAs ?? entry.connectionId ?? entry.databasePath ?? "unknown",
+        entry.databaseName ??
+          entry.attachAs ??
+          entry.connectionId ??
+          entry.databasePath ??
+          "unknown",
       );
     }
     return `${parts.join(".")} (${entry.type})`;
@@ -165,10 +190,16 @@ export function ConnectedDataPanel({
     entry: (typeof connectedTables)[0],
     tableName: string,
   ) => {
-    const schemaPrefix = entry.schema;
-    const qualifiedName = schemaPrefix
-      ? `${schemaPrefix}.${tableName}`
-      : tableName;
+    const catalog =
+      entry.type === "duckdb"
+        ? undefined
+        : entry.attachAs?.trim() || entry.databaseName?.trim();
+    const qualifiedName = buildExplorerTableReference({
+      catalog,
+      schema: entry.schema,
+      table: tableName,
+      includeCatalog: Boolean(catalog),
+    });
     onInsertTable?.(qualifiedName);
     if (mode === "popover") {
       setIsOpen(false);
@@ -189,14 +220,54 @@ export function ConnectedDataPanel({
     }
   };
 
-  const handleInsertWasmTable = (schema: string, tableName: string) => {
-    const qualifiedName =
-      schema.toLowerCase() === "main" ? tableName : `${schema}.${tableName}`;
-    onInsertTable?.(qualifiedName);
-    if (mode === "popover") {
-      setIsOpen(false);
-    }
-  };
+  const renderExplorerTableGroups = (
+    groups: ExplorerTableGroup[],
+    options: {
+      palette: string[];
+      includeCatalog: boolean;
+      onTableClick: (group: ExplorerTableGroup, qualifiedName: string) => void;
+    },
+  ) =>
+    groups.map((group, groupIdx) => (
+      <div
+        key={`${group.catalog || "default"}.${group.schema}`}
+        className="space-y-1"
+      >
+        {group.catalog && (
+          <p className="text-[10px] uppercase tracking-wide text-foreground/70">
+            {group.catalog}
+          </p>
+        )}
+        {(options.includeCatalog || group.schema.toLowerCase() !== "main") && (
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {group.schema}
+          </p>
+        )}
+        {group.tables.map((tableName, tableIdx) => {
+          const color =
+            options.palette[(groupIdx + tableIdx) % options.palette.length];
+          const qualifiedName = buildExplorerTableReference({
+            catalog: group.catalog,
+            schema: group.schema,
+            table: tableName,
+            includeCatalog: options.includeCatalog && Boolean(group.catalog),
+          });
+
+          return (
+            <button
+              key={`${group.catalog}.${group.schema}.${tableName}`}
+              type="button"
+              className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
+              onClick={() => options.onTableClick(group, qualifiedName)}
+              title={qualifiedName}
+            >
+              <span className={cn("w-1.5 h-1.5 rounded-full", color)} />
+              <span className="truncate">{tableName}</span>
+            </button>
+          );
+        })}
+      </div>
+    ));
 
   const renderStoredSqlQueries = () => {
     if (!showStoredSqlQueries) {
@@ -288,43 +359,16 @@ export function ConnectedDataPanel({
               ) : remoteTablesError ? (
                 <p className="text-xs text-destructive">{remoteTablesError}</p>
               ) : groupedRemoteTables.length > 0 ? (
-                groupedRemoteTables.map((group, groupIdx) => (
-                  <div key={group.schema} className="space-y-1">
-                    {group.schema.toLowerCase() !== "main" && (
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {group.schema}
-                      </p>
-                    )}
-                    {group.tables.map((tableName, tableIdx) => {
-                      const colors = [
-                        "bg-emerald-400",
-                        "bg-teal-400",
-                        "bg-cyan-400",
-                      ];
-                      const color =
-                        colors[(groupIdx + tableIdx) % colors.length];
-                      return (
-                        <button
-                          key={`${group.schema}.${tableName}`}
-                          type="button"
-                          className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-                          onClick={() =>
-                            onInsertTable?.(
-                              group.schema.toLowerCase() === "main"
-                                ? tableName
-                                : `${group.schema}.${tableName}`,
-                            )
-                          }
-                        >
-                          <span
-                            className={cn("w-1.5 h-1.5 rounded-full", color)}
-                          />
-                          <span className="truncate">{tableName}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))
+                renderExplorerTableGroups(groupedRemoteTables, {
+                  palette: ["bg-emerald-400", "bg-teal-400", "bg-cyan-400"],
+                  includeCatalog: true,
+                  onTableClick: (_group, qualifiedName) => {
+                    onInsertTable?.(qualifiedName);
+                    if (mode === "popover") {
+                      setIsOpen(false);
+                    }
+                  },
+                })
               ) : (
                 <p className="text-xs text-muted-foreground">
                   No tables found.
@@ -362,38 +406,16 @@ export function ConnectedDataPanel({
                 Failed to load local tables.
               </p>
             ) : hasWasmTables ? (
-              groupedWasmTables.map((group, groupIdx) => (
-                <div key={group.schema} className="space-y-1">
-                  {group.schema.toLowerCase() !== "main" && (
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {group.schema}
-                    </p>
-                  )}
-                  {group.tables.map((tableName, tableIdx) => {
-                    const colors = [
-                      "bg-blue-400",
-                      "bg-purple-400",
-                      "bg-amber-400",
-                    ];
-                    const color = colors[(groupIdx + tableIdx) % colors.length];
-                    return (
-                      <button
-                        key={`${group.schema}.${tableName}`}
-                        type="button"
-                        className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-                        onClick={() =>
-                          handleInsertWasmTable(group.schema, tableName)
-                        }
-                      >
-                        <span
-                          className={cn("w-1.5 h-1.5 rounded-full", color)}
-                        ></span>
-                        <span className="truncate">{tableName}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))
+              renderExplorerTableGroups(groupedWasmTables, {
+                palette: ["bg-blue-400", "bg-purple-400", "bg-amber-400"],
+                includeCatalog: true,
+                onTableClick: (_group, qualifiedName) => {
+                  onInsertTable?.(qualifiedName);
+                  if (mode === "popover") {
+                    setIsOpen(false);
+                  }
+                },
+              })
             ) : (
               <p className="text-xs text-muted-foreground">
                 No local tables yet.
