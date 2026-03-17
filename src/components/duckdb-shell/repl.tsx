@@ -204,12 +204,17 @@ export function DuckdbRepl({
   const executeQuery: ExecuteQueryFn = async ({ sql, signal }) => {
     const effectiveDb = selectedDb ?? selectedDbIdentifier;
 
-    // If there's a connected external entry, wrap the query with ATTACH / DETACH
     if (
-      connectedEntry?.databasePath &&
-      connectedEntry.type !== "duckdb" &&
-      connectedEntry.type !== "motherduck"
+      connectedEntry?.type === "motherduck" &&
+      effectiveSqlBackend === "duckdb-wasm"
     ) {
+      throw new Error(
+        "MotherDuck requires Bridge or DuckDB over HTTP. Switch the SQL runtime in Settings before running this source.",
+      );
+    }
+
+    // If there's a connected external entry, wrap the query with ATTACH / DETACH
+    if (connectedEntry?.databasePath && connectedEntry.type !== "duckdb") {
       const connectionConfig: SourceConnectionConfig = {
         type: connectedEntry.type,
         identifier: connectedEntry.databasePath,

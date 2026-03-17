@@ -40,23 +40,6 @@ function stripQueryString(identifier: string): string {
   return queryIndex >= 0 ? identifier.slice(0, queryIndex) : identifier;
 }
 
-function normalizeMotherduckIdentifier(identifier: string): {
-  attachIdentifier: string;
-} {
-  const trimmed = identifier.trim();
-  if (!trimmed.startsWith("md:")) {
-    return { attachIdentifier: trimmed };
-  }
-
-  const queryIndex = trimmed.indexOf("?");
-  if (queryIndex < 0) {
-    return { attachIdentifier: trimmed };
-  }
-
-  const baseIdentifier = trimmed.slice(0, queryIndex);
-  return { attachIdentifier: baseIdentifier };
-}
-
 function deriveAlias(connection: SourceConnectionConfig): string {
   if (connection.alias) {
     // Sanitize the explicitly provided alias to ensure it's a valid DuckDB identifier
@@ -112,10 +95,6 @@ export function buildAttachmentPlan(
 ): AttachmentPlan {
   const alias = deriveAlias(connection);
   const statements: string[] = [];
-  const motherduckConfig =
-    connection.type === "motherduck" && connection.identifier
-      ? normalizeMotherduckIdentifier(connection.identifier)
-      : null;
 
   const extension =
     connection.duckdbExtension || DEFAULT_EXTENSION_BY_SOURCE[connection.type];
@@ -125,15 +104,7 @@ export function buildAttachmentPlan(
     statements.push(`LOAD ${sanitizedExtension};`);
   }
 
-  const attachConnection =
-    motherduckConfig === null
-      ? connection
-      : {
-          ...connection,
-          identifier: motherduckConfig.attachIdentifier,
-        };
-
-  statements.push(buildAttachStatement(attachConnection, alias));
+  statements.push(buildAttachStatement(connection, alias));
 
   return {
     alias,

@@ -99,9 +99,6 @@ npm run dev
 Use `.env.local` only for the integrations you need:
 
 ```bash
-# Optional: MotherDuck connections
-MOTHERDUCK_TOKEN=
-
 # Optional: persist local DuckDB materializations
 DUCKDB_PERSIST_PATH=./data/materialized.duckdb
 
@@ -115,6 +112,16 @@ OPENAI_API_KEY=
 ```
 
 The checked-in template lives at [env.local.example](/Users/paulpeters/Developer/bi-chat/env.local.example).
+
+MotherDuck authentication is handled by the remote DuckDB runtime itself. When you connect a MotherDuck database in the UI, the app sends `INSTALL motherduck; LOAD motherduck; ATTACH 'md:<db>' AS motherduck;` to the configured Bridge or DuckDB HTTP runtime, and you complete the login flow in that DuckDB shell/server session.
+
+If you want MotherDuck authentication to persist across restarts, save the access token as `motherduck_token` in the environment used to launch DuckDB. For example:
+
+```bash
+export motherduck_token='<token>'
+```
+
+You can also add that line to `~/.zprofile` or `~/.bash_profile`, or store it in a local `.env` file. Restart the app/runtime after setting it.
 
 ## Usage
 
