@@ -32,6 +32,19 @@ function nowMs(): number {
   return Date.now();
 }
 
+function resolveDefaultBridgePort(): number {
+  if (typeof window === "undefined") {
+    return 80;
+  }
+
+  const parsedPort = Number.parseInt(window.location.port, 10);
+  if (Number.isFinite(parsedPort) && parsedPort > 0) {
+    return parsedPort;
+  }
+
+  return window.location.protocol === "https:" ? 443 : 80;
+}
+
 function getAuthHeaders(): Record<string, string> {
   if (!sessionSecret) {
     return {};
@@ -102,27 +115,18 @@ export function hasSessionSecret(): boolean {
 }
 
 export async function getBridgeConfig(): Promise<{ host: string; port: number }> {
-  const response = await fetch("/api/duckdb/config", {
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(await parseError(response));
+  if (cachedBridgeConfig) {
+    return cachedBridgeConfig;
   }
 
-  const payload = (await response.json()) as {
-    host?: string;
-    port?: number;
+  if (typeof window === "undefined") {
+    throw new Error("Bridge config is unavailable outside the browser.");
+  }
+
+  cachedBridgeConfig = {
+    host: window.location.hostname,
+    port: resolveDefaultBridgePort(),
   };
-
-  const host = payload.host?.trim();
-  const port = payload.port;
-
-  if (!host || !port) {
-    throw new Error("Bridge config is unavailable. Start Pondview first.");
-  }
-
-  cachedBridgeConfig = { host, port };
   return cachedBridgeConfig;
 }
 
