@@ -3,21 +3,23 @@ import { runQuery } from "@/lib/sql/run-query";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 
 export type WasmTableEntry = {
+  catalog?: string;
   schema: string;
   name: string;
   type: string;
 };
 
 const LIST_WASM_TABLES_SQL = `
-  SELECT table_schema, table_name, table_type
+  SELECT table_catalog, table_schema, table_name, table_type
   FROM information_schema.tables
   WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
-  ORDER BY table_schema, table_name
+  ORDER BY table_catalog, table_schema, table_name
 `;
 
 function parseWasmTables(rows: Record<string, unknown>[]): WasmTableEntry[] {
   return rows
     .map((row) => ({
+      catalog: String(row.table_catalog ?? "").trim(),
       schema: String(row.table_schema ?? "").trim(),
       name: String(row.table_name ?? "").trim(),
       type: String(row.table_type ?? "").trim(),

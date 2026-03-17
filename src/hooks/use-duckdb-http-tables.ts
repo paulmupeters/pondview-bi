@@ -14,16 +14,17 @@ export interface DuckdbHttpConnectionInfo {
 }
 
 const LIST_TABLES_SQL = `
-  SELECT table_schema, table_name, table_type
+  SELECT table_catalog, table_schema, table_name, table_type
   FROM information_schema.tables
   WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
-  ORDER BY table_schema, table_name
+  ORDER BY table_catalog, table_schema, table_name
 `;
 
 function mapInformationSchemaRows(
   rows: Record<string, unknown>[],
 ): DuckdbTableEntry[] {
   return rows.map((row) => ({
+    catalog: String(row.table_catalog ?? ""),
     schema: String(row.table_schema ?? ""),
     name: String(row.table_name ?? ""),
     type: String(row.table_type ?? ""),
@@ -40,6 +41,7 @@ function mapShowAllTablesRows(
         String(row.schema ?? "") !== "pg_catalog",
     )
     .map((row) => ({
+      catalog: String(row.database ?? row.catalog ?? row.table_catalog ?? ""),
       schema: String(row.schema ?? ""),
       name: String(row.name ?? ""),
       type: "BASE TABLE",
