@@ -96,26 +96,29 @@ describe("runQuery routing", () => {
     expect(result.columns).toEqual([{ name: "value" }]);
   });
 
-  test("routes MotherDuck identifiers through the server query endpoint", async () => {
-    let receivedSql: string | undefined;
-    let receivedIdentifier: string | undefined;
+  test("runs MotherDuck queries through duckdb-http attach lifecycle", async () => {
+    const receivedSql: string[] = [];
     let receivedSignal: AbortSignal | undefined;
-
     const runQuery = createRunQuery({
       resolveBackend: () => "duckdb-http",
-      runServerDuckDbQuery: async (sql, dbIdentifier, signal) => {
-        receivedSql = sql;
-        receivedIdentifier = dbIdentifier;
+      runDuckDbHttp: async (sql, signal) => {
+        receivedSql.push(sql);
         receivedSignal = signal;
+        if (sql.startsWith("SELECT")) {
+          return {
+            rows: [{ company: "Stripe", valuation: "$95B" }],
+            columns: [
+              { name: "company", type: "VARCHAR" },
+              { name: "valuation", type: "VARCHAR" },
+            ],
+            durationMs: 7,
+          };
+        }
         return {
-          rows: [{ company: "Stripe", valuation: "$95B" }],
+          rows: [],
+          columns: [],
+          durationMs: 0,
         };
-      },
-      runDuckDbHttp: async () => {
-        throw new Error("should not reach duckdb-http");
-      },
-      runBridge: async () => {
-        throw new Error("should not reach bridge");
       },
       runWasm: async () => {
         throw new Error("should not reach wasm");
@@ -126,18 +129,23 @@ describe("runQuery routing", () => {
     const controller = new AbortController();
     const result = await runQuery({
       sql: "SELECT * FROM unicorns",
-      dbIdentifier: "md:my_db?motherduck_token=abc123",
+      dbIdentifier: "md:my_db",
       signal: controller.signal,
       backendPreference: "duckdb-http",
     });
 
-    expect(receivedSql).toBe("SELECT * FROM unicorns");
-    expect(receivedIdentifier).toBe("md:my_db?motherduck_token=abc123");
     expect(receivedSignal).toBe(controller.signal);
-    expect(result.backend).toBe("bridge");
+    expect(receivedSql).toEqual([
+      "INSTALL motherduck;",
+      "LOAD motherduck;",
+      `ATTACH 'md:my_db' AS "motherduck";`,
+      "SELECT * FROM motherduck.public.unicorns",
+      'DETACH DATABASE IF EXISTS "motherduck";',
+    ]);
+    expect(result.backend).toBe("duckdb-http");
     expect(result.columns).toEqual([
-      { name: "company" },
-      { name: "valuation" },
+      { name: "company", type: "VARCHAR" },
+      { name: "valuation", type: "VARCHAR" },
     ]);
     expect(result.rows).toEqual([{ company: "Stripe", valuation: "$95B" }]);
   });

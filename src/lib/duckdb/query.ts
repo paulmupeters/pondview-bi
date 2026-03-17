@@ -34,9 +34,9 @@ function normalizeRows(rawRows: Record<string, unknown>[]): Result[] {
 }
 
 /**
- * Executes SQL with optional postgres attachment handling.
- * If dbIdentifier is a postgres URI, attaches it to DuckDB first, executes the query,
- * then detaches it.
+ * Executes SQL with attachment handling for external extension-backed sources.
+ * MotherDuck is opened directly via the database path; Postgres/MySQL/SQLite
+ * are attached for the duration of the query.
  */
 export async function runSqlNormalized(
   dbIdentifier: string,
@@ -45,7 +45,7 @@ export async function runSqlNormalized(
   const externalConnection = detectExternalConnection(dbIdentifier);
   const dbPath = resolveDbPath(dbIdentifier);
 
-  // If it's an external URI (postgres/mysql), we need to handle attachment/detachment
+  // External URIs are attached temporarily before executing the query.
   if (externalConnection) {
     const attachmentPlan = buildAttachmentPlan(externalConnection);
     const instance = await getDuckDbInstance(dbPath);
@@ -83,7 +83,7 @@ export async function runSqlNormalized(
     }
   }
 
-  // For non-postgres identifiers, use the original flow
+  // MotherDuck and local DuckDB paths are opened directly.
   const rawRows = await runRaw(dbPath, sql);
   return normalizeRows(rawRows);
 }

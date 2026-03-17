@@ -1,6 +1,12 @@
 import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
+import {
+  buildAttachmentPlan,
+  buildDetachStatement,
+} from "@/lib/duckdb/duckdb-attachments";
+import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
+import { rewriteSqlForAttachedDatabase } from "@/lib/duckdb/rewrite-sql";
 import { runQueryWasm } from "@/lib/sql/run-query-wasm";
 import {
   assertWasmCompatibleDbIdentifier,
@@ -24,21 +30,12 @@ export type RunQueryResult = {
   backend: SqlBackend;
 };
 
-type ServerDuckDbQueryResult = {
-  rows: Record<string, unknown>[];
-};
-
 type RunQueryDeps = {
   resolveBackend: typeof resolveSqlBackend;
   assertWasmCompatibleIdentifier: typeof assertWasmCompatibleDbIdentifier;
   runBridge: typeof runBridgeQuery;
   runDuckDbHttp: typeof runDuckDbHttpQuery;
   runWasm: typeof runQueryWasm;
-  runServerDuckDbQuery: (
-    sql: string,
-    dbIdentifier: string,
-    signal?: AbortSignal,
-  ) => Promise<ServerDuckDbQueryResult>;
 };
 
 function nowMs(): number {
@@ -52,52 +49,12 @@ function nowMs(): number {
   return Date.now();
 }
 
-function isMotherDuckIdentifier(dbIdentifier?: string): boolean {
-  const identifier = dbIdentifier?.trim() ?? "";
-  return identifier.startsWith("md:") || identifier.startsWith("duckdb:md:");
-}
-
-async function runServerDuckDbQuery(
-  sql: string,
-  dbIdentifier: string,
-  signal?: AbortSignal,
-): Promise<ServerDuckDbQueryResult> {
-  const response = await fetch("/api/duckdb/query", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      sql,
-      dbIdentifier,
-    }),
-    signal,
-  });
-
-  const payload = (await response.json().catch(() => ({}))) as {
-    rows?: Record<string, unknown>[];
-    error?: string;
-  };
-
-  if (!response.ok) {
-    throw new Error(
-      payload.error?.trim() ||
-        `DuckDB query failed: ${response.status} ${response.statusText}`,
-    );
-  }
-
-  return {
-    rows: Array.isArray(payload.rows) ? payload.rows : [],
-  };
-}
-
 const defaultDeps: RunQueryDeps = {
   resolveBackend: resolveSqlBackend,
   assertWasmCompatibleIdentifier: assertWasmCompatibleDbIdentifier,
   runBridge: runBridgeQuery,
   runDuckDbHttp: runDuckDbHttpQuery,
   runWasm: runQueryWasm,
-  runServerDuckDbQuery,
 };
 
 export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
@@ -119,26 +76,55 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
     }
 
     const normalizedIdentifier = dbIdentifier?.trim();
+    const backend = deps.resolveBackend({ backendPreference, dbIdentifier });
 
     if (isMotherDuckIdentifier(normalizedIdentifier) && normalizedIdentifier) {
-      const startedAt = nowMs();
-      const result = await deps.runServerDuckDbQuery(
-        trimmedSql,
-        normalizedIdentifier,
-        signal,
-      );
-      const columns = Object.keys(result.rows[0] ?? {}).map((name) => ({
-        name,
-      }));
-      return {
-        rows: result.rows,
-        columns,
-        durationMs: Math.max(0, Math.round(nowMs() - startedAt)),
-        backend: "bridge",
-      };
-    }
+      if (backend === "duckdb-wasm") {
+        deps.assertWasmCompatibleIdentifier(dbIdentifier);
+      }
 
-    const backend = deps.resolveBackend({ backendPreference, dbIdentifier });
+      const runRemoteSql =
+        backend === "bridge"
+          ? (statement: string) => deps.runBridge(statement, signal)
+          : backend === "duckdb-http"
+            ? (statement: string) => deps.runDuckDbHttp(statement, signal, config)
+            : null;
+
+      if (!runRemoteSql) {
+        deps.assertWasmCompatibleIdentifier(dbIdentifier);
+      }
+
+      const plan = buildAttachmentPlan({
+        type: "motherduck",
+        identifier: normalizedIdentifier.startsWith("duckdb:")
+          ? normalizedIdentifier.slice("duckdb:".length)
+          : normalizedIdentifier,
+        alias: "motherduck",
+        readOnly: false,
+        duckdbExtension: "motherduck",
+      });
+
+      for (const statement of plan.statements) {
+        await runRemoteSql!(statement);
+      }
+
+      try {
+        const rewrittenSql = rewriteSqlForAttachedDatabase(trimmedSql, plan.alias);
+        const result = await runRemoteSql!(rewrittenSql);
+        return {
+          ...result,
+          backend,
+        };
+      } finally {
+        try {
+          await runRemoteSql!(
+            buildDetachStatement(plan.alias, { ifExists: true }),
+          );
+        } catch {
+          // Best-effort detach only.
+        }
+      }
+    }
     if (backend === "bridge") {
       const result = await deps.runBridge(trimmedSql, signal);
       return {

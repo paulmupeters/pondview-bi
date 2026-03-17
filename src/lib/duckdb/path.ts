@@ -1,3 +1,6 @@
+import {
+  isMotherDuckIdentifier,
+} from "@/lib/duckdb/motherduck";
 import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 
 function readEnv(key: string): string | undefined {
@@ -289,22 +292,8 @@ export function resolveDbPath(dbIdentifier: string, token?: string): string {
     return DEFAULT_RUNTIME_DUCKDB_PATH;
   }
 
-  if (id.startsWith("duckdb:md:")) {
-    const hasToken = /motherduck_token=/i.test(id);
-    if (hasToken) return id;
-
-    // Prefer user-provided token over environment variable
-    const finalToken = token?.trim() || readEnv("MOTHERDUCK_TOKEN") || "";
-    if (!finalToken) {
-      // Return as-is if no token available (will likely fail, but preserves original behavior)
-      return id;
-    }
-
-    const separator = id.includes("?") ? "&" : "?";
-    // URL encode the token to handle special characters
-    const encodedToken = encodeURIComponent(finalToken);
-
-    return `${id.slice(7)}${separator}motherduck_token=${encodedToken}`;
+  if (isMotherDuckIdentifier(id)) {
+    return id.startsWith("duckdb:") ? id.slice("duckdb:".length) : id;
   }
   if (id.startsWith("duckdb:")) {
     return id.slice(7);

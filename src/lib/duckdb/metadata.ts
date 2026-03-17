@@ -3,6 +3,10 @@ import {
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
 import {
+  extractMotherDuckDatabaseName,
+  isMotherDuckIdentifier,
+} from "@/lib/duckdb/motherduck";
+import {
   getDuckDbInstance,
   runSqlAndGetRowObjectsJson,
 } from "@/lib/duckdb/duckdb-node";
@@ -10,18 +14,15 @@ import { detectExternalConnection, resolveDbPath } from "@/lib/duckdb/path";
 
 /**
  * Extracts the database name (table_catalog) from a DuckDB identifier.
- * For MotherDuck: extracts the part after "md:" and before "?" (if query params exist)
+ * For MotherDuck: extracts the database name from an `md:` identifier.
  * For local files: returns null (will need to query information_schema to get catalog)
  */
 function extractDatabaseName(dbIdentifier: string): string | null {
   const id = (dbIdentifier ?? "").trim();
   if (!id) return null;
 
-  if (id.startsWith("md:")) {
-    // Extract database name from md:db_name or md:db_name?params
-    const withoutPrefix = id.slice(3); // Remove "md:"
-    const beforeQuery = withoutPrefix.split("?")[0];
-    return beforeQuery || null;
+  if (isMotherDuckIdentifier(id)) {
+    return extractMotherDuckDatabaseName(id) || null;
   }
 
   // For local files, we'll need to query information_schema to get the catalog
