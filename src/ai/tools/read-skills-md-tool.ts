@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { readDatasourceContext } from "@/lib/semantic-layer/context";
 
 export const readSkillsMdTool = tool({
   description:
@@ -13,22 +14,10 @@ export const readSkillsMdTool = tool({
       ),
   }),
   execute: async ({ datasource }) => {
-    const params = new URLSearchParams();
-    if (datasource) params.set("datasource", datasource);
-
-    const res = await fetch(
-      `/api/semantic-layer/context?${params.toString()}`,
-    );
-
-    if (!res.ok) {
-      throw new Error(
-        `Failed to load skills.md: ${res.status} ${res.statusText}`,
-      );
-    }
-
-    const data = (await res.json()) as { content: string };
     return {
-      content: data.content || "No business logic documentation found.",
+      content:
+        (await readDatasourceContext(datasource)).content ||
+        "No business logic documentation found.",
     };
   },
 });
