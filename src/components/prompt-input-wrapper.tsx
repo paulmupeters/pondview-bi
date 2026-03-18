@@ -5,7 +5,7 @@ import {
   WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import type { ChatStatus } from "ai";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import {
   PromptInput,
@@ -28,6 +28,9 @@ import {
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
+import { DuckdbRepl } from "@/components/duckdb-shell/repl";
+import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
+import type { SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -36,8 +39,11 @@ import {
 } from "@/components/ui/tooltip";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
+import type { CardConfig, Config, Result } from "@/lib/types";
 import { getUploadedFileBlob, persistUploadedFile } from "@/lib/uploaded-files";
 import { cn } from "@/lib/utils";
+import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 
 export type PromptMode = "ai" | "manual";
 
@@ -58,6 +64,32 @@ interface PromptInputWrapperProps {
   selectedDb?: string;
   onSelectDb?: (db: string) => void;
   onInsertTable?: (payload: ExplorerInsertPayload) => void;
+  onAddSqlResultToChat?: (payload: SqlAnalysisData) => void;
+  sqlResult?: {
+    sql: string;
+    rows: Record<string, unknown>[];
+    columns: { name: string; type?: string }[];
+    durationMs: number;
+    backend?: SqlBackend;
+  } | null;
+  selectedCatalogContext?: string | null;
+  onConsoleApiChange?: (api: SqlConsoleApi | null) => void;
+  onResultChange?: (
+    result: {
+      sql: string;
+      rows: Record<string, unknown>[];
+      columns: { name: string; type?: string }[];
+      durationMs: number;
+      backend?: SqlBackend;
+    } | null,
+  ) => void;
+  storedSqlQueries?: SavedSqlQuery[];
+  onSaveQuery?: (sql: string) => void | Promise<void>;
+  isSavingQuery?: boolean;
+  manualChartConfig?: Config | null;
+  manualCardConfig?: CardConfig | null;
+  manualVisualType?: "table" | "chart" | "card" | null;
+  onManualReplFocus?: () => void;
 }
 
 // Inner component that uses the attachments hook within PromptInput context
@@ -227,6 +259,18 @@ function FileAttachmentHoverCard() {
   );
 }
 
+function PromptInputModeEffects({ mode }: { mode: PromptMode }) {
+  const { clear, files } = usePromptInputAttachments();
+
+  useEffect(() => {
+    if (mode === "manual" && files.length > 0) {
+      clear();
+    }
+  }, [clear, files.length, mode]);
+
+  return null;
+}
+
 export function PromptInputWrapper({
   onSubmit,
   placeholder = "Ask a question about your data...",
@@ -244,8 +288,22 @@ export function PromptInputWrapper({
   selectedDb,
   onSelectDb,
   onInsertTable,
+  onAddSqlResultToChat,
+  sqlResult = null,
+  selectedCatalogContext = null,
+  onConsoleApiChange,
+  onResultChange,
+  storedSqlQueries: _storedSqlQueries,
+  onSaveQuery,
+  isSavingQuery = false,
+  manualChartConfig,
+  manualCardConfig,
+  manualVisualType,
+  onManualReplFocus,
 }: PromptInputWrapperProps) {
   const [internalMode, setInternalMode] = useState<PromptMode>(mode ?? "ai");
+  const [manualConsoleApi, setManualConsoleApi] =
+    useState<SqlConsoleApi | null>(null);
 
   useEffect(() => {
     if (mode) {
@@ -284,6 +342,61 @@ export function PromptInputWrapper({
     }
   }, [pendingMode, status]);
 
+  const handleManualConsoleApiChange = useCallback(
+    (api: SqlConsoleApi | null) => {
+      setManualConsoleApi(api);
+      onConsoleApiChange?.(api);
+    },
+    [onConsoleApiChange],
+  );
+
+  const handleManualRun = useCallback(() => {
+    manualConsoleApi?.runQuery();
+  }, [manualConsoleApi]);
+
+  const handleManualSend = useCallback(() => {
+    if (!onAddSqlResultToChat || !sqlResult) {
+      return;
+    }
+
+    const isCardMode =
+      sqlResult.rows.length === 1 && sqlResult.columns.length === 1;
+    const visualType: "table" | "chart" | "card" =
+      manualVisualType ??
+      (isCardMode ? "card" : manualChartConfig ? "chart" : "table");
+
+    const payload: SqlAnalysisData = {
+      stage: "complete",
+      progress: 1,
+      query: sqlResult.sql,
+      dbIdentifier: selectedDb,
+      sqlBackend: sqlResult.backend,
+      executionTime: sqlResult.durationMs,
+      rowCount: sqlResult.rows.length,
+      columns: sqlResult.columns,
+      rows: sqlResult.rows as Result[],
+      visualType,
+      chartConfig:
+        visualType === "chart" ? (manualChartConfig ?? undefined) : undefined,
+      cardConfig:
+        visualType === "card" ? (manualCardConfig ?? undefined) : undefined,
+      summary: {
+        totalRows: sqlResult.rows.length,
+        executionTimeMs: sqlResult.durationMs,
+        insights: [],
+      },
+    };
+
+    onAddSqlResultToChat(payload);
+  }, [
+    manualCardConfig,
+    manualChartConfig,
+    manualVisualType,
+    onAddSqlResultToChat,
+    selectedDb,
+    sqlResult,
+  ]);
+
   const content = aiButtonLabel;
   const nextMode: PromptMode = internalMode === "ai" ? "manual" : "ai";
   const modeButtonLabel = nextMode === "ai" ? "Chat" : "Manual";
@@ -297,44 +410,125 @@ export function PromptInputWrapper({
       <PromptInput
         onSubmit={handlePromptSubmit}
         className={cn("flex-1 w-full flex flex-row", className)}
-        globalDrop
+        globalDrop={internalMode !== "manual"}
         multiple
       >
+        <PromptInputModeEffects mode={internalMode} />
         {showAiInput && (
-          <PromptInputBody>
-            <PromptInputAttachments>
-              {(attachment) => <PromptInputAttachment data={attachment} />}
-            </PromptInputAttachments>
-            <div className="w-full">
-              <div className="min-h-0 overflow-hidden">
-                <div className="relative w-full">
-                  <PromptInputTextarea
-                    placeholder={placeholder}
-                    className={cn(
-                      "flex-1 pr-4",
-                      compact ? "min-h-10 pb-10" : "min-h-28 pb-10",
-                    )}
-                  />
+          <div className="flex w-full flex-col">
+            <div
+              aria-hidden={internalMode !== "manual"}
+              className={cn(
+                "grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
+                internalMode === "manual"
+                  ? "grid-rows-[1fr] opacity-100 translate-y-0"
+                  : "pointer-events-none grid-rows-[0fr] opacity-0 -translate-y-2",
+              )}
+            >
+              <div className="min-h-0">
+                <div className="flex flex-col w-full">
                   <div
                     className={cn(
-                      "absolute right-3",
-                      compact ? "bottom-2" : "bottom-3",
+                      "w-full rounded-lg overflow-hidden",
+                      compact ? "h-85" : "h-105",
+                    )}
+                    onFocusCapture={() => onManualReplFocus?.()}
+                    onPointerDownCapture={() => onManualReplFocus?.()}
+                  >
+                    <DuckdbRepl
+                      className="h-full w-full border-r-0 p-0"
+                      selectedDbIdentifier={selectedDb}
+                      catalogContext={selectedCatalogContext}
+                      onConsoleApiChangeAction={handleManualConsoleApiChange}
+                      inlineResults={false}
+                      showRunControls={false}
+                      showExplorer={false}
+                      showSaveQueryButton={Boolean(onSaveQuery)}
+                      onSaveQueryAction={onSaveQuery}
+                      isSavingQuery={isSavingQuery}
+                      chartConfig={manualChartConfig}
+                      onResultChangeAction={onResultChange}
+                    />
+                  </div>
+                  <div
+                    className={cn(
+                      "flex justify-end gap-2 m-2",
+                      compact ? "pt-1 pr-1" : "pt-2 pr-2",
                     )}
                   >
                     <Button
                       size="sm"
                       variant="outline"
-                      type="submit"
+                      type="button"
                       className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-                      disabled={pendingMode === "ai"}
+                      disabled={!manualConsoleApi?.getQuery()?.trim()}
+                      onClick={handleManualRun}
                     >
-                      {content}
+                      Run
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                      disabled={!sqlResult}
+                      onClick={handleManualSend}
+                    >
+                      Add to chat
                     </Button>
                   </div>
                 </div>
               </div>
             </div>
-          </PromptInputBody>
+            <div
+              aria-hidden={internalMode === "manual"}
+              className={cn(
+                "grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
+                internalMode !== "manual"
+                  ? "grid-rows-[1fr] opacity-100 translate-y-0"
+                  : "pointer-events-none grid-rows-[0fr] opacity-0 translate-y-2",
+              )}
+            >
+              <div className="min-h-0">
+                <PromptInputBody>
+                  <PromptInputAttachments>
+                    {(attachment) => (
+                      <PromptInputAttachment data={attachment} />
+                    )}
+                  </PromptInputAttachments>
+                  <div className="w-full">
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="relative w-full">
+                        <PromptInputTextarea
+                          placeholder={placeholder}
+                          className={cn(
+                            "flex-1 pr-4",
+                            compact ? "min-h-10 pb-10" : "min-h-28 pb-10",
+                          )}
+                        />
+                        <div
+                          className={cn(
+                            "absolute right-3",
+                            compact ? "bottom-2" : "bottom-3",
+                          )}
+                        >
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            type="submit"
+                            className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                            disabled={pendingMode === "ai"}
+                          >
+                            {content}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </PromptInputBody>
+              </div>
+            </div>
+          </div>
         )}
         {showHeader && (
           <PromptInputHeader className={cn("p-0 overflow-hidden")}>
@@ -348,7 +542,7 @@ export function PromptInputWrapper({
                     onInsertTable={onInsertTable}
                   />
                 )}
-                <FileAttachmentHoverCard />
+                {internalMode !== "manual" && <FileAttachmentHoverCard />}
                 {!onHomePage && (
                   <Tooltip>
                     <TooltipTrigger asChild>

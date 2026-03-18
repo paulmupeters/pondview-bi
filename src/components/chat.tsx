@@ -10,11 +10,12 @@ import { ArtifactMutationProvider } from "@/components/artifact-mutation-context
 import { ChatMessageThread } from "@/components/chat/chat-message-thread";
 import { useChatUrlParams } from "@/components/chat/hooks/use-chat-url-params";
 import { useRightPanelResize } from "@/components/chat/hooks/use-right-panel-resize";
-import { useVisualizationSelection } from "@/components/chat/hooks/use-visualization-selection";
+import {
+  useVisualizationSelection,
+  type VisualizationEntry,
+} from "@/components/chat/hooks/use-visualization-selection";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
-import { DuckdbRepl } from "@/components/duckdb-shell/repl";
-import { ManualModeResultsPanel } from "@/components/manual-mode-results-panel";
 import {
   PromptInputWrapper,
   type PromptMode,
@@ -43,7 +44,7 @@ import {
   useDuckDbHttpHealthStatus,
   useSqlBackendPreference,
 } from "@/lib/sql/use-sql-backend";
-import type { Config } from "@/lib/types";
+import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   appendAssistantMessage,
@@ -145,6 +146,7 @@ function toPromptErrorMessage(error: Error): string {
 }
 
 const EMPTY_INITIAL_MESSAGES: UIMessage[] = [];
+const MANUAL_REPL_VISUALIZATION_ID = "manual-repl";
 
 export default function Chat({
   chatId,
@@ -173,7 +175,6 @@ export default function Chat({
   const hydratedChatIdRef = useRef<string | null>(
     resolvedInitialMessages.length > 0 ? chatId : null,
   );
-  const isAiMode = promptMode === "ai";
 
   const agent = useMemo(
     () => createPondviewAgent(connectedTables),
@@ -241,6 +242,12 @@ export default function Chat({
   const [manualChartConfig, setManualChartConfig] = useState<Config | null>(
     null,
   );
+  const [manualCardConfig, setManualCardConfig] = useState<CardConfig | null>(
+    null,
+  );
+  const [manualVisualType, setManualVisualType] = useState<
+    "table" | "chart" | "card" | null
+  >(null);
   const prevSqlRef = useRef<string | null>(null);
   const [isDashboardBuilderOpen, setIsDashboardBuilderOpen] = useState(false);
   const executeSqlArtifactType = "data-execute-sql";
@@ -249,6 +256,84 @@ export default function Chat({
   const showToolCalls = useShowToolCallsPreference();
   const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
   const {
+    rightPanelWidth,
+    isResizing,
+    resizeHandleRef,
+    containerRef,
+    handleResizeStart,
+  } = useRightPanelResize();
+
+  const handleManualVisualizationConfigChange = useCallback(
+    (config: { chartConfig?: Config; cardConfig?: CardConfig }) => {
+      if ("chartConfig" in config) {
+        setManualChartConfig(config.chartConfig ?? null);
+      }
+      if ("cardConfig" in config) {
+        setManualCardConfig(config.cardConfig ?? null);
+      }
+    },
+    [],
+  );
+
+  const handleManualVisualizationTypeChange = useCallback(
+    (visualType: "table" | "chart" | "card") => {
+      setManualVisualType(visualType);
+    },
+    [],
+  );
+
+  const manualVisualization = useMemo<VisualizationEntry[]>(() => {
+    if (!sqlResult) {
+      return [];
+    }
+
+    const isCardMode =
+      sqlResult.rows.length === 1 && sqlResult.columns.length === 1;
+    const visualType =
+      manualVisualType ??
+      (isCardMode ? "card" : manualChartConfig ? "chart" : "table");
+
+    return [
+      {
+        id: MANUAL_REPL_VISUALIZATION_ID,
+        data: {
+          stage: "complete",
+          progress: 1,
+          query: sqlResult.sql,
+          dbIdentifier: selectedDb,
+          sqlBackend: sqlResult.backend,
+          executionTime: sqlResult.durationMs,
+          rowCount: sqlResult.rows.length,
+          columns: sqlResult.columns,
+          rows: sqlResult.rows as Result[],
+          visualType,
+          chartConfig: manualChartConfig ?? undefined,
+          cardConfig: manualCardConfig ?? undefined,
+          summary: {
+            totalRows: sqlResult.rows.length,
+            executionTimeMs: sqlResult.durationMs,
+            insights: [],
+          },
+        },
+        stage: "complete",
+        progress: 1,
+        canAddToChat: false,
+        onConfigChange: handleManualVisualizationConfigChange,
+        onVisualTypeChange: handleManualVisualizationTypeChange,
+        source: "manual-repl",
+      },
+    ];
+  }, [
+    handleManualVisualizationConfigChange,
+    handleManualVisualizationTypeChange,
+    manualCardConfig,
+    manualChartConfig,
+    manualVisualType,
+    selectedDb,
+    sqlResult,
+  ]);
+
+  const {
     visualizations,
     activeVisualizationId,
     handleSelectVisualization,
@@ -256,15 +341,8 @@ export default function Chat({
   } = useVisualizationSelection({
     messages,
     executeSqlArtifactType,
+    supplementalVisualizations: manualVisualization,
   });
-
-  const {
-    rightPanelWidth,
-    isResizing,
-    resizeHandleRef,
-    containerRef,
-    handleResizeStart,
-  } = useRightPanelResize();
 
   useEffect(() => {
     let cancelled = false;
@@ -451,18 +529,9 @@ export default function Chat({
 
   const handlePromptSubmit = useCallback(
     (message: PromptInputMessage) => {
-      if (promptMode === "manual") {
-        const text = message.text?.trim();
-        if (text && sqlConsoleApi) {
-          sqlConsoleApi.setQuery(text);
-          sqlConsoleApi.focus();
-        }
-        return;
-      }
-
       void submitAiPrompt(message);
     },
-    [promptMode, sqlConsoleApi, submitAiPrompt],
+    [submitAiPrompt],
   );
 
   useEffect(() => {
@@ -797,16 +866,33 @@ export default function Chat({
       setSqlResult(result);
       if (result) {
         setExplorerRefreshToken((previous) => previous + 1);
+        handleSelectVisualization(MANUAL_REPL_VISUALIZATION_ID);
       }
 
       const newSql = result?.sql ?? null;
       if (newSql !== prevSqlRef.current) {
         setManualChartConfig(null);
+        setManualCardConfig(null);
+        setManualVisualType(
+          result && result.rows.length === 1 && result.columns.length === 1
+            ? "card"
+            : result
+              ? "table"
+              : null,
+        );
         prevSqlRef.current = newSql;
       }
     },
-    [],
+    [handleSelectVisualization],
   );
+
+  const handleManualReplFocus = useCallback(() => {
+    if (!sqlResult) {
+      return;
+    }
+
+    handleSelectVisualization(MANUAL_REPL_VISUALIZATION_ID);
+  }, [handleSelectVisualization, sqlResult]);
 
   const beginChatTitleEdit = useCallback(() => {
     setChatTitleDraft(chatTitle ?? "");
@@ -888,36 +974,10 @@ export default function Chat({
           )}
         </div>
       </div>
-      <div
-        aria-hidden={!isAiMode}
-        className={cn(
-          "absolute inset-x-0 bottom-0 top-9 flex flex-col transition-all duration-300 ease-out",
-          isAiMode
-            ? "opacity-100 translate-y-0 pointer-events-auto"
-            : "opacity-0 translate-y-2 pointer-events-none",
-        )}
-      >
+      <div className="absolute inset-x-0 bottom-0 top-9 flex flex-col">
         <VisualizationPanel
           visualizations={visualizations}
           selectedVisualizationId={activeVisualizationId}
-        />
-      </div>
-      <div
-        aria-hidden={isAiMode}
-        className={cn(
-          "absolute inset-x-0 bottom-0 top-9 flex flex-col transition-all duration-300 ease-out",
-          isAiMode
-            ? "opacity-0 translate-y-2 pointer-events-none"
-            : "opacity-100 translate-y-0 pointer-events-auto",
-        )}
-      >
-        <ManualModeResultsPanel
-          sqlResult={sqlResult}
-          onSwitchToAiMode={() => setPromptMode("ai")}
-          chartConfig={manualChartConfig}
-          onChartConfigChange={setManualChartConfig}
-          onAddToChatAction={handleAddSqlResultToChat}
-          selectedDbIdentifier={selectedDb}
         />
       </div>
     </div>
@@ -969,46 +1029,25 @@ export default function Chat({
                     showStoredSqlQueries
                   />
                   <div className="relative flex-1 min-h-0 min-w-0 flex flex-col">
-                    {isAiMode ? (
-                      <ChatMessageThread
-                        messages={messages}
-                        status={status}
-                        animationFrame={animationFrame}
-                        verbAiIsThinking={verbAiIsThinking}
-                        executeSqlArtifactType={executeSqlArtifactType}
-                        activeVisualizationId={activeVisualizationId}
-                        getLastSelectableVisualizationIdForMessage={
-                          getLastSelectableVisualizationIdForMessage
-                        }
-                        onSelectVisualization={handleSelectVisualization}
-                        onRemoveMessage={handleRemoveMessage}
-                        conversationClassName="flex-1 min-h-0"
-                        contentSpacingClassName="space-y-2 pb-36 lg:pb-40"
-                        messagePaddingClassName="p-3"
-                        userResponsePaddingClassName="p-1"
-                        showToolCalls={showToolCalls}
-                        showExecuteSqlRawOutput={showExecuteSqlRawOutput}
-                      />
-                    ) : (
-                      <div className="flex-1 min-h-0 w-full p-3 pb-36 lg:pb-40">
-                        <div className="h-full min-h-0 overflow-hidden">
-                          <DuckdbRepl
-                            className="h-full w-full border-r-0 p-0"
-                            selectedDbIdentifier={selectedDb}
-                            catalogContext={selectedCatalogContext}
-                            onConsoleApiChangeAction={setSqlConsoleApi}
-                            inlineResults={false}
-                            showRunControls={false}
-                            showExplorer={false}
-                            showSaveQueryButton
-                            onSaveQueryAction={handleSaveStoredSqlQuery}
-                            isSavingQuery={isSavingStoredSqlQuery}
-                            chartConfig={manualChartConfig}
-                            onResultChangeAction={handleReplResultChange}
-                          />
-                        </div>
-                      </div>
-                    )}
+                    <ChatMessageThread
+                      messages={messages}
+                      status={status}
+                      animationFrame={animationFrame}
+                      verbAiIsThinking={verbAiIsThinking}
+                      executeSqlArtifactType={executeSqlArtifactType}
+                      activeVisualizationId={activeVisualizationId}
+                      getLastSelectableVisualizationIdForMessage={
+                        getLastSelectableVisualizationIdForMessage
+                      }
+                      onSelectVisualization={handleSelectVisualization}
+                      onRemoveMessage={handleRemoveMessage}
+                      conversationClassName="flex-1 min-h-0"
+                      contentSpacingClassName="space-y-2 pb-36 lg:pb-40"
+                      messagePaddingClassName="p-3"
+                      userResponsePaddingClassName="p-1"
+                      showToolCalls={showToolCalls}
+                      showExecuteSqlRawOutput={showExecuteSqlRawOutput}
+                    />
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 px-4 pb-4">
                       <div className="pointer-events-auto w-full">
                         {promptError ? (
@@ -1029,6 +1068,20 @@ export default function Chat({
                           compact
                           showAiInput
                           onCreateDashboard={handleOpenDashboardBuilder}
+                          selectedDb={selectedDb}
+                          selectedCatalogContext={selectedCatalogContext}
+                          onConsoleApiChange={setSqlConsoleApi}
+                          onResultChange={handleReplResultChange}
+                          sqlResult={sqlResult}
+                          onAddSqlResultToChat={handleAddSqlResultToChat}
+                          storedSqlQueries={storedSqlQueries}
+                          onSaveQuery={handleSaveStoredSqlQuery}
+                          isSavingQuery={isSavingStoredSqlQuery}
+                          manualChartConfig={manualChartConfig}
+                          manualCardConfig={manualCardConfig}
+                          manualVisualType={manualVisualType}
+                          onManualReplFocus={handleManualReplFocus}
+                          onInsertTable={handleInsertTableIntoSql}
                         />
                       </div>
                     </div>

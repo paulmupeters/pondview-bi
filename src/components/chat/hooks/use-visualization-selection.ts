@@ -9,22 +9,33 @@ import type {
   SqlAnalysisData,
   SqlAnalysisStage,
 } from "@/components/sql-analysis-display.types";
+import type { CardConfig, Config } from "@/lib/types";
 
-type VisualizationEntry = {
+export type VisualizationEntry = {
   id: string;
   data: SqlAnalysisData | null;
   stage?: SqlAnalysisStage;
   progress?: number;
+  artifactId?: string;
+  canAddToChat?: boolean;
+  onConfigChange?: (config: {
+    chartConfig?: Config;
+    cardConfig?: CardConfig;
+  }) => void;
+  onVisualTypeChange?: (visualType: "table" | "chart" | "card") => void;
+  source?: "artifact" | "manual-repl";
 };
 
 type UseVisualizationSelectionArgs = {
   messages: UIMessage[];
   executeSqlArtifactType: string;
+  supplementalVisualizations?: VisualizationEntry[];
 };
 
 export function useVisualizationSelection({
   messages,
   executeSqlArtifactType,
+  supplementalVisualizations = [],
 }: UseVisualizationSelectionArgs) {
   const [activeVisualizationId, setActiveVisualizationId] = useState<
     string | null
@@ -112,12 +123,22 @@ export function useVisualizationSelection({
           data: payload,
           stage: derivedStage,
           progress: progressValue,
+          artifactId: artifactData.id,
+          source: "artifact",
         });
       });
     });
 
+    supplementalVisualizations.forEach((visualization) => {
+      if (!visualization.data) {
+        return;
+      }
+
+      vizList.push(visualization);
+    });
+
     return vizList;
-  }, [messages, executeSqlArtifactType]);
+  }, [messages, executeSqlArtifactType, supplementalVisualizations]);
 
   useEffect(() => {
     if (visualizations.length === 0) {
@@ -131,15 +152,21 @@ export function useVisualizationSelection({
       return;
     }
 
-    const latestVisualizationId = visualizations[visualizations.length - 1]?.id;
     const latestVisualization = visualizations[visualizations.length - 1];
+    const latestPersistedVisualization =
+      [...visualizations]
+        .reverse()
+        .find((visualization) => visualization.source !== "manual-repl") ??
+      null;
+    const latestVisualizationId =
+      latestPersistedVisualization?.id ?? latestVisualization?.id;
     const activeSelectionExists = visualizations.some(
       (visualization) => visualization.id === activeVisualizationId,
     );
     const latestVisualizationIsGeneratedChart =
-      latestVisualization?.stage === "complete" &&
-      (latestVisualization.data?.visualType === "chart" ||
-        latestVisualization.data?.visualType === "card");
+      latestPersistedVisualization?.stage === "complete" &&
+      (latestPersistedVisualization.data?.visualType === "chart" ||
+        latestPersistedVisualization.data?.visualType === "card");
     const isNewGeneratedVisualization =
       latestVisualizationId &&
       latestVisualizationId !==
@@ -171,10 +198,13 @@ export function useVisualizationSelection({
     }
   }, [activeVisualizationId, hasPinnedVisualizationSelection, visualizations]);
 
-  const handleSelectVisualization = useCallback((visualizationId: string) => {
-    setHasPinnedVisualizationSelection(true);
-    setActiveVisualizationId(visualizationId);
-  }, []);
+  const handleSelectVisualization = useCallback(
+    (visualizationId: string, options?: { pinned?: boolean }) => {
+      setHasPinnedVisualizationSelection(options?.pinned ?? true);
+      setActiveVisualizationId(visualizationId);
+    },
+    [],
+  );
 
   return {
     visualizations,

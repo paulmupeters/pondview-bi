@@ -1,18 +1,10 @@
 import { useMemo } from "react";
+import type { VisualizationEntry } from "@/components/chat/hooks/use-visualization-selection";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
-import type {
-  SqlAnalysisData,
-  SqlAnalysisStage,
-} from "@/components/sql-analysis-display.types";
 import { cn } from "@/lib/utils";
 
 export interface VisualizationPanelProps {
-  visualizations: Array<{
-    id: string;
-    data: SqlAnalysisData | null;
-    stage?: SqlAnalysisStage;
-    progress?: number;
-  }>;
+  visualizations: VisualizationEntry[];
   selectedVisualizationId?: string | null;
   className?: string;
 }
@@ -79,7 +71,10 @@ export function VisualizationPanel({
                 progress={currentViz.progress}
                 showStageIndicator={true}
                 className="w-full"
-                artifactId={currentViz.id}
+                artifactId={currentViz.artifactId}
+                canAddToChat={currentViz.canAddToChat}
+                onConfigChange={currentViz.onConfigChange}
+                onVisualTypeChange={currentViz.onVisualTypeChange}
               />
             </div>
           </div>
