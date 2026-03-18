@@ -40,7 +40,14 @@ function stripQueryString(identifier: string): string {
   return queryIndex >= 0 ? identifier.slice(0, queryIndex) : identifier;
 }
 
-function deriveAlias(connection: SourceConnectionConfig): string {
+type AttachmentAliasInput = Pick<
+  SourceConnectionConfig,
+  "alias" | "identifier"
+>;
+
+export function resolveAttachmentAlias(
+  connection: AttachmentAliasInput,
+): string {
   if (connection.alias) {
     // Sanitize the explicitly provided alias to ensure it's a valid DuckDB identifier
     const sanitized = connection.alias.replace(/[^A-Za-z0-9_]/g, "_");
@@ -93,7 +100,7 @@ export interface AttachmentPlan {
 export function buildAttachmentPlan(
   connection: SourceConnectionConfig,
 ): AttachmentPlan {
-  const alias = deriveAlias(connection);
+  const alias = resolveAttachmentAlias(connection);
   const statements: string[] = [];
 
   const extension =

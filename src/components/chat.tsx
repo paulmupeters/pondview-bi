@@ -1,5 +1,4 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { type ChatTransport, DirectChatTransport } from "ai";
 import { Pencil } from "lucide-react";
 import { nanoid } from "nanoid";
@@ -22,6 +21,7 @@ import {
 } from "@/components/prompt-input-wrapper";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { VisualizationPanel } from "@/components/visualization-panel";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import {
@@ -32,6 +32,7 @@ import {
   useExecuteSqlRawOutputPreference,
   useShowToolCallsPreference,
 } from "@/lib/chat-display-preferences";
+import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   resolveSqlBackend,
@@ -219,6 +220,9 @@ export default function Chat({
   });
 
   const [selectedDb, setSelectedDb] = useState<string | undefined>();
+  const [selectedCatalogContext, setSelectedCatalogContext] = useState<
+    string | null
+  >(null);
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(true);
   const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(
     null,
@@ -366,13 +370,17 @@ export default function Chat({
     setIsDashboardBuilderOpen(true);
   };
 
-  const handleInsertTableIntoSql = (tableName: string) => {
+  const handleInsertTableIntoSql = (payload: ExplorerInsertPayload) => {
     if (!sqlConsoleApi) return;
     const current = sqlConsoleApi.getQuery() ?? "";
     const lastChar = current.length > 0 ? current[current.length - 1] : "";
     const needsSpace = current.length > 0 && !/\s/.test(lastChar);
-    sqlConsoleApi.insertText(`${needsSpace ? " " : ""}${tableName}`);
+    sqlConsoleApi.insertText(`${needsSpace ? " " : ""}${payload.reference}`);
     sqlConsoleApi.focus();
+    if (payload.dbIdentifier) {
+      setSelectedDb(payload.dbIdentifier);
+    }
+    setSelectedCatalogContext(payload.catalogContext ?? null);
   };
 
   const submitAiPrompt = useCallback(
@@ -936,7 +944,10 @@ export default function Chat({
                 <div className="flex-1 min-h-0 flex overflow-hidden">
                   <ConnectedDataPanel
                     selectedDb={selectedDb}
-                    onSelect={setSelectedDb}
+                    onSelect={(db) => {
+                      setSelectedDb(db);
+                      setSelectedCatalogContext(null);
+                    }}
                     mode="sidebar"
                     onInsertTable={handleInsertTableIntoSql}
                     refreshToken={explorerRefreshToken}
@@ -984,6 +995,7 @@ export default function Chat({
                           <DuckdbRepl
                             className="h-full w-full border-r-0 p-0"
                             selectedDbIdentifier={selectedDb}
+                            catalogContext={selectedCatalogContext}
                             onConsoleApiChangeAction={setSqlConsoleApi}
                             inlineResults={false}
                             showRunControls={false}
