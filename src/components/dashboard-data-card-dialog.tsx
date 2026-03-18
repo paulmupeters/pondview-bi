@@ -29,6 +29,7 @@ import {
   formatFirstRowMeasureValue,
   type MeasureOption,
 } from "@/lib/dashboard/measures";
+import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
@@ -311,6 +312,9 @@ export function DashboardDataCardDialog({
   const [selectedExplorerDb, setSelectedExplorerDb] = useState<string>(
     DEFAULT_WASM_DB_IDENTIFIER,
   );
+  const [selectedCatalogContext, setSelectedCatalogContext] = useState<
+    string | null
+  >(null);
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
   const [showVisualOptions, setShowVisualOptions] = useState(false);
@@ -433,8 +437,12 @@ export function DashboardDataCardDialog({
 
   const canSave = sourceMode === "measure" ? canSaveMeasure : canSaveSql;
 
-  const handleInsertExplorerTable = (tableName: string) => {
-    sqlPreviewRef.current?.insertText(tableName);
+  const handleInsertExplorerTable = (payload: ExplorerInsertPayload) => {
+    sqlPreviewRef.current?.insertText(payload.reference);
+    if (payload.dbIdentifier) {
+      setSelectedExplorerDb(payload.dbIdentifier);
+    }
+    setSelectedCatalogContext(payload.catalogContext ?? null);
   };
 
   const handleSave = async () => {
@@ -674,7 +682,10 @@ export function DashboardDataCardDialog({
                     </div>
                     <ConnectedDataPanel
                       selectedDb={selectedExplorerDb}
-                      onSelect={setSelectedExplorerDb}
+                      onSelect={(db) => {
+                        setSelectedExplorerDb(db);
+                        setSelectedCatalogContext(null);
+                      }}
                       onInsertTable={handleInsertExplorerTable}
                       refreshToken={explorerRefreshToken}
                       sqlBackend={resolvedSqlBackend}
@@ -684,7 +695,10 @@ export function DashboardDataCardDialog({
                   <div className="flex min-h-[22rem] min-w-0">
                     <ConnectedDataPanel
                       selectedDb={selectedExplorerDb}
-                      onSelect={setSelectedExplorerDb}
+                      onSelect={(db) => {
+                        setSelectedExplorerDb(db);
+                        setSelectedCatalogContext(null);
+                      }}
                       mode="sidebar"
                       onInsertTable={handleInsertExplorerTable}
                       refreshToken={explorerRefreshToken}
@@ -707,6 +721,7 @@ export function DashboardDataCardDialog({
                             : undefined
                         }
                         backendPreference={resolvedSqlBackend}
+                        catalogContext={selectedCatalogContext}
                         defaultOpen
                         onQueryChange={setSql}
                         onSave={async (newSql) => {

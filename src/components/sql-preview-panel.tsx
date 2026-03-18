@@ -85,6 +85,7 @@ export interface SqlPreviewPanelProps {
   query: string;
   dbIdentifier?: string;
   backendPreference?: SqlBackendPreference;
+  catalogContext?: string | null;
   defaultOpen?: boolean;
   onQueryChange?: (newSql: string) => void;
   onSave?: (newSql: string) => Promise<void>;
@@ -101,6 +102,7 @@ export const SqlPreviewPanel = forwardRef<
     query,
     dbIdentifier,
     backendPreference,
+    catalogContext,
     defaultOpen = false,
     onQueryChange,
     onSave,
@@ -172,6 +174,7 @@ export const SqlPreviewPanel = forwardRef<
         sql: trimmed,
         dbIdentifier,
         backendPreference,
+        catalogContext,
       });
       setLastRunDuration(result.durationMs);
       onRun?.({

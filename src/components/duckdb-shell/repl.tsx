@@ -27,12 +27,13 @@ import {
   type ConnectedTable,
   readConnectedTablesFromStorage,
 } from "@/lib/connected-tables";
+import { runWithCatalogContext } from "@/lib/duckdb/catalog-context";
 import {
   buildAttachmentPlan,
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
 import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
-import { rewriteSqlForAttachedDatabase } from "@/lib/duckdb/rewrite-sql";
+import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 import { runQuery } from "@/lib/sql/run-query";
 import {
@@ -130,9 +131,11 @@ const _SQL_SAMPLE_LINES: {
 type DuckdbReplProps = {
   className?: string;
   selectedDbIdentifier?: string;
+  catalogContext?: string | null;
   onRunSqlAction?: (params: {
     sql: string;
     dbIdentifier?: string;
+    catalogContext?: string | null;
     signal: AbortSignal;
   }) => ReturnType<ExecuteQueryFn>;
   onConsoleApiChangeAction?: (api: SqlConsoleApi | null) => void;
@@ -159,6 +162,7 @@ const HISTORY_KEY = "bi.repl.history";
 export function DuckdbRepl({
   className,
   selectedDbIdentifier,
+  catalogContext,
   onRunSqlAction,
   onConsoleApiChangeAction,
   inlineResults = true,
@@ -183,6 +187,9 @@ export function DuckdbRepl({
   const [selectedDb, setSelectedDb] = useState<string | undefined>(
     selectedDbIdentifier ?? DEFAULT_WASM_DB_IDENTIFIER,
   );
+  const [internalCatalogContext, setInternalCatalogContext] = useState<
+    string | null
+  >(catalogContext ?? null);
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(true);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
   const sqlBackendPreference = useSqlBackendPreference();
@@ -200,6 +207,9 @@ export function DuckdbRepl({
         t.attachAs === selectedDb,
     );
   }, [selectedDb]);
+
+  const effectiveCatalogContext =
+    catalogContext !== undefined ? catalogContext : internalCatalogContext;
 
   const executeQuery: ExecuteQueryFn = async ({ sql, signal }) => {
     const effectiveDb = selectedDb ?? selectedDbIdentifier;
@@ -240,28 +250,35 @@ export function DuckdbRepl({
       }
 
       try {
-        const aliasedSql = rewriteSqlForAttachedDatabase(sql, plan.alias);
-
         if (onRunSqlAction) {
           return await onRunSqlAction({
-            sql: aliasedSql,
+            sql,
             dbIdentifier: effectiveDb,
+            catalogContext: plan.alias,
             signal,
           });
         }
-        if (effectiveSqlBackend === "bridge") {
-          const result = await runBridgeQuery(aliasedSql, signal);
-          return { ...result, backend: "bridge" as SqlBackend };
-        }
-        if (effectiveSqlBackend === "duckdb-http") {
-          const result = await runDuckDbHttpQuery(aliasedSql, signal);
-          return { ...result, backend: "duckdb-http" as SqlBackend };
-        }
-        return await runQuery({
-          sql: aliasedSql,
-          dbIdentifier: effectiveDb,
-          signal,
+
+        const runAttachedSql = async (statement: string) => {
+          if (effectiveSqlBackend === "bridge") {
+            return runBridgeQuery(statement, signal);
+          }
+          if (effectiveSqlBackend === "duckdb-http") {
+            return runDuckDbHttpQuery(statement, signal);
+          }
+          return runQuery({ sql: statement, signal });
+        };
+
+        const result = await runWithCatalogContext({
+          sql,
+          selectedCatalog: plan.alias,
+          runQuery: runAttachedSql,
         });
+
+        return {
+          ...result,
+          backend: effectiveSqlBackend,
+        };
       } finally {
         try {
           await runRemote(buildDetachStatement(plan.alias, { ifExists: true }));
@@ -273,9 +290,19 @@ export function DuckdbRepl({
 
     // Default path: local WASM or no external connection
     if (onRunSqlAction) {
-      return onRunSqlAction({ sql, dbIdentifier: effectiveDb, signal });
+      return onRunSqlAction({
+        sql,
+        dbIdentifier: effectiveDb,
+        catalogContext: effectiveCatalogContext,
+        signal,
+      });
     }
-    return runQuery({ sql, dbIdentifier: effectiveDb, signal });
+    return runQuery({
+      sql,
+      dbIdentifier: effectiveDb,
+      catalogContext: effectiveCatalogContext,
+      signal,
+    });
   };
 
   const handleCopySqlSnippet = () => {
@@ -320,15 +347,21 @@ export function DuckdbRepl({
   };
 
   const handleInsertTableName = useCallback(
-    (tableName: string) => {
+    (payload: ExplorerInsertPayload) => {
       if (!internalApi) return;
       const current = internalApi.getQuery() ?? "";
       const lastChar = current.length > 0 ? current[current.length - 1] : "";
       const needsSpace = current.length > 0 && !/\s/.test(lastChar);
-      internalApi.insertText(`${needsSpace ? " " : ""}${tableName}`);
+      internalApi.insertText(`${needsSpace ? " " : ""}${payload.reference}`);
       internalApi.focus();
+      if (payload.dbIdentifier) {
+        setSelectedDb(payload.dbIdentifier);
+      }
+      if (catalogContext === undefined) {
+        setInternalCatalogContext(payload.catalogContext ?? null);
+      }
     },
-    [internalApi],
+    [catalogContext, internalApi],
   );
 
   const handleCancelQuery = async () => {
@@ -370,6 +403,18 @@ export function DuckdbRepl({
     };
   }, []);
 
+  useEffect(() => {
+    if (selectedDbIdentifier !== undefined) {
+      setSelectedDb(selectedDbIdentifier);
+    }
+  }, [selectedDbIdentifier]);
+
+  useEffect(() => {
+    if (catalogContext !== undefined) {
+      setInternalCatalogContext(catalogContext ?? null);
+    }
+  }, [catalogContext]);
+
   return (
     <div
       className={cn(
@@ -381,7 +426,10 @@ export function DuckdbRepl({
       {showExplorer && (
         <ConnectedDataPanel
           selectedDb={selectedDb}
-          onSelect={setSelectedDb}
+          onSelect={(dbIdentifier) => {
+            setSelectedDb(dbIdentifier);
+            setInternalCatalogContext(null);
+          }}
           mode="sidebar"
           onInsertTable={handleInsertTableName}
           refreshToken={explorerRefreshToken}

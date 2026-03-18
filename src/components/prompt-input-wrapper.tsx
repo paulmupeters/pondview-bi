@@ -35,6 +35,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
+import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import { getUploadedFileBlob, persistUploadedFile } from "@/lib/uploaded-files";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +57,7 @@ interface PromptInputWrapperProps {
   pendingMode?: PromptMode | null;
   selectedDb?: string;
   onSelectDb?: (db: string) => void;
-  onInsertTable?: (tableName: string) => void;
+  onInsertTable?: (payload: ExplorerInsertPayload) => void;
 }
 
 // Inner component that uses the attachments hook within PromptInput context

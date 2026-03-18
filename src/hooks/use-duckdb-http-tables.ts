@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DuckdbTableEntry } from "@/lib/api/types/duckdb";
 import { getBridgeSession, runBridgeQuery } from "@/lib/bridge/pondview-bridge";
+import { resolveCurrentCatalog } from "@/lib/duckdb/catalog-context";
 import {
   getDuckDbHttpConfigFromStorage,
   runDuckDbHttpQuery,
@@ -20,7 +21,7 @@ const LIST_TABLES_SQL = `
   ORDER BY table_catalog, table_schema, table_name
 `;
 
-function mapInformationSchemaRows(
+export function mapInformationSchemaRows(
   rows: Record<string, unknown>[],
 ): DuckdbTableEntry[] {
   return rows.map((row) => ({
@@ -31,7 +32,7 @@ function mapInformationSchemaRows(
   }));
 }
 
-function mapShowAllTablesRows(
+export function mapShowAllTablesRows(
   rows: Record<string, unknown>[],
 ): DuckdbTableEntry[] {
   return rows
@@ -53,6 +54,7 @@ export function useDuckdbHttpTables(
   refreshToken?: number,
 ) {
   const [tables, setTables] = useState<DuckdbTableEntry[]>([]);
+  const [currentCatalog, setCurrentCatalog] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isConfigured, setIsConfigured] = useState(false);
@@ -70,6 +72,7 @@ export function useDuckdbHttpTables(
     async function fetchTables() {
       if (backend === "duckdb-wasm") {
         setTables([]);
+        setCurrentCatalog(null);
         setError(null);
         setIsConfigured(false);
         setConnectionInfo(null);
@@ -83,6 +86,7 @@ export function useDuckdbHttpTables(
 
         if (backend === "bridge") {
           const session = await getBridgeSession().catch(() => null);
+          const runBridgeSql = (sql: string) => runBridgeQuery(sql);
 
           if (!cancelled) {
             setIsConfigured(true);
@@ -92,14 +96,22 @@ export function useDuckdbHttpTables(
           }
 
           try {
-            const result = await runBridgeQuery(LIST_TABLES_SQL);
+            const [result, nextCurrentCatalog] = await Promise.all([
+              runBridgeSql(LIST_TABLES_SQL),
+              resolveCurrentCatalog(runBridgeSql),
+            ]);
             if (!cancelled) {
               setTables(mapInformationSchemaRows(result.rows));
+              setCurrentCatalog(nextCurrentCatalog);
             }
           } catch {
-            const fallback = await runBridgeQuery("SHOW ALL TABLES;");
+            const [fallback, nextCurrentCatalog] = await Promise.all([
+              runBridgeSql("SHOW ALL TABLES;"),
+              resolveCurrentCatalog(runBridgeSql),
+            ]);
             if (!cancelled) {
               setTables(mapShowAllTablesRows(fallback.rows));
+              setCurrentCatalog(nextCurrentCatalog);
             }
           }
 
@@ -110,6 +122,7 @@ export function useDuckdbHttpTables(
         if (!config) {
           if (!cancelled) {
             setTables([]);
+            setCurrentCatalog(null);
             setError(null);
             setIsConfigured(false);
             setConnectionInfo(null);
@@ -122,15 +135,25 @@ export function useDuckdbHttpTables(
           setConnectionInfo({ host: config.host, port: config.port });
         }
 
+        const runDuckDbHttpSql = (sql: string) => runDuckDbHttpQuery(sql);
+
         try {
-          const result = await runDuckDbHttpQuery(LIST_TABLES_SQL);
+          const [result, nextCurrentCatalog] = await Promise.all([
+            runDuckDbHttpSql(LIST_TABLES_SQL),
+            resolveCurrentCatalog(runDuckDbHttpSql),
+          ]);
           if (!cancelled) {
             setTables(mapInformationSchemaRows(result.rows));
+            setCurrentCatalog(nextCurrentCatalog);
           }
         } catch {
-          const fallback = await runDuckDbHttpQuery("SHOW ALL TABLES;");
+          const [fallback, nextCurrentCatalog] = await Promise.all([
+            runDuckDbHttpSql("SHOW ALL TABLES;"),
+            resolveCurrentCatalog(runDuckDbHttpSql),
+          ]);
           if (!cancelled) {
             setTables(mapShowAllTablesRows(fallback.rows));
+            setCurrentCatalog(nextCurrentCatalog);
           }
         }
       } catch (err) {
@@ -139,6 +162,7 @@ export function useDuckdbHttpTables(
             err instanceof Error ? err.message : String(err ?? "");
           setError(message);
           setTables([]);
+          setCurrentCatalog(null);
           console.error("[useDuckdbHttpTables] Error:", message);
         }
       } finally {
@@ -155,5 +179,12 @@ export function useDuckdbHttpTables(
     };
   }, [backend, refreshToken]);
 
-  return { tables, isLoading, error, isConfigured, connectionInfo };
+  return {
+    tables,
+    currentCatalog,
+    isLoading,
+    error,
+    isConfigured,
+    connectionInfo,
+  };
 }

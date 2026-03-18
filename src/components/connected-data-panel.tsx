@@ -20,7 +20,14 @@ import {
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
 import { useWasmTables } from "@/hooks/use-wasm-tables";
-import { buildExplorerTableReference } from "@/lib/duckdb/table-reference";
+import type { ConnectedTable } from "@/lib/connected-tables";
+import { resolveAttachmentAlias } from "@/lib/duckdb/duckdb-attachments";
+import {
+  buildExplorerInsertPayload,
+  buildExplorerTableReference,
+  type ExplorerInsertPayload,
+  isDefaultExplorerSchema,
+} from "@/lib/duckdb/table-reference";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
@@ -36,11 +43,53 @@ type ExplorerTableGroup = {
   tables: string[];
 };
 
+export function getConnectedEntryCatalog(
+  entry: ConnectedTable,
+): string | undefined {
+  if (entry.type === "duckdb") {
+    return undefined;
+  }
+
+  return resolveAttachmentAlias({
+    alias: entry.attachAs || "source",
+    identifier: entry.databasePath ?? entry.connectionId,
+  });
+}
+
+export function getConnectedEntryDisplayName(entry: ConnectedTable): string {
+  const parts: string[] = [];
+  const catalog = getConnectedEntryCatalog(entry);
+
+  if (catalog) {
+    parts.push(catalog);
+  } else if (entry.attachAs) {
+    parts.push(entry.attachAs);
+  }
+
+  if (entry.schema && !isDefaultExplorerSchema(entry.schema)) {
+    parts.push(entry.schema);
+  }
+  if (entry.table) {
+    parts.push(entry.table);
+  }
+  if (parts.length === 0) {
+    parts.push(
+      entry.databaseName ??
+        entry.attachAs ??
+        entry.connectionId ??
+        entry.databasePath ??
+        "unknown",
+    );
+  }
+
+  return `${parts.join(".")} (${entry.type})`;
+}
+
 interface ConnectedDataPanelProps {
   selectedDb?: string;
   onSelect: (dbIdentifier: string) => void;
   className?: string;
-  onInsertTable?: (tableName: string) => void;
+  onInsertTable?: (payload: ExplorerInsertPayload) => void;
   mode?: "popover" | "sidebar";
   collapsed?: boolean;
   collapsedBehavior?: "inline" | "overlay";
@@ -74,12 +123,14 @@ export function ConnectedDataPanel({
   const connectedTables = useConnectedTables();
   const {
     tables: wasmTables,
+    currentCatalog: wasmCurrentCatalog,
     isLoading: isLoadingWasmTables,
     error: wasmTablesError,
     refresh: refreshWasmTables,
   } = useWasmTables();
   const {
     tables: remoteTables,
+    currentCatalog: remoteCurrentCatalog,
     isLoading: isLoadingRemoteTables,
     error: remoteTablesError,
     connectionInfo: remoteConnectionInfo,
@@ -169,38 +220,21 @@ export function ConnectedDataPanel({
     return `${entry.type}-${dbId}-${entry.schema || entry.table || ""}`;
   };
 
-  const getDbDisplayName = (entry: (typeof connectedTables)[0]): string => {
-    const parts: string[] = [];
-    if (entry.attachAs) parts.push(entry.attachAs);
-    if (entry.schema) parts.push(entry.schema);
-    if (entry.table) parts.push(entry.table);
-    if (parts.length === 0) {
-      parts.push(
-        entry.databaseName ??
-          entry.attachAs ??
-          entry.connectionId ??
-          entry.databasePath ??
-          "unknown",
-      );
-    }
-    return `${parts.join(".")} (${entry.type})`;
-  };
-
   const handleInsertTable = (
     entry: (typeof connectedTables)[0],
     tableName: string,
   ) => {
-    const catalog =
-      entry.type === "duckdb"
-        ? undefined
-        : entry.attachAs?.trim() || entry.databaseName?.trim();
-    const qualifiedName = buildExplorerTableReference({
+    const dbIdentifier = getDbIdentifier(entry);
+    const catalog = getConnectedEntryCatalog(entry);
+    const payload = buildExplorerInsertPayload({
       catalog,
       schema: entry.schema,
       table: tableName,
-      includeCatalog: Boolean(catalog),
+      source: "connected-entry",
+      dbIdentifier,
     });
-    onInsertTable?.(qualifiedName);
+    onSelect(dbIdentifier);
+    onInsertTable?.(payload);
     if (mode === "popover") {
       setIsOpen(false);
     }
@@ -223,9 +257,12 @@ export function ConnectedDataPanel({
   const renderExplorerTableGroups = (
     groups: ExplorerTableGroup[],
     options: {
+      currentCatalog?: string | null;
       palette: string[];
-      includeCatalog: boolean;
-      onTableClick: (group: ExplorerTableGroup, qualifiedName: string) => void;
+      onTableClick: (
+        group: ExplorerTableGroup,
+        payload: ExplorerInsertPayload,
+      ) => void;
     },
   ) =>
     groups.map((group, groupIdx) => (
@@ -236,9 +273,13 @@ export function ConnectedDataPanel({
         {group.catalog && (
           <p className="text-[10px] uppercase tracking-wide text-foreground/70">
             {group.catalog}
+            {options.currentCatalog &&
+            group.catalog.toLowerCase() === options.currentCatalog.toLowerCase()
+              ? " · current"
+              : ""}
           </p>
         )}
-        {(options.includeCatalog || group.schema.toLowerCase() !== "main") && (
+        {!isDefaultExplorerSchema(group.schema) && (
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
             {group.schema}
           </p>
@@ -246,11 +287,19 @@ export function ConnectedDataPanel({
         {group.tables.map((tableName, tableIdx) => {
           const color =
             options.palette[(groupIdx + tableIdx) % options.palette.length];
-          const qualifiedName = buildExplorerTableReference({
+          const payload = buildExplorerInsertPayload({
+            catalog: group.catalog,
+            currentCatalog: options.currentCatalog,
+            schema: group.schema,
+            table: tableName,
+            source: "runtime",
+          });
+          const displayReference = buildExplorerTableReference({
             catalog: group.catalog,
             schema: group.schema,
             table: tableName,
-            includeCatalog: options.includeCatalog && Boolean(group.catalog),
+            includeCatalog: Boolean(group.catalog),
+            includeDefaultSchema: true,
           });
 
           return (
@@ -258,8 +307,8 @@ export function ConnectedDataPanel({
               key={`${group.catalog}.${group.schema}.${tableName}`}
               type="button"
               className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-              onClick={() => options.onTableClick(group, qualifiedName)}
-              title={qualifiedName}
+              onClick={() => options.onTableClick(group, payload)}
+              title={displayReference}
             >
               <span className={cn("w-1.5 h-1.5 rounded-full", color)} />
               <span className="truncate">{tableName}</span>
@@ -360,10 +409,10 @@ export function ConnectedDataPanel({
                 <p className="text-xs text-destructive">{remoteTablesError}</p>
               ) : groupedRemoteTables.length > 0 ? (
                 renderExplorerTableGroups(groupedRemoteTables, {
+                  currentCatalog: remoteCurrentCatalog,
                   palette: ["bg-emerald-400", "bg-teal-400", "bg-cyan-400"],
-                  includeCatalog: true,
-                  onTableClick: (_group, qualifiedName) => {
-                    onInsertTable?.(qualifiedName);
+                  onTableClick: (_group, payload) => {
+                    onInsertTable?.(payload);
                     if (mode === "popover") {
                       setIsOpen(false);
                     }
@@ -407,10 +456,10 @@ export function ConnectedDataPanel({
               </p>
             ) : hasWasmTables ? (
               renderExplorerTableGroups(groupedWasmTables, {
+                currentCatalog: wasmCurrentCatalog,
                 palette: ["bg-blue-400", "bg-purple-400", "bg-amber-400"],
-                includeCatalog: true,
-                onTableClick: (_group, qualifiedName) => {
-                  onInsertTable?.(qualifiedName);
+                onTableClick: (_group, payload) => {
+                  onInsertTable?.(payload);
                   if (mode === "popover") {
                     setIsOpen(false);
                   }
@@ -430,7 +479,8 @@ export function ConnectedDataPanel({
           connectedTables.map((entry) => {
             const dbKey = getDbKey(entry);
             const dbIdentifier = getDbIdentifier(entry);
-            const dbDisplayName = getDbDisplayName(entry);
+            const dbDisplayName = getConnectedEntryDisplayName(entry);
+            const catalog = getConnectedEntryCatalog(entry);
             // Check both databasePath and attachAs for backward compatibility
             const isSelected =
               selectedDb === dbIdentifier || selectedDb === entry.attachAs;
@@ -474,6 +524,13 @@ export function ConnectedDataPanel({
                               onClick={() =>
                                 handleInsertTable(entry, tableName)
                               }
+                              title={buildExplorerTableReference({
+                                catalog,
+                                schema: entry.schema,
+                                table: tableName,
+                                includeCatalog: entry.type !== "duckdb",
+                                includeDefaultSchema: true,
+                              })}
                             >
                               <span
                                 className={cn(
@@ -492,6 +549,13 @@ export function ConnectedDataPanel({
                             onClick={() =>
                               handleInsertTable(entry, entry.table as string)
                             }
+                            title={buildExplorerTableReference({
+                              catalog,
+                              schema: entry.schema,
+                              table: entry.table as string,
+                              includeCatalog: entry.type !== "duckdb",
+                              includeDefaultSchema: true,
+                            })}
                           >
                             <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
                             <span className="truncate">{entry.table}</span>

@@ -1,12 +1,12 @@
 import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
+import { runWithCatalogContext } from "@/lib/duckdb/catalog-context";
 import {
   buildAttachmentPlan,
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
-import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
-import { rewriteSqlForAttachedDatabase } from "@/lib/duckdb/rewrite-sql";
+import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import { runQueryWasm } from "@/lib/sql/run-query-wasm";
 import {
   assertWasmCompatibleDbIdentifier,
@@ -19,6 +19,7 @@ export type RunQueryOptions = {
   sql: string;
   config?: HttpDuckDbConfig;
   dbIdentifier?: string;
+  catalogContext?: string | null;
   signal?: AbortSignal;
   backendPreference?: SqlBackendPreference;
 };
@@ -38,17 +39,6 @@ type RunQueryDeps = {
   runWasm: typeof runQueryWasm;
 };
 
-function nowMs(): number {
-  if (
-    typeof performance !== "undefined" &&
-    typeof performance.now === "function"
-  ) {
-    return performance.now();
-  }
-
-  return Date.now();
-}
-
 const defaultDeps: RunQueryDeps = {
   resolveBackend: resolveSqlBackend,
   assertWasmCompatibleIdentifier: assertWasmCompatibleDbIdentifier,
@@ -67,6 +57,7 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
     sql,
     config,
     dbIdentifier,
+    catalogContext,
     signal,
     backendPreference = "auto",
   }: RunQueryOptions): Promise<RunQueryResult> {
@@ -87,12 +78,15 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
         backend === "bridge"
           ? (statement: string) => deps.runBridge(statement, signal)
           : backend === "duckdb-http"
-            ? (statement: string) => deps.runDuckDbHttp(statement, signal, config)
+            ? (statement: string) =>
+                deps.runDuckDbHttp(statement, signal, config)
             : null;
 
       if (!runRemoteSql) {
         deps.assertWasmCompatibleIdentifier(dbIdentifier);
+        throw new Error("Remote SQL runner is unavailable for this backend.");
       }
+      const remoteSqlRunner = runRemoteSql;
 
       const plan = buildAttachmentPlan({
         type: "motherduck",
@@ -105,19 +99,22 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
       });
 
       for (const statement of plan.statements) {
-        await runRemoteSql!(statement);
+        await remoteSqlRunner(statement);
       }
 
       try {
-        const rewrittenSql = rewriteSqlForAttachedDatabase(trimmedSql, plan.alias);
-        const result = await runRemoteSql!(rewrittenSql);
+        const result = await runWithCatalogContext({
+          sql: trimmedSql,
+          selectedCatalog: plan.alias,
+          runQuery: remoteSqlRunner,
+        });
         return {
           ...result,
           backend,
         };
       } finally {
         try {
-          await runRemoteSql!(
+          await remoteSqlRunner(
             buildDetachStatement(plan.alias, { ifExists: true }),
           );
         } catch {
@@ -126,7 +123,11 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
       }
     }
     if (backend === "bridge") {
-      const result = await deps.runBridge(trimmedSql, signal);
+      const result = await runWithCatalogContext({
+        sql: trimmedSql,
+        selectedCatalog: catalogContext,
+        runQuery: (statement: string) => deps.runBridge(statement, signal),
+      });
       return {
         ...result,
         backend,
@@ -134,7 +135,12 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
     }
 
     if (backend === "duckdb-http") {
-      const result = await deps.runDuckDbHttp(trimmedSql, signal, config);
+      const result = await runWithCatalogContext({
+        sql: trimmedSql,
+        selectedCatalog: catalogContext,
+        runQuery: (statement: string) =>
+          deps.runDuckDbHttp(statement, signal, config),
+      });
       return {
         ...result,
         backend,
@@ -142,10 +148,15 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
     }
 
     deps.assertWasmCompatibleIdentifier(dbIdentifier);
-    const result = await deps.runWasm({
+    const result = await runWithCatalogContext({
       sql: trimmedSql,
-      signal,
-      dbIdentifier,
+      selectedCatalog: catalogContext,
+      runQuery: (statement: string) =>
+        deps.runWasm({
+          sql: statement,
+          signal,
+          dbIdentifier,
+        }),
     });
     return {
       ...result,

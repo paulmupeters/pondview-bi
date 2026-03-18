@@ -8,12 +8,11 @@
 export function rewriteSqlForAttachedDatabase(
   sql: string,
   alias: string,
+  options: {
+    defaultSchema?: string;
+  } = {},
 ): string {
-  // Simple heuristic: if the SQL already contains schema-qualified names
-  // (e.g., "public.users" or "schema.table"), prepend the alias.
-  // Otherwise, assume tables are in the public schema.
-
-  // Escape the alias for use in regex
+  const defaultSchema = (options.defaultSchema ?? "main").trim() || "main";
   const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   // Don't rewrite if the alias is already present
@@ -30,20 +29,22 @@ export function rewriteSqlForAttachedDatabase(
     return sql.replace(
       /\b(FROM|JOIN|UPDATE|INTO)\s+(\w+)\.(\w+)/gi,
       (match, keyword: string, schema: string, table: string) => {
-        // Don't rewrite if it's already prefixed with the alias or is a known DuckDB schema
+        const normalizedSchema = schema.toLowerCase();
         if (
-          schema.toLowerCase() === alias.toLowerCase() ||
-          ["main", "temp", "information_schema"].includes(schema.toLowerCase())
+          normalizedSchema === alias.toLowerCase() ||
+          ["temp", "information_schema"].includes(normalizedSchema)
         ) {
           return match;
+        }
+        if (normalizedSchema === defaultSchema.toLowerCase()) {
+          return `${keyword} ${alias}.${table}`;
         }
         return `${keyword} ${alias}.${schema}.${table}`;
       },
     );
   }
 
-  // No schema qualification - assume public schema
-  // Pattern: FROM table -> FROM alias.public.table
+  // No schema qualification - assume the attached database default schema.
   return sql.replace(
     /\b(FROM|JOIN|UPDATE|INTO)\s+(\w+)(?:\s|$|;|,)/gi,
     (match, keyword: string, table: string) => {
@@ -62,7 +63,7 @@ export function rewriteSqlForAttachedDatabase(
       ) {
         return match;
       }
-      return `${keyword} ${alias}.public.${table}`;
+      return `${keyword} ${alias}.${table}`;
     },
   );
 }
