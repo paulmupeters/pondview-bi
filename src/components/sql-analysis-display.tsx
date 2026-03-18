@@ -2,17 +2,12 @@ import {
   ChatBubbleBottomCenterTextIcon,
   PlusCircleIcon,
 } from "@heroicons/react/24/outline";
-import {
-  ChartBar,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Table,
-} from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useArtifactMutation } from "@/components/artifact-mutation-context";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Tooltip,
   TooltipContent,
@@ -84,6 +79,7 @@ export function SqlAnalysisDisplay({
   canAddToChat,
   artifactId,
   onConfigChange,
+  onVisualTypeChange,
 }: SqlAnalysisDisplayProps) {
   const { updateArtifactConfig } = useArtifactMutation();
   const [activeView, setActiveView] = useState<ActiveView>(() =>
@@ -307,6 +303,25 @@ export function SqlAnalysisDisplay({
     };
   }, [data, chartConfig, cardConfig, activeView]);
 
+  const currentVisualType: "table" | "chart" | "card" | undefined =
+    activeView === "table" ? "table" : selectedForCard ? "card" : "chart";
+  const lastEmittedVisualTypeRef = useRef<"table" | "chart" | "card" | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!onVisualTypeChange || !currentVisualType) {
+      return;
+    }
+
+    if (lastEmittedVisualTypeRef.current === currentVisualType) {
+      return;
+    }
+
+    lastEmittedVisualTypeRef.current = currentVisualType;
+    onVisualTypeChange(currentVisualType);
+  }, [currentVisualType, onVisualTypeChange]);
+
   const showAddToChatButton =
     Boolean(onAddToChat) &&
     Boolean(payloadForAddToChat) &&
@@ -343,27 +358,41 @@ export function SqlAnalysisDisplay({
       {data && (
         <div className="flex flex-col gap-4 w-full">
           <div className="px-4 pt-2">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={activeView === "table" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setActiveView("table")}
-                className="flex items-center gap-2"
+            <ToggleGroup
+              type="single"
+              value={activeView}
+              onValueChange={(value) => {
+                if (value) {
+                  setActiveView(value as ActiveView);
+                }
+              }}
+              className="gap-2"
+            >
+              <ToggleGroupItem
+                value="table"
                 disabled={!canShowTable}
+                className={cn(
+                  "rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-medium bg-transparent data-[state=on]:text-primary data-[state=on]:bg-transparent",
+                  activeView === "table"
+                    ? "border-primary font-bold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
-                <Table className="w-4 h-4" />
                 Data
-              </Button>
-              <Button
-                variant={activeView === "chart" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setActiveView("chart")}
-                className="flex items-center gap-2"
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="chart"
+                disabled={false}
+                className={cn(
+                  "rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-mono bg-transparent data-[state=on]:text-primary data-[state=on]:bg-transparent",
+                  activeView === "chart"
+                    ? "border-primary font-bold"
+                    : "text-muted-foreground hover:text-foreground font-medium",
+                )}
               >
-                <ChartBar className="w-4 h-4" />
                 Visual
-              </Button>
-            </div>
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
 
           <div className="flex justify-end px-4">

@@ -53,6 +53,7 @@ export interface SqlAnalysisDisplayProps {
     chartConfig?: Config;
     cardConfig?: CardConfig;
   }) => void;
+  onVisualTypeChange?: (visualType: "table" | "chart" | "card") => void;
 }
 
 export interface StageIndicatorProps {

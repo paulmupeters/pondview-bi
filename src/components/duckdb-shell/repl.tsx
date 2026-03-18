@@ -377,12 +377,13 @@ export function DuckdbRepl({
     await cancelBridgeQuery();
   };
 
-  // Propagate result changes to parent when inlineResults is false
+  // Keep parent state in sync with the latest query result regardless of where
+  // the result is rendered.
   useEffect(() => {
-    if (!inlineResults && onResultChangeAction) {
+    if (onResultChangeAction) {
       onResultChangeAction(lastResult);
     }
-  }, [lastResult, inlineResults, onResultChangeAction]);
+  }, [lastResult, onResultChangeAction]);
 
   useEffect(() => {
     if (internalApi && onConsoleApiChangeAction) {
@@ -454,7 +455,7 @@ export function DuckdbRepl({
                     setLastResult(null);
                     internalApi?.clearResults();
                     internalApi?.setQuery("");
-                    if (!inlineResults && onResultChangeAction) {
+                    if (onResultChangeAction) {
                       onResultChangeAction(null);
                     }
                   }}
