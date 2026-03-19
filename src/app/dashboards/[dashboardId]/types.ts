@@ -1,4 +1,7 @@
-import type { MeasureOption, MeasuresByName } from "@/lib/dashboard/measures";
+import type {
+  MeasureOption,
+  MeasureRenderContextByName,
+} from "@/lib/dashboard/measures";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import type {
   CardConfig,
@@ -64,7 +67,7 @@ export type SortableChartCardProps = {
   chart: DashboardChart & { filtersApplied?: boolean };
   config: Config | CardConfig | TableConfig | TextConfig | null;
   rows: Result[];
-  measures: MeasuresByName;
+  measures: MeasureRenderContextByName;
   measureOptions?: MeasureOption[];
   measure?: WorkspaceDashboardMeasure | null;
   measureValue?: string;
@@ -103,6 +106,7 @@ export type MetricCardGroupProps = {
   totalColumns: number;
   selectedChartId: string | null;
   onChartSelect: (chartId: string) => void;
+  onPreviewChart: (chartId: string) => void;
 };
 
 export type MetricCardInGroupProps = {
@@ -123,6 +127,7 @@ export type MetricCardInGroupProps = {
   isLast: boolean;
   isSelected: boolean;
   onSelect: (chartId: string) => void;
+  onPreviewChart: (chartId: string) => void;
 };
 
 export type MetricCardSqlEditorProps = {

@@ -129,7 +129,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   };
 
   return (
-    <div className="relative flex h-full w-20 flex-col border-r border-border bg-sidebar px-2 py-4">
+    <div className="relative flex h-full w-20 flex-col border-r border-border bg-sidebar py-4 p-1">
       <div className="relative flex flex-col items-center gap-2">
         <div className="relative">
           <Link href="/">
@@ -335,7 +335,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
             className={cn(
               railButtonClassName,
               isDashboardsRoute &&
-                "bg-sidebar-accent text-sidebar-accent-foreground",
+                "bg-sidebar-accent text-sidebar-accent-foreground w-full",
             )}
             aria-label="Dashboards"
             title="Dashboards"
