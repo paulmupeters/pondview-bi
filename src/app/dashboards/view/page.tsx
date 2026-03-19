@@ -11,6 +11,7 @@ import {
 import { DashboardDataCardDialog } from "@/components/dashboard-data-card-dialog";
 import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
 import { DynamicChart } from "@/components/dynamic-chart";
+import { MetricCard } from "@/components/metric-card";
 import {
   SqlPreviewPanel,
   type SqlPreviewRunResult,
@@ -34,9 +35,11 @@ import {
 import { executeDashboardChartsWithFilters } from "@/lib/dashboard/browser-filter-engine";
 import {
   buildMeasureOptions,
-  buildMeasuresByName,
+  buildMeasureRenderContextByName,
+  extractFirstRowMeasurePrimitive,
   extractLegacyMeasureOptionsFromMetricCards,
   formatFirstRowMeasureValue,
+  type MeasurePrimitive,
 } from "@/lib/dashboard/measures";
 import { runQuery } from "@/lib/sql/run-query";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
@@ -167,6 +170,9 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   const [measureValuesById, setMeasureValuesById] = useState<
     Record<string, string>
   >({});
+  const [measureRawValuesById, setMeasureRawValuesById] = useState<
+    Record<string, MeasurePrimitive>
+  >({});
   const [chartQueryError, setChartQueryError] = useState<string | null>(null);
   const [measureQueryError, setMeasureQueryError] = useState<string | null>(
     null,
@@ -239,7 +245,14 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
 
             return [
               measure.id,
-              formatFirstRowMeasureValue(result.rows as Result[]),
+              {
+                formattedValue: formatFirstRowMeasureValue(
+                  result.rows as Result[],
+                ),
+                rawValue: extractFirstRowMeasurePrimitive(
+                  result.rows as Result[],
+                ),
+              },
             ] as const;
           } catch (error) {
             const message = getErrorMessage(error);
@@ -252,12 +265,30 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
               `Failed to resolve value for dashboard measure ${measure.id}:`,
               error,
             );
-            return [measure.id, ""] as const;
+            return [
+              measure.id,
+              {
+                formattedValue: "",
+                rawValue: undefined,
+              },
+            ] as const;
           }
         }),
       );
 
-      setMeasureValuesById(Object.fromEntries(valueEntries));
+      setMeasureValuesById(
+        Object.fromEntries(
+          valueEntries.map(([measureId, value]) => [
+            measureId,
+            value.formattedValue,
+          ]),
+        ),
+      );
+      setMeasureRawValuesById(
+        Object.fromEntries(
+          valueEntries.map(([measureId, value]) => [measureId, value.rawValue]),
+        ),
+      );
       setMeasureQueryError(nextMeasureError);
     } catch (error) {
       console.error("Failed to refresh dashboard measures:", error);
@@ -553,12 +584,18 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       buildMeasureOptions({
         savedMeasures: dashboardMeasures,
         savedValuesByMeasureId: measureValuesById,
+        savedRawValuesByMeasureId: measureRawValuesById,
         legacyMeasureOptions,
       }),
-    [dashboardMeasures, measureValuesById, legacyMeasureOptions],
+    [
+      dashboardMeasures,
+      measureRawValuesById,
+      measureValuesById,
+      legacyMeasureOptions,
+    ],
   );
   const allMeasuresByName = useMemo(
-    () => buildMeasuresByName(measureOptions),
+    () => buildMeasureRenderContextByName(measureOptions),
     [measureOptions],
   );
   const measuresById = useMemo(
@@ -690,12 +727,56 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       return null;
     }
   }, [previewChart]);
+  const previewMeasure = useMemo(() => {
+    if (
+      !previewConfig ||
+      !isCardConfig(previewConfig) ||
+      !previewConfig.measureId
+    ) {
+      return null;
+    }
+
+    return measuresById[previewConfig.measureId] ?? null;
+  }, [measuresById, previewConfig]);
+  const previewSql = previewMeasure?.sql ?? previewChart?.sql ?? "";
+  const previewDbIdentifier =
+    previewMeasure?.dbIdentifier ?? previewChart?.dbIdentifier ?? undefined;
+  const previewBackendPreference =
+    previewMeasure?.sqlBackend ?? previewChart?.sqlBackend ?? undefined;
+  const previewDisplayRows = previewRunRows ?? previewRows;
+  const previewDialogTitle =
+    previewConfig && "title" in previewConfig && previewConfig.title
+      ? previewConfig.title
+      : previewChart?.title || "Chart preview";
   const isPreviewTable = isTableConfig(previewConfig);
+  const previewCardConfig =
+    previewConfig && isCardConfig(previewConfig) ? previewConfig : null;
   const isPreviewChart =
     previewConfig &&
     !isCardConfig(previewConfig) &&
     !isTableConfig(previewConfig) &&
     !isTextConfig(previewConfig);
+  const previewMetricValue = useMemo(() => {
+    if (!previewCardConfig) {
+      return "";
+    }
+
+    if (previewRunRows !== null) {
+      return formatFirstRowMeasureValue(previewRunRows);
+    }
+
+    if (previewMeasure && measureValuesById[previewMeasure.id] !== undefined) {
+      return measureValuesById[previewMeasure.id];
+    }
+
+    return formatFirstRowMeasureValue(previewRows);
+  }, [
+    measureValuesById,
+    previewCardConfig,
+    previewMeasure,
+    previewRows,
+    previewRunRows,
+  ]);
   const dashboardWarningMessage = chartQueryError ?? measureQueryError;
 
   if (loading)
@@ -788,7 +869,10 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         onResizeSelect={handleResizeSelect}
         selectedChartId={selectedChartId}
         onChartSelect={setSelectedChartId}
-        onPreviewChart={setPreviewChartId}
+        onPreviewChart={(chartId) => {
+          setPreviewRunRows(null);
+          setPreviewChartId(chartId);
+        }}
       />
       <DashboardDataCardDialog
         open={isDataCardDialogOpen}
@@ -823,18 +907,29 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       >
         <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden">
           <DialogHeader>
-            <DialogTitle>{previewChart?.title || "Chart preview"}</DialogTitle>
+            <DialogTitle>{previewDialogTitle}</DialogTitle>
             <DialogDescription>
               Preview for this dashboard visual.
             </DialogDescription>
           </DialogHeader>
-          {previewChart?.sql && (
+          {previewSql ? (
             <SqlPreviewPanel
-              query={previewChart.sql}
-              dbIdentifier={previewChart.dbIdentifier ?? undefined}
-              backendPreference={previewChart.sqlBackend ?? undefined}
+              query={previewSql}
+              dbIdentifier={previewDbIdentifier}
+              backendPreference={previewBackendPreference}
               onSave={async (newSql) => {
-                await handleSqlUpdate(previewChart.id, newSql);
+                if (!previewChart) {
+                  return;
+                }
+
+                if (previewMeasure) {
+                  await handleDashboardMeasureUpdate(previewMeasure.id, {
+                    label: previewMeasure.label,
+                    sql: newSql,
+                  });
+                } else {
+                  await handleSqlUpdate(previewChart.id, newSql);
+                }
                 setPreviewRunRows(null);
               }}
               onRunStart={() => {
@@ -847,14 +942,53 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
                 setPreviewRunRows(null);
               }}
             />
-          )}
+          ) : null}
           <div className="max-h-[70vh] overflow-auto">
             {(() => {
-              const displayRows = previewRunRows ?? previewRows;
-              const hasData =
-                previewChart && previewConfig && displayRows.length > 0;
+              const hasRows = previewDisplayRows.length > 0;
 
-              if (!hasData) {
+              if (!previewChart || !previewConfig) {
+                return (
+                  <div className="p-3 text-sm text-muted-foreground">
+                    Preview unavailable. The chart config or data could not be
+                    loaded.
+                  </div>
+                );
+              }
+
+              if (previewCardConfig) {
+                return (
+                  <div className="space-y-4 p-1">
+                    <div className="rounded-xl border border-border bg-muted/20 p-3">
+                      <MetricCard
+                        value={previewMetricValue}
+                        title={previewCardConfig.title}
+                        description={previewCardConfig.description}
+                        takeaway={previewCardConfig.takeaway}
+                        className="border-0 bg-transparent shadow-none"
+                      />
+                    </div>
+                    {hasRows ? (
+                      <SqlResultsTable
+                        dataOverride={{
+                          stage: "complete",
+                          columns: Object.keys(previewDisplayRows[0] || {}).map(
+                            (name) => ({ name }),
+                          ),
+                          rows: previewDisplayRows as Record<string, unknown>[],
+                        }}
+                      />
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                        No preview rows yet. Run the query to inspect the metric
+                        result set.
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              if (!hasRows) {
                 return (
                   <div className="p-3 text-sm text-muted-foreground">
                     Preview unavailable. The chart config or data could not be
@@ -868,10 +1002,10 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
                   <SqlResultsTable
                     dataOverride={{
                       stage: "complete",
-                      columns: Object.keys(displayRows[0] || {}).map(
+                      columns: Object.keys(previewDisplayRows[0] || {}).map(
                         (name) => ({ name }),
                       ),
-                      rows: displayRows as Record<string, unknown>[],
+                      rows: previewDisplayRows as Record<string, unknown>[],
                     }}
                   />
                 );
@@ -880,7 +1014,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
               if (isPreviewChart) {
                 return (
                   <DynamicChart
-                    chartData={displayRows}
+                    chartData={previewDisplayRows}
                     chartConfig={previewConfig as Config}
                     className="w-full"
                   />

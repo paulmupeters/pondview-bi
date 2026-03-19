@@ -19,7 +19,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { MeasureOption, MeasuresByName } from "@/lib/dashboard/measures";
+import {
+  buildMeasureRenderContextByName,
+  renderTextTemplate,
+  type MeasureOption,
+  type MeasureRenderContextByName,
+} from "@/lib/dashboard/measures";
 import type { TextConfig } from "@/lib/types";
 
 type TextConfigDialogProps = {
@@ -27,7 +32,7 @@ type TextConfigDialogProps = {
   config: TextConfig | null;
   onConfigChange: (config: TextConfig) => void;
   tooltip?: string;
-  measures?: MeasuresByName;
+  measures?: MeasureRenderContextByName;
   measureOptions?: MeasureOption[];
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -61,20 +66,36 @@ export function TextConfigDialog({
   }, [open, config?.title, config?.content]);
 
   const canSave = useMemo(() => content.trim().length > 0, [content]);
+  const availableMeasures = useMemo(() => {
+    if (Object.keys(measures).length > 0) {
+      return measures;
+    }
+
+    return measureOptions && measureOptions.length > 0
+      ? buildMeasureRenderContextByName(measureOptions)
+      : {};
+  }, [measureOptions, measures]);
+
   const measureEntries = useMemo(() => {
     if (measureOptions && measureOptions.length > 0) {
       return measureOptions;
     }
 
-    return Object.entries(measures)
+    return Object.entries(availableMeasures)
       .map<MeasureOption>(([key, value]) => ({
         key,
         label: key,
-        value,
+        value: value.formattedValue,
+        rawValue: value.rawValue,
         source: "legacy",
       }))
       .sort((left, right) => left.key.localeCompare(right.key));
-  }, [measureOptions, measures]);
+  }, [measureOptions, availableMeasures]);
+
+  const previewContent = useMemo(
+    () => renderTextTemplate(content, availableMeasures),
+    [content, availableMeasures],
+  );
 
   const handleApply = () => {
     if (!canSave) return;
@@ -195,7 +216,7 @@ export function TextConfigDialog({
         {showPreview ? (
           <div className="min-h-[200px] rounded-md border border-input bg-background p-3 text-sm">
             {content.trim().length ? (
-              <MarkdownRenderer>{content}</MarkdownRenderer>
+              <MarkdownRenderer>{previewContent}</MarkdownRenderer>
             ) : (
               <span className="text-muted-foreground">Nothing to preview</span>
             )}
@@ -210,6 +231,11 @@ export function TextConfigDialog({
             placeholder="Write markdown here..."
           />
         )}
+        <p className="text-xs text-muted-foreground">
+          Use <code>{"{{revenue}}"}</code> to show a measure, or{" "}
+          <code>{"{{#if revenue > 0}}📈{{else}}📉{{/if}}"}</code> for
+          conditional content.
+        </p>
       </div>
 
       <div className="flex justify-end gap-2">

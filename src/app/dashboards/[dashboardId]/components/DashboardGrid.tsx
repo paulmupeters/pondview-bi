@@ -9,7 +9,7 @@ import { rectSortingStrategy, SortableContext } from "@dnd-kit/sortable";
 import {
   formatFirstRowMeasureValue,
   type MeasureOption,
-  type MeasuresByName,
+  type MeasureRenderContextByName,
 } from "@/lib/dashboard/measures";
 import type { Result } from "@/lib/types";
 import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
@@ -21,7 +21,7 @@ import { SortableChartCard } from "./SortableChartCard";
 type DashboardGridProps = {
   charts: DashboardChart[];
   chartData: Record<string, Result[]>;
-  measures: MeasuresByName;
+  measures: MeasureRenderContextByName;
   measureOptions: MeasureOption[];
   measuresById: Record<string, WorkspaceDashboardMeasure>;
   measureValuesById: Record<string, string>;
@@ -227,6 +227,7 @@ export function DashboardGrid({
                         totalColumns={row.columns}
                         selectedChartId={selectedChartId}
                         onChartSelect={onChartSelect}
+                        onPreviewChart={onPreviewChart}
                       />
                     );
                   }

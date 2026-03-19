@@ -18,11 +18,20 @@ export type MeasurePrimitive =
   | Date
   | null
   | undefined;
-export type MeasuresByName = Record<string, string>;
+
+export type MeasureRenderContext = {
+  key: string;
+  formattedValue: string;
+  rawValue?: MeasurePrimitive;
+};
+
+export type MeasureRenderContextByName = Record<string, MeasureRenderContext>;
+
 export type MeasureOption = {
   key: string;
   label: string;
   value: string;
+  rawValue?: MeasurePrimitive;
   source: "saved" | "legacy";
   measureId?: string;
   sql?: string;
@@ -32,6 +41,9 @@ export type MeasureOption = {
 };
 
 const MEASURE_TOKEN_PATTERN = /{{\s*([^{}]+?)\s*}}/g;
+const IF_BLOCK_PATTERN =
+  /{{#if\s+([^{}]+?)}}([\s\S]*?)(?:{{else}}([\s\S]*?))?{{\/if}}/g;
+const INVALID_CONDITION_LITERAL = Symbol("invalid-measure-condition-literal");
 
 function parseChartConfig(chartConfigJson: string): unknown | null {
   try {
@@ -69,9 +81,9 @@ function coerceCardConfig(config: unknown): CardConfig | null {
 }
 
 function hasOwnMeasureKey(
-  measures: MeasuresByName,
+  measures: MeasureRenderContextByName,
   key: string,
-): key is keyof MeasuresByName {
+): key is keyof MeasureRenderContextByName {
   return Object.hasOwn(measures, key);
 }
 
@@ -105,25 +117,31 @@ export function formatMeasureValue(value: MeasurePrimitive): string {
   return String(value);
 }
 
-export function formatFirstRowMeasureValue(rows: Result[]): string {
+export function extractFirstRowMeasurePrimitive(
+  rows: Result[],
+): MeasurePrimitive {
   const firstRow = rows[0];
   if (!firstRow) {
-    return "";
+    return undefined;
   }
 
   const firstColumnName = Object.keys(firstRow)[0];
   if (!firstColumnName) {
-    return "";
+    return undefined;
   }
 
-  return formatMeasureValue(firstRow[firstColumnName] as MeasurePrimitive);
+  return firstRow[firstColumnName] as MeasurePrimitive;
+}
+
+export function formatFirstRowMeasureValue(rows: Result[]): string {
+  return formatMeasureValue(extractFirstRowMeasurePrimitive(rows));
 }
 
 export function extractMeasuresFromMetricCards(
   charts: DashboardMeasureSourceChart[],
   chartData: Record<string, Result[]>,
-): MeasuresByName {
-  const measures: MeasuresByName = {};
+): MeasureRenderContextByName {
+  const measures: MeasureRenderContextByName = {};
 
   for (const chart of charts) {
     const config = parseChartConfig(chart.chartConfigJson);
@@ -147,7 +165,11 @@ export function extractMeasuresFromMetricCards(
       continue;
     }
 
-    measures[key] = formatFirstRowMeasureValue(rows);
+    measures[key] = {
+      key,
+      formattedValue: formatFirstRowMeasureValue(rows),
+      rawValue: extractFirstRowMeasurePrimitive(rows),
+    };
   }
 
   return measures;
@@ -212,6 +234,7 @@ export function extractLegacyMeasureOptionsFromMetricCards(
         firstColumnName,
       }),
       value: formatFirstRowMeasureValue(rows),
+      rawValue: extractFirstRowMeasurePrimitive(rows),
       source: "legacy",
       sql: chart.sql ?? undefined,
       dbIdentifier: chart.dbIdentifier ?? null,
@@ -228,7 +251,8 @@ export function extractLegacyMeasureOptionsFromMetricCards(
 export function buildMeasureOptions(input: {
   savedMeasures: WorkspaceDashboardMeasure[];
   savedValuesByMeasureId: Record<string, string>;
-  legacyMeasures?: MeasuresByName;
+  savedRawValuesByMeasureId?: Record<string, MeasurePrimitive>;
+  legacyMeasures?: MeasureRenderContextByName;
   legacyMeasureOptions?: MeasureOption[];
 }): MeasureOption[] {
   const optionsByKey = new Map<string, MeasureOption>();
@@ -238,6 +262,7 @@ export function buildMeasureOptions(input: {
       key: measure.key,
       label: measure.label,
       value: input.savedValuesByMeasureId[measure.id] ?? "",
+      rawValue: input.savedRawValuesByMeasureId?.[measure.id],
       source: "saved",
       measureId: measure.id,
       sql: measure.sql,
@@ -266,7 +291,8 @@ export function buildMeasureOptions(input: {
         .filter(Boolean)
         .map((segment) => segment[0]?.toUpperCase() + segment.slice(1))
         .join(" "),
-      value,
+      value: value.formattedValue,
+      rawValue: value.rawValue,
       source: "legacy",
     });
   }
@@ -276,18 +302,162 @@ export function buildMeasureOptions(input: {
   );
 }
 
+export function buildMeasureRenderContextByName(
+  measureOptions: MeasureOption[],
+): MeasureRenderContextByName {
+  return measureOptions.reduce<MeasureRenderContextByName>(
+    (accumulator, option) => {
+      accumulator[option.key] = {
+        key: option.key,
+        formattedValue: option.value,
+        rawValue: option.rawValue,
+      };
+      return accumulator;
+    },
+    {},
+  );
+}
+
 export function buildMeasuresByName(
   measureOptions: MeasureOption[],
-): MeasuresByName {
-  return measureOptions.reduce<MeasuresByName>((accumulator, option) => {
-    accumulator[option.key] = option.value;
-    return accumulator;
-  }, {});
+): MeasureRenderContextByName {
+  return buildMeasureRenderContextByName(measureOptions);
+}
+
+function parseConditionLiteral(
+  value: string,
+): MeasurePrimitive | typeof INVALID_CONDITION_LITERAL {
+  const trimmed = value.trim();
+  if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+    return Number(trimmed);
+  }
+
+  if (trimmed === "true") {
+    return true;
+  }
+
+  if (trimmed === "false") {
+    return false;
+  }
+
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+
+  return INVALID_CONDITION_LITERAL;
+}
+
+function toComparableNumber(value: MeasurePrimitive): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function normalizeScalarValue(value: MeasurePrimitive): MeasurePrimitive {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return value;
+}
+
+function evaluateMeasureCondition(
+  condition: string,
+  measures: MeasureRenderContextByName,
+): boolean | null {
+  const match = condition.match(/^(.*?)\s*(>=|<=|==|!=|>|<)\s*(.+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, rawLeft, operator, rawRight] = match;
+  const key = normalizeMeasureName(rawLeft);
+  if (!key || !hasOwnMeasureKey(measures, key)) {
+    return false;
+  }
+
+  const right = parseConditionLiteral(rawRight);
+  if (right === INVALID_CONDITION_LITERAL) {
+    return null;
+  }
+
+  const left = measures[key].rawValue;
+  if (operator === "==" || operator === "!=") {
+    const isEqual = normalizeScalarValue(left) === normalizeScalarValue(right);
+    return operator === "==" ? isEqual : !isEqual;
+  }
+
+  const leftNumber = toComparableNumber(left);
+  const rightNumber = toComparableNumber(right);
+  if (leftNumber === null || rightNumber === null) {
+    return false;
+  }
+
+  switch (operator) {
+    case ">":
+      return leftNumber > rightNumber;
+    case ">=":
+      return leftNumber >= rightNumber;
+    case "<":
+      return leftNumber < rightNumber;
+    case "<=":
+      return leftNumber <= rightNumber;
+    default:
+      return null;
+  }
+}
+
+function renderConditionalBlocks(
+  content: string,
+  measures: MeasureRenderContextByName,
+): string {
+  return content.replace(
+    IF_BLOCK_PATTERN,
+    (match, condition: string, truthyBlock: string, falsyBlock?: string) => {
+      const result = evaluateMeasureCondition(condition, measures);
+      if (result === null) {
+        return match;
+      }
+
+      return result ? truthyBlock : (falsyBlock ?? "");
+    },
+  );
+}
+
+export function renderTextTemplate(
+  content: string,
+  measures: MeasureRenderContextByName,
+): string {
+  if (!content.includes("{{")) {
+    return content;
+  }
+
+  const conditionallyRendered = renderConditionalBlocks(content, measures);
+  return interpolateMeasurePlaceholders(conditionallyRendered, measures);
 }
 
 export function interpolateMeasurePlaceholders(
   content: string,
-  measures: MeasuresByName,
+  measures: MeasureRenderContextByName,
 ): string {
   if (!content.includes("{{")) {
     return content;
@@ -299,6 +469,6 @@ export function interpolateMeasurePlaceholders(
       return match;
     }
 
-    return measures[key];
+    return measures[key].formattedValue;
   });
 }

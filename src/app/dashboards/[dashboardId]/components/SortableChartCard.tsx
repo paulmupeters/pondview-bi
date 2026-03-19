@@ -24,7 +24,7 @@ import { SqlResultsTable } from "@/components/sql-results-table";
 import { TableConfigDialog } from "@/components/table-config-dialog";
 import { TextConfigDialog } from "@/components/text-config-dialog";
 import { Button } from "@/components/ui/button";
-import { interpolateMeasurePlaceholders } from "@/lib/dashboard/measures";
+import { renderTextTemplate } from "@/lib/dashboard/measures";
 import type { CardConfig, Config, TableConfig, TextConfig } from "@/lib/types";
 import type { SortableChartCardProps } from "../types";
 import {
@@ -75,16 +75,11 @@ export function SortableChartCard({
     Math.max(1, previewColSpan ?? currentColSpan),
   );
 
-  const isChart =
-    config &&
-    !isCardConfig(config) &&
-    !isTableConfig(config) &&
-    !isTextConfig(config);
   const isTable = Boolean(config && isTableConfig(config));
   const isResizable = Boolean(
     config && !isCardConfig(config) && !isTextConfig(config),
   );
-  const canPreview = Boolean(config && (isChart || isTableConfig(config)));
+  const canPreview = Boolean(config && !isTextConfig(config));
   const {
     attributes,
     listeners,
@@ -126,7 +121,7 @@ export function SortableChartCard({
     if (!config || !isTextConfig(config)) {
       return "";
     }
-    return interpolateMeasurePlaceholders(config.content, measures);
+    return renderTextTemplate(config.content, measures);
   }, [config, measures]);
 
   const handleCardClick = (e: ReactMouseEvent<HTMLDivElement>) => {
@@ -155,6 +150,7 @@ export function SortableChartCard({
     : "text-xs text-muted-foreground";
 
   return (
+    /* biome-ignore lint/a11y/useSemanticElements: This selectable card container also contains nested interactive controls, so it cannot be converted to a native button element. */
     <div
       ref={setNodeRef}
       style={style}

@@ -1,5 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import { Funnel, GripVertical, Settings, Trash2 } from "lucide-react";
 import type { CSSProperties } from "react";
 import { MetricCard } from "@/components/metric-card";
@@ -24,6 +25,7 @@ export function MetricCardInGroup({
   isLast: _isLast,
   isSelected,
   onSelect,
+  onPreviewChart,
 }: MetricCardInGroupProps) {
   const appliedFilterCount = chart.appliedFiltersCount ?? 0;
   const {
@@ -75,6 +77,15 @@ export function MetricCardInGroup({
           {...listeners}
         >
           <GripVertical className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label="View chart"
+          title="View chart"
+          onClick={() => onPreviewChart(chart.id)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ArrowTopRightOnSquareIcon className="h-4 w-4" />
         </button>
         <button
           type="button"

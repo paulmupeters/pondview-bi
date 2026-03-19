@@ -6,8 +6,9 @@ import {
   extractMeasuresFromMetricCards,
   formatMeasureValue,
   interpolateMeasurePlaceholders,
-  type MeasuresByName,
   normalizeMeasureName,
+  renderTextTemplate,
+  type MeasureRenderContextByName,
 } from "@/lib/dashboard/measures";
 import type { Result } from "@/lib/types";
 
@@ -52,8 +53,16 @@ describe("dashboard measures", () => {
     const measures = extractMeasuresFromMetricCards(charts, chartData);
 
     expect(measures).toEqual({
-      highest_category: "Books",
-      total_revenue: formatMeasureValue(1200),
+      highest_category: {
+        key: "highest_category",
+        formattedValue: "Books",
+        rawValue: "Books",
+      },
+      total_revenue: {
+        key: "total_revenue",
+        formattedValue: formatMeasureValue(1200),
+        rawValue: 1200,
+      },
     });
   });
 
@@ -69,7 +78,13 @@ describe("dashboard measures", () => {
     };
 
     const measures = extractMeasuresFromMetricCards(charts, chartData);
-    expect(measures).toEqual({ revenue: formatMeasureValue(1000) });
+    expect(measures).toEqual({
+      revenue: {
+        key: "revenue",
+        formattedValue: formatMeasureValue(1000),
+        rawValue: 1000,
+      },
+    });
   });
 
   test("skips metric cards that do not have data rows", () => {
@@ -116,6 +131,7 @@ describe("dashboard measures", () => {
         key: "total_revenue",
         label: "Revenue",
         value: "1,000",
+        rawValue: 1000,
         source: "legacy",
         sql: "select 1000 as total_revenue",
         dbIdentifier: "warehouse",
@@ -128,8 +144,12 @@ describe("dashboard measures", () => {
   test("interpolates known placeholders and preserves unknown placeholders", () => {
     const content =
       "Highest category: {{highest_category}}. Missing: {{missing_measure}}.";
-    const measures: MeasuresByName = {
-      highest_category: "Books",
+    const measures: MeasureRenderContextByName = {
+      highest_category: {
+        key: "highest_category",
+        formattedValue: "Books",
+        rawValue: "Books",
+      },
     };
 
     expect(interpolateMeasurePlaceholders(content, measures)).toBe(
@@ -139,13 +159,89 @@ describe("dashboard measures", () => {
 
   test("normalizes placeholder tokens before lookup", () => {
     const content = "Winner: {{ Highest Category }}";
-    const measures: MeasuresByName = {
-      highest_category: "Books",
+    const measures: MeasureRenderContextByName = {
+      highest_category: {
+        key: "highest_category",
+        formattedValue: "Books",
+        rawValue: "Books",
+      },
     };
 
     expect(interpolateMeasurePlaceholders(content, measures)).toBe(
       "Winner: Books",
     );
+  });
+
+  test("renders conditional text blocks for positive numbers", () => {
+    const content =
+      "{{#if revenue > 0}}📈{{else}}📉{{/if}} Revenue: {{revenue}}";
+    const measures: MeasureRenderContextByName = {
+      revenue: {
+        key: "revenue",
+        formattedValue: "1,000",
+        rawValue: 1000,
+      },
+    };
+
+    expect(renderTextTemplate(content, measures)).toBe("📈 Revenue: 1,000");
+  });
+
+  test("renders false branch for zero or negative numbers", () => {
+    const content = "{{#if revenue > 0}}📈{{else}}📉{{/if}}";
+    const measures: MeasureRenderContextByName = {
+      revenue: {
+        key: "revenue",
+        formattedValue: "-2",
+        rawValue: -2,
+      },
+    };
+
+    expect(renderTextTemplate(content, measures)).toBe("📉");
+  });
+
+  test("returns empty content for false conditions without else", () => {
+    const content = "Status: {{#if revenue > 0}}📈{{/if}}";
+    const measures: MeasureRenderContextByName = {
+      revenue: {
+        key: "revenue",
+        formattedValue: "0",
+        rawValue: 0,
+      },
+    };
+
+    expect(renderTextTemplate(content, measures)).toBe("Status: ");
+  });
+
+  test("uses raw numeric values instead of locale formatted strings", () => {
+    const content = "{{#if revenue > 900}}high{{else}}low{{/if}}";
+    const measures: MeasureRenderContextByName = {
+      revenue: {
+        key: "revenue",
+        formattedValue: "1,000",
+        rawValue: 1000,
+      },
+    };
+
+    expect(renderTextTemplate(content, measures)).toBe("high");
+  });
+
+  test("treats missing measure keys as false in conditional blocks", () => {
+    expect(
+      renderTextTemplate("{{#if revenue > 0}}📈{{else}}📉{{/if}}", {}),
+    ).toBe("📉");
+  });
+
+  test("supports string equality conditions", () => {
+    const content = '{{#if status == "up"}}online{{else}}offline{{/if}}';
+    const measures: MeasureRenderContextByName = {
+      status: {
+        key: "status",
+        formattedValue: "up",
+        rawValue: "up",
+      },
+    };
+
+    expect(renderTextTemplate(content, measures)).toBe("online");
   });
 
   test("formats supported measure value types", () => {
@@ -185,11 +281,15 @@ describe("dashboard measures", () => {
       savedValuesByMeasureId: {
         "measure-1": "2,500",
       },
+      savedRawValuesByMeasureId: {
+        "measure-1": 2500,
+      },
       legacyMeasureOptions: [
         {
           key: "revenue",
           label: "Revenue (Legacy)",
           value: "1,000",
+          rawValue: 1000,
           source: "legacy",
           sql: "select 1000 as revenue",
           sourceChartId: "chart-1",
@@ -198,6 +298,7 @@ describe("dashboard measures", () => {
           key: "orders",
           label: "Orders",
           value: "120",
+          rawValue: 120,
           source: "legacy",
           sql: "select 120 as orders",
           sourceChartId: "chart-2",
@@ -210,6 +311,7 @@ describe("dashboard measures", () => {
         key: "orders",
         label: "Orders",
         value: "120",
+        rawValue: 120,
         source: "legacy",
         sql: "select 120 as orders",
         sourceChartId: "chart-2",
@@ -218,6 +320,7 @@ describe("dashboard measures", () => {
         key: "revenue",
         label: "Revenue",
         value: "2,500",
+        rawValue: 2500,
         source: "saved",
         measureId: "measure-1",
         sql: "select 1 as revenue",
@@ -227,8 +330,16 @@ describe("dashboard measures", () => {
     ]);
 
     expect(buildMeasuresByName(options)).toEqual({
-      orders: "120",
-      revenue: "2,500",
+      orders: {
+        key: "orders",
+        formattedValue: "120",
+        rawValue: 120,
+      },
+      revenue: {
+        key: "revenue",
+        formattedValue: "2,500",
+        rawValue: 2500,
+      },
     });
   });
 });
