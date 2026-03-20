@@ -29,6 +29,12 @@ import {
   useSqlBackendPreference,
 } from "@/lib/sql/use-sql-backend";
 import { useTheme } from "@/lib/theme-provider";
+import {
+  clearJoinDefsInStorage,
+  readJoinDefsRawFromStorage,
+  saveJoinDefsRawToStorage,
+} from "@/lib/joins/browser-storage";
+import { Textarea } from "@/components/ui/textarea";
 
 import Image from "@/vite/next-image";
 
@@ -54,6 +60,9 @@ export default function ViewDataPage() {
   const isDarkMode = theme === "dark";
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [isShellDialogOpen, setIsShellDialogOpen] = useState(false);
+  const [joinDefsRaw, setJoinDefsRaw] = useState("[]");
+  const [joinDefsError, setJoinDefsError] = useState<string | null>(null);
+  const [joinDefsSuccess, setJoinDefsSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     void refreshBridgeHealth();
@@ -80,6 +89,35 @@ export default function ViewDataPage() {
       window.clearInterval(intervalId);
     };
   }, [duckDbHttpConfig]);
+
+  useEffect(() => {
+    setJoinDefsRaw(readJoinDefsRawFromStorage());
+  }, []);
+
+  const handleSaveJoinDefs = () => {
+    try {
+      const joinDefs = saveJoinDefsRawToStorage(joinDefsRaw);
+      setJoinDefsRaw(readJoinDefsRawFromStorage());
+      setJoinDefsError(null);
+      setJoinDefsSuccess(
+        `Saved ${joinDefs.length} join definition${joinDefs.length === 1 ? "" : "s"}.`,
+      );
+    } catch (error) {
+      setJoinDefsSuccess(null);
+      setJoinDefsError(
+        error instanceof Error
+          ? error.message
+          : "Invalid join definitions JSON.",
+      );
+    }
+  };
+
+  const handleClearJoinDefs = () => {
+    clearJoinDefsInStorage();
+    setJoinDefsRaw("[]");
+    setJoinDefsError(null);
+    setJoinDefsSuccess("Cleared join definitions.");
+  };
 
   const tablesBySchema = useMemo(() => {
     const grouped = new Map<string, { name: string; type: string }[]>();
@@ -143,220 +181,324 @@ export default function ViewDataPage() {
     effectiveSqlBackend === "bridge"
       ? bridgeHealthStatus
       : duckDbHttpHealthStatus;
+  const isRemoteRuntimeActive = effectiveSqlBackend !== "duckdb-wasm";
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-6 overflow-y-auto px-6 py-10">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Data Sources
-          </span>
-          <h1 className="text-3xl font-semibold text-foreground">
-            Connected Data
-          </h1>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            Browser mode stores workspace metadata locally and runs SQL through
-            the selected DuckDB runtime.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setIsShellDialogOpen(true)}
-          >
-            Open SQL Shell
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setIsConnectDialogOpen(true)}
-          >
-            Connect Data Source
-          </Button>
-        </div>
-      </header>
+    <div className="flex h-full flex-col">
+      <div className="flex-1 overflow-auto">
+        <div className="p-8 max-w-2xl mx-auto">
+          <div className="flex flex-col gap-6">
+            <header className="flex flex-wrap items-start justify-between gap-4">
+              <div className="space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Data Sources
+                </span>
+                <h1 className="text-3xl font-semibold text-foreground">
+                  Connected Data
+                </h1>
+                <p className="max-w-3xl text-sm text-muted-foreground">
+                  Browser mode stores workspace metadata locally and runs SQL
+                  through the selected DuckDB runtime.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsShellDialogOpen(true)}
+                >
+                  Open SQL Shell
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsConnectDialogOpen(true)}
+                >
+                  Connect Data Source
+                </Button>
+              </div>
+            </header>
 
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold text-foreground">
-          Duckdb connection
-        </h2>
-        {effectiveSqlBackend === "duckdb-wasm" ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">DuckDB WASM</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Queries are running against the browser-local DuckDB WASM
-                database.
-              </p>
-            </CardContent>
-          </Card>
-        ) : isDuckdbHttpConfigured ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">
-                {remoteRuntimeLabel}{" "}
-                {duckdbHttpConnectionInfo
-                  ? `${duckdbHttpConnectionInfo.host}:${duckdbHttpConnectionInfo.port}`
-                  : "configured"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {isDuckdbTablesLoading ? (
-                <p className="text-sm text-muted-foreground">
-                  Loading tables...
-                </p>
-              ) : duckdbTablesError ? (
-                <p className="text-sm text-destructive">
-                  Failed to load tables: {duckdbTablesError}
-                </p>
-              ) : tablesBySchema.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No tables found.
-                </p>
-              ) : (
-                <div className="grid gap-3">
-                  {tablesBySchema.map((group) => (
-                    <div key={group.schema} className="rounded-lg border p-3">
-                      <p className="text-xs uppercase text-muted-foreground">
-                        Schema
-                      </p>
-                      <p className="mb-2 text-sm font-semibold">
-                        {group.schema}
-                      </p>
-                      <div className="grid gap-1">
-                        {group.tables.map((table) => (
-                          <div
-                            key={`${group.schema}.${table.name}`}
-                            className="flex items-center justify-between text-sm"
-                          >
-                            <span>{table.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {table.type}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent className="pt-6 text-sm text-muted-foreground">
-              {remoteRuntimeLabel} is selected, but remote metadata is
-              unavailable. Health: {selectedRemoteHealthStatus}.
-            </CardContent>
-          </Card>
-        )}
-      </section>
+            {isRemoteRuntimeActive && (
+              <Card className="border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/30">
+                <CardContent className="pt-6">
+                  <p className="text-sm text-amber-900 dark:text-amber-100">
+                    File upload is currently only supported with DuckDB WASM.
+                    When you are connected through {remoteRuntimeLabel}, add
+                    files from the DuckDB shell instead.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold text-foreground">
-          External Connected Sources
-        </h2>
-        {groupedConnectedSources.length === 0 ? (
-          <Card>
-            <CardContent className="pt-6 text-sm text-muted-foreground">
-              No locally connected sources yet.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-3">
-            {groupedConnectedSources.map((group) => {
-              const first = group.entries[0];
-              const logo = getDatabaseLogo(first.type ?? "");
-              return (
-                <Card key={group.key}>
+            <section className="space-y-3">
+              <h2 className="text-base font-semibold text-foreground">
+                Duckdb connection
+              </h2>
+              {effectiveSqlBackend === "duckdb-wasm" ? (
+                <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      {logo ? (
-                        <Image
-                          src={logo}
-                          alt={first.type ?? "source"}
-                          width={20}
-                          height={20}
-                        />
-                      ) : null}
-                      <span>
-                        {first.databaseName ?? first.databasePath ?? "Source"}
-                      </span>
+                    <CardTitle className="text-sm">DuckDB WASM</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Queries are running against the browser-local DuckDB WASM
+                      database.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : isDuckdbHttpConfigured ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">
+                      {remoteRuntimeLabel}{" "}
+                      {duckdbHttpConnectionInfo
+                        ? `${duckdbHttpConnectionInfo.host}:${duckdbHttpConnectionInfo.port}`
+                        : "configured"}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {group.entries.map((entry) => (
-                      <div
-                        key={`${entry.type}-${entry.databasePath}-${entry.schema ?? ""}-${entry.table ?? ""}`}
-                        className="rounded-md border p-3"
-                      >
-                        <p className="text-xs text-muted-foreground">
-                          {entry.type}
-                        </p>
-                        <p className="text-sm font-medium">
-                          {entry.schema ||
-                            entry.table ||
-                            entry.attachAs ||
-                            "(unspecified)"}
-                        </p>
-                        {entry.tables && entry.tables.length > 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            Tables: {entry.tables.join(", ")}
-                          </p>
-                        ) : null}
-                        {entry.description ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {entry.description}
-                          </p>
-                        ) : null}
-                        <div className="mt-2 flex justify-end">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={async () => {
-                              if (
-                                confirm("Remove this connected source entry?")
-                              ) {
-                                // Best-effort remote detach before removing local metadata
-                                if (
-                                  entry.attachAs &&
-                                  effectiveSqlBackend !== "duckdb-wasm"
-                                ) {
-                                  try {
-                                    const detachSql = buildDetachStatement(
-                                      entry.attachAs,
-                                      { ifExists: true },
-                                    );
-                                    if (effectiveSqlBackend === "bridge") {
-                                      await runBridgeQuery(detachSql);
-                                    } else if (
-                                      effectiveSqlBackend === "duckdb-http"
-                                    ) {
-                                      await runDuckDbHttpQuery(detachSql);
-                                    }
-                                  } catch {
-                                    // Best-effort only; removal proceeds regardless
-                                  }
-                                }
-                                await removeConnectedTable(entry);
-                              }
-                            }}
+                    {isDuckdbTablesLoading ? (
+                      <p className="text-sm text-muted-foreground">
+                        Loading tables...
+                      </p>
+                    ) : duckdbTablesError ? (
+                      <p className="text-sm text-destructive">
+                        Failed to load tables: {duckdbTablesError}
+                      </p>
+                    ) : tablesBySchema.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No tables found.
+                      </p>
+                    ) : (
+                      <div className="grid gap-3">
+                        {tablesBySchema.map((group) => (
+                          <div
+                            key={group.schema}
+                            className="rounded-lg border p-3"
                           >
-                            Remove
-                          </Button>
-                        </div>
+                            <p className="text-xs uppercase text-muted-foreground">
+                              Schema
+                            </p>
+                            <p className="mb-2 text-sm font-semibold">
+                              {group.schema}
+                            </p>
+                            <div className="grid gap-1">
+                              {group.tables.map((table) => (
+                                <div
+                                  key={`${group.schema}.${table.name}`}
+                                  className="flex items-center justify-between text-sm"
+                                >
+                                  <span>{table.name}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {table.type}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </CardContent>
                 </Card>
-              );
-            })}
+              ) : (
+                <Card>
+                  <CardContent className="pt-6 text-sm text-muted-foreground">
+                    {remoteRuntimeLabel} is selected, but remote metadata is
+                    unavailable. Health: {selectedRemoteHealthStatus}.
+                  </CardContent>
+                </Card>
+              )}
+            </section>
+
+            <section className="space-y-3">
+              <h2 className="text-base font-semibold text-foreground">
+                Dashboard Join Definitions
+              </h2>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">
+                    Cross-table dashboard joins
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Configure cross-table dashboard filtering joins stored in{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                      bi.dashboard.joinDefs.v1
+                    </code>
+                    . Values must be a JSON array with{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                      leftTable
+                    </code>
+                    ,{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                      leftColumn
+                    </code>
+                    ,{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                      rightTable
+                    </code>
+                    ,{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                      rightColumn
+                    </code>
+                    , and optional{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                      type
+                    </code>
+                    .
+                  </p>
+
+                  <Textarea
+                    value={joinDefsRaw}
+                    onChange={(event) => {
+                      setJoinDefsRaw(event.target.value);
+                      setJoinDefsError(null);
+                      setJoinDefsSuccess(null);
+                    }}
+                    className="min-h-[220px] font-mono text-xs"
+                    spellCheck={false}
+                    placeholder="[]"
+                  />
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={handleSaveJoinDefs}>
+                      Save Join Definitions
+                    </Button>
+                    <Button variant="outline" onClick={handleClearJoinDefs}>
+                      Clear
+                    </Button>
+                  </div>
+
+                  {joinDefsError && (
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      {joinDefsError}
+                    </p>
+                  )}
+                  {joinDefsSuccess && (
+                    <p className="text-sm text-green-600 dark:text-green-400">
+                      {joinDefsSuccess}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </section>
+
+            <section className="space-y-3">
+              <h2 className="text-base font-semibold text-foreground">
+                External Connected Sources
+              </h2>
+              {groupedConnectedSources.length === 0 ? (
+                <Card>
+                  <CardContent className="pt-6 text-sm text-muted-foreground">
+                    No locally connected sources yet.
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-3">
+                  {groupedConnectedSources.map((group) => {
+                    const first = group.entries[0];
+                    const logo = getDatabaseLogo(first.type ?? "");
+                    return (
+                      <Card key={group.key}>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-sm">
+                            {logo ? (
+                              <Image
+                                src={logo}
+                                alt={first.type ?? "source"}
+                                width={20}
+                                height={20}
+                              />
+                            ) : null}
+                            <span>
+                              {first.databaseName ??
+                                first.databasePath ??
+                                "Source"}
+                            </span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {group.entries.map((entry) => (
+                            <div
+                              key={`${entry.type}-${entry.databasePath}-${entry.schema ?? ""}-${entry.table ?? ""}`}
+                              className="rounded-md border p-3"
+                            >
+                              <p className="text-xs text-muted-foreground">
+                                {entry.type}
+                              </p>
+                              <p className="text-sm font-medium">
+                                {entry.schema ||
+                                  entry.table ||
+                                  entry.attachAs ||
+                                  "(unspecified)"}
+                              </p>
+                              {entry.tables && entry.tables.length > 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Tables: {entry.tables.join(", ")}
+                                </p>
+                              ) : null}
+                              {entry.description ? (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {entry.description}
+                                </p>
+                              ) : null}
+                              <div className="mt-2 flex justify-end">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={async () => {
+                                    if (
+                                      confirm(
+                                        "Remove this connected source entry?",
+                                      )
+                                    ) {
+                                      // Best-effort remote detach before removing local metadata
+                                      if (
+                                        entry.attachAs &&
+                                        effectiveSqlBackend !== "duckdb-wasm"
+                                      ) {
+                                        try {
+                                          const detachSql =
+                                            buildDetachStatement(
+                                              entry.attachAs,
+                                              { ifExists: true },
+                                            );
+                                          if (
+                                            effectiveSqlBackend === "bridge"
+                                          ) {
+                                            await runBridgeQuery(detachSql);
+                                          } else if (
+                                            effectiveSqlBackend ===
+                                            "duckdb-http"
+                                          ) {
+                                            await runDuckDbHttpQuery(detachSql);
+                                          }
+                                        } catch {
+                                          // Best-effort only; removal proceeds regardless
+                                        }
+                                      }
+                                      await removeConnectedTable(entry);
+                                    }
+                                  }}
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </div>
-        )}
-      </section>
+        </div>
+      </div>
 
       <ConnectDataDialog
         open={isConnectDialogOpen}

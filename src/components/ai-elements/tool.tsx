@@ -17,7 +17,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { CodeBlock } from "./code-block";
 
 export type ToolType = `tool-${string}`;
 export type ToolState =
@@ -31,6 +30,44 @@ export type ToolState =
 export type ToolInputValue = unknown;
 export type ToolOutputValue = unknown;
 export type ToolErrorText = string | undefined;
+
+function renderEscapedNewlines(value: string): string {
+  return value
+    .replaceAll("\\r\\n", "\n")
+    .replaceAll("\\n", "\n")
+    .replaceAll("\\r", "\r");
+}
+
+export function formatJsonBlockContent(value: unknown): string {
+  if (typeof value === "string") {
+    return renderEscapedNewlines(value);
+  }
+
+  try {
+    const formatted = JSON.stringify(value, null, 2);
+    return formatted ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+type JsonBlockProps = {
+  content: string;
+  className?: string;
+};
+
+function JsonBlock({ content, className }: JsonBlockProps) {
+  return (
+    <pre
+      className={cn(
+        "overflow-x-auto rounded-md bg-muted/50 p-4 font-mono text-xs text-foreground whitespace-pre-wrap",
+        className,
+      )}
+    >
+      <code>{content}</code>
+    </pre>
+  );
+}
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -135,9 +172,7 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
     <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
       Parameters
     </h4>
-    <div className="rounded-md bg-muted/50">
-      <CodeBlock code={JSON.stringify(input ?? {}, null, 2)} language="json" />
-    </div>
+    <JsonBlock content={formatJsonBlockContent(input ?? {})} />
   </div>
 );
 
@@ -159,11 +194,9 @@ export const ToolOutput = ({
   let resolvedOutput: ReactNode = <div>{output as ReactNode}</div>;
 
   if (typeof output === "object" && output && !isValidElement(output)) {
-    resolvedOutput = (
-      <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />
-    );
+    resolvedOutput = <JsonBlock content={formatJsonBlockContent(output)} />;
   } else if (typeof output === "string") {
-    resolvedOutput = <CodeBlock code={output} language="json" />;
+    resolvedOutput = <JsonBlock content={formatJsonBlockContent(output)} />;
   }
 
   return (

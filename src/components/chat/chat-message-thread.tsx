@@ -74,7 +74,10 @@ function getSqlArtifactsByTopLevelPartIndex(
   parts: UIMessage["parts"] | undefined,
   executeSqlArtifactType: string,
 ): Map<number, SqlArtifactEntry[]> {
-  const sqlArtifactParts = extractSqlArtifactParts(parts, executeSqlArtifactType);
+  const sqlArtifactParts = extractSqlArtifactParts(
+    parts,
+    executeSqlArtifactType,
+  );
   const sqlArtifactsByTopLevelPartIndex = new Map<number, SqlArtifactEntry[]>();
 
   sqlArtifactParts.forEach(({ partIndex, artifactData }) => {
@@ -237,9 +240,7 @@ export function ChatMessageThread({
         {isConversationEmpty && (
           <Message from="assistant" key="assistant-ready">
             <MessageContent>
-              <Response key="assistant-ready-response">
-                Ready to help...
-              </Response>
+              <Response key="assistant-ready-response">Ready</Response>
             </MessageContent>
           </Message>
         )}
@@ -272,10 +273,11 @@ export function ChatMessageThread({
             }
           };
 
-          const sqlArtifactsByTopLevelPartIndex = getSqlArtifactsByTopLevelPartIndex(
-            message.parts,
-            executeSqlArtifactType,
-          );
+          const sqlArtifactsByTopLevelPartIndex =
+            getSqlArtifactsByTopLevelPartIndex(
+              message.parts,
+              executeSqlArtifactType,
+            );
           const hasRenderableMessageContent =
             message.role !== "assistant" ||
             hasRenderableAssistantContent(

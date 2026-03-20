@@ -39,7 +39,8 @@ import {
 } from "@/components/ui/tooltip";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
-import type { SqlBackend } from "@/lib/sql/sql-runtime";
+import { resolveSqlBackend, type SqlBackend } from "@/lib/sql/sql-runtime";
+import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { getUploadedFileBlob, persistUploadedFile } from "@/lib/uploaded-files";
 import { cn } from "@/lib/utils";
@@ -94,6 +95,11 @@ interface PromptInputWrapperProps {
 
 // Inner component that uses the attachments hook within PromptInput context
 function FileAttachmentHoverCard() {
+  const sqlBackendPreference = useSqlBackendPreference();
+  const effectiveSqlBackend = resolveSqlBackend({
+    backendPreference: sqlBackendPreference,
+  });
+  const isFileUploadSupported = effectiveSqlBackend === "duckdb-wasm";
   const uploadedFiles = useUploadedFiles();
   const attachments = usePromptInputAttachments();
   const [searchQuery, setSearchQuery] = useState("");
@@ -177,9 +183,11 @@ function FileAttachmentHoverCard() {
           />
           <PromptInputCommandList>
             <PromptInputCommandEmpty className="p-3 text-muted-foreground text-sm">
-              {uploadedFiles.length === 0
-                ? "No uploaded files. Upload a file to get started."
-                : "No results found."}
+              {!isFileUploadSupported
+                ? "File upload is currently only supported in DuckDB WASM. Use the DuckDB shell to load files for HTTP or Bridge connections."
+                : uploadedFiles.length === 0
+                  ? "No uploaded files. Upload a file to get started."
+                  : "No results found."}
             </PromptInputCommandEmpty>
 
             {attachments.files.length > 0 && (
@@ -213,6 +221,7 @@ function FileAttachmentHoverCard() {
                     <PromptInputCommandItem
                       key={file.fileId}
                       onSelect={() => handleAddUploadedFile(file)}
+                      disabled={!isFileUploadSupported}
                     >
                       <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
                       <span className="flex-1 truncate">
@@ -234,23 +243,32 @@ function FileAttachmentHoverCard() {
                   {errorMessage}
                 </div>
               ) : null}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,.xlsx,.xls,.parquet"
-                className="hidden"
-                onChange={handleUploadNewFile}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full"
-                disabled={isUploading}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {isUploading ? "Uploading..." : "Upload New File"}
-              </Button>
+              {!isFileUploadSupported ? (
+                <div className="text-xs text-muted-foreground">
+                  File upload is currently only supported in DuckDB WASM. Use
+                  the DuckDB shell to load files for HTTP or Bridge connections.
+                </div>
+              ) : (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.xlsx,.xls,.parquet"
+                    className="hidden"
+                    onChange={handleUploadNewFile}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    disabled={isUploading}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {isUploading ? "Uploading..." : "Upload New File"}
+                  </Button>
+                </>
+              )}
             </div>
           </PromptInputCommandList>
         </PromptInputCommand>
@@ -464,7 +482,7 @@ export function PromptInputWrapper({
                       disabled={!manualConsoleApi?.getQuery()?.trim()}
                       onClick={handleManualRun}
                     >
-                      Run
+                      [Run ▷]
                     </Button>
                     <Button
                       size="sm"
@@ -474,7 +492,7 @@ export function PromptInputWrapper({
                       disabled={!sqlResult}
                       onClick={handleManualSend}
                     >
-                      Add to chat
+                      [Add to chat +]
                     </Button>
                   </div>
                 </div>
