@@ -219,18 +219,6 @@ export default function ViewDataPage() {
               </div>
             </header>
 
-            {isRemoteRuntimeActive && (
-              <Card className="border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/30">
-                <CardContent className="pt-6">
-                  <p className="text-sm text-amber-900 dark:text-amber-100">
-                    File upload is currently only supported with DuckDB WASM.
-                    When you are connected through {remoteRuntimeLabel}, add
-                    files from the DuckDB shell instead.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
             <section className="space-y-3">
               <h2 className="text-base font-semibold text-foreground">
                 Duckdb connection

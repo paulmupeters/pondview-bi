@@ -184,7 +184,7 @@ function FileAttachmentHoverCard() {
           <PromptInputCommandList>
             <PromptInputCommandEmpty className="p-3 text-muted-foreground text-sm">
               {!isFileUploadSupported
-                ? "File upload is currently only supported in DuckDB WASM. Use the DuckDB shell to load files for HTTP or Bridge connections."
+                ? ""
                 : uploadedFiles.length === 0
                   ? "No uploaded files. Upload a file to get started."
                   : "No results found."}

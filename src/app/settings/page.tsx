@@ -588,7 +588,6 @@ export default function SettingsPage() {
                     <SelectItem value="gateway">Gateway</SelectItem>
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="anthropic">Anthropic</SelectItem>
-                    <SelectItem value="xai">xAI</SelectItem>
                     <SelectItem value="open-responses">
                       Open Responses
                     </SelectItem>

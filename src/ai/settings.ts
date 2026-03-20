@@ -1,11 +1,6 @@
 import { CHAT_MODEL } from "@/ai/models";
 
-export type AiProvider =
-  | "gateway"
-  | "openai"
-  | "anthropic"
-  | "xai"
-  | "open-responses";
+export type AiProvider = "gateway" | "openai" | "anthropic" | "open-responses";
 
 export interface AiSettings {
   provider: AiProvider;
@@ -25,7 +20,6 @@ const AI_PROVIDER_API_KEY_STORAGE_KEYS: Record<AiProvider, string> = {
   gateway: "AI_GATEWAY_API_KEY",
   openai: "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
-  xai: "XAI_API_KEY",
   "open-responses": "OPEN_RESPONSES_API_KEY",
 };
 
@@ -33,7 +27,6 @@ const AI_PROVIDER_DISPLAY_NAMES: Record<AiProvider, string> = {
   gateway: "Gateway",
   openai: "OpenAI",
   anthropic: "Anthropic",
-  xai: "xAI",
   "open-responses": "Open Responses",
 };
 
@@ -41,7 +34,6 @@ const AI_PROVIDERS: AiProvider[] = [
   "gateway",
   "openai",
   "anthropic",
-  "xai",
   "open-responses",
 ];
 
@@ -49,7 +41,9 @@ function normalizeText(value: string | null | undefined): string {
   return value?.trim() ?? "";
 }
 
-export function isAiProvider(value: string | null | undefined): value is AiProvider {
+export function isAiProvider(
+  value: string | null | undefined,
+): value is AiProvider {
   return AI_PROVIDERS.includes((value ?? "") as AiProvider);
 }
 
@@ -85,7 +79,9 @@ export function loadAiSettingsFromStorage(): AiSettings {
   }
 
   const rawProvider = window.localStorage.getItem(AI_PROVIDER_STORAGE_KEY);
-  const provider: AiProvider = isAiProvider(rawProvider) ? rawProvider : "gateway";
+  const provider: AiProvider = isAiProvider(rawProvider)
+    ? rawProvider
+    : "gateway";
   const rawModel = window.localStorage.getItem(AI_MODEL_STORAGE_KEY);
   const model = rawModel === null ? fallbackModel : normalizeText(rawModel);
 
