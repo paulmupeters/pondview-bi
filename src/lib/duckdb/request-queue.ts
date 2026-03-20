@@ -13,7 +13,7 @@ export class RequestQueue {
 
   constructor(concurrency = 1) {
     if (concurrency < 1) {
-      throw new Error('Concurrency must be at least 1');
+      throw new Error("Concurrency must be at least 1");
     }
     this.concurrency = concurrency;
   }
@@ -92,4 +92,3 @@ export class RequestQueue {
     return this.queue.length;
   }
 }
-

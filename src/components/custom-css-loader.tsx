@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import {
   applyCustomCss,
-  clearCustomCss,
-  CUSTOM_CSS_KEY,
-  getSelectedTheme,
   applyTheme,
+  CUSTOM_CSS_KEY,
+  clearCustomCss,
+  getSelectedTheme,
 } from "@/lib/custom-css";
 
 export function CustomCssLoader() {
@@ -30,5 +30,3 @@ export function CustomCssLoader() {
 
   return null;
 }
-
-

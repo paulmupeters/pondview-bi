@@ -305,7 +305,9 @@ export function DynamicChart({
         className,
       )}
     >
-      {showMetadata && <h2 className="text-lg font-bold mb-2">{chartConfig.title}</h2>}
+      {showMetadata && (
+        <h2 className="text-lg font-bold mb-2">{chartConfig.title}</h2>
+      )}
       {chartConfig && chartData.length > 0 && hasYData && (
         <ChartContainer
           config={

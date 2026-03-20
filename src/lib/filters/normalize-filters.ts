@@ -24,7 +24,7 @@ export interface NormalizeFilterOptions {
 
 export function normalizeFilterPayload(
   payload: unknown,
-  options: NormalizeFilterOptions = {}
+  options: NormalizeFilterOptions = {},
 ): Filter[] {
   if (!Array.isArray(payload)) {
     return [];
@@ -42,7 +42,7 @@ export function normalizeFilterPayload(
 
 export function normalizeFilter(
   value: unknown,
-  options: NormalizeFilterOptions = {}
+  options: NormalizeFilterOptions = {},
 ): Filter | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -73,7 +73,10 @@ export function normalizeFilter(
   };
 }
 
-function normalizeField(fieldValue: unknown, defaultTable?: string): string | null {
+function normalizeField(
+  fieldValue: unknown,
+  defaultTable?: string,
+): string | null {
   if (typeof fieldValue !== "string") {
     return null;
   }

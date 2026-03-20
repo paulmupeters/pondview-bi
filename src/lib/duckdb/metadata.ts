@@ -3,13 +3,13 @@ import {
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
 import {
-  extractMotherDuckDatabaseName,
-  isMotherDuckIdentifier,
-} from "@/lib/duckdb/motherduck";
-import {
   getDuckDbInstance,
   runSqlAndGetRowObjectsJson,
 } from "@/lib/duckdb/duckdb-node";
+import {
+  extractMotherDuckDatabaseName,
+  isMotherDuckIdentifier,
+} from "@/lib/duckdb/motherduck";
 import { detectExternalConnection, resolveDbPath } from "@/lib/duckdb/path";
 
 /**
@@ -85,7 +85,7 @@ export async function getSchemas(dbIdentifier: string): Promise<string[]> {
       FROM information_schema.tables
       WHERE ${whereClause}
       ORDER BY 1
-    `
+    `,
   );
   console.log("getSchemas result", result);
   return result.map((r) => r.table_schema as string);
@@ -94,7 +94,7 @@ export async function getSchemas(dbIdentifier: string): Promise<string[]> {
 export async function getTablesForSchema(
   dbIdentifier: string,
   schema: string,
-  limit = 20
+  limit = 20,
 ): Promise<string[]> {
   const externalConnection = detectExternalConnection(dbIdentifier);
   const dbPath = resolveDbPath(dbIdentifier);
@@ -156,14 +156,14 @@ export async function getTablesForSchema(
       WHERE ${whereClause}
       ORDER BY table_name
       LIMIT ${lim}
-    `
+    `,
   );
   console.log("getTablesForSchema result", result);
   return result.map((r) => r.table_name as string);
 }
 
 export async function getTables(
-  dbIdentifier: string
+  dbIdentifier: string,
 ): Promise<
   Array<{ table_schema: string; table_name: string; table_type: string }>
 > {
@@ -196,7 +196,7 @@ export async function getTables(
       const reader = await connection.runAndReadAll(sql);
       const tablesResult = reader.getRowObjectsJson();
       const filteredResult = tablesResult.filter(
-        (table) => String(table.table_type) === "BASE TABLE"
+        (table) => String(table.table_type) === "BASE TABLE",
       ) as Array<{
         table_schema: string;
         table_name: string;
@@ -234,10 +234,10 @@ export async function getTables(
       FROM information_schema.tables 
       WHERE ${whereClause}
       ORDER BY table_schema, table_name
-    `
+    `,
   );
   const filteredResult = tablesResult.filter(
-    (table) => (table.table_type as string) === "BASE TABLE"
+    (table) => (table.table_type as string) === "BASE TABLE",
   ) as Array<{ table_schema: string; table_name: string; table_type: string }>;
   return filteredResult;
 }

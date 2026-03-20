@@ -3,10 +3,10 @@ import { resolveGatewayModel } from "@/ai/gateway-model";
 import {
   AI_MODEL_STORAGE_KEY,
   AI_PROVIDER_STORAGE_KEY,
+  type AiProvider,
+  getApiKeyStorageKeyForProvider,
   OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY,
   OPEN_RESPONSES_URL_STORAGE_KEY,
-  getApiKeyStorageKeyForProvider,
-  type AiProvider,
 } from "@/ai/settings";
 
 type LocalStorageLike = {
@@ -20,7 +20,7 @@ function createStorage(): LocalStorageLike {
 
   return {
     getItem(key: string) {
-      return store.has(key) ? store.get(key)! : null;
+      return store.get(key) ?? null;
     },
     setItem(key: string, value: string) {
       store.set(key, value);
@@ -58,7 +58,10 @@ function configureProvider(provider: AiProvider, options?: { model?: string }) {
   storage.setItem(getApiKeyStorageKeyForProvider(provider), "test-key");
 
   if (provider === "open-responses") {
-    storage.setItem(OPEN_RESPONSES_URL_STORAGE_KEY, "https://api.example.com/v1");
+    storage.setItem(
+      OPEN_RESPONSES_URL_STORAGE_KEY,
+      "https://api.example.com/v1",
+    );
     storage.setItem(OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY, "example");
   }
 
@@ -71,7 +74,6 @@ describe("resolveGatewayModel", () => {
       "gateway",
       "openai",
       "anthropic",
-      "xai",
       "open-responses",
     ];
 
@@ -108,7 +110,10 @@ describe("resolveGatewayModel", () => {
     const storage = createStorage();
     storage.setItem(AI_PROVIDER_STORAGE_KEY, "open-responses");
     storage.setItem(AI_MODEL_STORAGE_KEY, "gpt-4.1");
-    storage.setItem(getApiKeyStorageKeyForProvider("open-responses"), "test-key");
+    storage.setItem(
+      getApiKeyStorageKeyForProvider("open-responses"),
+      "test-key",
+    );
     storage.setItem(OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY, "example");
     setBrowserStorage(storage);
 

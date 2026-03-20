@@ -22,7 +22,11 @@ function parseFrontmatter(content: string): { name?: string; body: string } {
 }
 
 async function loadAllContextEntries(): Promise<
-  Array<{ file: string; content: string; parsed: { name?: string; body: string } }>
+  Array<{
+    file: string;
+    content: string;
+    parsed: { name?: string; body: string };
+  }>
 > {
   const entries = await Promise.all(
     Object.entries(contextModules).map(async ([file, load]) => {

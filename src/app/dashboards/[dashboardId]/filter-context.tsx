@@ -102,7 +102,10 @@ export function FilterProvider({
         setAvailableDimensions(dimensions);
       } catch (error) {
         if (!cancelled) {
-          console.error("[Filters] Failed to load dashboard dimensions:", error);
+          console.error(
+            "[Filters] Failed to load dashboard dimensions:",
+            error,
+          );
           setAvailableDimensions([]);
         }
       } finally {

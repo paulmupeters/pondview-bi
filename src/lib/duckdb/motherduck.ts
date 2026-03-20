@@ -25,14 +25,13 @@ export function extractMotherDuckDatabaseName(value?: string): string {
     : identifier;
   const queryIndex = withoutPrefix.indexOf("?");
   return (
-    (queryIndex >= 0
-      ? withoutPrefix.slice(0, queryIndex)
-      : withoutPrefix
-    ).trim()
-  );
+    queryIndex >= 0 ? withoutPrefix.slice(0, queryIndex) : withoutPrefix
+  ).trim();
 }
 
-export function buildMotherDuckIdentifier(databaseNameOrIdentifier: string): string {
+export function buildMotherDuckIdentifier(
+  databaseNameOrIdentifier: string,
+): string {
   const databaseName = extractMotherDuckDatabaseName(databaseNameOrIdentifier);
   if (!databaseName) {
     return "";

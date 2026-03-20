@@ -1,10 +1,7 @@
-import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import duckdb, { DuckDBInstance } from "@duckdb/node-api";
+import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 
-import {
-  executeDuckDbHttpQuery,
-  resolveHttpDuckDbConfig,
-} from "./duckdb-http";
+import { executeDuckDbHttpQuery, resolveHttpDuckDbConfig } from "./duckdb-http";
 import { RequestQueue } from "./request-queue";
 
 // Lightweight instance cache to avoid re-initializing DuckDB for the same dbPath
@@ -53,7 +50,7 @@ export function getMaterializationDbPath(): string {
 }
 
 export async function getDuckDbInstance(
-  dbPath: string
+  dbPath: string,
 ): Promise<DuckDBInstance> {
   const key = normalizeDbPath(dbPath);
   let p = instanceCache.get(key);
@@ -66,7 +63,7 @@ export async function getDuckDbInstance(
 
 export async function runSqlAndGetRowObjectsJson(
   dbPath: string,
-  sql: string
+  sql: string,
 ): Promise<Record<string, unknown>[]> {
   const instance = await getDuckDbInstance(dbPath);
   const connection = await instance.connect();
@@ -102,10 +99,10 @@ export type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 export async function runSqlAndGetRowObjectsJsonHttp(
   config: HttpDuckDbConfig | undefined,
   sql: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>[]> {
   const resolvedConfig = resolveHttpDuckDbConfig(config);
   return httpQueue.add(() =>
-    executeDuckDbHttpQuery(resolvedConfig, sql, signal)
+    executeDuckDbHttpQuery(resolvedConfig, sql, signal),
   );
 }

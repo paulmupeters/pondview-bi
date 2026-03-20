@@ -15,8 +15,8 @@ import {
 } from "@/lib/duckdb/duckdb-attachments";
 import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
 import {
-  extractMotherDuckDatabaseName,
   buildMotherDuckIdentifier,
+  extractMotherDuckDatabaseName,
 } from "@/lib/duckdb/motherduck";
 import {
   buildPostgresConnectionString,
@@ -376,11 +376,7 @@ export function ConnectDataDialog({
     } finally {
       setIsLoadingTables(false);
     }
-  }, [
-    isWasmActive,
-    effectiveSqlBackend,
-    runMotherDuckAttachSequence,
-  ]);
+  }, [isWasmActive, effectiveSqlBackend, runMotherDuckAttachSequence]);
 
   const handleConnectClick = useCallback(async () => {
     if (isWasmActive) return;
@@ -701,7 +697,7 @@ export function ConnectDataDialog({
           ? customExtensionName.trim()
           : connectionType === "motherduck"
             ? "motherduck"
-          : resolveDuckdbExtension(connectionType);
+            : resolveDuckdbExtension(connectionType);
 
       const databaseName = extractDatabaseName(selectedDatabase, dbPath);
       const entrySchema =
@@ -1055,7 +1051,11 @@ export function ConnectDataDialog({
                 <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">
                   {buildMotherDuckDbIdentifier()}
                 </code>
-                as <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">{MOTHERDUCK_ALIAS}</code>.
+                as{" "}
+                <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">
+                  {MOTHERDUCK_ALIAS}
+                </code>
+                .
               </p>
               <p className="text-sm text-muted-foreground">
                 Check that shell for the MotherDuck login URL, sign in there,
@@ -1136,7 +1136,9 @@ export function ConnectDataDialog({
                   <button
                     type="button"
                     className="text-xs text-primary hover:underline"
-                    onClick={() => setSelectedTables(new Set(schemaTablesPreview))}
+                    onClick={() =>
+                      setSelectedTables(new Set(schemaTablesPreview))
+                    }
                   >
                     Select all
                   </button>
@@ -1410,16 +1412,18 @@ export function ConnectDataDialog({
                     renderSchemaAndTableSelection()}
 
                   {!hasConnected &&
-                    !(selectedDatabase === "motherduck" &&
-                      motherDuckConnectionState !== "idle") && (
-                    <Button
-                      type="button"
-                      disabled={isConnectDisabled || isLoadingSchemas}
-                      onClick={handleConnectClick}
-                      className="w-full"
-                    >
-                      {isLoadingSchemas ? "Connecting…" : "Connect"}
-                    </Button>
+                    !(
+                      selectedDatabase === "motherduck" &&
+                      motherDuckConnectionState !== "idle"
+                    ) && (
+                      <Button
+                        type="button"
+                        disabled={isConnectDisabled || isLoadingSchemas}
+                        onClick={handleConnectClick}
+                        className="w-full"
+                      >
+                        {isLoadingSchemas ? "Connecting…" : "Connect"}
+                      </Button>
                     )}
 
                   {hasConnected && selectedDatabase !== "motherduck" && (

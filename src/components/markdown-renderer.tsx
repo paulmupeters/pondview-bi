@@ -66,13 +66,17 @@ function extractCodeFromPre(children: ReactNode): ExtractedCode | null {
 
 function highlightSql(code: string): string {
   try {
-    return hljs.highlight(code, { language: "sql", ignoreIllegals: true }).value;
+    return hljs.highlight(code, { language: "sql", ignoreIllegals: true })
+      .value;
   } catch {
     return escapeHtml(code);
   }
 }
 
-export function MarkdownRenderer({ children, className }: MarkdownRendererProps) {
+export function MarkdownRenderer({
+  children,
+  className,
+}: MarkdownRendererProps) {
   return (
     <div
       className={cn(
@@ -86,19 +90,28 @@ export function MarkdownRenderer({ children, className }: MarkdownRendererProps)
         components={{
           h1: ({ className: elementClassName, ...props }) => (
             <h1
-              className={cn("mb-3 mt-6 text-xl font-semibold", elementClassName)}
+              className={cn(
+                "mb-3 mt-6 text-xl font-semibold",
+                elementClassName,
+              )}
               {...props}
             />
           ),
           h2: ({ className: elementClassName, ...props }) => (
             <h2
-              className={cn("mb-3 mt-5 text-lg font-semibold", elementClassName)}
+              className={cn(
+                "mb-3 mt-5 text-lg font-semibold",
+                elementClassName,
+              )}
               {...props}
             />
           ),
           h3: ({ className: elementClassName, ...props }) => (
             <h3
-              className={cn("mb-2 mt-4 text-base font-semibold", elementClassName)}
+              className={cn(
+                "mb-2 mt-4 text-base font-semibold",
+                elementClassName,
+              )}
               {...props}
             />
           ),
@@ -169,7 +182,10 @@ export function MarkdownRenderer({ children, className }: MarkdownRendererProps)
             />
           ),
           hr: ({ className: elementClassName, ...props }) => (
-            <hr className={cn("my-4 border-border", elementClassName)} {...props} />
+            <hr
+              className={cn("my-4 border-border", elementClassName)}
+              {...props}
+            />
           ),
           pre: ({
             className: elementClassName,
@@ -221,7 +237,9 @@ export function MarkdownRenderer({ children, className }: MarkdownRendererProps)
                 )}
                 {...props}
               >
-                <code className={cn("font-mono text-sm", extractedCode.className)}>
+                <code
+                  className={cn("font-mono text-sm", extractedCode.className)}
+                >
                   {extractedCode.code}
                 </code>
               </pre>

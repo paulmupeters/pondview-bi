@@ -1,6 +1,4 @@
-import {
-  isMotherDuckIdentifier,
-} from "@/lib/duckdb/motherduck";
+import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 
 function readEnv(key: string): string | undefined {
@@ -47,7 +45,10 @@ export interface PostgresUrlComponents {
 
 export function parsePostgresUrl(url: string): PostgresUrlComponents | null {
   const trimmed = url.trim();
-  if (!trimmed.startsWith("postgres://") && !trimmed.startsWith("postgresql://")) {
+  if (
+    !trimmed.startsWith("postgres://") &&
+    !trimmed.startsWith("postgresql://")
+  ) {
     return null;
   }
 
@@ -58,7 +59,7 @@ export function parsePostgresUrl(url: string): PostgresUrlComponents | null {
     const user = decodeURIComponent(parsed.username || "postgres");
     const password = decodeURIComponent(parsed.password || "");
     const database = decodeURIComponent(parsed.pathname.slice(1) || "postgres");
-    
+
     // Parse query parameters for SSL mode and other options
     const params = new URLSearchParams(parsed.search);
     const sslmode = params.get("sslmode") || undefined;
@@ -84,10 +85,10 @@ export function parsePostgresUrl(url: string): PostgresUrlComponents | null {
  * SSL configuration should be handled at the server level or through environment variables.
  */
 export function buildPostgresConnectionString(
-  components: PostgresUrlComponents
+  components: PostgresUrlComponents,
 ): string {
   const parts: string[] = [];
-  
+
   parts.push(`host=${components.host}`);
   parts.push(`port=${components.port}`);
   parts.push(`user=${components.user}`);
@@ -95,7 +96,7 @@ export function buildPostgresConnectionString(
     parts.push(`password=${components.password}`);
   }
   parts.push(`dbname=${components.database}`);
-  
+
   // Note: DuckDB's Postgres extension doesn't support sslmode parameter
   // SSL configuration must be handled at the PostgreSQL server level
   // or through PostgreSQL environment variables (PGSSLMODE, etc.)
@@ -109,10 +110,10 @@ export function buildPostgresConnectionString(
  * If it's a PostgreSQL URL, parses and converts it.
  */
 export function normalizePostgresConnectionString(
-  connectionString: string
+  connectionString: string,
 ): string {
   const trimmed = connectionString.trim();
-  
+
   // If it's already in key=value format (contains "host=" or "dbname="), return as-is
   if (trimmed.includes("host=") || trimmed.includes("dbname=")) {
     return trimmed;
@@ -133,7 +134,7 @@ export function normalizePostgresConnectionString(
  * SourceConnectionConfig. Supports mysql:// URIs and mysql:ALIAS env lookups.
  */
 export function detectMysqlConnection(
-  dbIdentifier: string
+  dbIdentifier: string,
 ): SourceConnectionConfig | null {
   const id = (dbIdentifier ?? "").trim();
   if (!id) return null;
@@ -178,7 +179,7 @@ export function detectMysqlConnection(
  * Detects SQLite connection strings in the form sqlite:/path/to/file.db
  */
 export function detectSqliteConnection(
-  dbIdentifier: string
+  dbIdentifier: string,
 ): SourceConnectionConfig | null {
   const id = (dbIdentifier ?? "").trim();
   if (!id.startsWith("sqlite:")) {
@@ -201,7 +202,7 @@ export function detectSqliteConnection(
  * Returns null if it's not a postgres URI.
  */
 export function detectPostgresConnection(
-  dbIdentifier: string
+  dbIdentifier: string,
 ): SourceConnectionConfig | null {
   const id = (dbIdentifier ?? "").trim();
   if (!id) return null;
@@ -263,7 +264,7 @@ export function detectPostgresConnection(
  * Currently supports Postgres and MySQL.
  */
 export function detectExternalConnection(
-  dbIdentifier: string
+  dbIdentifier: string,
 ): SourceConnectionConfig | null {
   return (
     detectPostgresConnection(dbIdentifier) ??
@@ -272,7 +273,7 @@ export function detectExternalConnection(
   );
 }
 
-export function resolveDbPath(dbIdentifier: string, token?: string): string {
+export function resolveDbPath(dbIdentifier: string, _token?: string): string {
   const id = (dbIdentifier ?? "").trim();
   if (!id) return DEFAULT_RUNTIME_DUCKDB_PATH;
 

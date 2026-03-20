@@ -8,11 +8,15 @@ describe("formatJsonBlockContent", () => {
         name: "orders",
         columns: ["id", "amount"],
       }),
-    ).toBe('{\n  "name": "orders",\n  "columns": [\n    "id",\n    "amount"\n  ]\n}');
+    ).toBe(
+      '{\n  "name": "orders",\n  "columns": [\n    "id",\n    "amount"\n  ]\n}',
+    );
   });
 
   test("returns strings verbatim", () => {
-    expect(formatJsonBlockContent('{\n  "raw": true\n}')).toBe('{\n  "raw": true\n}');
+    expect(formatJsonBlockContent('{\n  "raw": true\n}')).toBe(
+      '{\n  "raw": true\n}',
+    );
   });
 
   test("renders escaped newlines in strings", () => {

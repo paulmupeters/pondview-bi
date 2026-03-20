@@ -10,12 +10,12 @@ interface InlineChartConfigProps {
   onChartConfigChange: (config: Config | null) => void;
   columns: { name: string; type?: string }[];
   rows?: Result[];
-  
+
   // Card config props (optional)
   cardConfig?: CardConfig | null;
   onCardConfigChange?: (config: CardConfig | null) => void;
   isCardMode?: boolean;
-  
+
   // UI props
   showAdvancedConfig?: boolean;
   hideNarrativeFields?: boolean;
@@ -34,7 +34,7 @@ export function InlineChartConfig({
   hideNarrativeFields = false,
 }: InlineChartConfigProps) {
   const effectiveChartConfig = chartConfig ?? defaultChartConfig;
-  
+
   const updateChartConfig = (updater: (config: Config) => Config) => {
     onChartConfigChange(updater(effectiveChartConfig));
   };
@@ -94,7 +94,7 @@ export function InlineChartConfig({
     const newCategories = currentCategories.includes(category)
       ? currentCategories.filter((c) => c !== category)
       : [...currentCategories, category];
-    
+
     updateChartConfig((config) => ({
       ...config,
       lineCategories: newCategories.length > 0 ? newCategories : undefined,
@@ -267,46 +267,47 @@ export function InlineChartConfig({
                 ))}
               </select>
             </div>
-            {effectiveChartConfig.categoryColumn && availableCategories.length > 0 && (
-              <div className="col-span-2 xxl:col-span-4">
-                <div className="block text-[10px] text-muted-foreground mb-1 tracking-wider font-bold uppercase">
-                  Line Categories
-                </div>
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={toggleAllCategories}
-                    className="px-2 py-1 text-xs border rounded bg-transparent hover:bg-card-foreground/5"
-                  >
-                    {(effectiveChartConfig.lineCategories ?? []).length ===
-                    availableCategories.length
-                      ? "Deselect All"
-                      : "Select All"}
-                  </button>
-                  <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
-                    {availableCategories.map((category) => {
-                      const isSelected = (
-                        effectiveChartConfig.lineCategories ?? []
-                      ).includes(category);
-                      return (
-                        <label
-                          key={category}
-                          className="flex items-center gap-2 cursor-pointer text-xs"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleCategory(category)}
-                            className="rounded border-input"
-                          />
-                          <span>{category}</span>
-                        </label>
-                      );
-                    })}
+            {effectiveChartConfig.categoryColumn &&
+              availableCategories.length > 0 && (
+                <div className="col-span-2 xxl:col-span-4">
+                  <div className="block text-[10px] text-muted-foreground mb-1 tracking-wider font-bold uppercase">
+                    Line Categories
+                  </div>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={toggleAllCategories}
+                      className="px-2 py-1 text-xs border rounded bg-transparent hover:bg-card-foreground/5"
+                    >
+                      {(effectiveChartConfig.lineCategories ?? []).length ===
+                      availableCategories.length
+                        ? "Deselect All"
+                        : "Select All"}
+                    </button>
+                    <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
+                      {availableCategories.map((category) => {
+                        const isSelected = (
+                          effectiveChartConfig.lineCategories ?? []
+                        ).includes(category);
+                        return (
+                          <label
+                            key={category}
+                            className="flex items-center gap-2 cursor-pointer text-xs"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleCategory(category)}
+                              className="rounded border-input"
+                            />
+                            <span>{category}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
             <div>
               <label
                 htmlFor="measurementColumn"
@@ -969,4 +970,3 @@ export function InlineChartConfig({
     </div>
   );
 }
-

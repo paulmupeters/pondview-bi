@@ -41,7 +41,10 @@ type RunQueryWasmDeps = {
 let sharedClient: DuckdbWasmClientClass | null = null;
 
 function nowMs(): number {
-  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+  if (
+    typeof performance !== "undefined" &&
+    typeof performance.now === "function"
+  ) {
     return performance.now();
   }
   return Date.now();
@@ -78,7 +81,8 @@ function normalizeWasmValue(value: unknown): unknown {
 
 export function normalizeWasmRows(rows: unknown[]): Record<string, unknown>[] {
   return rows.map((row) => {
-    const source = row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+    const source =
+      row && typeof row === "object" ? (row as Record<string, unknown>) : {};
     const normalized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(source)) {
       normalized[key] = normalizeWasmValue(value);

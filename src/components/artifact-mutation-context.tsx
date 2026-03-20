@@ -1,7 +1,7 @@
-import { createContext, useContext, useCallback, type ReactNode } from "react";
 import type { UIMessage } from "ai";
-import type { CardConfig, Config } from "@/lib/types";
+import { createContext, type ReactNode, useCallback, useContext } from "react";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
+import type { CardConfig, Config } from "@/lib/types";
 import { getMessageById, updateMessageParts } from "@/lib/workspace/chat-repo";
 
 interface ArtifactMutationContextValue {
@@ -62,7 +62,11 @@ function hasArtifactInParts(
     const toolOutput = isRecord(part.output) ? part.output : undefined;
     const toolResult = isRecord(part.result) ? part.result : undefined;
     return (
-      hasArtifactInParts(toolOutput?.parts, artifactId, executeSqlArtifactType) ||
+      hasArtifactInParts(
+        toolOutput?.parts,
+        artifactId,
+        executeSqlArtifactType,
+      ) ||
       hasArtifactInParts(toolResult?.parts, artifactId, executeSqlArtifactType)
     );
   });
@@ -174,7 +178,9 @@ export function ArtifactMutationProvider({
       // Update local state optimistically.
       setMessages((prev) =>
         prev.map((msg) => {
-          if (!hasArtifactInParts(msg.parts, artifactId, executeSqlArtifactType)) {
+          if (
+            !hasArtifactInParts(msg.parts, artifactId, executeSqlArtifactType)
+          ) {
             return msg;
           }
 

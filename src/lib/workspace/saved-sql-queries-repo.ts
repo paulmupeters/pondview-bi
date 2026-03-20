@@ -1,8 +1,5 @@
 import { nanoid } from "nanoid";
-import {
-  getPreference,
-  setPreference,
-} from "@/lib/workspace/preferences-repo";
+import { getPreference, setPreference } from "@/lib/workspace/preferences-repo";
 
 const SAVED_SQL_QUERIES_KEY = "workspace:saved-sql-queries";
 const MAX_SAVED_SQL_QUERIES = 100;
@@ -29,7 +26,10 @@ function normalizeName(name: string): string {
   return name.trim().toLowerCase();
 }
 
-export function deriveSavedSqlQueryName(sql: string, timestamp = Date.now()): string {
+export function deriveSavedSqlQueryName(
+  sql: string,
+  timestamp = Date.now(),
+): string {
   const lines = sql.split(/\r?\n/);
   for (const line of lines) {
     const trimmed = line.trim();
@@ -185,7 +185,9 @@ export async function renameSavedSqlQuery(
   return next;
 }
 
-export async function deleteSavedSqlQuery(id: string): Promise<SavedSqlQuery[]> {
+export async function deleteSavedSqlQuery(
+  id: string,
+): Promise<SavedSqlQuery[]> {
   const existing = await listSavedSqlQueries();
   const next = existing.filter((entry) => entry.id !== id);
   await setPreference(SAVED_SQL_QUERIES_KEY, next);

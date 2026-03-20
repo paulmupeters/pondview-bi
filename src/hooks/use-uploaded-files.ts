@@ -25,4 +25,3 @@ export function useUploadedFiles(): UploadedFile[] {
 
   return files;
 }
-

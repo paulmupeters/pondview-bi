@@ -18,7 +18,7 @@ export const metadata = {
 };
 
 const THEME_CSS_BY_NAME = Object.fromEntries(
-  Object.values(themes).map((theme) => [theme.name, theme.css])
+  Object.values(themes).map((theme) => [theme.name, theme.css]),
 );
 
 const THEME_BOOTSTRAP_SCRIPT = `(() => {
@@ -69,9 +69,7 @@ export default function RootLayout({
           <TooltipProvider>
             <CustomCssLoader />
             <CommandPalette />
-            <SidebarLayout>
-              {children}
-            </SidebarLayout>
+            <SidebarLayout>{children}</SidebarLayout>
           </TooltipProvider>
         </ThemeProvider>
       </body>

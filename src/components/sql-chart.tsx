@@ -1,7 +1,7 @@
 import { Pencil } from "lucide-react";
 import { useCallback } from "react";
-import { useInlineTextEdit } from "@/components/hooks/use-inline-text-edit";
 import { DynamicChart } from "@/components/dynamic-chart";
+import { useInlineTextEdit } from "@/components/hooks/use-inline-text-edit";
 import type { Config, Result } from "@/lib/types";
 
 export function SqlChart({
@@ -39,8 +39,8 @@ export function SqlChart({
   const insights = (summary?.insights ?? []).filter(Boolean);
   const additionalInsights = takeaway
     ? insights.filter(
-      (insight) => insight.trim().toLowerCase() !== takeaway.toLowerCase(),
-    )
+        (insight) => insight.trim().toLowerCase() !== takeaway.toLowerCase(),
+      )
     : insights;
   type EditableField = "title" | "description" | "takeaway";
 

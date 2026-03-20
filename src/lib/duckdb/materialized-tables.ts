@@ -11,9 +11,7 @@ export const MATERIALIZED_SCHEMA = "mat";
 /**
  * Checks if a database identifier represents a materialized table
  */
-export function isMaterializedTableIdentifier(
-  dbIdentifier?: string
-): boolean {
+export function isMaterializedTableIdentifier(dbIdentifier?: string): boolean {
   if (!dbIdentifier) {
     return false;
   }
@@ -25,7 +23,7 @@ export function isMaterializedTableIdentifier(
  * Format: materialized:mat.<table_name>
  */
 export function extractMaterializedTableName(
-  dbIdentifier: string
+  dbIdentifier: string,
 ): string | null {
   if (!isMaterializedTableIdentifier(dbIdentifier)) {
     return null;
@@ -42,9 +40,6 @@ export function extractMaterializedTableName(
 /**
  * Creates a materialized table identifier
  */
-export function createMaterializedTableIdentifier(
-  tableName: string
-): string {
+export function createMaterializedTableIdentifier(tableName: string): string {
   return `${MATERIALIZED_TABLE_PREFIX}${MATERIALIZED_SCHEMA}.${tableName}`;
 }
-

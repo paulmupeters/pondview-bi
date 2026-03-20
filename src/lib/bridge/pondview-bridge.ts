@@ -26,7 +26,10 @@ let sessionSecret: string | undefined;
 let cachedBridgeConfig: { host: string; port: number } | null = null;
 
 function nowMs(): number {
-  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+  if (
+    typeof performance !== "undefined" &&
+    typeof performance.now === "function"
+  ) {
     return performance.now();
   }
   return Date.now();
@@ -114,7 +117,10 @@ export function hasSessionSecret(): boolean {
   return Boolean(sessionSecret);
 }
 
-export async function getBridgeConfig(): Promise<{ host: string; port: number }> {
+export async function getBridgeConfig(): Promise<{
+  host: string;
+  port: number;
+}> {
   if (cachedBridgeConfig) {
     return cachedBridgeConfig;
   }
@@ -151,11 +157,16 @@ export async function pingBridge(signal?: AbortSignal): Promise<boolean> {
     return false;
   }
 
-  const payload = (await response.json().catch(() => ({}))) as { status?: string };
+  const payload = (await response.json().catch(() => ({}))) as {
+    status?: string;
+  };
   return payload.status === "ok";
 }
 
-export async function runBridgeQuery(sql: string, signal?: AbortSignal): Promise<BridgeQueryResult> {
+export async function runBridgeQuery(
+  sql: string,
+  signal?: AbortSignal,
+): Promise<BridgeQueryResult> {
   const trimmedSql = sql.trim();
   if (!trimmedSql) {
     throw new Error("SQL query is required");
