@@ -191,6 +191,7 @@ bun run docs:preview
 bun run lint
 bun run format
 bun run typecheck
+bun run test
 ```
 
 ### Key areas
