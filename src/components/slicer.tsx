@@ -1,7 +1,6 @@
 import { Check, ChevronDown, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFilters } from "@/app/dashboards/[dashboardId]/filter-context";
-import { loadDashboardDimensionValues } from "@/lib/dashboard/browser-filter-engine";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -24,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { loadDashboardDimensionValues } from "@/lib/dashboard/browser-filter-engine";
 import type { Op } from "@/lib/types/filters";
 import { cn } from "@/lib/utils";
 

@@ -7,7 +7,6 @@ import {
   Palette,
   Settings,
 } from "lucide-react";
-import { useRouter } from '@/vite/next-navigation';
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +18,7 @@ import {
 } from "@/lib/custom-css";
 import { useTheme } from "@/lib/theme-provider";
 import { getAllThemes } from "@/themes";
+import { useRouter } from "@/vite/next-navigation";
 
 interface CommandItem {
   id: string;
@@ -153,8 +153,9 @@ export function CommandPalette() {
   const themeCommands: CommandItem[] = useMemo(() => {
     const baseCommands = availableThemes.map((themeOption) => ({
       id: `theme-${themeOption.name}`,
-      label: `Switch to ${themeOption.displayName}${selectedTheme === themeOption.name ? " (current)" : ""
-        }`,
+      label: `Switch to ${themeOption.displayName}${
+        selectedTheme === themeOption.name ? " (current)" : ""
+      }`,
       icon: <Palette size={16} />,
       perform: () => handleThemeChange(themeOption.name),
     }));
@@ -162,8 +163,9 @@ export function CommandPalette() {
     if (hasCustomCss) {
       baseCommands.push({
         id: "theme-custom",
-        label: `Use Custom Theme${selectedTheme === CUSTOM_THEME_VALUE ? " (current)" : ""
-          }`,
+        label: `Use Custom Theme${
+          selectedTheme === CUSTOM_THEME_VALUE ? " (current)" : ""
+        }`,
         icon: <Palette size={16} />,
         perform: () => handleThemeChange(CUSTOM_THEME_VALUE),
       });
@@ -225,8 +227,8 @@ export function CommandPalette() {
       if (!open) return;
 
       const key = e.key;
-      const matchedCommand = commands.find(
-        (command) => command.shortcut?.includes(key),
+      const matchedCommand = commands.find((command) =>
+        command.shortcut?.includes(key),
       );
 
       if (matchedCommand) {
@@ -276,7 +278,9 @@ export function CommandPalette() {
     applySelectedPreview();
 
     const observer = new MutationObserver((mutations) => {
-      if (mutations.some((mutation) => mutation.attributeName === "data-selected")) {
+      if (
+        mutations.some((mutation) => mutation.attributeName === "data-selected")
+      ) {
         applySelectedPreview();
       }
     });
@@ -321,7 +325,10 @@ export function CommandPalette() {
             />
           </div>
 
-          <Command.List ref={commandListRef} className="max-h-76 overflow-y-auto p-2">
+          <Command.List
+            ref={commandListRef}
+            className="max-h-76 overflow-y-auto p-2"
+          >
             <Command.Empty className="px-3 py-2 text-sm text-muted-foreground">
               No results found.
             </Command.Empty>

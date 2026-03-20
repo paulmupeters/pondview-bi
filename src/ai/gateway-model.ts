@@ -1,14 +1,14 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenResponses } from "@ai-sdk/open-responses";
+import { createOpenAI } from "@ai-sdk/openai";
 // import { createXai } from "@ai-sdk/xai";
 import { createGateway, gateway, type LanguageModel } from "ai";
 import { createBrowserGatewayFetch } from "@/ai/browser-gateway-fetch";
 import {
+  type AiProvider,
   getAiProviderDisplayName,
   getMissingRequiredSetting,
   loadAiSettingsFromStorage,
-  type AiProvider,
 } from "@/ai/settings";
 
 function resolveBrowserModel(
@@ -46,8 +46,8 @@ function resolveBrowserModel(
     case "open-responses": {
       const provider = createOpenResponses({
         apiKey: settings.apiKey,
-        url: settings.openResponsesUrl!,
-        name: settings.openResponsesName!,
+        url: settings.openResponsesUrl ?? "",
+        name: settings.openResponsesName ?? "",
       });
       return provider(modelId);
     }

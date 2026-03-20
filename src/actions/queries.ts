@@ -12,7 +12,7 @@ import type { Result } from "@/lib/types";
 export const runSqlAndGetRowObjectsJson = async (
   dbIdentifier: string,
   sql: string,
-  useHttp?: boolean
+  useHttp?: boolean,
 ): Promise<Result[]> => runSqlNormalized(dbIdentifier, sql, useHttp);
 
 export const getTables = async (dbIdentifier: string) =>
@@ -21,14 +21,13 @@ export const getTables = async (dbIdentifier: string) =>
 export const getSchemas = async (dbIdentifier: string) =>
   getSchemasLib(dbIdentifier);
 
-
 export const getTablesForSchema = async (
   dbIdentifier: string,
   schema: string,
-  limit = 20
+  limit = 20,
 ) => getTablesForSchemaLib(dbIdentifier, schema, limit);
 
 export const generateChartConfig = async (
   results: Result[],
-  userQuery: string
+  userQuery: string,
 ) => generateChartConfigTool(results, userQuery);

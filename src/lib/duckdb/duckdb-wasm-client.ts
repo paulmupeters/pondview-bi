@@ -1,6 +1,6 @@
 import {
-  DuckDBDataProtocol,
   type AsyncDuckDBConnection,
+  DuckDBDataProtocol,
 } from "@duckdb/duckdb-wasm";
 
 import { DuckdbWasmProvider } from "@/lib/duckdb/duckdb-wasm";
@@ -200,7 +200,7 @@ export class DuckdbWasmClient {
   }
 
   private quoteIdentifier(identifier: string): string {
-    return '"' + identifier.replace(/"/g, '""') + '"';
+    return `"${identifier.replace(/"/g, '""')}"`;
   }
 
   private escapeSqlString(value: string): string {

@@ -20,7 +20,7 @@ export interface JoinPathStep {
 export function findJoinPath(
   fromTable: string,
   toTable: string,
-  joins: JoinDefinition[]
+  joins: JoinDefinition[],
 ): JoinPathStep[] | null {
   const fromCanonical = canonicalTable(fromTable);
   const toCanonical = canonicalTable(toTable);
@@ -70,7 +70,9 @@ export function canonicalTable(input: string): string {
   return parts[parts.length - 1]?.toLowerCase().trim() ?? "";
 }
 
-export function dedupeJoinDefinitions(joins: JoinDefinition[]): JoinDefinition[] {
+export function dedupeJoinDefinitions(
+  joins: JoinDefinition[],
+): JoinDefinition[] {
   const unique = new Map<string, JoinDefinition>();
   for (const joinDef of joins) {
     const key = [
@@ -120,7 +122,7 @@ function buildGraph(joins: JoinDefinition[]): Map<string, JoinPathStep[]> {
 function addEdge(
   graph: Map<string, JoinPathStep[]>,
   table: string,
-  step: JoinPathStep
+  step: JoinPathStep,
 ): void {
   const existing = graph.get(table);
   if (existing) {

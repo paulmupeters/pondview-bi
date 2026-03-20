@@ -1,6 +1,4 @@
-export function sanitizeGatewayBrowserHeaders(
-  headers?: HeadersInit,
-): Headers {
+export function sanitizeGatewayBrowserHeaders(headers?: HeadersInit): Headers {
   const sanitizedHeaders = new Headers(headers);
   sanitizedHeaders.delete("user-agent");
   return sanitizedHeaders;

@@ -1,9 +1,9 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
-import HomePage from "@/app/page";
 import ChatPage from "@/app/chat/page";
-import DataPage from "@/app/data/page";
 import DashboardsPage from "@/app/dashboards/page";
 import DashboardViewPage from "@/app/dashboards/view/page";
+import DataPage from "@/app/data/page";
+import HomePage from "@/app/page";
 import SettingsPage from "@/app/settings/page";
 import ShellPage from "@/app/shell/page";
 import { CommandPalette } from "@/components/CommandPalette";

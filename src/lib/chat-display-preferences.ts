@@ -33,7 +33,11 @@ function getBooleanPreference(key: string, defaultValue: boolean): boolean {
   return value === "true";
 }
 
-function setBooleanPreference(key: string, value: boolean, eventName: string): void {
+function setBooleanPreference(
+  key: string,
+  value: boolean,
+  eventName: string,
+): void {
   if (!isBrowser()) {
     return;
   }

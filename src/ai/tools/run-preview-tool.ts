@@ -31,7 +31,9 @@ export const runPreviewTool = tool({
   inputSchema: z.object({
     table: z
       .string()
-      .describe("The table name to preview (can be schema-qualified, e.g. public.users)"),
+      .describe(
+        "The table name to preview (can be schema-qualified, e.g. public.users)",
+      ),
     databasePath: z
       .string()
       .describe("Database identifier/path to query (e.g. wasm:local)")
@@ -45,9 +47,7 @@ export const runPreviewTool = tool({
 
     const rows = normalizeRows(result.rows);
     const columns =
-      rows.length > 0
-        ? Object.keys(rows[0]).map((name) => ({ name }))
-        : [];
+      rows.length > 0 ? Object.keys(rows[0]).map((name) => ({ name })) : [];
 
     return { table, columns, rows };
   },

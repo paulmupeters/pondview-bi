@@ -2,7 +2,7 @@ import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useCallback, useEffect, useState } from "react";
 import { runQuery } from "@/lib/sql/run-query";
-import type { CardConfig, Config, Result } from "@/lib/types";
+import type { Result } from "@/lib/types";
 import {
   listChartsByDashboard,
   listDashboards,
@@ -75,7 +75,9 @@ export function useDashboardDetail(
     let cancelled = false;
     (async () => {
       const dashboardCharts = await listChartsByDashboard(dashboardId);
-      const sortedCharts = [...dashboardCharts].sort((a, b) => a.position - b.position);
+      const sortedCharts = [...dashboardCharts].sort(
+        (a, b) => a.position - b.position,
+      );
       if (cancelled) {
         return;
       }

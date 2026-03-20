@@ -34,7 +34,10 @@ export function readJoinDefsFromStorage(): JoinDefinition[] {
     const parsed = JSON.parse(raw);
     return parseJoinDefsPayload(parsed);
   } catch (error) {
-    console.error("[joinDefs] Failed to parse join definitions from storage", error);
+    console.error(
+      "[joinDefs] Failed to parse join definitions from storage",
+      error,
+    );
     return [];
   }
 }
@@ -82,16 +85,18 @@ export function parseJoinDefsPayload(payload: unknown): JoinDefinition[] {
   }
 
   const normalized = payload
-    .map((candidate) =>
-      normalizeJoinRecord(candidate as JoinRecordCandidate),
-    )
+    .map((candidate) => normalizeJoinRecord(candidate as JoinRecordCandidate))
     .filter((entry): entry is JoinDefinition => entry !== null);
 
   return dedupeJoinDefinitions(normalized);
 }
 
-function normalizeJoinRecord(candidate: JoinRecordCandidate): JoinDefinition | null {
-  const leftTable = toTrimmedString(candidate.leftTable ?? candidate.left_table);
+function normalizeJoinRecord(
+  candidate: JoinRecordCandidate,
+): JoinDefinition | null {
+  const leftTable = toTrimmedString(
+    candidate.leftTable ?? candidate.left_table,
+  );
   const leftColumn = toTrimmedString(
     candidate.leftColumn ?? candidate.left_column,
   );
@@ -120,12 +125,7 @@ function toTrimmedString(value: unknown): string {
 }
 
 function normalizeJoinKind(raw: unknown): JoinKind {
-  if (
-    raw === "left" ||
-    raw === "inner" ||
-    raw === "right" ||
-    raw === "full"
-  ) {
+  if (raw === "left" || raw === "inner" || raw === "right" || raw === "full") {
     return raw;
   }
   return "left";

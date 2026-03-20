@@ -5,10 +5,7 @@ interface SqlControlsProps {
   className?: string;
 }
 
-export function SqlControls({
-  extraControls,
-  className,
-}: SqlControlsProps) {
+export function SqlControls({ extraControls, className }: SqlControlsProps) {
   if (!extraControls) {
     return null;
   }

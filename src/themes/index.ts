@@ -1,7 +1,7 @@
 import * as defaultTheme from "./default";
-import * as improvedTheme from "./rosewater";
-import * as monoGreenTheme from "./moss-terminal";
 import * as emberClayTheme from "./ember-clay";
+import * as monoGreenTheme from "./moss-terminal";
+import * as improvedTheme from "./rosewater";
 
 export type Theme = {
   name: string;

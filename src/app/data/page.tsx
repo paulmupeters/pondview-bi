@@ -2,17 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import { DuckdbShellDialog } from "@/components/duckdb-shell";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
-
+import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { removeConnectedTable } from "@/lib/connected-tables";
 import { buildDetachStatement } from "@/lib/duckdb/duckdb-attachments";
@@ -20,7 +14,11 @@ import {
   refreshDuckDbHttpHealth,
   runDuckDbHttpQuery,
 } from "@/lib/duckdb/duckdb-http-browser";
-import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
+import {
+  clearJoinDefsInStorage,
+  readJoinDefsRawFromStorage,
+  saveJoinDefsRawToStorage,
+} from "@/lib/joins/browser-storage";
 import { refreshBridgeHealth, resolveSqlBackend } from "@/lib/sql/sql-runtime";
 import {
   useBridgeHealthStatus,
@@ -29,12 +27,6 @@ import {
   useSqlBackendPreference,
 } from "@/lib/sql/use-sql-backend";
 import { useTheme } from "@/lib/theme-provider";
-import {
-  clearJoinDefsInStorage,
-  readJoinDefsRawFromStorage,
-  saveJoinDefsRawToStorage,
-} from "@/lib/joins/browser-storage";
-import { Textarea } from "@/components/ui/textarea";
 
 import Image from "@/vite/next-image";
 
@@ -181,7 +173,7 @@ export default function ViewDataPage() {
     effectiveSqlBackend === "bridge"
       ? bridgeHealthStatus
       : duckDbHttpHealthStatus;
-  const isRemoteRuntimeActive = effectiveSqlBackend !== "duckdb-wasm";
+  const _isRemoteRuntimeActive = effectiveSqlBackend !== "duckdb-wasm";
 
   return (
     <div className="flex h-full flex-col">

@@ -55,10 +55,7 @@ export function DashboardSettingsDialog({
             <label htmlFor="columns-select" className="text-sm font-medium">
               Number of Columns
             </label>
-            <Select
-              value={columns.toString()}
-              onValueChange={onColumnsChange}
-            >
+            <Select value={columns.toString()} onValueChange={onColumnsChange}>
               <SelectTrigger id="columns-select" className="w-full">
                 <SelectValue placeholder="Select columns" />
               </SelectTrigger>

@@ -17,12 +17,6 @@ export type MaterializedTableDetail = {
   introspectionError?: string;
 };
 
-type MaterializedTablesDetailsResponse = {
-  tables: string[];
-  details?: MaterializedTableDetail[];
-  error?: string;
-};
-
 export function useMaterializedTableDetails(enabled: boolean) {
   const [details, setDetails] = useState<MaterializedTableDetail[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -35,7 +29,9 @@ export function useMaterializedTableDetails(enabled: boolean) {
 
     setIsLoading(false);
     setDetails([]);
-    setError("Materialized semantic table details are deferred in browser mode.");
+    setError(
+      "Materialized semantic table details are deferred in browser mode.",
+    );
   }, [enabled]);
 
   useEffect(() => {

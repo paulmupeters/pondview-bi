@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { chromium } from "playwright";
 
 interface PageResult {
   url: string;
@@ -10,31 +10,55 @@ interface PageResult {
 }
 
 const pages = [
-  { url: 'http://127.0.0.1:4320/', name: 'Home', expected: 'logo/branding, prompt input, and example commands' },
-  { url: 'http://127.0.0.1:4320/chat?id=test', name: 'Chat', expected: 'chat interface or "Missing chat" message' },
-  { url: 'http://127.0.0.1:4320/dashboards', name: 'Dashboards', expected: 'dashboards heading' },
-  { url: 'http://127.0.0.1:4320/data', name: 'Data', expected: 'data source management' },
-  { url: 'http://127.0.0.1:4320/settings', name: 'Settings', expected: 'settings form' },
-  { url: 'http://127.0.0.1:4320/shell', name: 'Shell', expected: 'DuckDB Shell heading' },
+  {
+    url: "http://127.0.0.1:4320/",
+    name: "Home",
+    expected: "logo/branding, prompt input, and example commands",
+  },
+  {
+    url: "http://127.0.0.1:4320/chat?id=test",
+    name: "Chat",
+    expected: 'chat interface or "Missing chat" message',
+  },
+  {
+    url: "http://127.0.0.1:4320/dashboards",
+    name: "Dashboards",
+    expected: "dashboards heading",
+  },
+  {
+    url: "http://127.0.0.1:4320/data",
+    name: "Data",
+    expected: "data source management",
+  },
+  {
+    url: "http://127.0.0.1:4320/settings",
+    name: "Settings",
+    expected: "settings form",
+  },
+  {
+    url: "http://127.0.0.1:4320/shell",
+    name: "Shell",
+    expected: "DuckDB Shell heading",
+  },
 ];
 
 async function verifyPages() {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
-    viewport: { width: 1280, height: 720 }
+    viewport: { width: 1280, height: 720 },
   });
   const page = await context.newPage();
 
   const results: PageResult[] = [];
   const consoleErrors: string[] = [];
 
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') {
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
       consoleErrors.push(`[${msg.type()}] ${msg.text()}`);
     }
   });
 
-  page.on('pageerror', (error) => {
+  page.on("pageerror", (error) => {
     consoleErrors.push(`[pageerror] ${error.message}`);
   });
 
@@ -43,8 +67,11 @@ async function verifyPages() {
     consoleErrors.length = 0;
 
     try {
-      await page.goto(pageInfo.url, { waitUntil: 'networkidle', timeout: 10000 });
-      
+      await page.goto(pageInfo.url, {
+        waitUntil: "networkidle",
+        timeout: 10000,
+      });
+
       // Wait a bit for React to render
       await page.waitForTimeout(2000);
 
@@ -52,7 +79,7 @@ async function verifyPages() {
       await page.screenshot({ path: screenshotPath, fullPage: false });
 
       // Check if page is blank
-      const bodyText = await page.textContent('body');
+      const bodyText = await page.textContent("body");
       const isBlank = !bodyText || bodyText.trim().length < 10;
 
       // Get page title
@@ -64,7 +91,9 @@ async function verifyPages() {
         success: !isBlank && consoleErrors.length === 0,
         errors: [...consoleErrors],
         screenshot: screenshotPath,
-        notes: isBlank ? '⚠️  Page appears blank' : `✅ Page rendered (title: "${title}")`
+        notes: isBlank
+          ? "⚠️  Page appears blank"
+          : `✅ Page rendered (title: "${title}")`,
       };
 
       results.push(result);
@@ -72,22 +101,24 @@ async function verifyPages() {
       console.log(`  ${result.notes}`);
       if (consoleErrors.length > 0) {
         console.log(`  ❌ Console errors: ${consoleErrors.length}`);
-        consoleErrors.forEach(err => console.log(`     - ${err}`));
+        consoleErrors.forEach((err) => {
+          console.log(`     - ${err}`);
+        });
       } else {
         console.log(`  ✅ No console errors`);
       }
       console.log(`  📸 Screenshot: ${screenshotPath}`);
-
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       console.log(`  ❌ Failed to load: ${errorMessage}`);
       results.push({
         url: pageInfo.url,
         name: pageInfo.name,
         success: false,
         errors: [errorMessage, ...consoleErrors],
-        screenshot: '',
-        notes: `Failed to load: ${errorMessage}`
+        screenshot: "",
+        notes: `Failed to load: ${errorMessage}`,
       });
     }
   }
@@ -95,34 +126,37 @@ async function verifyPages() {
   await browser.close();
 
   // Print summary
-  console.log('\n' + '='.repeat(60));
-  console.log('📊 SUMMARY');
-  console.log('='.repeat(60));
+  console.log(`\n${"=".repeat(60)}`);
+  console.log("📊 SUMMARY");
+  console.log("=".repeat(60));
 
-  const successful = results.filter(r => r.success).length;
-  const failed = results.filter(r => !r.success).length;
+  const successful = results.filter((r) => r.success).length;
+  const failed = results.filter((r) => !r.success).length;
 
   console.log(`\n✅ Successful: ${successful}/${results.length}`);
   console.log(`❌ Failed: ${failed}/${results.length}\n`);
 
-  results.forEach(result => {
-    const status = result.success ? '✅' : '❌';
+  results.forEach((result) => {
+    const status = result.success ? "✅" : "❌";
     console.log(`${status} ${result.name.padEnd(15)} - ${result.notes}`);
     if (result.errors.length > 0) {
-      result.errors.forEach(err => console.log(`   └─ ${err}`));
+      result.errors.forEach((err) => {
+        console.log(`   └─ ${err}`);
+      });
     }
   });
 
-  console.log('\n' + '='.repeat(60));
+  console.log(`\n${"=".repeat(60)}`);
 
   return results;
 }
 
 // Create screenshots directory
-import { mkdirSync } from 'fs';
+import { mkdirSync } from "node:fs";
+
 try {
-  mkdirSync('./screenshots', { recursive: true });
-} catch (e) {
+  mkdirSync("./screenshots", { recursive: true });
+} catch (_e) {
   // Directory might already exist
 }
 

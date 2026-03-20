@@ -2,13 +2,13 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import { GripVertical, Settings, Trash2 } from "lucide-react";
-import { type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import { CardConfigDialog } from "@/components/card-config-dialog";
 import { ChartConfigDialog } from "@/components/chart-config-dialog";
 import { DynamicChart } from "@/components/dynamic-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { CardConfig, Config, Result } from "@/lib/types";
 import type { DashboardChart } from "@/hooks/use-dashboard-detail";
+import type { CardConfig, Config, Result } from "@/lib/types";
 
 type SortableChartCardProps = {
   chart: DashboardChart;
@@ -188,4 +188,3 @@ export function SortableChartCard({
     </div>
   );
 }
-

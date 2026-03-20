@@ -26,7 +26,10 @@ function readModel(databasePath: string): DataModel {
 function writeModel(databasePath: string, model: DataModel) {
   if (!isClient) return;
   try {
-    window.localStorage.setItem(storageKey(databasePath), JSON.stringify(model));
+    window.localStorage.setItem(
+      storageKey(databasePath),
+      JSON.stringify(model),
+    );
   } catch {
     // ignore
   }
@@ -77,11 +80,14 @@ export function useDataModel(databasePath: string | undefined) {
   );
 
   const api = useMemo(
-    () => ({ relationships, addRelationship, removeRelationship, replaceRelationship }),
+    () => ({
+      relationships,
+      addRelationship,
+      removeRelationship,
+      replaceRelationship,
+    }),
     [relationships, addRelationship, removeRelationship, replaceRelationship],
   );
 
   return api;
 }
-
-

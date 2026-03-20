@@ -1,5 +1,5 @@
-import { nanoid } from "nanoid";
 import { promises as fs } from "node:fs";
+import { nanoid } from "nanoid";
 import {
   readJsonFile,
   resolveSidecarPath,
@@ -85,7 +85,9 @@ async function saveDashboardsIndex(index: DashboardsIndexFile): Promise<void> {
   await writeJsonFileAtomic(DASHBOARDS_INDEX_PATH, index);
 }
 
-async function loadDashboardFile(dashboardId: string): Promise<DashboardFile | null> {
+async function loadDashboardFile(
+  dashboardId: string,
+): Promise<DashboardFile | null> {
   const fallback = null as DashboardFile | null;
   return readJsonFile(dashboardFilePath(dashboardId), fallback);
 }
@@ -96,7 +98,9 @@ async function saveDashboardFile(file: DashboardFile): Promise<void> {
 
 async function upsertDashboardIndex(dashboard: DbDashboard): Promise<void> {
   const index = await loadDashboardsIndex();
-  const existingIndex = index.dashboards.findIndex((d) => d.id === dashboard.id);
+  const existingIndex = index.dashboards.findIndex(
+    (d) => d.id === dashboard.id,
+  );
   if (existingIndex >= 0) {
     index.dashboards[existingIndex] = dashboard;
   } else {
@@ -254,7 +258,11 @@ export async function updateChartConfig(
   return { updated: true };
 }
 
-export async function updateChartSql(chartId: string, sql: string, now = Date.now()) {
+export async function updateChartSql(
+  chartId: string,
+  sql: string,
+  now = Date.now(),
+) {
   const location = await findChartLocation(chartId);
   if (!location) return { updated: false };
   const chart = location.file.charts[location.chartIndex];
@@ -300,7 +308,10 @@ export async function reorderDashboardCharts(
   await upsertDashboardIndex(file.dashboard);
 }
 
-export async function removeChartFromDashboard(chartId: string, now = Date.now()) {
+export async function removeChartFromDashboard(
+  chartId: string,
+  now = Date.now(),
+) {
   const location = await findChartLocation(chartId);
   if (!location) return { removed: false };
   const [removed] = location.file.charts.splice(location.chartIndex, 1);
@@ -437,7 +448,9 @@ export async function removeSlicerFromDashboard(
   for (const dashboard of index.dashboards) {
     const file = await loadDashboardFile(dashboard.id);
     if (!file) continue;
-    const slicerIndex = file.dashboardSlicers.findIndex((s) => s.id === slicerId);
+    const slicerIndex = file.dashboardSlicers.findIndex(
+      (s) => s.id === slicerId,
+    );
     if (slicerIndex < 0) continue;
     file.dashboardSlicers.splice(slicerIndex, 1);
     touchDashboard(file, now);
@@ -549,7 +562,10 @@ export async function reorderChartSlicers(
   await upsertDashboardIndex(location.file.dashboard);
 }
 
-export async function removeSlicerFromChart(slicerId: string, now = Date.now()) {
+export async function removeSlicerFromChart(
+  slicerId: string,
+  now = Date.now(),
+) {
   const index = await loadDashboardsIndex();
   for (const dashboard of index.dashboards) {
     const file = await loadDashboardFile(dashboard.id);

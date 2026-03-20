@@ -21,9 +21,9 @@ import {
 } from "@/components/ui/tooltip";
 import {
   buildMeasureRenderContextByName,
-  renderTextTemplate,
   type MeasureOption,
   type MeasureRenderContextByName,
+  renderTextTemplate,
 } from "@/lib/dashboard/measures";
 import type { TextConfig } from "@/lib/types";
 

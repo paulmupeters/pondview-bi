@@ -1,7 +1,7 @@
 import type { DbAdapter, TableRow } from "@/lib/db/driver";
+import { runSqlAndGetRowObjectsJsonHttp } from "@/lib/duckdb/duckdb-node";
 import * as duckMeta from "@/lib/duckdb/metadata";
 import * as duckQuery from "@/lib/duckdb/query";
-import { runSqlAndGetRowObjectsJsonHttp } from "@/lib/duckdb/duckdb-node";
 
 // All queries now go through DuckDB, which handles postgres URIs via the postgres extension
 const duckdbAdapter: DbAdapter = {
@@ -50,7 +50,7 @@ const httpDuckdbAdapter: DbAdapter = {
 export const runSqlNormalized = (
   id: string,
   sql: string,
-  useHttp?: boolean
+  useHttp?: boolean,
 ) => {
   if (useHttp) {
     return httpDuckdbAdapter.runSqlNormalized(id, sql);

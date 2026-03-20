@@ -29,10 +29,10 @@ export const Results = ({
       .join(" ");
   };
 
-  const formatCellValue = (column: string, value: any) => {
+  const formatCellValue = (column: string, value: unknown) => {
     if (column.toLowerCase().includes("valuation")) {
-      const parsedValue = parseFloat(value);
-      if (isNaN(parsedValue)) {
+      const parsedValue = parseFloat(String(value));
+      if (Number.isNaN(parsedValue)) {
         return "";
       }
       const formattedValue = parsedValue.toFixed(2);
@@ -40,8 +40,8 @@ export const Results = ({
       return `$${trimmedValue}B`;
     }
     if (column.toLowerCase().includes("rate")) {
-      const parsedValue = parseFloat(value);
-      if (isNaN(parsedValue)) {
+      const parsedValue = parseFloat(String(value));
+      if (Number.isNaN(parsedValue)) {
         return "";
       }
       const percentage = (parsedValue * 100).toFixed(2);

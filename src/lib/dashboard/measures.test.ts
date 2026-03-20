@@ -6,9 +6,9 @@ import {
   extractMeasuresFromMetricCards,
   formatMeasureValue,
   interpolateMeasurePlaceholders,
+  type MeasureRenderContextByName,
   normalizeMeasureName,
   renderTextTemplate,
-  type MeasureRenderContextByName,
 } from "@/lib/dashboard/measures";
 import type { Result } from "@/lib/types";
 

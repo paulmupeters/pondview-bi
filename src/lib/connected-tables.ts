@@ -44,23 +44,24 @@ export function readConnectedTablesFromStorage(): ConnectedTable[] {
 
     return parsed.filter((entry): entry is ConnectedTable => {
       if (typeof entry !== "object" || entry === null) return false;
-      if (typeof (entry as any).type !== "string") return false;
+      const e = entry as Record<string, unknown>;
+      if (typeof e.type !== "string") return false;
       // Accept entries with either databasePath (legacy) or connectionId (new)
-      const hasDatabasePath = typeof (entry as any).databasePath === "string";
-      const hasConnectionId = typeof (entry as any).connectionId === "string";
+      const hasDatabasePath = typeof e.databasePath === "string";
+      const hasConnectionId = typeof e.connectionId === "string";
       if (!hasDatabasePath && !hasConnectionId) return false;
       // Accept either table or schema for compatibility
-      const hasTable = typeof (entry as any).table === "string";
-      const hasSchema = typeof (entry as any).schema === "string";
-      const maybeTables = (entry as any).tables;
+      const hasTable = typeof e.table === "string";
+      const hasSchema = typeof e.schema === "string";
+      const maybeTables = e.tables;
       const tablesValid =
         maybeTables === undefined ||
         (Array.isArray(maybeTables) &&
           maybeTables.every((t) => typeof t === "string"));
-      const databaseName = (entry as any).databaseName;
-      const attachAs = (entry as any).attachAs;
-      const readOnly = (entry as any).readOnly;
-      const duckdbExtension = (entry as any).duckdbExtension;
+      const databaseName = e.databaseName;
+      const attachAs = e.attachAs;
+      const readOnly = e.readOnly;
+      const duckdbExtension = e.duckdbExtension;
       const databaseNameValid =
         databaseName === undefined || typeof databaseName === "string";
       const attachValid =

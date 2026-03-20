@@ -11,7 +11,10 @@ export async function ensureParentDir(filePath: string): Promise<void> {
   await fs.mkdir(dirname(filePath), { recursive: true });
 }
 
-export async function readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
+export async function readJsonFile<T>(
+  filePath: string,
+  fallback: T,
+): Promise<T> {
   try {
     const raw = await fs.readFile(filePath, "utf-8");
     return JSON.parse(raw) as T;

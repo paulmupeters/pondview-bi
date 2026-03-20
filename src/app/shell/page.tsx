@@ -1,7 +1,7 @@
 import { ArrowLeft } from "lucide-react";
-import Link from '@/vite/next-link';
 import { DuckdbRepl } from "@/components/duckdb-shell";
 import { Button } from "@/components/ui/button";
+import Link from "@/vite/next-link";
 
 export default function ShellPage() {
   return (

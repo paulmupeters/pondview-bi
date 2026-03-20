@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type AiProvider,
   getAiProviderDisplayName,
@@ -30,7 +30,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   clearSessionSecret,
   hasSessionSecret,
-  runBridgeQuery,
   setSessionSecret,
 } from "@/lib/bridge/pondview-bridge";
 import {
@@ -51,7 +50,6 @@ import {
   getDuckDbHttpConfigFromStorage,
   hasDuckDbHttpSessionAuth,
   refreshDuckDbHttpHealth,
-  runDuckDbHttpQuery,
   setDuckDbHttpConfigInStorage,
   setDuckDbHttpSessionAuth,
 } from "@/lib/duckdb/duckdb-http-browser";
