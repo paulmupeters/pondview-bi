@@ -13,6 +13,7 @@ import {
   useRef,
 } from "react";
 import { cn } from "@/lib/utils";
+import { fa } from "zod/v4/locales";
 
 export type SqlCodeEditorApi = {
   /**
@@ -211,11 +212,11 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
           allowMultipleSelections: false,
           indentOnInput: true,
           bracketMatching: true,
-          closeBrackets: true,
+          closeBrackets: false,
           autocompletion: false,
           rectangularSelection: false,
           crosshairCursor: false,
-          highlightSelectionMatches: true,
+          highlightSelectionMatches: false,
           searchKeymap: true,
           tabSize: 2,
         }}

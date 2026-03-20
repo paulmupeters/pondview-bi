@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenResponses } from "@ai-sdk/open-responses";
-import { createXai } from "@ai-sdk/xai";
+// import { createXai } from "@ai-sdk/xai";
 import { createGateway, gateway, type LanguageModel } from "ai";
 import { createBrowserGatewayFetch } from "@/ai/browser-gateway-fetch";
 import {
@@ -11,11 +11,16 @@ import {
   type AiProvider,
 } from "@/ai/settings";
 
-function resolveBrowserModel(provider: AiProvider, modelId: string): LanguageModel {
+function resolveBrowserModel(
+  provider: AiProvider,
+  modelId: string,
+): LanguageModel {
   const settings = loadAiSettingsFromStorage();
   const missingSetting = getMissingRequiredSetting(settings);
   if (missingSetting) {
-    throw new Error(`Missing ${missingSetting}. Open Settings to configure AI provider.`);
+    throw new Error(
+      `Missing ${missingSetting}. Open Settings to configure AI provider.`,
+    );
   }
 
   switch (provider) {
@@ -34,10 +39,10 @@ function resolveBrowserModel(provider: AiProvider, modelId: string): LanguageMod
       const provider = createAnthropic({ apiKey: settings.apiKey });
       return provider(modelId);
     }
-    case "xai": {
-      const provider = createXai({ apiKey: settings.apiKey });
-      return provider(modelId);
-    }
+    // case "xai": {
+    //   const provider = createXai({ apiKey: settings.apiKey });
+    //   return provider(modelId);
+    // }
     case "open-responses": {
       const provider = createOpenResponses({
         apiKey: settings.apiKey,

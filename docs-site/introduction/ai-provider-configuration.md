@@ -6,7 +6,7 @@ BI Chat uses a browser-first AI configuration flow for the primary chat UI. Prov
 
 Open **Settings -> AI Provider Configuration** and set:
 
-- Provider (`Gateway`, `OpenAI`, `Anthropic`, `xAI`, `Open Responses`)
+- Provider (`Gateway`, `OpenAI`, `Anthropic`, `Open Responses`)
 - Model ID
 - Provider API key
 - For Open Responses only: base URL and provider name
@@ -35,7 +35,6 @@ Validation is enforced by `getMissingRequiredSetting()` before saving and when m
   - `AI_GATEWAY_API_KEY`
   - `OPENAI_API_KEY`
   - `ANTHROPIC_API_KEY`
-  - `XAI_API_KEY`
   - `OPEN_RESPONSES_API_KEY`
 - Open Responses extras:
   - `OPEN_RESPONSES_URL`

@@ -1,3 +1,5 @@
+import { DuckdbWasmClient } from "@/lib/duckdb/duckdb-wasm-client";
+
 export const CONNECTED_TABLES_STORAGE_KEY = "connectedTables";
 
 export const CONNECTED_TABLES_UPDATED_EVENT = "connectedTablesUpdated";
@@ -134,9 +136,6 @@ export async function removeConnectedTable(
   // Clean up DuckDB-Wasm tables if this is a DuckDB entry
   if (entry.type === "duckdb") {
     try {
-      const { DuckdbWasmClient } = await import(
-        "@/lib/duckdb/duckdb-wasm-client"
-      );
       const client = new DuckdbWasmClient();
 
       // Only clean up if client is connected
