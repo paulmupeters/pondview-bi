@@ -55,11 +55,7 @@ import {
   setDuckDbHttpConfigInStorage,
   setDuckDbHttpSessionAuth,
 } from "@/lib/duckdb/duckdb-http-browser";
-import {
-  clearJoinDefsInStorage,
-  readJoinDefsRawFromStorage,
-  saveJoinDefsRawToStorage,
-} from "@/lib/joins/browser-storage";
+
 import {
   getSqlBackendPreferenceFromStorage,
   refreshBridgeHealth,
@@ -120,18 +116,11 @@ export default function SettingsPage() {
   const [runtimeSettingsSuccess, setRuntimeSettingsSuccess] = useState<
     string | null
   >(null);
-  const [secrets, setSecrets] = useState<{ name: string; provider: string }[]>(
-    [],
-  );
-  const [secretsError, setSecretsError] = useState<string | null>(null);
-  const [isSecretsLoading, setIsSecretsLoading] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [isTestingHttpConnection, setIsTestingHttpConnection] = useState(false);
   const [isExportingWorkspace, setIsExportingWorkspace] = useState(false);
   const [isImportingWorkspace, setIsImportingWorkspace] = useState(false);
   const [isResettingWorkspace, setIsResettingWorkspace] = useState(false);
-  const [joinDefsRaw, setJoinDefsRaw] = useState("[]");
-  const [joinDefsError, setJoinDefsError] = useState<string | null>(null);
-  const [joinDefsSuccess, setJoinDefsSuccess] = useState<string | null>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
   const sqlBackendPreference = useSqlBackendPreference();
@@ -164,7 +153,6 @@ export default function SettingsPage() {
     const hasSecret = hasSessionSecret();
     setHasBridgeSecret(hasSecret);
     setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
-    setJoinDefsRaw(readJoinDefsRawFromStorage());
 
     const savedDuckDbHttpConfig = getDuckDbHttpConfigFromStorage();
     setDuckDbHttpHost(savedDuckDbHttpConfig?.host ?? "");
@@ -252,50 +240,6 @@ export default function SettingsPage() {
       : selectedSqlBackend === "duckdb-http" && isDuckDbHttpConfigured
         ? "duckdb-http"
         : "duckdb-wasm";
-  const isRemoteRuntimeActive = effectiveSqlBackend !== "duckdb-wasm";
-
-  const fetchSecrets = useCallback(async () => {
-    if (!isRemoteRuntimeActive) {
-      setSecrets([]);
-      setSecretsError(null);
-      setIsSecretsLoading(false);
-      return;
-    }
-
-    setIsSecretsLoading(true);
-    setSecretsError(null);
-    try {
-      const result =
-        effectiveSqlBackend === "bridge"
-          ? await runBridgeQuery("SELECT name, provider FROM duckdb_secrets();")
-          : await runDuckDbHttpQuery(
-              "SELECT name, provider FROM duckdb_secrets();",
-            );
-      const resolved = result.rows.map((row) => ({
-        name: String(row.name ?? ""),
-        provider: String(row.provider ?? ""),
-      }));
-      setSecrets(resolved);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to load secrets.";
-      setSecrets([]);
-      setSecretsError(message);
-    } finally {
-      setIsSecretsLoading(false);
-    }
-  }, [effectiveSqlBackend, isRemoteRuntimeActive]);
-
-  useEffect(() => {
-    if (isRemoteRuntimeActive) {
-      void fetchSecrets();
-      return;
-    }
-
-    setSecrets([]);
-    setSecretsError(null);
-  }, [fetchSecrets, isRemoteRuntimeActive]);
-
   const handleSetBridgeSecret = () => {
     setSessionSecret(bridgeSecret);
     setHasBridgeSecret(hasSessionSecret());
@@ -474,7 +418,7 @@ export default function SettingsPage() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to import workspace.";
-      setSecretsError(message);
+      setWorkspaceError(message);
     } finally {
       setIsImportingWorkspace(false);
       if (importFileRef.current) {
@@ -501,38 +445,9 @@ export default function SettingsPage() {
         error instanceof Error
           ? error.message
           : "Failed to reset workspace data.";
-      setSecretsError(message);
+      setWorkspaceError(message);
       setIsResettingWorkspace(false);
     }
-  };
-
-  const handleSaveJoinDefs = () => {
-    try {
-      const joinDefs = saveJoinDefsRawToStorage(joinDefsRaw);
-      setJoinDefsRaw(readJoinDefsRawFromStorage());
-      setJoinDefsError(null);
-      setJoinDefsSuccess(
-        `Saved ${joinDefs.length} join definition${joinDefs.length === 1 ? "" : "s"}.`,
-      );
-      setShowSuccessMessage(true);
-      setTimeout(() => setShowSuccessMessage(false), 3000);
-    } catch (error) {
-      setJoinDefsSuccess(null);
-      setJoinDefsError(
-        error instanceof Error
-          ? error.message
-          : "Invalid join definitions JSON.",
-      );
-    }
-  };
-
-  const handleClearJoinDefs = () => {
-    clearJoinDefsInStorage();
-    setJoinDefsRaw("[]");
-    setJoinDefsError(null);
-    setJoinDefsSuccess("Cleared join definitions.");
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
   };
 
   const handleSaveAiSettings = async () => {
@@ -706,10 +621,11 @@ export default function SettingsPage() {
                 <Input
                   id="api-key"
                   type="password"
-                  name="ai-provider-api-key"
-                  autoComplete="new-password"
+                  name="settings-ai-provider-secret"
+                  autoComplete="off"
                   data-1p-ignore="true"
                   data-lpignore="true"
+                  data-form-type="other"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="Enter your API key"
@@ -850,6 +766,11 @@ export default function SettingsPage() {
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       type="password"
+                      name="settings-bridge-secret"
+                      autoComplete="off"
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      data-form-type="other"
                       value={bridgeSecret}
                       onChange={(event) => setBridgeSecret(event.target.value)}
                       placeholder="Enter Pondview secret"
@@ -923,6 +844,11 @@ export default function SettingsPage() {
                       <Input
                         id="duckdb-http-auth"
                         type="password"
+                        name="settings-duckdb-http-auth"
+                        autoComplete="off"
+                        data-1p-ignore="true"
+                        data-lpignore="true"
+                        data-form-type="other"
                         value={duckDbHttpAuth}
                         onChange={(event) =>
                           setDuckDbHttpAuth(event.target.value)
@@ -972,71 +898,6 @@ export default function SettingsPage() {
           <Card className="p-6 mb-6">
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold mb-2">
-                  Dashboard Join Definitions
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Configure cross-table dashboard filtering joins stored in{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                    bi.dashboard.joinDefs.v1
-                  </code>
-                  . Values must be a JSON array with{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                    leftTable
-                  </code>
-                  ,{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                    leftColumn
-                  </code>
-                  ,{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                    rightTable
-                  </code>
-                  ,{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                    rightColumn
-                  </code>
-                  , and optional{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                    type
-                  </code>
-                  .
-                </p>
-              </div>
-
-              <Textarea
-                value={joinDefsRaw}
-                onChange={(event) => setJoinDefsRaw(event.target.value)}
-                className="min-h-[220px] font-mono text-xs"
-                spellCheck={false}
-                placeholder="[]"
-              />
-
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={handleSaveJoinDefs}>
-                  Save Join Definitions
-                </Button>
-                <Button variant="outline" onClick={handleClearJoinDefs}>
-                  Clear
-                </Button>
-              </div>
-
-              {joinDefsError && (
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  {joinDefsError}
-                </p>
-              )}
-              {joinDefsSuccess && (
-                <p className="text-sm text-green-600 dark:text-green-400">
-                  {joinDefsSuccess}
-                </p>
-              )}
-            </div>
-          </Card>
-
-          <Card className="p-6 mb-6">
-            <div className="space-y-4">
-              <div>
                 <h2 className="text-xl font-semibold mb-2">Workspace Data</h2>
                 <p className="text-sm text-muted-foreground">
                   Export, import, or reset browser-local workspace state.
@@ -1066,6 +927,12 @@ export default function SettingsPage() {
                   {isResettingWorkspace ? "Resetting..." : "Reset Workspace"}
                 </Button>
               </div>
+
+              {workspaceError && (
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {workspaceError}
+                </p>
+              )}
 
               <input
                 ref={importFileRef}
@@ -1133,84 +1000,6 @@ export default function SettingsPage() {
                   className="h-4 w-4 rounded border-border"
                 />
               </label>
-            </div>
-          </Card>
-
-          {/* DuckDB Secrets Section */}
-          <Card className="p-6 mb-6">
-            <div className="flex flex-col gap-4">
-              {isRemoteRuntimeActive ? (
-                <>
-                  <div className="flex items-start justify-between gap-4 flex-wrap">
-                    <div>
-                      <h2 className="text-xl font-semibold mb-2">
-                        DuckDB Secrets
-                      </h2>
-                      <p className="text-sm text-muted-foreground">
-                        View persistent secrets managed by DuckDB. Use{" "}
-                        <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                          CREATE PERSISTENT SECRET
-                        </code>{" "}
-                        in the DuckDB shell to add one.
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => void fetchSecrets()}
-                      disabled={isSecretsLoading}
-                      className="whitespace-nowrap"
-                    >
-                      {isSecretsLoading ? "Refreshing..." : "Refresh"}
-                    </Button>
-                  </div>
-
-                  <div className="border rounded-lg divide-y bg-muted/20">
-                    {isSecretsLoading ? (
-                      <div className="p-4 text-sm text-muted-foreground">
-                        Loading secrets...
-                      </div>
-                    ) : secretsError ? (
-                      <div className="p-4 text-sm text-red-600 dark:text-red-400">
-                        {secretsError}
-                      </div>
-                    ) : secrets.length === 0 ? (
-                      <div className="p-4 text-sm text-muted-foreground">
-                        No persistent secrets found. Create one and it will
-                        appear here.
-                      </div>
-                    ) : (
-                      secrets.map((secret) => (
-                        <div
-                          key={`${secret.provider}:${secret.name}`}
-                          className="p-4 flex justify-between items-center gap-4"
-                        >
-                          <div>
-                            <p className="font-medium">{secret.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Provider: {secret.provider || "unknown"}
-                            </p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <h2 className="text-xl font-semibold mb-2">DuckDB Secrets</h2>
-                  <p className="text-sm text-muted-foreground">
-                    DuckDB secrets are available when queries run against a
-                    remote DuckDB runtime. SQL queries are currently running
-                    through DuckDB WASM.
-                    {!hasBridgeSecret && !isDuckDbHttpConfigured
-                      ? " Configure Bridge or DuckDB over HTTP, then switch to that runtime to view secrets."
-                      : bridgeHealthStatus === "offline" &&
-                          duckDbHttpHealthStatus === "offline"
-                        ? " Your remote runtimes currently appear offline. Bring one online and switch to it to view secrets."
-                        : " Switch runtime to Bridge or DuckDB over HTTP to view secrets."}
-                  </p>
-                </div>
-              )}
             </div>
           </Card>
 
