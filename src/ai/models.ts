@@ -8,10 +8,10 @@
 /**
  * Model used for main chat streaming with complex reasoning
  */
-export const CHAT_MODEL = "zai/glm-5";
+export const CHAT_MODEL = "gpt-5.4";
 
 /**
  * Model used for generating chart and card configurations
  * (lightweight tasks requiring structured output)
  */
-export const VISUALIZATION_MODEL = "zai/glm-5";
+export const VISUALIZATION_MODEL = "gpt-5.4";

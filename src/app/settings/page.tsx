@@ -583,12 +583,12 @@ export default function SettingsPage() {
                     <SelectValue placeholder="Select provider" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="gateway">Gateway</SelectItem>
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="anthropic">Anthropic</SelectItem>
                     <SelectItem value="open-responses">
                       Open Responses
                     </SelectItem>
+                    <SelectItem value="gateway">AI Gateway</SelectItem>
                   </SelectContent>
                 </Select>
 
