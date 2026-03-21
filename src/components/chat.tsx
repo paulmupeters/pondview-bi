@@ -1,6 +1,6 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { type ChatTransport, DirectChatTransport } from "ai";
-import { Pencil } from "lucide-react";
+import { AlertTriangle, Pencil } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPondviewAgent } from "@/ai/client/agent";
@@ -64,6 +64,7 @@ import {
   type SavedSqlQuery,
   saveSqlQuery,
 } from "@/lib/workspace/saved-sql-queries-repo";
+import Link from "@/vite/next-link";
 import { useRouter, useSearchParams } from "@/vite/next-navigation";
 
 function safeJsonParse(value: string): unknown {
@@ -176,24 +177,35 @@ export default function Chat({
     resolvedInitialMessages.length > 0 ? chatId : null,
   );
 
-  const agent = useMemo(
-    () => createPondviewAgent(connectedTables),
-    [connectedTables],
-  );
-  const directTransport = useMemo<ChatTransport<UIMessage>>(
-    () =>
-      new DirectChatTransport({
-        agent,
-        sendReasoning: false,
-        sendSources: false,
-      }) as unknown as ChatTransport<UIMessage>,
-    [agent],
-  );
+  const agent = useMemo(() => {
+    try {
+      return createPondviewAgent(connectedTables);
+    } catch (error) {
+      console.error("Failed to initialize AI agent:", error);
+      setPromptError(
+        error instanceof Error
+          ? toPromptErrorMessage(error)
+          : "Missing AI configuration. Open Settings and configure provider, API key, and model.",
+      );
+      return null;
+    }
+  }, [connectedTables]);
+  const directTransport = useMemo<ChatTransport<UIMessage> | null>(() => {
+    if (!agent) {
+      return null;
+    }
+
+    return new DirectChatTransport({
+      agent,
+      sendReasoning: false,
+      sendSources: false,
+    }) as unknown as ChatTransport<UIMessage>;
+  }, [agent]);
 
   const { messages, setMessages, sendMessage, status } = useChat<UIMessage>({
     id: chatId,
     messages: resolvedInitialMessages,
-    transport: directTransport,
+    transport: directTransport ?? undefined,
     onError: (error) => {
       console.error("AI chat error:", error);
       setPromptError(toPromptErrorMessage(error));
@@ -467,6 +479,13 @@ export default function Chat({
       const files = message.files;
 
       if (!text && (!files || files.length === 0)) {
+        return;
+      }
+
+      if (!directTransport) {
+        setPromptError(
+          "Missing AI configuration. Open Settings and configure provider, API key, and model.",
+        );
         return;
       }
 
@@ -1051,9 +1070,22 @@ export default function Chat({
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 px-4 pb-4">
                       <div className="pointer-events-auto w-full">
                         {promptError ? (
-                          <p className="mb-2 text-xs text-destructive">
-                            {promptError}
-                          </p>
+                          <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p>{promptError}</p>
+                                <div className="mt-2">
+                                  <Link
+                                    href="/settings"
+                                    className="inline-flex items-center font-medium underline underline-offset-2"
+                                  >
+                                    Open Settings
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         ) : null}
                         <PromptInputWrapper
                           onSubmit={handlePromptSubmit}
