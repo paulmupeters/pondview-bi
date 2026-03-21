@@ -13,6 +13,19 @@ export default defineConfig(async ({ command }) => {
   return {
     plugins,
     resolve: {
+      // CodeMirror extensions rely on instanceof checks, so mixed bundle copies
+      // of these packages cause "Unrecognized extension value" at runtime.
+      dedupe: [
+        "@codemirror/autocomplete",
+        "@codemirror/commands",
+        "@codemirror/language",
+        "@codemirror/lint",
+        "@codemirror/search",
+        "@codemirror/state",
+        "@codemirror/theme-one-dark",
+        "@codemirror/view",
+        "codemirror",
+      ],
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
       },
