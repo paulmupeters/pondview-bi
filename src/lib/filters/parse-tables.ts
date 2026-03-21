@@ -1,4 +1,4 @@
-import { canonicalTable } from "@/lib/joins/loader";
+import { canonicalTable } from "@/lib/joins/graph";
 
 type Token = {
   text: string;

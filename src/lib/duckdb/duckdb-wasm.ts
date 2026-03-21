@@ -253,9 +253,7 @@ export class DuckdbWasmProvider {
     // console.log('Attached database');
 
     // check if we have write access
-    await connection.query(
-      "CREATE OR REPLACE TABLE test AS SELECT 1 as a;",
-    );
+    await connection.query("CREATE OR REPLACE TABLE test AS SELECT 1 as a;");
     // drop the test table
     await connection.query("DROP TABLE test;");
     return { db, con: connection };

@@ -1,5 +1,5 @@
-import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { Suspense } from "react";
+import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { AppSidebar } from "./app-sidebar";
 
 interface SidebarLayoutProps {

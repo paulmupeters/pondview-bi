@@ -5,6 +5,7 @@ export interface HttpDuckDbConfig {
 }
 
 export type DuckdbTableEntry = {
+  catalog?: string;
   schema: string;
   name: string;
   type: string;

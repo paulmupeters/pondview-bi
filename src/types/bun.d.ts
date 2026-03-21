@@ -5,5 +5,3 @@ declare module "bun" {
     exec(sql: string): void;
   }
 }
-
-

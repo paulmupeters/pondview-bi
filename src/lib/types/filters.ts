@@ -57,5 +57,3 @@ export interface AvailableDimension {
   type: "string" | "number" | "boolean" | "time";
   conformKey?: string; // For cross-chart filtering
 }
-
-

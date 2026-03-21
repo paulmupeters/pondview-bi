@@ -17,12 +17,6 @@ export type MaterializedTableDetail = {
   introspectionError?: string;
 };
 
-type MaterializedTablesDetailsResponse = {
-  tables: string[];
-  details?: MaterializedTableDetail[];
-  error?: string;
-};
-
 export function useMaterializedTableDetails(enabled: boolean) {
   const [details, setDetails] = useState<MaterializedTableDetail[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -33,27 +27,11 @@ export function useMaterializedTableDetails(enabled: boolean) {
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(
-        "/api/semantic-layer/materialized-tables?details=1",
-      );
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch materialized table details: ${response.statusText}`,
-        );
-      }
-      const data = (await response.json()) as MaterializedTablesDetailsResponse;
-      const nextDetails = Array.isArray(data.details) ? data.details : [];
-      setDetails(nextDetails);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err ?? "");
-      setError(message);
-      console.error("[useMaterializedTableDetails] Error:", message);
-    } finally {
-      setIsLoading(false);
-    }
+    setIsLoading(false);
+    setDetails([]);
+    setError(
+      "Materialized semantic table details are deferred in browser mode.",
+    );
   }, [enabled]);
 
   useEffect(() => {

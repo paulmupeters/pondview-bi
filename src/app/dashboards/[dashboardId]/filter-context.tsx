@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { loadDashboardDimensions } from "@/lib/dashboard/browser-filter-engine";
 import { normalizeFilterPayload } from "@/lib/filters/normalize-filters";
 import type { AvailableDimension, Filter } from "@/lib/types/filters";
 
@@ -89,26 +90,22 @@ export function FilterProvider({
     setActiveScopeState({ kind: "dashboard" });
   }, [dashboardId]);
 
-  // Load available dimensions from API on mount.
   useEffect(() => {
     let cancelled = false;
-
-    async function loadDimensions() {
-      setIsLoading(true);
+    setIsLoading(true);
+    (async () => {
       try {
-        const res = await fetch(`/api/dashboard/${dashboardId}/dimensions`);
-        if (!res.ok) {
-          throw new Error(`Failed to load dimensions: ${res.statusText}`);
+        const dimensions = await loadDashboardDimensions(dashboardId);
+        if (cancelled) {
+          return;
         }
-        const data = await res.json();
-        if (!cancelled) {
-          setAvailableDimensions(
-            Array.isArray(data.dimensions) ? data.dimensions : [],
-          );
-        }
+        setAvailableDimensions(dimensions);
       } catch (error) {
-        console.error("[Filters] Failed to load dimensions:", error);
         if (!cancelled) {
+          console.error(
+            "[Filters] Failed to load dashboard dimensions:",
+            error,
+          );
           setAvailableDimensions([]);
         }
       } finally {
@@ -116,9 +113,8 @@ export function FilterProvider({
           setIsLoading(false);
         }
       }
-    }
+    })();
 
-    loadDimensions();
     return () => {
       cancelled = true;
     };

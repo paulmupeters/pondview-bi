@@ -211,11 +211,11 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
           allowMultipleSelections: false,
           indentOnInput: true,
           bracketMatching: true,
-          closeBrackets: true,
+          closeBrackets: false,
           autocompletion: false,
           rectangularSelection: false,
           crosshairCursor: false,
-          highlightSelectionMatches: true,
+          highlightSelectionMatches: false,
           searchKeymap: true,
           tabSize: 2,
         }}

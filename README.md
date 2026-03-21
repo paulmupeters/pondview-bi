@@ -1,66 +1,68 @@
 # BI Chat - AI Business Intelligence Assistant
 
-An intelligent chat application that enables natural language interaction with your data through AI-powered SQL generation, execution, and visualization.
+BI Chat is an AI-assisted analytics app for exploring connected data sources with natural language, SQL, charts, and dashboards.
 
 ## Features
 
-### 🤖 AI-Powered Data Analysis
-- **Natural Language Queries**: Ask questions about your data in plain English
-- **Intelligent SQL Generation**: AI automatically generates SQL queries based on your questions
-- **Schema Understanding**: AI analyzes table structures to write accurate queries
-- **Smart Insights**: Get automated insights and summaries from your data
+### AI analysis
 
-### 📊 Interactive Visualizations
-- **Dynamic Charts**: Automatically generates charts (line, area, pie) based on query results
-- **Customizable Visualizations**: Configure chart types, colors, and display options
-- **Real-time Updates**: Charts update as you modify queries and explore data
-- **Multiple Chart Types**: Support for line charts, area charts, and pie charts
+- Ask questions in natural language and turn them into SQL
+- Stream model responses and SQL tool output in the chat UI
+- Configure the AI provider, model, and API key from Settings
+- Keep chat history and interactive SQL artifacts in the workspace
 
-### 💾 Multi-Database Support
-- **DuckDB Integration**: Native support for DuckDB databases
-- **MotherDuck Cloud**: Connect to MotherDuck cloud databases
-- **SQLite Support**: Local SQLite database for chat history
-- **Flexible Data Sources**: Easy connection to various data sources
+### Charts and dashboards
 
-### 💬 Conversational Interface
-- **Chat History**: Persistent conversation history with SQL queries and results
-- **Context Awareness**: AI remembers previous queries and results
-- **Streaming Responses**: Real-time streaming of AI responses and query execution
-- **Artifact System**: Interactive SQL execution artifacts with loading states
+- Render line, area, bar, and pie charts from query results
+- Adjust chart settings inline or through config dialogs
+- Save visuals to dashboards with tables, metric cards, and text blocks
+- Reference metric SQL aliases in text cards with `{{measure_alias}}` placeholders
+- Filter dashboards in the browser with shared slicers and join definitions
 
-### 📋 Dashboards
-- **Dashboard Builder**: Compose charts, tables, metric cards, and text blocks into shareable dashboards
-- **Slicer / Filter Bar**: Cross-panel filtering driven by a global join graph
-- **Drag-and-Drop Layout**: Reorder and resize dashboard panels interactively
+### Data connectivity
+
+- Connect to DuckDB and MotherDuck databases
+- Attach Postgres, MySQL, and SQLite sources through DuckDB
+- Upload CSV, Parquet, XLSX, and XLS files from the UI
+- Inspect schemas and tables before querying
+
+### Runtime options
+
+- Run locally with DuckDB WASM in the browser
+- Switch to Bridge or DuckDB over HTTP from Settings
+- Persist browser workspace state and export/import it
+- Optionally persist materialized DuckDB tables across restarts
 
 ## Tech Stack
 
-- **Frontend**: Vite 7, React 19, TypeScript
-- **Routing**: React Router DOM v7
-- **UI Components**: Radix UI, Tailwind CSS v4
-- **Charts**: Recharts for data visualization
-- **Code Editor**: CodeMirror 6 with SQL language support
-- **AI**: Vercel AI SDK v5 with OpenAI
-- **Database**: DuckDB (WASM + Node API), SQLite, MotherDuck
-- **ORM**: Drizzle ORM
-- **Runtime**: Bun (recommended) or Node.js
+- Frontend: Vite 8, React 19, TypeScript
+- Routing: React Router DOM v7
+- UI Components: Radix UI, Tailwind CSS v4
+- Charts: Recharts
+- Code Editor: CodeMirror 6
+- AI: AI SDK v6 with Gateway, OpenAI, Anthropic, xAI, and Open Responses support
+- Database: DuckDB (WASM + Node API), MotherDuck, Postgres, MySQL, SQLite
+- Persistence: browser localStorage + IndexedDB, sidecar JSON files
+- Runtime: Bun (recommended) or Node.js
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+ or Bun
-- OpenAI API key (for AI functionality)
+- An API key for whichever AI provider you want to use
 
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd bi-chat
 ```
 
 2. Install dependencies:
+
 ```bash
 # Using Bun (recommended)
 bun install
@@ -69,15 +71,14 @@ bun install
 npm install
 ```
 
-3. Set up environment variables:
+3. Create local environment overrides if you need them:
+
 ```bash
-# Create a .env.local file
-OPENAI_API_KEY=your_openai_api_key
-MOTHERDUCK_TOKEN=your_motherduck_token  # Optional, for MotherDuck integration
-DATABASE_PATH=./sqlite.db              # Optional, custom SQLite path
+cp env.local.example .env.local
 ```
 
-4. Run the development server:
+4. Start the dev server:
+
 ```bash
 # Using Bun
 bun dev
@@ -86,148 +87,172 @@ bun dev
 npm run dev
 ```
 
-5. Open [http://localhost:5173](http://localhost:5173) in your browser.
+5. Open [http://localhost:5173](http://localhost:5173).
 
-6. *(Optional)* To persist materialized tables across restarts, set `DUCKDB_PERSIST_PATH=./data/materialized.duckdb` in `.env.local`.
+6. Open Settings in the app and configure:
+   - AI provider
+   - model ID
+   - provider API key
 
-7. *(Optional)* To use the DuckDB HTTP adapter for ad-hoc queries, run a DuckDB instance with the `httpserver` extension and set `DUCKDB_HTTP_HOST` / `DUCKDB_HTTP_PORT` in `.env.local`.
+### Optional Environment Variables
+
+Use `.env.local` only for the integrations you need:
+
+```bash
+# Optional: persist local DuckDB materializations
+DUCKDB_PERSIST_PATH=./data/materialized.duckdb
+
+# Optional: DuckDB over HTTP runtime
+DUCKDB_HTTP_HOST=0.0.0.0
+DUCKDB_HTTP_PORT=9999
+DUCKDB_HTTP_AUTH=secret
+
+# Optional: legacy/server-side OpenAI flows
+OPENAI_API_KEY=
+```
+
+The checked-in template lives at [env.local.example](/Users/paulpeters/Developer/bi-chat/env.local.example).
+
+MotherDuck authentication is handled by the remote DuckDB runtime itself. When you connect a MotherDuck database in the UI, the app sends `INSTALL motherduck; LOAD motherduck; ATTACH 'md:<db>' AS motherduck;` to the configured Bridge or DuckDB HTTP runtime, and you complete the login flow in that DuckDB shell/server session.
+
+If you want MotherDuck authentication to persist across restarts, save the access token as `motherduck_token` in the environment used to launch DuckDB. For example:
+
+```bash
+export motherduck_token='<token>'
+```
+
+You can also add that line to `~/.zprofile` or `~/.bash_profile`, or store it in a local `.env` file. Restart the app/runtime after setting it.
 
 ## Usage
 
-### Basic Workflow
+### Basic workflow
 
-1. **Ask Questions**: Type natural language questions about your data
-2. **AI Processing**: The AI analyzes your question and generates appropriate SQL
-3. **Query Execution**: SQL is executed against your connected databases
-4. **Results Display**: Results are shown in both table and chart formats
-5. **Further Exploration**: Continue the conversation to dive deeper into your data
+1. Connect a data source or upload a file
+2. Ask a question in chat or write SQL directly
+3. Review the generated SQL and results
+4. Turn useful results into charts or dashboard cards
+5. Save the workspace locally or export it for backup/share
 
-### Example Queries
+### Example prompts
 
 - "How many unicorn companies are there?"
 - "Show me the top 10 companies by valuation"
 - "What's the average valuation by country?"
-- "Create a chart showing company distribution by industry"
+- "Create a bar chart showing company distribution by industry"
 
-### Connecting Data Sources
+### Supported data sources
 
-The application supports connecting to various data sources through the connected tables system:
-
-- **DuckDB Files**: Local DuckDB database files
-- **MotherDuck**: Cloud-based DuckDB databases
-- **File Uploads**: Upload CSV or Parquet files directly in the UI
-- **Custom Schemas**: Connect to specific database schemas
+- DuckDB files
+- MotherDuck databases
+- Postgres
+- MySQL
+- SQLite
+- Browser uploads: CSV, Parquet, XLSX, XLS
 
 ## Project Structure
 
-```
+```text
 bi-chat/
-├── src/
-│   ├── ai/                    # AI-related functionality
-│   │   ├── agents/           # AI agents
-│   │   ├── artifacts/        # Interactive artifacts (SQL execution)
-│   │   ├── tools/            # AI tools (SQL execution, schema analysis)
-│   │   ├── models.ts         # Model configuration
-│   │   ├── prompts.ts        # AI prompts and instructions
-│   │   └── context.ts        # AI context helpers
-│   ├── app/                  # Application pages & API routes
-│   │   ├── api/             # Server-side API handlers
-│   │   ├── chat/            # Chat pages
-│   │   ├── dashboards/      # Dashboard pages
-│   │   ├── data/            # Data viewing pages
-│   │   └── settings/        # Settings pages
-│   ├── components/           # React components
-│   │   ├── ui/              # Reusable UI primitives
-│   │   ├── chat/            # Chat-specific components
-│   │   ├── dashboard/       # Dashboard components
-│   │   ├── chat.tsx         # Main chat interface
-│   │   ├── dynamic-chart.tsx # Chart visualization
-│   │   └── sql-*.tsx        # SQL-related components
-│   ├── lib/                  # Utility libraries
-│   │   ├── db/              # Database configuration (Drizzle)
-│   │   ├── duckdb/          # DuckDB integration
-│   │   ├── filters/         # Cross-panel filter logic
-│   │   ├── joins/           # Join graph utilities
-│   │   └── utils.ts         # Shared utility functions
-│   ├── hooks/               # Custom React hooks
-│   └── types/               # Shared TypeScript types
-├── semantic-layer/           # Semantic model configuration
-│   ├── context/             # Business/domain context for AI
-│   ├── models/              # Source-to-table mappings
-│   └── joins.yml            # Global join graph
+├── docs/                    # Architecture notes, docs index, and datasource context
+├── docs-site/               # Standalone VitePress docs app (deploy to docs subdomain)
 ├── public/                  # Static assets
+├── src/
+│   ├── ai/                  # Model config, prompts, tools, client helpers
+│   ├── app/                 # Pages and API routes
+│   ├── components/          # React components and UI primitives
+│   ├── hooks/               # Custom React hooks
+│   ├── lib/                 # Runtime, DuckDB, workspace, and dashboard logic
+│   ├── themes/              # Built-in visual themes
+│   └── vite/                # Vite-specific app shell and router adapters
+├── env.local.example        # Example environment variables
 ├── index.html               # Vite entry HTML
 └── vite.config.ts           # Vite configuration
 ```
 
+See [docs-site/guide/index.md](docs-site/guide/index.md) for the published docs map.
+
 ## Development
 
-### Available Scripts
+### Available scripts
 
 ```bash
 # Development
-bun dev                    # Start Vite development server
-bun build                  # Build for production
-bun preview                # Preview production build locally
-bun run serve:extension    # Start the extension sidecar server
+bun dev
+bun build
+bun preview
+bun run serve:extension
+
+# Docs (VitePress)
+bun run docs:dev
+bun run docs:build
+bun run docs:preview
 
 # Code Quality
-bun run lint               # Run Biome linter
-bun run format             # Format code with Biome
-bun run typecheck          # Type-check with tsc
-
-# Database
-bun run drizzle:generate   # Generate database migrations
-bun run drizzle:push       # Apply schema migrations
-bun run migrate            # Run migration script
+bun run lint
+bun run format
+bun run typecheck
+bun run test
 ```
 
-### Key Components
+### Key areas
 
-- **Chat Interface** (`src/components/chat.tsx`): Main conversational interface
-- **SQL Execution** (`src/ai/tools/`): AI tools for running SQL queries
-- **Chart Generation** (`src/ai/tools/`): AI-powered chart configuration
-- **Dynamic Charts** (`src/components/dynamic-chart.tsx`): Interactive chart rendering
-- **Dashboard Builder** (`src/components/dashboard-builder-panel.tsx`): Drag-and-drop dashboard composition
-- **Database Integration** (`src/lib/duckdb/`): DuckDB and database utilities
+- Chat UI: [src/components/chat.tsx](/Users/paulpeters/Developer/bi-chat/src/components/chat.tsx)
+- AI settings and provider selection: [src/app/settings/page.tsx](/Users/paulpeters/Developer/bi-chat/src/app/settings/page.tsx)
+- Connected data sources: [src/components/connect-data-dialog.tsx](/Users/paulpeters/Developer/bi-chat/src/components/connect-data-dialog.tsx)
+- Dashboard runtime and filtering: [src/lib/dashboard/browser-filter-engine.ts](/Users/paulpeters/Developer/bi-chat/src/lib/dashboard/browser-filter-engine.ts)
+- DuckDB integrations: [src/lib/duckdb](/Users/paulpeters/Developer/bi-chat/src/lib/duckdb)
+- Workspace persistence: [src/lib/workspace](/Users/paulpeters/Developer/bi-chat/src/lib/workspace)
 
-## Configuration
+## Configuration Notes
 
-### Environment Variables
+### AI configuration
 
-| Variable | Required | Description |
-|---|---|---|
-| `OPENAI_API_KEY` | ✅ | API key for AI functionality |
-| `MOTHERDUCK_TOKEN` | Optional | Token for MotherDuck cloud integration |
-| `DATABASE_PATH` | Optional | Custom SQLite database path (default: `./sqlite.db`) |
-| `DUCKDB_PERSIST_PATH` | Optional | Path for persisting materialized DuckDB tables |
-| `DUCKDB_HTTP_HOST` | Optional | Host for the DuckDB HTTP adapter |
-| `DUCKDB_HTTP_PORT` | Optional | Port for the DuckDB HTTP adapter |
+The primary chat experience reads AI settings from browser storage. In practice that means most local development starts with the Settings page rather than environment variables.
 
-### Semantic Layer
+Current built-in provider options include Gateway, OpenAI, Anthropic, xAI, and Open Responses.
 
-The `semantic-layer/` directory holds lightweight configuration consumed by the AI and query engine:
+### Dashboard filtering
 
-- **`context/context.md`**: Business/domain context injected into AI prompts
-- **`joins.yml`**: Global join graph for cross-table filter injection
-- **`models/sources.yml`**: Source-to-physical-table mappings and connection metadata
+Dashboard filtering is browser-first:
+
+- join definitions are edited in Settings and stored in `localStorage` under `bi.dashboard.joinDefs.v1`
+- chart SQL is rewritten in the browser when slicers are active
+- referenced tables are exposed through runtime-local `mat.*` aliases
+- simple references become views when possible; harder cases can fall back to copied tables
+
+### Datasource context
+
+Optional datasource-specific AI context lives in [docs/datasource-context](/Users/paulpeters/Developer/bi-chat/docs/datasource-context) and is exposed through the datasource context route/tooling.
+
+## Docs
+
+The project ships a standalone VitePress docs app under `docs-site/` so docs can be deployed independently from the main web app.
+
+### Local docs workflow
+
+- `bun run docs:dev` starts the VitePress dev server
+- `bun run docs:build` builds static docs output
+- `bun run docs:preview` previews the built docs locally
+
+### Subdomain deployment (`docs.<your-domain>`)
+
+Use any static host as a separate deploy target:
+
+- **Root directory**: `docs-site`
+- **Build command**: `bun run docs:build`
+- **Output directory**: `docs-site/.vitepress/dist`
+- **Custom domain**: map `docs.<your-domain>` to the docs project
+
+This keeps docs releases decoupled from the main app deployment.
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run linting and type-checks
-5. Submit a pull request
+1. Create a branch
+2. Make your changes
+3. Run linting and type-checks
+4. Update docs when behavior changes
+5. Open a pull request
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Acknowledgments
-
-- Bundled with [Vite](https://vitejs.dev)
-- AI powered by [Vercel AI SDK](https://sdk.vercel.ai)
-- Charts rendered with [Recharts](https://recharts.org)
-- UI components from [Radix UI](https://radix-ui.com)
-- Database integration with [DuckDB](https://duckdb.org)
+No license file is currently checked into this repository.

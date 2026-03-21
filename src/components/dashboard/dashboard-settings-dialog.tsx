@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
 import { Settings } from "lucide-react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -57,7 +57,10 @@ export function DashboardSettingsDialog({
             <label htmlFor="columns-select" className="text-sm font-medium">
               Number of Columns
             </label>
-            <Select value={columns.toString()} onValueChange={handleValueChange}>
+            <Select
+              value={columns.toString()}
+              onValueChange={handleValueChange}
+            >
               <SelectTrigger id="columns-select" className="w-full">
                 <SelectValue placeholder="Select columns" />
               </SelectTrigger>
@@ -81,4 +84,3 @@ export function DashboardSettingsDialog({
     </Dialog>
   );
 }
-

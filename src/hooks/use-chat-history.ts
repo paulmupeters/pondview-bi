@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api/client";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
+import { listRecentChats } from "@/lib/workspace/chat-repo";
 
 type LoadChatsOptions = {
   showLoading?: boolean;
@@ -9,6 +9,7 @@ type LoadChatsOptions = {
 export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
   const [chats, setChats] = useState<ChatHistoryEntry[]>(initialChats);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setChats(initialChats);
@@ -20,17 +21,17 @@ export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
       if (showLoading) {
         setIsLoading(true);
       }
+      setError(null);
 
       try {
-        const res = await apiFetch("/api/chats", { cache: "no-store" });
-        if (res.ok) {
-          const data = (await res.json()) as { chats: ChatHistoryEntry[] };
-          const chatList = data.chats ?? [];
-          setChats(chatList);
-          return chatList;
-        }
+        const chatList = await listRecentChats();
+        setChats(chatList);
+        return chatList;
       } catch (error) {
         console.error("Failed to load chats:", error);
+        setError(
+          error instanceof Error ? error.message : "Failed to load chats.",
+        );
       } finally {
         if (showLoading) {
           setIsLoading(false);
@@ -42,5 +43,5 @@ export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
     [],
   );
 
-  return { chats, isLoading, loadChats };
+  return { chats, isLoading, error, loadChats };
 }

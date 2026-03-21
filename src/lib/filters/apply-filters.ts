@@ -1,15 +1,17 @@
-import type { Filter } from "@/lib/types/filters";
+import { findBaseTableReference } from "@/lib/filters/parse-tables";
 import {
   canonicalTable,
   findJoinPath,
   type JoinDefinition,
   type JoinPathStep,
-} from "@/lib/joins/loader";
-import { findBaseTableReference } from "@/lib/filters/parse-tables";
+} from "@/lib/joins/graph";
+import type { Filter } from "@/lib/types/filters";
 
 export interface ApplyFiltersOptions {
   matSchema?: string;
   filteredCteName?: string;
+  tableReferences?: Map<string, string> | Record<string, string>;
+  resolveTableRef?: (tableName: string, defaultRef: string) => string;
 }
 
 export interface ApplyFiltersResult {
@@ -25,7 +27,7 @@ export function applyFiltersToSql(
   chartSql: string,
   filters: Filter[],
   joinDefs: JoinDefinition[],
-  options: ApplyFiltersOptions = {}
+  options: ApplyFiltersOptions = {},
 ): ApplyFiltersResult {
   const matSchema = options.matSchema ?? DEFAULT_MAT_SCHEMA;
   const filteredCteName = options.filteredCteName ?? DEFAULT_CTE_NAME;
@@ -73,7 +75,13 @@ export function applyFiltersToSql(
         });
         continue;
       }
-      filterAlias = ensureJoinPath(path, aliasByTable, joinClauses, matSchema);
+      filterAlias = ensureJoinPath(
+        path,
+        aliasByTable,
+        joinClauses,
+        matSchema,
+        options,
+      );
     }
 
     const clause = renderFilterClause(filterAlias, column, filter);
@@ -94,16 +102,20 @@ export function applyFiltersToSql(
   const baseSql = [
     `${quoteIdent(filteredCteName)} AS (`,
     `  SELECT b.*`,
-    `  FROM ${matTableRef(matSchema, baseTable)} AS b`,
+    `  FROM ${resolveTableRef(baseTable, matSchema, options)} AS b`,
     ...joinClauses.map((clause) => `  ${clause}`),
     `  WHERE ${whereClauses.join(" AND ")}`,
     `)`,
   ].join("\n");
 
-  const rewrittenSql = replaceBaseFromClause(chartSql, baseRef.matchedFromClause, {
-    cteName: filteredCteName,
-    alias: baseRef.alias,
-  });
+  const rewrittenSql = replaceBaseFromClause(
+    chartSql,
+    baseRef.matchedFromClause,
+    {
+      cteName: filteredCteName,
+      alias: baseRef.alias,
+    },
+  );
   const sql = prependCte(rewrittenSql, baseSql);
 
   return {
@@ -117,7 +129,8 @@ function ensureJoinPath(
   path: JoinPathStep[],
   aliasByTable: Map<string, string>,
   joinClauses: string[],
-  matSchema: string
+  matSchema: string,
+  options: ApplyFiltersOptions,
 ): string {
   let currentAlias = aliasByTable.get(path[0]?.fromTable ?? "") ?? "b";
 
@@ -131,9 +144,9 @@ function ensureJoinPath(
     const alias = `j${aliasByTable.size}`;
     aliasByTable.set(step.toTable, alias);
     joinClauses.push(
-      `LEFT JOIN ${matTableRef(matSchema, step.toTable)} AS ${alias} ON ${currentAlias}.${quoteIdent(
-        step.fromColumn
-      )} = ${alias}.${quoteIdent(step.toColumn)}`
+      `LEFT JOIN ${resolveTableRef(step.toTable, matSchema, options)} AS ${alias} ON ${currentAlias}.${quoteIdent(
+        step.fromColumn,
+      )} = ${alias}.${quoteIdent(step.toColumn)}`,
     );
     currentAlias = alias;
   }
@@ -144,7 +157,7 @@ function ensureJoinPath(
 function replaceBaseFromClause(
   sql: string,
   matchedFromClause: string,
-  options: { cteName: string; alias?: string }
+  options: { cteName: string; alias?: string },
 ): string {
   const replacement = `FROM ${quoteIdent(options.cteName)}${
     options.alias ? ` ${options.alias}` : ""
@@ -154,7 +167,7 @@ function replaceBaseFromClause(
     return sql;
   }
   return `${sql.slice(0, idx)}${replacement}${sql.slice(
-    idx + matchedFromClause.length
+    idx + matchedFromClause.length,
   )}`;
 }
 
@@ -169,7 +182,9 @@ function prependCte(sql: string, cteSql: string): string {
   return `WITH ${cteSql}\n${trimmed}`;
 }
 
-function parseFilterField(field: string): { table: string; column: string } | null {
+function parseFilterField(
+  field: string,
+): { table: string; column: string } | null {
   const parts = field
     .split(".")
     .map((part) => part.trim())
@@ -192,7 +207,11 @@ function parseFilterField(field: string): { table: string; column: string } | nu
   };
 }
 
-function renderFilterClause(alias: string, column: string, filter: Filter): string | null {
+function renderFilterClause(
+  alias: string,
+  column: string,
+  filter: Filter,
+): string | null {
   const expr = `${alias}.${quoteIdent(column)}`;
   const values = filter.values ?? [];
 
@@ -240,6 +259,36 @@ function renderFilterClause(alias: string, column: string, filter: Filter): stri
 
 function matTableRef(schema: string, table: string): string {
   return `${quoteIdent(schema)}.${quoteIdent(table)}`;
+}
+
+function resolveTableRef(
+  tableName: string,
+  matSchema: string,
+  options: ApplyFiltersOptions,
+): string {
+  const canonicalName = canonicalTable(tableName);
+  const defaultRef = matTableRef(matSchema, canonicalName);
+  const fromLookup = lookupTableRef(options.tableReferences, canonicalName);
+  const resolved = options.resolveTableRef?.(
+    canonicalName,
+    fromLookup ?? defaultRef,
+  );
+  return resolved ?? fromLookup ?? defaultRef;
+}
+
+function lookupTableRef(
+  tableReferences: ApplyFiltersOptions["tableReferences"],
+  tableName: string,
+): string | undefined {
+  if (!tableReferences) {
+    return undefined;
+  }
+
+  if (tableReferences instanceof Map) {
+    return tableReferences.get(tableName);
+  }
+
+  return tableReferences[tableName];
 }
 
 function quoteIdent(value: string): string {

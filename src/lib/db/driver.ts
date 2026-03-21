@@ -10,15 +10,13 @@ export interface DbAdapter {
   runSqlNormalized(
     dbIdentifier: string,
     sql: string,
-    useHttp?: boolean
+    useHttp?: boolean,
   ): Promise<TableRow[]>;
   getSchemas(dbIdentifier: string): Promise<string[]>;
   getTablesForSchema(
     dbIdentifier: string,
     schema: string,
-    limit?: number
+    limit?: number,
   ): Promise<string[]>;
   getTables(dbIdentifier: string): Promise<TablesListItem[]>;
 }
-
-

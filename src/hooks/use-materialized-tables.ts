@@ -1,69 +1,142 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { listMaterializedTablesForBackend } from "@/lib/dashboard/browser-filter-engine";
+import { subscribeDuckDbHttpHealth } from "@/lib/duckdb/duckdb-http-browser";
 import {
   isMaterializedTablesCacheFresh,
   readMaterializedTablesCache,
   writeMaterializedTablesCache,
 } from "@/lib/materialized-tables-cache";
+import {
+  getDefaultSqlRuntimeFingerprint,
+  resolveSqlRuntimeFingerprint,
+} from "@/lib/sql/runtime-fingerprint";
+import {
+  getSqlBackendPreference,
+  resolveSqlBackend,
+  type SqlBackend,
+  subscribeBridgeHealth,
+  subscribeSqlBackendPreference,
+} from "@/lib/sql/sql-runtime";
+
+function resolveActiveBackend(): SqlBackend {
+  return resolveSqlBackend({
+    backendPreference: getSqlBackendPreference(),
+  });
+}
 
 export function useMaterializedTables() {
-  const cacheRef = useRef(readMaterializedTablesCache());
-  const hasFreshCache =
-    cacheRef.current !== null &&
-    isMaterializedTablesCacheFresh(cacheRef.current);
-
-  const [tables, setTables] = useState<string[]>(
-    hasFreshCache && cacheRef.current ? cacheRef.current.tables : []
+  const [backend, setBackend] = useState<SqlBackend>(() =>
+    resolveActiveBackend(),
   );
-  const [isLoading, setIsLoading] = useState(!hasFreshCache);
+  const [runtimeFingerprint, setRuntimeFingerprint] = useState<string | null>(
+    () => getDefaultSqlRuntimeFingerprint(resolveActiveBackend()),
+  );
+  const [tables, setTables] = useState<string[]>(() => {
+    const initialBackend = resolveActiveBackend();
+    const initialFingerprint = getDefaultSqlRuntimeFingerprint(initialBackend);
+    const cache = initialFingerprint
+      ? readMaterializedTablesCache(initialBackend, initialFingerprint)
+      : null;
+    return isMaterializedTablesCacheFresh(cache) && cache ? cache.tables : [];
+  });
+  const [isLoading, setIsLoading] = useState(() => {
+    const initialBackend = resolveActiveBackend();
+    const initialFingerprint = getDefaultSqlRuntimeFingerprint(initialBackend);
+    const cache = initialFingerprint
+      ? readMaterializedTablesCache(initialBackend, initialFingerprint)
+      : null;
+    return !isMaterializedTablesCacheFresh(cache);
+  });
   const [error, setError] = useState<string | null>(null);
 
-  const skipInitialLoadingRef = useRef(hasFreshCache);
+  useEffect(() => {
+    const updateBackend = () => {
+      const nextBackend = resolveActiveBackend();
+      setBackend((current) =>
+        current === nextBackend ? current : nextBackend,
+      );
+    };
+
+    const unsubscribeBackendPreference =
+      subscribeSqlBackendPreference(updateBackend);
+    const unsubscribeBridgeHealth = subscribeBridgeHealth(updateBackend);
+    const unsubscribeDuckDbHttpHealth =
+      subscribeDuckDbHttpHealth(updateBackend);
+
+    return () => {
+      unsubscribeBackendPreference();
+      unsubscribeBridgeHealth();
+      unsubscribeDuckDbHttpHealth();
+    };
+  }, []);
 
   useEffect(() => {
+    const defaultFingerprint = getDefaultSqlRuntimeFingerprint(backend);
+    setRuntimeFingerprint(defaultFingerprint);
+
     let cancelled = false;
-
-    async function fetchTables() {
-      try {
-        if (!skipInitialLoadingRef.current) {
-          setIsLoading(true);
-        }
-        setError(null);
-
-        const response = await fetch("/api/semantic-layer/materialized-tables");
-        if (!response.ok) {
-          throw new Error(
-            `Failed to fetch materialized tables: ${response.statusText}`
-          );
-        }
-
-        const data = (await response.json()) as { tables: string[] };
-        if (!cancelled) {
-          const nextTables = Array.isArray(data.tables) ? data.tables : [];
-          setTables(nextTables);
-          writeMaterializedTablesCache(nextTables);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          const message =
-            err instanceof Error ? err.message : String(err ?? "");
-          setError(message);
-          console.error("[useMaterializedTables] Error:", message);
-          setTables((current) => (current.length > 0 ? current : []));
-        }
-      } finally {
-        skipInitialLoadingRef.current = false;
-        if (!cancelled) {
-          setIsLoading(false);
-        }
+    (async () => {
+      const nextFingerprint = await resolveSqlRuntimeFingerprint(backend);
+      if (!cancelled) {
+        setRuntimeFingerprint(nextFingerprint);
       }
-    }
-
-    fetchTables();
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [backend]);
+
+  useEffect(() => {
+    if (!runtimeFingerprint) {
+      setTables([]);
+      setIsLoading(true);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const cache = readMaterializedTablesCache(backend, runtimeFingerprint);
+    const hasFreshCache = isMaterializedTablesCacheFresh(cache);
+
+    if (hasFreshCache && cache) {
+      setTables(cache.tables);
+      setIsLoading(false);
+      setError(null);
+    } else {
+      setTables([]);
+      setIsLoading(true);
+      setError(null);
+    }
+
+    (async () => {
+      try {
+        const nextTables = await listMaterializedTablesForBackend(backend);
+        if (cancelled) {
+          return;
+        }
+
+        setTables(nextTables);
+        setError(null);
+        writeMaterializedTablesCache(backend, runtimeFingerprint, nextTables);
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [backend, runtimeFingerprint]);
 
   return { tables, isLoading, error };
 }

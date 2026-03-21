@@ -1,4 +1,4 @@
-import { createDuckDbExecuteQuery, SqlConsole } from "@/components/sql-console";
+import { createSqlExecuteQuery, SqlConsole } from "@/components/sql-console";
 import type { Result } from "@/lib/types";
 
 interface SqlEditorProps {
@@ -19,7 +19,7 @@ export function SqlEditor({
   onQuerySuccess,
   className,
 }: SqlEditorProps) {
-  const executeQuery = createDuckDbExecuteQuery({ dbIdentifier });
+  const executeQuery = createSqlExecuteQuery({ dbIdentifier });
 
   return (
     <SqlConsole

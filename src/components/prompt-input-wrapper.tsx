@@ -1,11 +1,11 @@
 import {
-  GlobeEuropeAfricaIcon,
+  ChatBubbleBottomCenterTextIcon,
   PaperClipIcon,
   Squares2X2Icon,
   WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import type { ChatStatus } from "ai";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import {
   PromptInput,
@@ -28,6 +28,9 @@ import {
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
+import { DuckdbRepl } from "@/components/duckdb-shell/repl";
+import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
+import type { SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -35,7 +38,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
+import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
+import { resolveSqlBackend, type SqlBackend } from "@/lib/sql/sql-runtime";
+import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
+import type { CardConfig, Config, Result } from "@/lib/types";
+import { getUploadedFileBlob, persistUploadedFile } from "@/lib/uploaded-files";
 import { cn } from "@/lib/utils";
+import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 
 export type PromptMode = "ai" | "manual";
 
@@ -55,11 +64,42 @@ interface PromptInputWrapperProps {
   pendingMode?: PromptMode | null;
   selectedDb?: string;
   onSelectDb?: (db: string) => void;
-  onInsertTable?: (tableName: string) => void;
+  onInsertTable?: (payload: ExplorerInsertPayload) => void;
+  onAddSqlResultToChat?: (payload: SqlAnalysisData) => void;
+  sqlResult?: {
+    sql: string;
+    rows: Record<string, unknown>[];
+    columns: { name: string; type?: string }[];
+    durationMs: number;
+    backend?: SqlBackend;
+  } | null;
+  selectedCatalogContext?: string | null;
+  onConsoleApiChange?: (api: SqlConsoleApi | null) => void;
+  onResultChange?: (
+    result: {
+      sql: string;
+      rows: Record<string, unknown>[];
+      columns: { name: string; type?: string }[];
+      durationMs: number;
+      backend?: SqlBackend;
+    } | null,
+  ) => void;
+  storedSqlQueries?: SavedSqlQuery[];
+  onSaveQuery?: (sql: string) => void | Promise<void>;
+  isSavingQuery?: boolean;
+  manualChartConfig?: Config | null;
+  manualCardConfig?: CardConfig | null;
+  manualVisualType?: "table" | "chart" | "card" | null;
+  onManualReplFocus?: () => void;
 }
 
 // Inner component that uses the attachments hook within PromptInput context
 function FileAttachmentHoverCard() {
+  const sqlBackendPreference = useSqlBackendPreference();
+  const effectiveSqlBackend = resolveSqlBackend({
+    backendPreference: sqlBackendPreference,
+  });
+  const isFileUploadSupported = effectiveSqlBackend === "duckdb-wasm";
   const uploadedFiles = useUploadedFiles();
   const attachments = usePromptInputAttachments();
   const [searchQuery, setSearchQuery] = useState("");
@@ -67,6 +107,8 @@ function FileAttachmentHoverCard() {
     new Set(),
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Filter uploaded files based on search query
   const filteredFiles = uploadedFiles.filter((file) =>
     file.originalName.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -74,82 +116,46 @@ function FileAttachmentHoverCard() {
 
   // Handle adding an uploaded file as attachment
   const handleAddUploadedFile = async (file: (typeof uploadedFiles)[0]) => {
-    try {
-      // Fetch the file from the server
-      const response = await fetch(`/api/upload/${file.fileId}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch file");
-      }
+    setErrorMessage(null);
 
-      const blob = await response.blob();
-      const fileObj = new File([blob], file.originalName, { type: file.type });
-
-      // Add to attachments
-      attachments.add([fileObj]);
-      setSelectedFileIds((prev) => new Set([...prev, file.fileId]));
-    } catch (error) {
-      console.error("Failed to add file:", error);
+    const blob = await getUploadedFileBlob(file.fileId);
+    if (!blob) {
+      setErrorMessage(
+        "The browser copy of this file is no longer available. Remove it and upload again.",
+      );
+      return;
     }
+
+    attachments.add([blob]);
+    setSelectedFileIds((prev) => new Set(prev).add(file.fileId));
   };
 
   // Handle uploading a new file
   const handleUploadNewFile = async (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    const validExtensions = [".csv", ".xlsx", ".xls", ".parquet"];
-    const fileExtension = file.name
-      .toLowerCase()
-      .substring(file.name.lastIndexOf("."));
-    if (!validExtensions.includes(fileExtension)) {
-      alert("Invalid file type. Please upload a CSV, XLSX, or Parquet file.");
+    e.preventDefault();
+    const nextFile = e.currentTarget.files?.[0];
+    if (!nextFile) {
       return;
     }
 
-    // Validate file size (max 50MB)
-    const maxSize = 50 * 1024 * 1024;
-    if (file.size > maxSize) {
-      alert("File size exceeds 50MB. Please choose a smaller file.");
-      return;
-    }
+    setErrorMessage(null);
+    setIsUploading(true);
 
     try {
-      const uploadFormData = new FormData();
-      uploadFormData.append("file", file);
-
-      const uploadResponse = await fetch("/api/upload", {
-        method: "POST",
-        body: uploadFormData,
-      });
-
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json();
-        throw new Error(errorData.error || "Failed to upload file");
+      const uploadedFile = await persistUploadedFile(nextFile);
+      const browserFile = await getUploadedFileBlob(uploadedFile.fileId);
+      if (browserFile) {
+        attachments.add([browserFile]);
+        setSelectedFileIds((prev) => new Set(prev).add(uploadedFile.fileId));
       }
-
-      const uploadData = await uploadResponse.json();
-
-      // Import and save to localStorage
-      const { appendUploadedFile } = await import("@/lib/uploaded-files");
-      appendUploadedFile({
-        fileId: uploadData.fileId,
-        fileName: uploadData.fileName,
-        originalName: file.name,
-        filePath: uploadData.filePath,
-        size: file.size,
-        type: file.type || "application/octet-stream",
-        uploadedAt: new Date().toISOString(),
-      });
-
-      // Also add as attachment
-      attachments.add([file]);
     } catch (error) {
-      console.error("File upload error:", error);
-      alert(error instanceof Error ? error.message : "Failed to upload file");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to upload file.",
+      );
     } finally {
+      setIsUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -162,12 +168,12 @@ function FileAttachmentHoverCard() {
         <PromptInputButton
           size="icon-sm"
           variant="outline"
-          className="!h-8 group dark:hover:bg-accent"
+          className="h-8! group dark:hover:bg-accent"
         >
           <PaperClipIcon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
         </PromptInputButton>
       </PromptInputHoverCardTrigger>
-      <PromptInputHoverCardContent className="w-[400px] p-0 transform translate-y-[-10px]">
+      <PromptInputHoverCardContent className="w-100 p-0 transform translate-y-[-10px]">
         <PromptInputCommand>
           <PromptInputCommandInput
             className="border-none focus-visible:ring-0"
@@ -177,9 +183,11 @@ function FileAttachmentHoverCard() {
           />
           <PromptInputCommandList>
             <PromptInputCommandEmpty className="p-3 text-muted-foreground text-sm">
-              {uploadedFiles.length === 0
-                ? "No uploaded files. Upload a file to get started."
-                : "No results found."}
+              {!isFileUploadSupported
+                ? ""
+                : uploadedFiles.length === 0
+                  ? "No uploaded files. Upload a file to get started."
+                  : "No results found."}
             </PromptInputCommandEmpty>
 
             {attachments.files.length > 0 && (
@@ -187,7 +195,7 @@ function FileAttachmentHoverCard() {
                 <PromptInputCommandGroup heading="Added">
                   {attachments.files.map((file) => (
                     <PromptInputCommandItem key={file.id}>
-                      <GlobeEuropeAfricaIcon className="h-4 w-4" />
+                      <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
                       <span>{file.filename}</span>
                       <span className="ml-auto text-muted-foreground">✓</span>
                     </PromptInputCommandItem>
@@ -213,8 +221,9 @@ function FileAttachmentHoverCard() {
                     <PromptInputCommandItem
                       key={file.fileId}
                       onSelect={() => handleAddUploadedFile(file)}
+                      disabled={!isFileUploadSupported}
                     >
-                      <GlobeEuropeAfricaIcon className="h-4 w-4" />
+                      <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
                       <span className="flex-1 truncate">
                         {file.originalName}
                       </span>
@@ -229,28 +238,55 @@ function FileAttachmentHoverCard() {
 
             <PromptInputCommandSeparator />
             <div className="p-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,.xlsx,.xls,.parquet"
-                className="hidden"
-                onChange={handleUploadNewFile}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                Upload New File
-              </Button>
+              {errorMessage ? (
+                <div className="pb-2 text-xs text-destructive">
+                  {errorMessage}
+                </div>
+              ) : null}
+              {!isFileUploadSupported ? (
+                <div className="text-xs text-muted-foreground">
+                  File upload is currently only supported in DuckDB WASM. Use
+                  the DuckDB shell to load files for HTTP or Bridge connections.
+                </div>
+              ) : (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.xlsx,.xls,.parquet"
+                    className="hidden"
+                    onChange={handleUploadNewFile}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    disabled={isUploading}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {isUploading ? "Uploading..." : "Upload New File"}
+                  </Button>
+                </>
+              )}
             </div>
           </PromptInputCommandList>
         </PromptInputCommand>
       </PromptInputHoverCardContent>
     </PromptInputHoverCard>
   );
+}
+
+function PromptInputModeEffects({ mode }: { mode: PromptMode }) {
+  const { clear, files } = usePromptInputAttachments();
+
+  useEffect(() => {
+    if (mode === "manual" && files.length > 0) {
+      clear();
+    }
+  }, [clear, files.length, mode]);
+
+  return null;
 }
 
 export function PromptInputWrapper({
@@ -270,11 +306,22 @@ export function PromptInputWrapper({
   selectedDb,
   onSelectDb,
   onInsertTable,
+  onAddSqlResultToChat,
+  sqlResult = null,
+  selectedCatalogContext = null,
+  onConsoleApiChange,
+  onResultChange,
+  storedSqlQueries: _storedSqlQueries,
+  onSaveQuery,
+  isSavingQuery = false,
+  manualChartConfig,
+  manualCardConfig,
+  manualVisualType,
+  onManualReplFocus,
 }: PromptInputWrapperProps) {
   const [internalMode, setInternalMode] = useState<PromptMode>(mode ?? "ai");
-
-  const promptMode = mode ?? internalMode;
-  const isAiMode = promptMode === "ai";
+  const [manualConsoleApi, setManualConsoleApi] =
+    useState<SqlConsoleApi | null>(null);
 
   useEffect(() => {
     if (mode) {
@@ -283,7 +330,7 @@ export function PromptInputWrapper({
   }, [mode]);
 
   const handlePromptModeChange = (value: PromptMode) => {
-    if (!value || value === promptMode) {
+    if (!value || value === internalMode) {
       return;
     }
     if (!mode) {
@@ -297,7 +344,7 @@ export function PromptInputWrapper({
   const aiButtonLabel = useMemo(() => {
     if (
       pendingMode === "ai" &&
-      (!status || status === ("idle" as ChatStatus))
+      (!status || status === ("ready" as ChatStatus))
     ) {
       return "[SENDING …]";
     }
@@ -313,7 +360,64 @@ export function PromptInputWrapper({
     }
   }, [pendingMode, status]);
 
+  const handleManualConsoleApiChange = useCallback(
+    (api: SqlConsoleApi | null) => {
+      setManualConsoleApi(api);
+      onConsoleApiChange?.(api);
+    },
+    [onConsoleApiChange],
+  );
+
+  const handleManualRun = useCallback(() => {
+    manualConsoleApi?.runQuery();
+  }, [manualConsoleApi]);
+
+  const handleManualSend = useCallback(() => {
+    if (!onAddSqlResultToChat || !sqlResult) {
+      return;
+    }
+
+    const isCardMode =
+      sqlResult.rows.length === 1 && sqlResult.columns.length === 1;
+    const visualType: "table" | "chart" | "card" =
+      manualVisualType ??
+      (isCardMode ? "card" : manualChartConfig ? "chart" : "table");
+
+    const payload: SqlAnalysisData = {
+      stage: "complete",
+      progress: 1,
+      query: sqlResult.sql,
+      dbIdentifier: selectedDb,
+      sqlBackend: sqlResult.backend,
+      executionTime: sqlResult.durationMs,
+      rowCount: sqlResult.rows.length,
+      columns: sqlResult.columns,
+      rows: sqlResult.rows as Result[],
+      visualType,
+      chartConfig:
+        visualType === "chart" ? (manualChartConfig ?? undefined) : undefined,
+      cardConfig:
+        visualType === "card" ? (manualCardConfig ?? undefined) : undefined,
+      summary: {
+        totalRows: sqlResult.rows.length,
+        executionTimeMs: sqlResult.durationMs,
+        insights: [],
+      },
+    };
+
+    onAddSqlResultToChat(payload);
+  }, [
+    manualCardConfig,
+    manualChartConfig,
+    manualVisualType,
+    onAddSqlResultToChat,
+    selectedDb,
+    sqlResult,
+  ]);
+
   const content = aiButtonLabel;
+  const nextMode: PromptMode = internalMode === "ai" ? "manual" : "ai";
+  const modeButtonLabel = nextMode === "ai" ? "Chat" : "Manual";
 
   if (!showHeader && !showAiInput) {
     return null;
@@ -324,51 +428,131 @@ export function PromptInputWrapper({
       <PromptInput
         onSubmit={handlePromptSubmit}
         className={cn("flex-1 w-full flex flex-row", className)}
-        globalDrop
+        globalDrop={internalMode !== "manual"}
         multiple
       >
+        <PromptInputModeEffects mode={internalMode} />
         {showAiInput && (
-          <PromptInputBody>
-            <PromptInputAttachments>
-              {(attachment) => <PromptInputAttachment data={attachment} />}
-            </PromptInputAttachments>
-            <div className="w-full">
-              <div className="min-h-0 overflow-hidden">
-                <div className="relative w-full">
-                  <PromptInputTextarea
-                    placeholder={placeholder}
+          <div className="flex w-full flex-col">
+            <div
+              aria-hidden={internalMode !== "manual"}
+              className={cn(
+                "grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
+                internalMode === "manual"
+                  ? "grid-rows-[1fr] opacity-100 translate-y-0"
+                  : "pointer-events-none grid-rows-[0fr] opacity-0 -translate-y-2",
+              )}
+            >
+              <div className="min-h-0">
+                <div className="flex flex-col w-full">
+                  <div
                     className={cn(
-                      "flex-1 pr-4",
-                      compact ? "min-h-10 pb-10" : "min-h-28 pb-12",
+                      "w-full rounded-lg overflow-hidden",
+                      compact ? "h-85" : "h-105",
                     )}
-                  />
-                  <div className={cn(
-                    "absolute right-3",
-                    compact ? "bottom-2" : "bottom-3",
-                  )}>
+                    onFocusCapture={() => onManualReplFocus?.()}
+                    onPointerDownCapture={() => onManualReplFocus?.()}
+                  >
+                    <DuckdbRepl
+                      className="h-full w-full border-r-0 p-0"
+                      selectedDbIdentifier={selectedDb}
+                      catalogContext={selectedCatalogContext}
+                      onConsoleApiChangeAction={handleManualConsoleApiChange}
+                      inlineResults={false}
+                      showRunControls={false}
+                      showExplorer={false}
+                      showSaveQueryButton={Boolean(onSaveQuery)}
+                      onSaveQueryAction={onSaveQuery}
+                      isSavingQuery={isSavingQuery}
+                      chartConfig={manualChartConfig}
+                      onResultChangeAction={onResultChange}
+                    />
+                  </div>
+                  <div
+                    className={cn(
+                      "flex justify-end gap-2 m-2",
+                      compact ? "pt-1 pr-1" : "pt-2 pr-2",
+                    )}
+                  >
                     <Button
                       size="sm"
                       variant="outline"
-                      type="submit"
+                      type="button"
                       className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-                      disabled={pendingMode === "ai"}
+                      disabled={!manualConsoleApi?.getQuery()?.trim()}
+                      onClick={handleManualRun}
                     >
-                      {content}
+                      [Run ▷]
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                      disabled={!sqlResult}
+                      onClick={handleManualSend}
+                    >
+                      [Add to chat +]
                     </Button>
                   </div>
                 </div>
               </div>
             </div>
-          </PromptInputBody>
+            <div
+              aria-hidden={internalMode === "manual"}
+              className={cn(
+                "grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
+                internalMode !== "manual"
+                  ? "grid-rows-[1fr] opacity-100 translate-y-0"
+                  : "pointer-events-none grid-rows-[0fr] opacity-0 translate-y-2",
+              )}
+            >
+              <div className="min-h-0">
+                <PromptInputBody>
+                  <PromptInputAttachments>
+                    {(attachment) => (
+                      <PromptInputAttachment data={attachment} />
+                    )}
+                  </PromptInputAttachments>
+                  <div className="w-full">
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="relative w-full">
+                        <PromptInputTextarea
+                          placeholder={placeholder}
+                          className={cn(
+                            "flex-1 pr-4",
+                            compact ? "min-h-10 pb-10" : "min-h-28 pb-10",
+                          )}
+                        />
+                        <div
+                          className={cn(
+                            "absolute right-3",
+                            compact ? "bottom-2" : "bottom-3",
+                          )}
+                        >
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            type="submit"
+                            className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                            disabled={pendingMode === "ai"}
+                          >
+                            {content}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </PromptInputBody>
+              </div>
+            </div>
+          </div>
         )}
         {showHeader && (
-          <PromptInputHeader className={cn(
-            "p-0 overflow-hidden",
-            compact ? "border-t-0" : "border-t border-border/20",
-          )}>
-            <div className="flex items-center gap-1.5 justify-between w-full">
+          <PromptInputHeader className={cn("p-0 overflow-hidden")}>
+            <div className="flex items-center gap-1.5 justify-between w-full m-3">
               <div className="flex items-center gap-1.5">
-                {onHomePage && promptMode === "ai" && (
+                {onHomePage && (
                   <ConnectedDataPanel
                     selectedDb={selectedDb}
                     onSelect={(db) => onSelectDb?.(db)}
@@ -376,7 +560,7 @@ export function PromptInputWrapper({
                     onInsertTable={onInsertTable}
                   />
                 )}
-                <FileAttachmentHoverCard />
+                {internalMode !== "manual" && <FileAttachmentHoverCard />}
                 {!onHomePage && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -399,20 +583,22 @@ export function PromptInputWrapper({
               <Button
                 type="button"
                 size="sm"
-                variant={!isAiMode ? "default" : "outline"}
+                variant="default"
                 className={cn(
                   "gap-1.5",
-                  !isAiMode &&
-                    "bg-primary text-primary-foreground hover:bg-primary/90 border-primary",
+                  "bg-primary text-primary-foreground hover:bg-primary/90 border-primary",
                 )}
-                onClick={() =>
-                  handlePromptModeChange(isAiMode ? "manual" : "ai")
-                }
+                onClick={() => handlePromptModeChange(nextMode)}
                 disabled={Boolean(pendingMode)}
-                aria-pressed={!isAiMode}
+                aria-pressed
+                title={modeButtonLabel}
               >
-                <WrenchScrewdriverIcon className="h-4 w-4" />
-                <span>Manual</span>
+                {nextMode === "ai" ? (
+                  <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
+                ) : (
+                  <WrenchScrewdriverIcon className="h-4 w-4" />
+                )}
+                <span>{modeButtonLabel}</span>
               </Button>
             </div>
           </PromptInputHeader>
