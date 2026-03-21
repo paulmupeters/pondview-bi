@@ -38,7 +38,7 @@ const NULL_COORDINATOR: Coordinator = {
 
 function generateTabId(name: string): string {
   const randomPart =
-    (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
       : `${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
 
@@ -69,7 +69,10 @@ function readOwnership(storageKey: string): OwnershipRecord | null {
   }
 }
 
-function writeOwnership(storageKey: string, record: OwnershipRecord | null): void {
+function writeOwnership(
+  storageKey: string,
+  record: OwnershipRecord | null,
+): void {
   if (typeof window === "undefined" || !window.localStorage) {
     return;
   }
@@ -209,7 +212,9 @@ export function createConnectionCoordinator(
 
     switch (data.type) {
       case "ownership-change":
-        updateOwnershipState(typeof data.ownerId === "string" ? data.ownerId : null);
+        updateOwnershipState(
+          typeof data.ownerId === "string" ? data.ownerId : null,
+        );
         break;
       case "request-release":
         if (isOwner) {
@@ -332,4 +337,3 @@ export function createConnectionCoordinator(
     noteServerConflict,
   };
 }
-

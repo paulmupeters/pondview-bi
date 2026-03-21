@@ -10,7 +10,7 @@ import type { StageIndicatorProps } from "../sql-analysis-display.types";
 
 export function StageIndicator({
   currentStage,
-  progress = 0,
+  progress: _progress = 0,
 }: StageIndicatorProps) {
   const stages = [
     {

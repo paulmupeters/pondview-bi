@@ -12,8 +12,7 @@ if (!globalThis.__bunSqlClients) globalThis.__bunSqlClients = clientCache;
 export function resolvePostgresUri(dbIdentifier: string): string {
   const id = (dbIdentifier ?? "").trim();
   if (!id) throw new Error("Empty Postgres identifier");
-  if (id.startsWith("postgres://") || id.startsWith("postgresql://"))
-    return id;
+  if (id.startsWith("postgres://") || id.startsWith("postgresql://")) return id;
   if (id.startsWith("pg:")) {
     const name = id.slice(3).trim() || "DEFAULT";
     const upper = name.toUpperCase();

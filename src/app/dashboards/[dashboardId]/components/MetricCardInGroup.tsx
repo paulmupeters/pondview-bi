@@ -1,11 +1,11 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import { Funnel, GripVertical, Settings, Trash2 } from "lucide-react";
 import type { CSSProperties } from "react";
-import { CardConfigDialog } from "@/components/card-config-dialog";
 import { MetricCard } from "@/components/metric-card";
+import { MetricCardSettingsDialog } from "@/components/metric-card-settings-dialog";
 import type { CardConfig, Config, TableConfig, TextConfig } from "@/lib/types";
-import { useFilters } from "../filter-context";
 import type { MetricCardInGroupProps } from "../types";
 import { isCardConfig } from "../utils";
 import { MetricCardSqlEditor } from "./MetricCardSqlEditor";
@@ -13,7 +13,10 @@ import { MetricCardSqlEditor } from "./MetricCardSqlEditor";
 export function MetricCardInGroup({
   chart,
   chartData,
+  measure,
+  measureValue,
   onConfigChange,
+  onMeasureChange,
   onDelete,
   expandedSqlChartId,
   onToggleSql,
@@ -22,8 +25,9 @@ export function MetricCardInGroup({
   isLast: _isLast,
   isSelected,
   onSelect,
+  onPreviewChart,
 }: MetricCardInGroupProps) {
-  const { filters } = useFilters();
+  const appliedFilterCount = chart.appliedFiltersCount ?? 0;
   const {
     attributes,
     listeners,
@@ -47,13 +51,20 @@ export function MetricCardInGroup({
   }
   const rows = chartData[chart.id] || [];
   const isExpanded = expandedSqlChartId === chart.id;
+  const emptyStateMessage = chart.errorMessage?.trim() || "No data";
+  const emptyStateClassName = chart.errorMessage
+    ? "text-xs text-destructive"
+    : "text-xs text-muted-foreground";
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex-1 flex flex-col p-4 md:p-2 relative group/item transition-colors ${
-        isSelected ? "bg-primary/5 ring-1 ring-primary/40" : ""
+      data-chart-group-card-id={chart.id}
+      className={`flex-1 flex flex-col p-4 md:p-2 relative group/item transition-colors ring-1 ring-inset ${
+        isSelected
+          ? "bg-primary/5 ring-primary/40"
+          : "bg-transparent ring-transparent"
       }`}
     >
       <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-30">
@@ -69,6 +80,15 @@ export function MetricCardInGroup({
         </button>
         <button
           type="button"
+          aria-label="View chart"
+          title="View chart"
+          onClick={() => onPreviewChart(chart.id)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
           aria-label="Filter this visual"
           title="Filter this visual"
           onClick={() => onSelect(chart.id)}
@@ -81,15 +101,16 @@ export function MetricCardInGroup({
           <Funnel className="h-4 w-4" />
         </button>
       </div>
-      {chart.filtersApplied && filters.length > 0 && isFirst && (
+      {chart.filtersApplied && appliedFilterCount > 0 && isFirst && (
         <div className="absolute left-1/2 top-2 -translate-x-1/2 opacity-0 transition-opacity group-hover:opacity-100">
           <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-            {filters.length} filter{filters.length !== 1 ? "s" : ""} applied
+            {appliedFilterCount} filter{appliedFilterCount !== 1 ? "s" : ""}{" "}
+            applied
           </span>
         </div>
       )}
       <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-20">
-        <CardConfigDialog
+        <MetricCardSettingsDialog
           trigger={
             <button
               type="button"
@@ -101,10 +122,19 @@ export function MetricCardInGroup({
             </button>
           }
           config={config as CardConfig}
+          measure={measure}
+          currentMeasureValue={measureValue}
           onConfigChange={async (newConfig) => {
             const newJson = JSON.stringify(newConfig);
             await onConfigChange(chart.id, newJson);
           }}
+          onMeasureChange={
+            measure
+              ? async (updates) => {
+                  await onMeasureChange(measure.id, updates);
+                }
+              : undefined
+          }
         />
         <button
           type="button"
@@ -125,7 +155,7 @@ export function MetricCardInGroup({
           className="w-full h-full flex flex-col border-0 shadow-none"
         />
       ) : (
-        <div className="text-xs text-muted-foreground">No data</div>
+        <div className={emptyStateClassName}>{emptyStateMessage}</div>
       )}
       {isExpanded && (
         <div className="mt-4 border-t pt-4 transition-all duration-200">

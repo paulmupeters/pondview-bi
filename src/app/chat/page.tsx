@@ -1,10 +1,14 @@
-import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Chat from "@/components/chat";
+import { useSearchParams } from "@/vite/next-navigation";
 
 export default function ChatPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="p-6 text-sm text-muted-foreground">Loading...</div>
+      }
+    >
       <ChatPageContent />
     </Suspense>
   );
@@ -16,9 +20,7 @@ function ChatPageContent() {
 
   if (!chatId) {
     return (
-      <div className="p-6 text-sm text-muted-foreground">
-        Missing chat id
-      </div>
+      <div className="p-6 text-sm text-muted-foreground">Missing chat id</div>
     );
   }
 

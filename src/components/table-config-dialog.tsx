@@ -7,13 +7,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import type { TableConfig } from "@/lib/types";
 
 interface TableConfigDialogProps {
@@ -47,6 +47,7 @@ export function TableConfigDialog({
       takeaway: (formData.get("takeaway") as string) || undefined,
       sortColumn: sortColumn || undefined,
       sortDirection: sortDirection || undefined,
+      colSpan: config?.colSpan,
     };
 
     onConfigChange(newConfig);

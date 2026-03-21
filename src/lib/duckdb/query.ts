@@ -7,70 +7,8 @@ import {
   runSqlAndGetRowObjectsJson as runRaw,
 } from "@/lib/duckdb/duckdb-node";
 import { detectExternalConnection, resolveDbPath } from "@/lib/duckdb/path";
+import { rewriteSqlForAttachedDatabase } from "@/lib/duckdb/rewrite-sql";
 import type { Result } from "@/lib/types";
-
-/**
- * Rewrites SQL to reference tables in an attached database.
- * Handles cases where tables are already schema-qualified or not.
- */
-function rewriteSqlForAttachedDatabase(sql: string, alias: string): string {
-  // Simple heuristic: if the SQL already contains schema-qualified names
-  // (e.g., "public.users" or "schema.table"), prepend the alias.
-  // Otherwise, assume tables are in the public schema.
-
-  // Escape the alias for use in regex
-  const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-  // Don't rewrite if the alias is already present
-  if (new RegExp(`\\b${escapedAlias}\\.`, "i").test(sql)) {
-    return sql;
-  }
-
-  // Check if SQL has schema-qualified table names (pattern: schema.table)
-  const hasSchemaQualified = /\b\w+\.\w+\b/.test(sql);
-
-  if (hasSchemaQualified) {
-    // Prepend alias to schema-qualified names
-    // Pattern: FROM schema.table -> FROM alias.schema.table
-    return sql.replace(
-      /\b(FROM|JOIN|UPDATE|INTO)\s+(\w+)\.(\w+)/gi,
-      (match, keyword, schema, table) => {
-        // Don't rewrite if it's already prefixed with the alias or is a known DuckDB schema
-        if (
-          schema.toLowerCase() === alias.toLowerCase() ||
-          ["main", "temp", "information_schema"].includes(schema.toLowerCase())
-        ) {
-          return match;
-        }
-        return `${keyword} ${alias}.${schema}.${table}`;
-      }
-    );
-  } else {
-    // No schema qualification - assume public schema
-    // Pattern: FROM table -> FROM alias.public.table
-    return sql.replace(
-      /\b(FROM|JOIN|UPDATE|INTO)\s+(\w+)(?:\s|$|;|,)/gi,
-      (match, keyword, table) => {
-        // Don't rewrite if it's a keyword or already qualified
-        if (
-          [
-            "select",
-            "where",
-            "group",
-            "order",
-            "having",
-            "limit",
-            "offset",
-          ].includes(table.toLowerCase()) ||
-          match.includes(".")
-        ) {
-          return match;
-        }
-        return `${keyword} ${alias}.public.${table}`;
-      }
-    );
-  }
-}
 
 function normalizeRows(rawRows: Record<string, unknown>[]): Result[] {
   const normalizeValue = (value: unknown): string | number | boolean | Date => {
@@ -96,18 +34,18 @@ function normalizeRows(rawRows: Record<string, unknown>[]): Result[] {
 }
 
 /**
- * Executes SQL with optional postgres attachment handling.
- * If dbIdentifier is a postgres URI, attaches it to DuckDB first, executes the query,
- * then detaches it.
+ * Executes SQL with attachment handling for external extension-backed sources.
+ * MotherDuck is opened directly via the database path; Postgres/MySQL/SQLite
+ * are attached for the duration of the query.
  */
 export async function runSqlNormalized(
   dbIdentifier: string,
-  sql: string
+  sql: string,
 ): Promise<Result[]> {
   const externalConnection = detectExternalConnection(dbIdentifier);
   const dbPath = resolveDbPath(dbIdentifier);
 
-  // If it's an external URI (postgres/mysql), we need to handle attachment/detachment
+  // External URIs are attached temporarily before executing the query.
   if (externalConnection) {
     const attachmentPlan = buildAttachmentPlan(externalConnection);
     const instance = await getDuckDbInstance(dbPath);
@@ -122,7 +60,7 @@ export async function runSqlNormalized(
       // Rewrite SQL to use the attached database alias
       const rewrittenSql = rewriteSqlForAttachedDatabase(
         sql,
-        attachmentPlan.alias
+        attachmentPlan.alias,
       );
 
       // Execute the query
@@ -145,7 +83,7 @@ export async function runSqlNormalized(
     }
   }
 
-  // For non-postgres identifiers, use the original flow
+  // MotherDuck and local DuckDB paths are opened directly.
   const rawRows = await runRaw(dbPath, sql);
   return normalizeRows(rawRows);
 }

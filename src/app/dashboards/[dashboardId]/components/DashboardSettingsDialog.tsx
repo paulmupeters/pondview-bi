@@ -1,5 +1,4 @@
 import { Settings } from "lucide-react";
-import { DashboardFilterPane } from "@/components/dashboard-filter-pane";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -56,10 +55,7 @@ export function DashboardSettingsDialog({
             <label htmlFor="columns-select" className="text-sm font-medium">
               Number of Columns
             </label>
-            <Select
-              value={columns.toString()}
-              onValueChange={onColumnsChange}
-            >
+            <Select value={columns.toString()} onValueChange={onColumnsChange}>
               <SelectTrigger id="columns-select" className="w-full">
                 <SelectValue placeholder="Select columns" />
               </SelectTrigger>
@@ -94,8 +90,9 @@ export function DashboardSettingsDialog({
           </div>
           <div className="flex flex-col gap-2">
             <h3 className="text-sm font-medium">Filters</h3>
-            <div className="rounded-md border p-4">
-              <DashboardFilterPane />
+            <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+              Manage filters from the slicer bar in dashboard view. Available
+              dimensions are discovered from the active SQL runtime.
             </div>
           </div>
         </div>

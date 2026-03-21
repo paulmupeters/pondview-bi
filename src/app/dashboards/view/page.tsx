@@ -1,12 +1,71 @@
 import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { DashboardDataCardDialog } from "@/components/dashboard-data-card-dialog";
 import { DashboardSlicersBar } from "@/components/dashboard-slicers-bar";
+import { DynamicChart } from "@/components/dynamic-chart";
+import { MetricCard } from "@/components/metric-card";
+import {
+  SqlPreviewPanel,
+  type SqlPreviewRunResult,
+} from "@/components/sql-preview-panel";
+import { SqlResultsTable } from "@/components/sql-results-table";
 import { TextConfigDialog } from "@/components/text-config-dialog";
 import { Button } from "@/components/ui/button";
-import { apiFetch } from "@/lib/api/client";
-import type { Result, TextConfig } from "@/lib/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { executeDashboardChartsWithFilters } from "@/lib/dashboard/browser-filter-engine";
+import {
+  buildMeasureOptions,
+  buildMeasureRenderContextByName,
+  extractFirstRowMeasurePrimitive,
+  extractLegacyMeasureOptionsFromMetricCards,
+  formatFirstRowMeasureValue,
+  type MeasurePrimitive,
+} from "@/lib/dashboard/measures";
+import { runQuery } from "@/lib/sql/run-query";
+import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
+import type {
+  CardConfig,
+  Config,
+  Result,
+  TableConfig,
+  TextConfig,
+} from "@/lib/types";
+import {
+  addChartToDashboard,
+  listChartsByDashboard,
+  listDashboards,
+  listMeasuresByDashboard,
+  removeChartFromDashboard,
+  reorderDashboardCharts,
+  updateChartConfig,
+  updateChartSql,
+  updateDashboardMeasure,
+  updateDashboardTitle,
+} from "@/lib/workspace/dashboard-repo";
+import { getPreference, setPreference } from "@/lib/workspace/preferences-repo";
+import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
+import Link from "@/vite/next-link";
+import { useSearchParams } from "@/vite/next-navigation";
 import {
   DashboardGrid,
   DashboardHeader,
@@ -18,11 +77,45 @@ import type {
   DashboardChart,
   ResizeState,
 } from "../[dashboardId]/types";
-import { buildRows, groupConsecutiveMetricCards } from "../[dashboardId]/utils";
+import {
+  buildResizePreview,
+  buildRows,
+  canEqualizeRow,
+  canFitRow,
+  findLayoutRowForChart,
+  getChartColSpan,
+  groupConsecutiveMetricCards,
+  isCardConfig,
+  isResizableConfig,
+  isTableConfig,
+  isTextConfig,
+  parseChartConfig,
+} from "../[dashboardId]/utils";
+
+const PREF_COLUMNS_PREFIX = "dashboard:columns:";
+const PREF_AUTOFIT_PREFIX = "dashboard:auto-fit:";
+const DASHBOARD_AUTH_ERROR_MESSAGE =
+  "Dashboard queries need DuckDB HTTP authentication. Re-enter your DuckDB HTTP auth in Settings to load data.";
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "Failed to load dashboard data.";
+}
+
+function isUnauthorizedMessage(message: string | null | undefined): boolean {
+  return Boolean(message && /unauthorized/i.test(message));
+}
 
 export default function DashboardViewPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="p-6 text-sm text-muted-foreground">Loading...</div>
+      }
+    >
       <DashboardViewPageContent />
     </Suspense>
   );
@@ -40,128 +133,226 @@ function DashboardViewPageContent() {
     );
   }
 
+  return <DashboardDetailPageContent dashboardId={dashboardId} />;
+}
+
+function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   return (
     <FilterProvider dashboardId={dashboardId}>
-      <DashboardDetailPageContent dashboardId={dashboardId} />
+      <DashboardDetailPageInner dashboardId={dashboardId} />
     </FilterProvider>
   );
 }
 
-function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
+function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
+  const { dashboardFilters, chartFiltersById } = useFilters();
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [charts, setCharts] = useState<DashboardChart[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState<Record<string, Result[]>>({});
   const [columns, setColumns] = useState<number>(3);
-  const [autoFitRows, setAutoFitRows] = useState<boolean>(true);
+  const [autoFitRows, setAutoFitRows] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [expandedSqlChartId, setExpandedSqlChartId] = useState<string | null>(
     null,
   );
   const [resizingChart, setResizingChart] = useState<ResizeState>(null);
   const [selectedChartId, setSelectedChartId] = useState<string | null>(null);
+  const dashboardContentRef = useRef<HTMLDivElement>(null);
+  const [previewChartId, setPreviewChartId] = useState<string | null>(null);
+  const [previewRunRows, setPreviewRunRows] = useState<Result[] | null>(null);
   const [isAddingTextCard, setIsAddingTextCard] = useState(false);
-  const { dashboardFilters, chartFiltersById } = useFilters();
+  const [isTextCardDialogOpen, setIsTextCardDialogOpen] = useState(false);
+  const [isDataCardDialogOpen, setIsDataCardDialogOpen] = useState(false);
+  const [dashboardMeasures, setDashboardMeasures] = useState<
+    WorkspaceDashboardMeasure[]
+  >([]);
+  const [measureValuesById, setMeasureValuesById] = useState<
+    Record<string, string>
+  >({});
+  const [measureRawValuesById, setMeasureRawValuesById] = useState<
+    Record<string, MeasurePrimitive>
+  >({});
+  const [chartQueryError, setChartQueryError] = useState<string | null>(null);
+  const [measureQueryError, setMeasureQueryError] = useState<string | null>(
+    null,
+  );
 
-  const filtersQueryString = useMemo(() => {
-    const params = new URLSearchParams();
-    if (dashboardFilters.length > 0) {
-      params.set("dashboardFilters", JSON.stringify(dashboardFilters));
-    }
-    if (Object.keys(chartFiltersById).length > 0) {
-      params.set("chartFilters", JSON.stringify(chartFiltersById));
-    }
-    const query = params.toString();
-    return query ? `?${query}` : "";
-  }, [dashboardFilters, chartFiltersById]);
-
-  // Load saved preferences from localStorage
-  useEffect(() => {
-    const savedColumns = localStorage.getItem(`dashboard_${dashboardId}_columns`);
-    const savedAutoFit = localStorage.getItem(
-      `dashboard_${dashboardId}_auto_fit_rows`,
-    );
-    if (savedColumns) {
-      const parsed = parseInt(savedColumns, 10);
-      if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= 6) {
-        setColumns(parsed);
-      }
-    }
-    if (savedAutoFit === "false") {
-      setAutoFitRows(false);
-    }
-  }, [dashboardId]);
-
-  // Load dashboard metadata
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoading(true);
-      try {
-        const res = await apiFetch(`/api/dashboards`);
-        if (res.ok) {
-          const list = (await res.json()) as { dashboards: Dashboard[] };
-          const d = list.dashboards.find((x) => x.id === dashboardId) || null;
-          if (!cancelled) setDashboard(d);
-        }
-      } finally {
-        setLoading(false);
+      const savedColumns = await getPreference<number>(
+        `${PREF_COLUMNS_PREFIX}${dashboardId}`,
+      );
+      const savedAutoFit = await getPreference<boolean>(
+        `${PREF_AUTOFIT_PREFIX}${dashboardId}`,
+      );
+      if (cancelled) return;
+      if (
+        typeof savedColumns === "number" &&
+        savedColumns >= 1 &&
+        savedColumns <= 6
+      ) {
+        setColumns(savedColumns);
+      }
+      if (typeof savedAutoFit === "boolean") {
+        setAutoFitRows(savedAutoFit);
       }
     })();
+
     return () => {
       cancelled = true;
     };
   }, [dashboardId]);
 
-  // Refresh dashboard data with filters
-  const refreshDashboardData = useCallback(
-    async (signal?: AbortSignal) => {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
       try {
-        const res = await apiFetch(
-          `/api/dashboard/${dashboardId}/data${filtersQueryString}`,
-          {
-            cache: "no-store",
-            signal,
-          },
-        );
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          charts: (DashboardChart & {
-            rows: Result[];
-            filtersApplied?: boolean;
-          })[];
-        };
-        if (signal?.aborted) return;
-        const sortedCharts = [...data.charts].sort(
-          (a, b) => a.position - b.position,
-        );
-        setCharts(sortedCharts);
-        const map: Record<string, Result[]> = {};
-        for (const c of data.charts) map[c.id] = c.rows;
-        setChartData(map);
-      } catch (error) {
-        if (signal?.aborted) return;
-        console.error("Failed to refresh dashboard data:", error);
+        const dashboards = await listDashboards();
+        const selected =
+          dashboards.find((item) => item.id === dashboardId) ?? null;
+        if (!cancelled) {
+          setDashboard(selected as Dashboard | null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    },
-    [dashboardId, filtersQueryString],
-  );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardId]);
+
+  const refreshDashboardMeasures = useCallback(async () => {
+    try {
+      const measures = await listMeasuresByDashboard(dashboardId);
+      setDashboardMeasures(measures);
+      let nextMeasureError: string | null = null;
+
+      const valueEntries = await Promise.all(
+        measures.map(async (measure) => {
+          try {
+            const result = await runQuery({
+              sql: measure.sql,
+              dbIdentifier: measure.dbIdentifier ?? undefined,
+              backendPreference: measure.sqlBackend ?? undefined,
+            });
+
+            return [
+              measure.id,
+              {
+                formattedValue: formatFirstRowMeasureValue(
+                  result.rows as Result[],
+                ),
+                rawValue: extractFirstRowMeasurePrimitive(
+                  result.rows as Result[],
+                ),
+              },
+            ] as const;
+          } catch (error) {
+            const message = getErrorMessage(error);
+            if (!nextMeasureError) {
+              nextMeasureError = isUnauthorizedMessage(message)
+                ? DASHBOARD_AUTH_ERROR_MESSAGE
+                : message;
+            }
+            console.error(
+              `Failed to resolve value for dashboard measure ${measure.id}:`,
+              error,
+            );
+            return [
+              measure.id,
+              {
+                formattedValue: "",
+                rawValue: undefined,
+              },
+            ] as const;
+          }
+        }),
+      );
+
+      setMeasureValuesById(
+        Object.fromEntries(
+          valueEntries.map(([measureId, value]) => [
+            measureId,
+            value.formattedValue,
+          ]),
+        ),
+      );
+      setMeasureRawValuesById(
+        Object.fromEntries(
+          valueEntries.map(([measureId, value]) => [measureId, value.rawValue]),
+        ),
+      );
+      setMeasureQueryError(nextMeasureError);
+    } catch (error) {
+      console.error("Failed to refresh dashboard measures:", error);
+      const message = getErrorMessage(error);
+      setMeasureQueryError(
+        isUnauthorizedMessage(message) ? DASHBOARD_AUTH_ERROR_MESSAGE : message,
+      );
+    }
+  }, [dashboardId]);
+
+  const refreshDashboardData = useCallback(async () => {
+    try {
+      const dashboardCharts = await listChartsByDashboard(dashboardId);
+      const sortedCharts = [...dashboardCharts].sort(
+        (a, b) => a.position - b.position,
+      );
+      const execution = await executeDashboardChartsWithFilters({
+        dashboardId,
+        charts: sortedCharts,
+        dashboardFilters,
+        chartFiltersById,
+      });
+      const metadataEntries = Object.values(execution.metadataByChartId);
+      const firstError = metadataEntries.find((entry) => entry.errorMessage);
+
+      setCharts(
+        sortedCharts.map((chart) => ({
+          ...chart,
+          ...(execution.metadataByChartId[chart.id] ?? {
+            filtersApplied: false,
+            appliedFiltersCount: 0,
+            skippedFilters: [],
+          }),
+        })),
+      );
+      setChartData(execution.rowsByChartId);
+      setChartQueryError(
+        firstError
+          ? isUnauthorizedMessage(firstError.errorMessage)
+            ? DASHBOARD_AUTH_ERROR_MESSAGE
+            : (firstError.errorMessage ?? null)
+          : null,
+      );
+    } catch (error) {
+      console.error("Failed to refresh dashboard data:", error);
+      const message = getErrorMessage(error);
+      setChartQueryError(
+        isUnauthorizedMessage(message) ? DASHBOARD_AUTH_ERROR_MESSAGE : message,
+      );
+    }
+  }, [chartFiltersById, dashboardFilters, dashboardId]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void refreshDashboardData(controller.signal);
-    return () => controller.abort();
+    void refreshDashboardData();
   }, [refreshDashboardData]);
 
-  // Title update handler
+  useEffect(() => {
+    void refreshDashboardMeasures();
+  }, [refreshDashboardMeasures]);
+
   const handleTitleUpdate = useCallback(
     async (newTitle: string) => {
-      const res = await apiFetch(`/api/dashboards/${dashboardId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTitle }),
-      });
-      if (!res.ok) {
+      const result = await updateDashboardTitle(dashboardId, newTitle);
+      if (!result.updated) {
         throw new Error("Failed to update dashboard title");
       }
       setDashboard((prev) =>
@@ -171,18 +362,13 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     [dashboardId],
   );
 
-  // Persist chart order
   const persistOrder = useCallback(
     async (previousOrder: DashboardChart[], nextOrder: DashboardChart[]) => {
       try {
-        const res = await apiFetch(`/api/dashboard/${dashboardId}/charts`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chartIds: nextOrder.map((chart) => chart.id),
-          }),
-        });
-        if (!res.ok) throw new Error("Failed to save order");
+        await reorderDashboardCharts(
+          dashboardId,
+          nextOrder.map((chart) => chart.id),
+        );
       } catch (error) {
         console.error(error);
         setCharts(previousOrder);
@@ -222,32 +408,40 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
           chart.id === chartId ? { ...chart, chartConfigJson: newJson } : chart,
         ),
       );
-      await apiFetch(`/api/charts/${chartId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chartConfigJson: newJson }),
-      });
+      await updateChartConfig(chartId, newJson);
     },
     [],
+  );
+
+  const handleDashboardMeasureUpdate = useCallback(
+    async (
+      measureId: string,
+      updates: Pick<WorkspaceDashboardMeasure, "label" | "sql">,
+    ) => {
+      const result = await updateDashboardMeasure(measureId, updates);
+      if (!result.updated) {
+        throw new Error("Failed to update measure");
+      }
+
+      await Promise.all([refreshDashboardData(), refreshDashboardMeasures()]);
+    },
+    [refreshDashboardData, refreshDashboardMeasures],
   );
 
   const handleAddTextCard = useCallback(
     async (textConfig: TextConfig) => {
       setIsAddingTextCard(true);
       try {
-        const res = await apiFetch(`/api/dashboard/${dashboardId}/charts`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: textConfig.title ?? "Text Card",
-            description: textConfig.title ?? null,
-            sql: "SELECT 1",
-            dbIdentifier: "md:my_db",
-            chartConfigJson: JSON.stringify(textConfig),
-          }),
+        await addChartToDashboard({
+          dashboardId,
+          title: textConfig.title ?? "Text Card",
+          description: textConfig.title ?? null,
+          sql: "SELECT 1",
+          dbIdentifier: DEFAULT_WASM_DB_IDENTIFIER,
+          chartConfigJson: JSON.stringify(textConfig),
         });
-        if (!res.ok) throw new Error("Failed to add text card");
         await refreshDashboardData();
+        setIsTextCardDialogOpen(false);
       } catch (error) {
         console.error("Failed to add text card:", error);
       } finally {
@@ -257,35 +451,26 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     [dashboardId, refreshDashboardData],
   );
 
-  const handleChartDelete = useCallback(
-    async (chartId: string) => {
-      try {
-        const res = await apiFetch(
-          `/api/dashboard/${dashboardId}/charts?chartId=${chartId}`,
-          {
-            method: "DELETE",
-          },
-        );
-        if (!res.ok) throw new Error("Failed to delete chart");
-        setCharts((prev) => prev.filter((chart) => chart.id !== chartId));
-        setSelectedChartId((prev) => (prev === chartId ? null : prev));
-        setChartData((prev) => {
-          const next = { ...prev };
-          delete next[chartId];
-          return next;
-        });
-      } catch (error) {
-        console.error(error);
-      }
-    },
-    [dashboardId],
-  );
+  const handleChartDelete = useCallback(async (chartId: string) => {
+    try {
+      await removeChartFromDashboard(chartId);
+      setCharts((prev) => prev.filter((chart) => chart.id !== chartId));
+      setSelectedChartId((prev) => (prev === chartId ? null : prev));
+      setChartData((prev) => {
+        const next = { ...prev };
+        delete next[chartId];
+        return next;
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
 
   const handleColumnsChange = useCallback(
     (value: string) => {
       const newColumns = parseInt(value, 10);
       setColumns(newColumns);
-      localStorage.setItem(`dashboard_${dashboardId}_columns`, value);
+      void setPreference(`${PREF_COLUMNS_PREFIX}${dashboardId}`, newColumns);
       setIsSettingsOpen(false);
     },
     [dashboardId],
@@ -294,10 +479,7 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
   const handleAutoFitChange = useCallback(
     (checked: boolean) => {
       setAutoFitRows(checked);
-      localStorage.setItem(
-        `dashboard_${dashboardId}_auto_fit_rows`,
-        checked ? "true" : "false",
-      );
+      void setPreference(`${PREF_AUTOFIT_PREFIX}${dashboardId}`, checked);
     },
     [dashboardId],
   );
@@ -306,61 +488,24 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     setExpandedSqlChartId((prev) => (prev === chartId ? null : chartId));
   }, []);
 
-  const handleResizeChange = useCallback(
-    (chartId: string, tempColSpan: number | null) => {
-      if (tempColSpan !== null) {
-        setResizingChart({ chartId, tempColSpan });
-      } else {
-        setResizingChart(null);
-      }
-    },
-    [],
-  );
-
   const handleSqlUpdate = useCallback(
     async (chartId: string, newSql: string) => {
       try {
-        const res = await apiFetch(`/api/charts/${chartId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sql: newSql }),
-        });
-        if (!res.ok) throw new Error("Failed to update SQL");
+        const result = await updateChartSql(chartId, newSql);
+        if (!result.updated) throw new Error("Failed to update SQL");
 
         setCharts((prev) =>
           prev.map((chart) =>
             chart.id === chartId ? { ...chart, sql: newSql } : chart,
           ),
         );
-
-        // Re-fetch chart data to update the chart with new SQL
-        const dataRes = await apiFetch(
-          `/api/dashboard/${dashboardId}/data${filtersQueryString}`,
-          {
-            cache: "no-store",
-          },
-        );
-        if (dataRes.ok) {
-          const data = (await dataRes.json()) as {
-            charts: (DashboardChart & {
-              rows: Result[];
-              filtersApplied?: boolean;
-            })[];
-          };
-          const updatedChart = data.charts.find((c) => c.id === chartId);
-          if (updatedChart) {
-            setChartData((prev) => ({
-              ...prev,
-              [chartId]: updatedChart.rows,
-            }));
-          }
-        }
+        await refreshDashboardData();
       } catch (error) {
         console.error("Failed to update SQL:", error);
         throw error;
       }
     },
-    [dashboardId, filtersQueryString],
+    [refreshDashboardData],
   );
 
   useEffect(() => {
@@ -370,23 +515,269 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     }
   }, [charts, selectedChartId]);
 
+  useEffect(() => {
+    if (!previewChartId) return;
+    if (!charts.some((chart) => chart.id === previewChartId)) {
+      setPreviewChartId(null);
+    }
+  }, [charts, previewChartId]);
+
+  useEffect(() => {
+    if (!selectedChartId) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      const clickedInsideDashboard =
+        dashboardContentRef.current?.contains(target) ?? false;
+      const clickedSelectedCard = Boolean(
+        (target instanceof Element &&
+          target.closest(`[data-chart-card-id="${selectedChartId}"]`)) ||
+          (target instanceof Element &&
+            target.closest(`[data-chart-group-card-id="${selectedChartId}"]`)),
+      );
+      const clickedInsideDialog = Boolean(
+        target instanceof Element &&
+          target.closest(
+            '[role="dialog"], [data-radix-popper-content-wrapper]',
+          ),
+      );
+      const clickedInsidePopoverTrigger = Boolean(
+        target instanceof Element &&
+          target.closest(
+            '[data-state], [aria-haspopup="dialog"], [aria-expanded]',
+          ),
+      );
+      const clickedInsideSlicerBar = Boolean(
+        target instanceof Element && target.closest("[data-slicer-bar]"),
+      );
+
+      if (
+        clickedInsideDashboard &&
+        !clickedSelectedCard &&
+        !clickedInsideDialog &&
+        !clickedInsidePopoverTrigger &&
+        !clickedInsideSlicerBar
+      ) {
+        setSelectedChartId(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [selectedChartId]);
+
   const chartGroups = useMemo(
     () => groupConsecutiveMetricCards(charts, chartData),
     [charts, chartData],
   );
+  const legacyMeasureOptions = useMemo(
+    () => extractLegacyMeasureOptionsFromMetricCards(charts, chartData),
+    [charts, chartData],
+  );
+  const measureOptions = useMemo(
+    () =>
+      buildMeasureOptions({
+        savedMeasures: dashboardMeasures,
+        savedValuesByMeasureId: measureValuesById,
+        savedRawValuesByMeasureId: measureRawValuesById,
+        legacyMeasureOptions,
+      }),
+    [
+      dashboardMeasures,
+      measureRawValuesById,
+      measureValuesById,
+      legacyMeasureOptions,
+    ],
+  );
+  const allMeasuresByName = useMemo(
+    () => buildMeasureRenderContextByName(measureOptions),
+    [measureOptions],
+  );
+  const measuresById = useMemo(
+    () =>
+      dashboardMeasures.reduce<Record<string, WorkspaceDashboardMeasure>>(
+        (accumulator, measure) => {
+          accumulator[measure.id] = measure;
+          return accumulator;
+        },
+        {},
+      ),
+    [dashboardMeasures],
+  );
 
   const layoutRows = useMemo(
-    () =>
-      autoFitRows
-        ? buildRows(chartGroups, columns)
-        : [
-            {
-              columns,
-              groups: chartGroups,
-            },
-          ],
+    () => buildRows(chartGroups, columns, autoFitRows),
     [chartGroups, columns, autoFitRows],
   );
+
+  const buildResizeState = useCallback(
+    (
+      chartId: string,
+      mode: "single" | "equalize" | "fit" = "single",
+      targetColSpan?: number,
+    ): ResizeState => {
+      const row = findLayoutRowForChart(layoutRows, chartId);
+      if (!row) return null;
+
+      return {
+        chartId,
+        mode,
+        previewSpans: buildResizePreview(
+          row,
+          chartId,
+          mode,
+          columns,
+          targetColSpan,
+        ),
+        canFit: canFitRow(row),
+        canEqualize: canEqualizeRow(row),
+      };
+    },
+    [columns, layoutRows],
+  );
+
+  const persistResizeState = useCallback(
+    async (resizeState: NonNullable<ResizeState>) => {
+      const updates = resizeState.previewSpans
+        .filter((item) => item.kind === "single" && item.chartId)
+        .map((item) => {
+          const targetChart = charts.find((chart) => chart.id === item.chartId);
+          if (!targetChart) return null;
+
+          const config = parseChartConfig(targetChart);
+          if (!config || !isResizableConfig(config)) return null;
+
+          const currentSpan = getChartColSpan(
+            targetChart,
+            Number.MAX_SAFE_INTEGER,
+          );
+          if (currentSpan === item.colSpan) return null;
+
+          return handleChartConfigChange(
+            targetChart.id,
+            JSON.stringify({
+              ...config,
+              colSpan: item.colSpan,
+            }),
+          );
+        })
+        .filter(
+          (update): update is ReturnType<typeof handleChartConfigChange> =>
+            Boolean(update),
+        );
+
+      await Promise.all(updates);
+    },
+    [charts, handleChartConfigChange],
+  );
+
+  const handleResizeOpen = useCallback(
+    (chartId: string) => {
+      const nextState = buildResizeState(chartId);
+      if (!nextState) return;
+      setResizingChart(nextState);
+    },
+    [buildResizeState],
+  );
+
+  const handleResizeSelect = useCallback(
+    (
+      chartId: string,
+      mode: "single" | "equalize" | "fit",
+      targetColSpan?: number,
+    ) => {
+      const nextState = buildResizeState(chartId, mode, targetColSpan);
+      if (!nextState) return;
+      setResizingChart(nextState);
+      void persistResizeState(nextState).finally(() => {
+        setResizingChart((current) =>
+          current?.chartId === chartId ? null : current,
+        );
+      });
+    },
+    [buildResizeState, persistResizeState],
+  );
+
+  const handleResizeClose = useCallback(() => {
+    setResizingChart(null);
+  }, []);
+
+  const previewChart = useMemo(
+    () => charts.find((chart) => chart.id === previewChartId) ?? null,
+    [charts, previewChartId],
+  );
+  const previewRows = useMemo(
+    () => (previewChart ? chartData[previewChart.id] || [] : []),
+    [previewChart, chartData],
+  );
+  const previewConfig = useMemo(() => {
+    if (!previewChart) return null;
+    try {
+      return JSON.parse(previewChart.chartConfigJson) as
+        | Config
+        | CardConfig
+        | TableConfig
+        | TextConfig;
+    } catch {
+      return null;
+    }
+  }, [previewChart]);
+  const previewMeasure = useMemo(() => {
+    if (
+      !previewConfig ||
+      !isCardConfig(previewConfig) ||
+      !previewConfig.measureId
+    ) {
+      return null;
+    }
+
+    return measuresById[previewConfig.measureId] ?? null;
+  }, [measuresById, previewConfig]);
+  const previewSql = previewMeasure?.sql ?? previewChart?.sql ?? "";
+  const previewDbIdentifier =
+    previewMeasure?.dbIdentifier ?? previewChart?.dbIdentifier ?? undefined;
+  const previewBackendPreference =
+    previewMeasure?.sqlBackend ?? previewChart?.sqlBackend ?? undefined;
+  const previewDisplayRows = previewRunRows ?? previewRows;
+  const previewDialogTitle =
+    previewConfig && "title" in previewConfig && previewConfig.title
+      ? previewConfig.title
+      : previewChart?.title || "Chart preview";
+  const isPreviewTable = isTableConfig(previewConfig);
+  const previewCardConfig =
+    previewConfig && isCardConfig(previewConfig) ? previewConfig : null;
+  const isPreviewChart =
+    previewConfig &&
+    !isCardConfig(previewConfig) &&
+    !isTableConfig(previewConfig) &&
+    !isTextConfig(previewConfig);
+  const previewMetricValue = useMemo(() => {
+    if (!previewCardConfig) {
+      return "";
+    }
+
+    if (previewRunRows !== null) {
+      return formatFirstRowMeasureValue(previewRunRows);
+    }
+
+    if (previewMeasure && measureValuesById[previewMeasure.id] !== undefined) {
+      return measureValuesById[previewMeasure.id];
+    }
+
+    return formatFirstRowMeasureValue(previewRows);
+  }, [
+    measureValuesById,
+    previewCardConfig,
+    previewMeasure,
+    previewRows,
+    previewRunRows,
+  ]);
+  const dashboardWarningMessage = chartQueryError ?? measureQueryError;
 
   if (loading)
     return <div className="p-6 text-sm text-muted-foreground">Loading...</div>;
@@ -398,28 +789,34 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
     );
 
   return (
-    <div className="mx-auto flex h-full w-full flex-col gap-1 overflow-y-auto px-6 md:px-12 lg:px-18 pt-2 pb-6 md:pb-10">
+    <div
+      ref={dashboardContentRef}
+      className="mx-auto flex h-full w-full flex-col gap-1 overflow-y-auto px-6 md:px-12 lg:px-18 pt-2 pb-6 md:pb-10"
+    >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <DashboardHeader
           dashboard={dashboard}
           onTitleUpdate={handleTitleUpdate}
         />
         <div className="flex items-center gap-2">
-          <TextConfigDialog
-            trigger={
-              <Button
-                variant="outline"
-                size="default"
-                disabled={isAddingTextCard}
-              >
-                Add Text Card
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="default">
+                Add Card
               </Button>
-            }
-            config={null}
-            onConfigChange={(newConfig) => {
-              void handleAddTextCard(newConfig);
-            }}
-          />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onSelect={() => setIsDataCardDialogOpen(true)}>
+                Metric / Visual card
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isAddingTextCard}
+                onSelect={() => setIsTextCardDialogOpen(true)}
+              >
+                Text card
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <DashboardSettingsDialog
             isOpen={isSettingsOpen}
             onOpenChange={setIsSettingsOpen}
@@ -430,27 +827,209 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
           />
         </div>
       </div>
+
       <DashboardSlicersBar
         dashboardId={dashboardId}
         selectedChartId={selectedChartId}
+        charts={charts}
         onClearChartSelection={() => setSelectedChartId(null)}
       />
+      {dashboardWarningMessage ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div>{dashboardWarningMessage}</div>
+          {isUnauthorizedMessage(dashboardWarningMessage) ? (
+            <div className="mt-3">
+              <Button asChild size="sm" variant="outline">
+                <Link href="/settings">Open Settings</Link>
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <DashboardGrid
         charts={charts}
         chartData={chartData}
+        measures={allMeasuresByName}
+        measureOptions={measureOptions}
+        measuresById={measuresById}
+        measureValuesById={measureValuesById}
         layoutRows={layoutRows}
+        dashboardColumns={columns}
         onDragEnd={handleDragEnd}
         onConfigChange={handleChartConfigChange}
+        onMeasureChange={handleDashboardMeasureUpdate}
         onDelete={handleChartDelete}
         expandedSqlChartId={expandedSqlChartId}
         onToggleSql={handleToggleSql}
         onSqlUpdate={handleSqlUpdate}
         resizingChart={resizingChart}
-        onResizeChange={handleResizeChange}
+        onResizeOpen={handleResizeOpen}
+        onResizeClose={handleResizeClose}
+        onResizeSelect={handleResizeSelect}
         selectedChartId={selectedChartId}
         onChartSelect={setSelectedChartId}
+        onPreviewChart={(chartId) => {
+          setPreviewRunRows(null);
+          setPreviewChartId(chartId);
+        }}
       />
+      <DashboardDataCardDialog
+        open={isDataCardDialogOpen}
+        onOpenChange={setIsDataCardDialogOpen}
+        dashboardId={dashboardId}
+        existingMeasures={measureOptions}
+        onSaved={async () => {
+          await Promise.all([
+            refreshDashboardData(),
+            refreshDashboardMeasures(),
+          ]);
+        }}
+      />
+      <TextConfigDialog
+        open={isTextCardDialogOpen}
+        onOpenChange={setIsTextCardDialogOpen}
+        config={null}
+        measures={allMeasuresByName}
+        measureOptions={measureOptions}
+        onConfigChange={(newConfig) => {
+          void handleAddTextCard(newConfig);
+        }}
+      />
+      <Dialog
+        open={Boolean(previewChartId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewChartId(null);
+            setPreviewRunRows(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>{previewDialogTitle}</DialogTitle>
+            <DialogDescription>
+              Preview for this dashboard visual.
+            </DialogDescription>
+          </DialogHeader>
+          {previewSql ? (
+            <SqlPreviewPanel
+              query={previewSql}
+              dbIdentifier={previewDbIdentifier}
+              backendPreference={previewBackendPreference}
+              onSave={async (newSql) => {
+                if (!previewChart) {
+                  return;
+                }
+
+                if (previewMeasure) {
+                  await handleDashboardMeasureUpdate(previewMeasure.id, {
+                    label: previewMeasure.label,
+                    sql: newSql,
+                  });
+                } else {
+                  await handleSqlUpdate(previewChart.id, newSql);
+                }
+                setPreviewRunRows(null);
+              }}
+              onRunStart={() => {
+                setPreviewRunRows([]);
+              }}
+              onRun={(result: SqlPreviewRunResult) => {
+                setPreviewRunRows(result.rows as Result[]);
+              }}
+              onCancel={() => {
+                setPreviewRunRows(null);
+              }}
+            />
+          ) : null}
+          <div className="max-h-[70vh] overflow-auto">
+            {(() => {
+              const hasRows = previewDisplayRows.length > 0;
+
+              if (!previewChart || !previewConfig) {
+                return (
+                  <div className="p-3 text-sm text-muted-foreground">
+                    Preview unavailable. The chart config or data could not be
+                    loaded.
+                  </div>
+                );
+              }
+
+              if (previewCardConfig) {
+                return (
+                  <div className="space-y-4 p-1">
+                    <div className="rounded-xl border border-border bg-muted/20 p-3">
+                      <MetricCard
+                        value={previewMetricValue}
+                        title={previewCardConfig.title}
+                        description={previewCardConfig.description}
+                        takeaway={previewCardConfig.takeaway}
+                        className="border-0 bg-transparent shadow-none"
+                      />
+                    </div>
+                    {hasRows ? (
+                      <SqlResultsTable
+                        dataOverride={{
+                          stage: "complete",
+                          columns: Object.keys(previewDisplayRows[0] || {}).map(
+                            (name) => ({ name }),
+                          ),
+                          rows: previewDisplayRows as Record<string, unknown>[],
+                        }}
+                      />
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                        No preview rows yet. Run the query to inspect the metric
+                        result set.
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              if (!hasRows) {
+                return (
+                  <div className="p-3 text-sm text-muted-foreground">
+                    Preview unavailable. The chart config or data could not be
+                    loaded.
+                  </div>
+                );
+              }
+
+              if (isPreviewTable) {
+                return (
+                  <SqlResultsTable
+                    dataOverride={{
+                      stage: "complete",
+                      columns: Object.keys(previewDisplayRows[0] || {}).map(
+                        (name) => ({ name }),
+                      ),
+                      rows: previewDisplayRows as Record<string, unknown>[],
+                    }}
+                  />
+                );
+              }
+
+              if (isPreviewChart) {
+                return (
+                  <DynamicChart
+                    chartData={previewDisplayRows}
+                    chartConfig={previewConfig as Config}
+                    className="w-full"
+                  />
+                );
+              }
+
+              return (
+                <div className="p-3 text-sm text-muted-foreground">
+                  This visual type does not support preview.
+                </div>
+              );
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -14,7 +14,7 @@ interface TransformationResult {
 
 export function transformDataForMultiLineChart(
   data: InputDataPoint[],
-  chartConfig: Config
+  chartConfig: Config,
 ): TransformationResult {
   const { xKey, lineCategories, measurementColumn, categoryColumn } =
     chartConfig;
@@ -25,11 +25,11 @@ export function transformDataForMultiLineChart(
   const lineField = categoryColumn
     ? categoryColumn
     : fields.find((field) =>
-        lineCategories?.includes(data[0][field] as string)
+        lineCategories?.includes(data[0][field] as string),
       ) || "";
 
   const xAxisValues = Array.from(
-    new Set(data.map((item) => String(item[xAxisField])))
+    new Set(data.map((item) => String(item[xAxisField]))),
   );
 
   const transformedData: TransformedDataPoint[] = xAxisValues.map((xValue) => {
@@ -38,7 +38,7 @@ export function transformDataForMultiLineChart(
       const matchingItem = data.find(
         (item) =>
           String(item[xAxisField]) === xValue &&
-          String(item[lineField]) === category
+          String(item[lineField]) === category,
       );
       dataPoint[category] = matchingItem
         ? matchingItem[measurementColumn ?? ""]

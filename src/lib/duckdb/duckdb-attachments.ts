@@ -33,20 +33,38 @@ export function quoteIdentifier(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-function deriveAlias(connection: SourceConnectionConfig): string {
+const RESERVED_DUCKDB_NAMES = new Set(["main", "system", "temp", "temporary"]);
+
+function stripQueryString(identifier: string): string {
+  const queryIndex = identifier.indexOf("?");
+  return queryIndex >= 0 ? identifier.slice(0, queryIndex) : identifier;
+}
+
+type AttachmentAliasInput = Pick<
+  SourceConnectionConfig,
+  "alias" | "identifier"
+>;
+
+export function resolveAttachmentAlias(
+  connection: AttachmentAliasInput,
+): string {
   if (connection.alias) {
     // Sanitize the explicitly provided alias to ensure it's a valid DuckDB identifier
     const sanitized = connection.alias.replace(/[^A-Za-z0-9_]/g, "_");
     const withoutLeadingUnderscore = sanitized.replace(/^_+/, "");
-    return withoutLeadingUnderscore || "source";
+    const alias = withoutLeadingUnderscore || "source";
+    return RESERVED_DUCKDB_NAMES.has(alias.toLowerCase())
+      ? `${alias}_db`
+      : alias;
   }
 
   const identifier = connection.identifier ?? "";
-  const segments = identifier.split(/[/:]/).filter(Boolean);
+  const segments = stripQueryString(identifier).split(/[/:]/).filter(Boolean);
   const candidate = segments[segments.length - 1] || "source";
   const sanitized = candidate.replace(/[^A-Za-z0-9_]/g, "_");
   const withoutLeadingUnderscore = sanitized.replace(/^_+/, "");
-  return withoutLeadingUnderscore || "source";
+  const alias = withoutLeadingUnderscore || "source";
+  return RESERVED_DUCKDB_NAMES.has(alias.toLowerCase()) ? `${alias}_db` : alias;
 }
 
 function buildAttachStatement(
@@ -82,7 +100,7 @@ export interface AttachmentPlan {
 export function buildAttachmentPlan(
   connection: SourceConnectionConfig,
 ): AttachmentPlan {
-  const alias = deriveAlias(connection);
+  const alias = resolveAttachmentAlias(connection);
   const statements: string[] = [];
 
   const extension =

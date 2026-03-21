@@ -18,6 +18,7 @@ export async function runSqlNormalized(
   query: string,
 ): Promise<TableRow[]> {
   const uri = resolvePostgresUri(dbIdentifier);
+  // biome-ignore lint/suspicious/noExplicitAny: bun SQL client has no public type
   const client = getBunSql(uri) as any;
   const rows = await client.unsafe(query);
   return (rows as Array<Record<string, unknown>>).map((row) => {

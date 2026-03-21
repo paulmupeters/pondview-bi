@@ -1,29 +1,21 @@
 import {
   ChatBubbleBottomCenterTextIcon,
   PlusCircleIcon,
-  TrashIcon,
 } from "@heroicons/react/24/outline";
-import {
-  ChartBar,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Table,
-} from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useArtifactMutation } from "@/components/artifact-mutation-context";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { runQuery } from "@/lib/sql/run-query";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ChartView } from "./sql-analysis-display/chart-view";
-import { SqlControls } from "./sql-analysis-display/sql-controls";
 import { StageIndicator } from "./sql-analysis-display/stage-indicator";
 import type {
   ActiveView,
@@ -33,6 +25,47 @@ import type {
   SqlAnalysisDisplayProps,
   SqlAnalysisStage,
 } from "./sql-analysis-display.types";
+
+function normalizeChartConfigForRows(
+  config: Config | null | undefined,
+  rows: Result[],
+): Config | null {
+  if (!config || rows.length === 0) {
+    return null;
+  }
+
+  const availableColumns = new Set<string>();
+  rows.forEach((row) => {
+    Object.keys(row).forEach((key) => {
+      availableColumns.add(key);
+    });
+  });
+
+  if (!config.xKey || !availableColumns.has(config.xKey)) {
+    return null;
+  }
+
+  if (config.countMode) {
+    return config;
+  }
+
+  const validYKeys = (config.yKeys ?? []).filter((key) =>
+    availableColumns.has(key),
+  );
+
+  if (validYKeys.length === 0) {
+    return null;
+  }
+
+  if (validYKeys.length === config.yKeys.length) {
+    return config;
+  }
+
+  return {
+    ...config,
+    yKeys: validYKeys,
+  };
+}
 
 export function SqlAnalysisDisplay({
   data,
@@ -46,6 +79,7 @@ export function SqlAnalysisDisplay({
   canAddToChat,
   artifactId,
   onConfigChange,
+  onVisualTypeChange,
 }: SqlAnalysisDisplayProps) {
   const { updateArtifactConfig } = useArtifactMutation();
   const [activeView, setActiveView] = useState<ActiveView>(() =>
@@ -60,60 +94,15 @@ export function SqlAnalysisDisplay({
   const [cardConfig, setCardConfig] = useState<CardConfig | null>(
     () => data?.cardConfig ?? null,
   );
-  const [executedRows, setExecutedRows] = useState<Result[] | null>(null);
-  const [executedColumns, setExecutedColumns] = useState<
-    { name: string; type?: string }[] | null
-  >(null);
   const lastQueryRef = useRef<string | null>(data?.query ?? null);
-  const lastAutoSwitchQueryRef = useRef<string | null>(data?.query ?? null);
   const lastVisualTypeRef = useRef<string | undefined>(data?.visualType);
-  const [query, setQuery] = useState<string | null>(null);
-  const [isSqlExpanded, setIsSqlExpanded] = useState(
-    data?.isSqlExpandedInitial ?? false,
-  );
   const [showVisualOptions, setShowVisualOptions] = useState(false);
 
-  const toggleSqlExpanded = () => {
-    setIsSqlExpanded((prev) => !prev);
-  };
-
-  const handleExecute = async () => {
-    const queryToExecute = query || data?.query || "";
-
-    try {
-      const result = await runQuery({
-        sql: queryToExecute,
-        dbIdentifier: data?.dbIdentifier,
-      });
-
-      setExecutedColumns(result.columns);
-      // Cast to Result[] since the API returns compatible data
-      setExecutedRows(result.rows as Result[]);
-    } catch (error) {
-      console.error("Query execution failed:", error);
-      // Reset to empty state on error
-      setExecutedColumns([]);
-      setExecutedRows([]);
-    }
-  };
-
   const handleClear = () => {
-    setQuery(null);
-    setExecutedRows(null);
-    setExecutedColumns(null);
     setChartConfig(null);
     setCardConfig(null);
     setShowVisualOptions(false);
-    lastAutoSwitchQueryRef.current = null;
   };
-
-  const { renderControls, renderEditor } = SqlControls({
-    query: query ?? data?.query ?? "",
-    onQueryChange: (newQuery) => setQuery(newQuery),
-    onExecute: handleExecute,
-    isExpanded: isSqlExpanded,
-    onToggleExpanded: toggleSqlExpanded,
-  });
 
   // Wrapper functions to notify parent of config changes
   const handleChartConfigChange = useCallback(
@@ -154,15 +143,11 @@ export function SqlAnalysisDisplay({
       setChartConfig(data?.chartConfig ?? null);
       setCardConfig(data?.cardConfig ?? null);
       setShowVisualOptions(false);
-      setExecutedRows(null);
-      setExecutedColumns(null);
-      setQuery(null);
       setActiveView(
         currentVisualType === "chart" || currentVisualType === "card"
           ? "chart"
           : "table",
       );
-      lastAutoSwitchQueryRef.current = currentQuery;
       lastQueryRef.current = currentQuery;
       lastVisualTypeRef.current = currentVisualType;
     } else if (currentVisualType !== lastVisualTypeRef.current) {
@@ -174,22 +159,17 @@ export function SqlAnalysisDisplay({
           : "table",
       );
       // Also sync chartConfig/cardConfig if they weren't set yet
-      if (data?.chartConfig && !chartConfig) {
-        setChartConfig(data.chartConfig);
+      if (data?.chartConfig) {
+        const nextChartConfig = data.chartConfig;
+        setChartConfig((previous) => previous ?? nextChartConfig);
       }
-      if (data?.cardConfig && !cardConfig) {
-        setCardConfig(data.cardConfig);
+      if (data?.cardConfig) {
+        const nextCardConfig = data.cardConfig;
+        setCardConfig((previous) => previous ?? nextCardConfig);
       }
       lastVisualTypeRef.current = currentVisualType;
     }
-  }, [
-    data?.query,
-    data?.visualType,
-    data?.chartConfig,
-    data?.cardConfig,
-    chartConfig,
-    cardConfig,
-  ]);
+  }, [data?.query, data?.visualType, data?.chartConfig, data?.cardConfig]);
 
   useEffect(() => {
     if (activeView !== "chart") {
@@ -198,48 +178,29 @@ export function SqlAnalysisDisplay({
   }, [activeView]);
 
   const columnsForDialog = useMemo(
-    () =>
-      (executedColumns ?? data?.columns ?? []).map((c) => ({ name: c.name })),
-    [executedColumns, data?.columns],
+    () => (data?.columns ?? []).map((c) => ({ name: c.name })),
+    [data?.columns],
   );
 
   const selectedForChart = useMemo((): SelectedForChart | undefined => {
-    if (executedRows !== null) {
-      return {
-        stage: "complete",
-        rows: executedRows,
-        chartConfig: chartConfig ?? data?.chartConfig,
-        summary: data?.summary,
-      };
+    if (data?.stage !== "complete") {
+      return undefined;
     }
 
-    return data?.stage === "complete"
-      ? {
-          stage: data.stage,
-          rows: (data.rows as Result[] | undefined) ?? [],
-          chartConfig: data.chartConfig,
-          summary: data.summary,
-        }
-      : undefined;
-  }, [
-    executedRows,
-    chartConfig,
-    data?.stage,
-    data?.rows,
-    data?.chartConfig,
-    data?.summary,
-  ]);
+    const completedRows = (data.rows as Result[] | undefined) ?? [];
+    const resolvedConfig = normalizeChartConfigForRows(
+      chartConfig ?? data.chartConfig,
+      completedRows,
+    );
+    return {
+      stage: data.stage,
+      rows: completedRows,
+      chartConfig: resolvedConfig ?? undefined,
+      summary: data.summary,
+    };
+  }, [chartConfig, data?.stage, data?.rows, data?.chartConfig, data?.summary]);
 
   const selectedForTable = useMemo((): SelectedForTable | undefined => {
-    if (executedRows !== null && executedColumns !== null) {
-      return {
-        stage: "complete",
-        columns: executedColumns,
-        rows: executedRows as Record<string, unknown>[],
-        summary: data?.summary,
-      };
-    }
-
     return data?.stage === "complete"
       ? {
           stage: data.stage,
@@ -248,20 +209,12 @@ export function SqlAnalysisDisplay({
           summary: data.summary,
         }
       : undefined;
-  }, [
-    executedRows,
-    executedColumns,
-    data?.stage,
-    data?.columns,
-    data?.rows,
-    data?.summary,
-  ]);
+  }, [data?.stage, data?.columns, data?.rows, data?.summary]);
 
   const cardSourceRows =
-    executedRows ?? (data?.stage === "complete" ? (data.rows ?? null) : null);
+    data?.stage === "complete" ? (data.rows ?? null) : null;
   const cardSourceColumns =
-    executedColumns ??
-    (data?.stage === "complete" ? (data.columns ?? null) : null);
+    data?.stage === "complete" ? (data.columns ?? null) : null;
 
   const selectedForCard: SelectedForCard | undefined =
     cardSourceRows &&
@@ -287,25 +240,24 @@ export function SqlAnalysisDisplay({
     activeView === "chart" && columnsForDialog.length > 0 && !selectedForCard;
 
   const payloadForAddToChat = useMemo(() => {
-    if (!data && executedRows === null && executedColumns === null) {
+    if (!data) {
       return null;
     }
 
-    const finalRows =
-      (executedRows as Result[] | null) ??
-      (data?.rows as Result[] | undefined) ??
-      null;
+    const finalRows = (data.rows as Result[] | undefined) ?? null;
     const finalColumns =
-      executedColumns ??
-      (data?.columns as { name: string; type?: string }[] | undefined) ??
-      null;
+      (data.columns as { name: string; type?: string }[] | undefined) ?? null;
 
-    if (!data && !finalRows && !finalColumns) {
+    if (!finalRows && !finalColumns) {
       return null;
     }
 
     const resolvedRows = finalRows ?? [];
     const resolvedColumns = finalColumns ?? [];
+    const resolvedChartConfig = normalizeChartConfigForRows(
+      chartConfig ?? data?.chartConfig,
+      resolvedRows,
+    );
     const totalRows =
       resolvedRows.length > 0
         ? resolvedRows.length
@@ -316,26 +268,26 @@ export function SqlAnalysisDisplay({
     if (activeView === "chart") {
       if (cardConfig || data?.cardConfig) {
         visualType = "card";
-      } else if (chartConfig || data?.chartConfig) {
+      } else if (resolvedChartConfig) {
         visualType = "chart";
       } else if (resolvedRows.length === 1 && resolvedColumns.length === 1) {
         visualType = "card";
       } else {
-        visualType = "chart";
+        visualType = "table";
       }
     }
 
     return {
       stage: "complete" as const,
       progress: 1,
-      query: query ?? data?.query ?? "",
+      query: data?.query ?? "",
       dbIdentifier: data?.dbIdentifier,
       executionTime: data?.executionTime,
       rowCount: totalRows,
       columns: resolvedColumns,
       rows: resolvedRows,
       visualType,
-      chartConfig: chartConfig ?? data?.chartConfig,
+      chartConfig: resolvedChartConfig ?? undefined,
       cardConfig: cardConfig ?? data?.cardConfig,
       summary:
         data?.summary ??
@@ -349,15 +301,26 @@ export function SqlAnalysisDisplay({
             }
           : undefined),
     };
-  }, [
-    data,
-    executedRows,
-    executedColumns,
-    chartConfig,
-    cardConfig,
-    query,
-    activeView,
-  ]);
+  }, [data, chartConfig, cardConfig, activeView]);
+
+  const currentVisualType: "table" | "chart" | "card" | undefined =
+    activeView === "table" ? "table" : selectedForCard ? "card" : "chart";
+  const lastEmittedVisualTypeRef = useRef<"table" | "chart" | "card" | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!onVisualTypeChange || !currentVisualType) {
+      return;
+    }
+
+    if (lastEmittedVisualTypeRef.current === currentVisualType) {
+      return;
+    }
+
+    lastEmittedVisualTypeRef.current = currentVisualType;
+    onVisualTypeChange(currentVisualType);
+  }, [currentVisualType, onVisualTypeChange]);
 
   const showAddToChatButton =
     Boolean(onAddToChat) &&
@@ -375,19 +338,11 @@ export function SqlAnalysisDisplay({
     return null;
   }
 
-  // Logic to determine if we should show the clear button.
-  // We generally want to show it if we are in "interactive" mode (e.g. in the prompt input area),
-  // but NOT if we are just displaying a static result (e.g. in the chat history).
-  //
-  // - If `data` comes from props and has stage="complete", it's likely a static chat artifact -> NO Clear button.
-  // - If `data` is initial (e.g. from prompt input wrapper), we are interactive -> YES Clear button (once we have results).
-  //
-  // The `executedRows` state being non-null implies the user has run a query interactively in this session.
-  const isInteractive = executedRows !== null || data?.stage === "initial";
+  // Keep clear controls limited to interactive/initial states.
+  const isInteractive = data?.stage === "initial";
 
   const showClearButton =
-    isInteractive &&
-    (executedRows !== null || (data && data.stage !== "complete"));
+    isInteractive && Boolean(data && data.stage !== "complete");
 
   return (
     <div className={cn("space-y-6 w-full", className)}>
@@ -401,166 +356,191 @@ export function SqlAnalysisDisplay({
       )}
 
       {data && (
-        <div className="flex items-center justify-between gap-2 px-4 pt-4 lg:w-[300px] xl:w-[500px] w-full overflow-y-auto">
-          <div className="flex gap-2">
-            <Button
-              variant={activeView === "table" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setActiveView("table")}
-              className="flex items-center gap-2"
-              disabled={!canShowTable}
+        <div className="flex flex-col gap-4 w-full">
+          <div className="px-4 pt-2">
+            <ToggleGroup
+              type="single"
+              value={activeView}
+              onValueChange={(value) => {
+                if (value) {
+                  setActiveView(value as ActiveView);
+                }
+              }}
+              className="gap-2"
             >
-              <Table className="w-4 h-4" />
-              Data
-            </Button>
-            <Button
-              variant={activeView === "chart" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setActiveView("chart")}
-              className="flex items-center gap-2"
-            >
-              <ChartBar className="w-4 h-4" />
-              Visual
-            </Button>
-            {canShowVisualOptionsToggle && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 text-xs font-mono"
-                onClick={() => setShowVisualOptions((prev) => !prev)}
-                aria-expanded={showVisualOptions}
-                aria-controls="chart-visual-options"
+              <ToggleGroupItem
+                value="table"
+                disabled={!canShowTable}
+                className={cn(
+                  "rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-medium bg-transparent data-[state=on]:text-primary data-[state=on]:bg-transparent",
+                  activeView === "table"
+                    ? "border-primary font-bold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
-                Visual options
-                <ChevronDown
-                  className={cn(
-                    "h-3.5 w-3.5 transition-transform",
-                    showVisualOptions && "rotate-180",
-                  )}
-                />
-              </Button>
-            )}
-            {showAddToChatButton && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-2"
-                    onClick={handleAddToChatClick}
-                  >
-                    <PlusCircleIcon className="w-4 h-4" />
-                    Add to chat
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Share this result</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
+                Data
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="chart"
+                disabled={false}
+                className={cn(
+                  "rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-mono bg-transparent data-[state=on]:text-primary data-[state=on]:bg-transparent",
+                  activeView === "chart"
+                    ? "border-primary font-bold"
+                    : "text-muted-foreground hover:text-foreground font-medium",
+                )}
+              >
+                Visual
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+
+          <div className="flex justify-end px-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {canShowVisualOptionsToggle && (
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 text-xs font-mono"
+                  onClick={() => setShowVisualOptions((prev) => !prev)}
+                  aria-expanded={showVisualOptions}
+                  aria-controls="chart-visual-options"
                 >
-                  <ChatBubbleBottomCenterTextIcon className="w-4 h-4" />
+                  Visual options
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 transition-transform",
+                      showVisualOptions && "rotate-180",
+                    )}
+                  />
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Edit with AI</p>
-              </TooltipContent>
-            </Tooltip>
-            {showClearButton && (
+              )}
+              {showAddToChatButton && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                      onClick={handleAddToChatClick}
+                    >
+                      <PlusCircleIcon className="w-4 h-4" />
+                      Add to chat
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Share this result</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
                     className="flex items-center gap-2"
-                    onClick={handleClear}
                   >
-                    <TrashIcon className="w-4 h-4" />
-                    Clear
+                    <ChatBubbleBottomCenterTextIcon className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Clear analysis</p>
+                  <p>Edit with AI</p>
                 </TooltipContent>
               </Tooltip>
+              {showClearButton ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                      onClick={handleClear}
+                    >
+                      Clear
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Clear analysis</p>
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
+              {history && history.total > 0 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={history.onPrev}
+                    disabled={history.currentIndex <= 0}
+                    className="flex items-center gap-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground min-w-[60px] text-center">
+                    {history.currentIndex + 1} / {history.total}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={history.onNext}
+                    disabled={history.currentIndex >= history.total - 1}
+                    className="flex items-center gap-2"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="w-full px-4">
+            {(data ||
+              (effectiveStage === "initial" && activeView === "chart")) &&
+              activeView === "chart" &&
+              (() => {
+                const dbIdentifier = data?.dbIdentifier;
+                const isSqlExpandedInitial = data?.isSqlExpandedInitial;
+                return (
+                  <ChartView
+                    data={
+                      data ?? {
+                        stage: "initial",
+                        progress: 0,
+                        executionTime: 0,
+                        rowCount: 0,
+                        columns: [],
+                        rows: [],
+                        dbIdentifier,
+                        visualType: "chart",
+                        isSqlExpandedInitial: isSqlExpandedInitial ?? false,
+                      }
+                    }
+                    selectedForChart={selectedForChart}
+                    selectedForCard={selectedForCard}
+                    selectedForTable={selectedForTable}
+                    chartConfig={chartConfig}
+                    cardConfig={cardConfig}
+                    columnsForDialog={columnsForDialog}
+                    onChartConfigChange={handleChartConfigChange}
+                    onCardConfigChange={handleCardConfigChange}
+                    showVisualOptions={showVisualOptions}
+                    onShowVisualOptionsChange={setShowVisualOptions}
+                  />
+                );
+              })()}
+
+            {data && activeView === "table" && (
+              <div className="group relative">
+                <SqlResultsTable
+                  dataOverride={selectedForTable}
+                  expandable
+                  query={data.query}
+                  dbIdentifier={data.dbIdentifier}
+                  backendPreference={data.sqlBackend ?? undefined}
+                />
+              </div>
             )}
           </div>
-          {history && history.total > 0 && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={history.onPrev}
-                disabled={history.currentIndex <= 0}
-                className="flex items-center gap-2"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <span className="text-xs text-muted-foreground min-w-[60px] text-center">
-                {history.currentIndex + 1} / {history.total}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={history.onNext}
-                disabled={history.currentIndex >= history.total - 1}
-                className="flex items-center gap-2"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {(data || (effectiveStage === "initial" && activeView === "chart")) &&
-        activeView === "chart" &&
-        (() => {
-          const dbIdentifier = data?.dbIdentifier;
-          const isSqlExpandedInitial = data?.isSqlExpandedInitial;
-          return (
-            <ChartView
-              data={
-                data ?? {
-                  stage: "initial",
-                  progress: 0,
-                  executionTime: 0,
-                  rowCount: 0,
-                  columns: [],
-                  rows: [],
-                  dbIdentifier,
-                  visualType: "chart",
-                  isSqlExpandedInitial: isSqlExpandedInitial ?? false,
-                }
-              }
-              selectedForChart={selectedForChart}
-              selectedForCard={selectedForCard}
-              selectedForTable={selectedForTable}
-              chartConfig={chartConfig}
-              cardConfig={cardConfig}
-              columnsForDialog={columnsForDialog}
-              onChartConfigChange={handleChartConfigChange}
-              onCardConfigChange={handleCardConfigChange}
-              renderSqlControls={renderControls}
-              renderSqlEditor={renderEditor}
-              showVisualOptions={showVisualOptions}
-              onShowVisualOptionsChange={setShowVisualOptions}
-            />
-          );
-        })()}
-
-      {data && activeView === "table" && (
-        <div className="group relative">
-          {renderControls(undefined, "sql-editor-analysis-table")}
-          <SqlResultsTable dataOverride={selectedForTable} />
-          {renderEditor("sql-editor-analysis-table")}
         </div>
       )}
 

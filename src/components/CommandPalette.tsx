@@ -7,7 +7,6 @@ import {
   Palette,
   Settings,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +18,7 @@ import {
 } from "@/lib/custom-css";
 import { useTheme } from "@/lib/theme-provider";
 import { getAllThemes } from "@/themes";
+import { useRouter } from "@/vite/next-navigation";
 
 interface CommandItem {
   id: string;
@@ -39,6 +39,8 @@ export function CommandPalette() {
   const [hasCustomCss, setHasCustomCss] = useState(false);
   const availableThemes = useMemo(() => getAllThemes(), []);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const commandListRef = React.useRef<HTMLDivElement | null>(null);
+  const lastPreviewedCommandIdRef = React.useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -72,6 +74,21 @@ export function CommandPalette() {
     } finally {
       setOpen(false);
       setSearch("");
+    }
+  }, []);
+
+  const previewTheme = useCallback((themeName: string) => {
+    try {
+      if (themeName === CUSTOM_THEME_VALUE) {
+        const savedCss = localStorage.getItem("CUSTOM_CSS") || "";
+        if (!savedCss) return;
+        applyCustomCss(savedCss);
+        return;
+      }
+
+      applyTheme(themeName);
+    } catch (error) {
+      console.error("Failed to preview theme", error);
     }
   }, []);
 
@@ -123,6 +140,7 @@ export function CommandPalette() {
         id: "change-theme-menu",
         label: "Change theme",
         icon: <Palette size={16} />,
+        shortcut: ["6"],
         perform: () => {
           setShowThemeMenu(true);
           setSearch("");
@@ -135,8 +153,9 @@ export function CommandPalette() {
   const themeCommands: CommandItem[] = useMemo(() => {
     const baseCommands = availableThemes.map((themeOption) => ({
       id: `theme-${themeOption.name}`,
-      label: `Switch to ${themeOption.displayName}${selectedTheme === themeOption.name ? " (current)" : ""
-        }`,
+      label: `Switch to ${themeOption.displayName}${
+        selectedTheme === themeOption.name ? " (current)" : ""
+      }`,
       icon: <Palette size={16} />,
       perform: () => handleThemeChange(themeOption.name),
     }));
@@ -144,8 +163,9 @@ export function CommandPalette() {
     if (hasCustomCss) {
       baseCommands.push({
         id: "theme-custom",
-        label: `Use Custom Theme${selectedTheme === CUSTOM_THEME_VALUE ? " (current)" : ""
-          }`,
+        label: `Use Custom Theme${
+          selectedTheme === CUSTOM_THEME_VALUE ? " (current)" : ""
+        }`,
         icon: <Palette size={16} />,
         perform: () => handleThemeChange(CUSTOM_THEME_VALUE),
       });
@@ -169,6 +189,26 @@ export function CommandPalette() {
     [navigationCommands, showThemeMenu, themeCommands],
   );
 
+  const shouldKeepPaletteOpen = useCallback(
+    (commandId: string) =>
+      commandId === "change-theme-menu" || commandId === "theme-back",
+    [],
+  );
+
+  const previewThemeFromCommandId = useCallback(
+    (commandId: string) => {
+      if (!showThemeMenu) return;
+      if (commandId === "theme-back") return;
+      if (!commandId.startsWith("theme-")) return;
+      if (lastPreviewedCommandIdRef.current === commandId) return;
+
+      const themeName = commandId.slice("theme-".length);
+      previewTheme(themeName);
+      lastPreviewedCommandIdRef.current = commandId;
+    },
+    [previewTheme, showThemeMenu],
+  );
+
   // Toggle the menu when ⌘K is pressed
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -187,18 +227,20 @@ export function CommandPalette() {
       if (!open) return;
 
       const key = e.key;
-      const matchedCommand = commands.find(
-        (command) => command.shortcut?.includes(key),
+      const matchedCommand = commands.find((command) =>
+        command.shortcut?.includes(key),
       );
 
       if (matchedCommand) {
         e.preventDefault();
         matchedCommand.perform();
-        setOpen(false);
-        setSearch("");
+        if (!shouldKeepPaletteOpen(matchedCommand.id)) {
+          setOpen(false);
+          setSearch("");
+        }
       }
     },
-    [open, commands],
+    [open, commands, shouldKeepPaletteOpen],
   );
 
   useEffect(() => {
@@ -212,6 +254,45 @@ export function CommandPalette() {
       setSearch("");
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!showThemeMenu) {
+      lastPreviewedCommandIdRef.current = null;
+    }
+  }, [showThemeMenu]);
+
+  useEffect(() => {
+    if (!open || !showThemeMenu || !commandListRef.current) return;
+
+    const listElement = commandListRef.current;
+    const applySelectedPreview = () => {
+      const selectedItem = listElement.querySelector<HTMLElement>(
+        "[cmdk-item][data-selected='true']",
+      );
+      const commandId = selectedItem?.dataset.commandId;
+      if (commandId) {
+        previewThemeFromCommandId(commandId);
+      }
+    };
+
+    applySelectedPreview();
+
+    const observer = new MutationObserver((mutations) => {
+      if (
+        mutations.some((mutation) => mutation.attributeName === "data-selected")
+      ) {
+        applySelectedPreview();
+      }
+    });
+
+    observer.observe(listElement, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ["data-selected"],
+    });
+
+    return () => observer.disconnect();
+  }, [open, previewThemeFromCommandId, showThemeMenu]);
 
   // Listen for programmatic open/toggle/close events
   useEffect(() => {
@@ -244,7 +325,10 @@ export function CommandPalette() {
             />
           </div>
 
-          <Command.List className="max-h-76 overflow-y-auto p-2">
+          <Command.List
+            ref={commandListRef}
+            className="max-h-76 overflow-y-auto p-2"
+          >
             <Command.Empty className="px-3 py-2 text-sm text-muted-foreground">
               No results found.
             </Command.Empty>
@@ -258,10 +342,12 @@ export function CommandPalette() {
               .map((command) => (
                 <Command.Item
                   key={command.id}
+                  data-command-id={command.id}
+                  onMouseEnter={() => previewThemeFromCommandId(command.id)}
                   onSelect={() => {
                     command.perform();
                     // Don't close dialog for menu navigation commands
-                    if (command.id !== "change-theme-menu" && command.id !== "theme-back") {
+                    if (!shouldKeepPaletteOpen(command.id)) {
                       setOpen(false);
                       setSearch("");
                     }

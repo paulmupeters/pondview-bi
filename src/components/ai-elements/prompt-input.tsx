@@ -5,7 +5,6 @@ import {
   Loader2Icon,
   MicIcon,
   PaperclipIcon,
-  SendIcon,
   SquareIcon,
   XIcon,
 } from "lucide-react";
@@ -283,6 +282,7 @@ export function PromptInputAttachment({
       {...props}
     >
       {mediaType === "image" ? (
+        // biome-ignore lint/performance/noImgElement: attachment thumbnail, no Next.js Image needed
         <img
           alt={data.filename || "attachment"}
           className="size-full rounded-sm object-cover"
@@ -708,7 +708,7 @@ export const PromptInput = ({
     // Convert blob URLs to data URLs asynchronously
     Promise.all(
       files.map(async ({ id, ...item }) => {
-        if (item.url && item.url.startsWith("blob:")) {
+        if (item.url?.startsWith("blob:")) {
           return {
             ...item,
             url: await convertBlobUrlToDataUrl(item.url),
@@ -739,7 +739,7 @@ export const PromptInput = ({
             controller.textInput.clear();
           }
         }
-      } catch (error) {
+      } catch (_error) {
         // Don't clear on error - user may want to retry
       }
     });
@@ -865,7 +865,10 @@ export const PromptInputTextarea = ({
 
   return (
     <InputGroupTextarea
-      className={cn("field-sizing-content max-h-48 min-h-16 overflow-y-auto", className)}
+      className={cn(
+        "field-sizing-content max-h-48 min-h-16 overflow-y-auto",
+        className,
+      )}
       name="message"
       onCompositionEnd={() => setIsComposing(false)}
       onCompositionStart={() => setIsComposing(true)}
@@ -1025,13 +1028,13 @@ interface SpeechRecognition extends EventTarget {
   lang: string;
   start(): void;
   stop(): void;
-  onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onend: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
   onresult:
-    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any)
+    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void)
     | null;
   onerror:
-    | ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any)
+    | ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void)
     | null;
 }
 

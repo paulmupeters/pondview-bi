@@ -10,7 +10,7 @@ export function showRandomAnimation(
   delay?: number,
   duration: number = 3000,
   onFrame?: (frame: string) => void,
-  onComplete?: () => void
+  onComplete?: () => void,
 ) {
   // Get all animation names
   const animationNames = Object.keys(animations);
@@ -44,7 +44,7 @@ export function showAnimation(
     duration?: number;
     onFrame?: (frame: string) => void;
     onComplete?: () => void;
-  }
+  },
 ) {
   const animation = animations[animationName];
   if (!animation) {

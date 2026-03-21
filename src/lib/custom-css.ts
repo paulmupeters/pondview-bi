@@ -42,16 +42,16 @@ export function setSelectedTheme(themeName: string | null) {
 
 export function applyTheme(themeName: string) {
   if (typeof document === "undefined") return;
-  
+
   const theme = getTheme(themeName);
   if (!theme) {
     console.warn(`Theme "${themeName}" not found`);
     return;
   }
-  
+
   // Clear custom CSS when applying a theme
   clearCustomCss();
-  
+
   // Apply theme CSS
   let styleElement = document.getElementById(THEME_STYLE_ID);
   if (!styleElement) {
@@ -60,7 +60,7 @@ export function applyTheme(themeName: string) {
     document.head.appendChild(styleElement);
   }
   styleElement.textContent = theme.css;
-  
+
   // Save theme selection
   setSelectedTheme(themeName);
 }
@@ -73,5 +73,3 @@ export function clearTheme() {
   }
   setSelectedTheme(null);
 }
-
-

@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  extractSqlArtifactParts,
   getVisualizationIdForArtifact,
   shouldIncludeVisualization,
 } from "@/components/chat/sql-artifact-utils";
@@ -8,59 +9,52 @@ import type {
   SqlAnalysisData,
   SqlAnalysisStage,
 } from "@/components/sql-analysis-display.types";
-import type { ArtifactStatus } from "@/hooks/types";
+import type { CardConfig, Config } from "@/lib/types";
 
-type VisualizationEntry = {
+export type VisualizationEntry = {
   id: string;
   data: SqlAnalysisData | null;
   stage?: SqlAnalysisStage;
   progress?: number;
+  artifactId?: string;
+  canAddToChat?: boolean;
+  onConfigChange?: (config: {
+    chartConfig?: Config;
+    cardConfig?: CardConfig;
+  }) => void;
+  onVisualTypeChange?: (visualType: "table" | "chart" | "card") => void;
+  source?: "artifact" | "manual-repl";
 };
 
 type UseVisualizationSelectionArgs = {
   messages: UIMessage[];
   executeSqlArtifactType: string;
+  supplementalVisualizations?: VisualizationEntry[];
 };
 
 export function useVisualizationSelection({
   messages,
   executeSqlArtifactType,
+  supplementalVisualizations = [],
 }: UseVisualizationSelectionArgs) {
   const [activeVisualizationId, setActiveVisualizationId] = useState<
     string | null
   >(null);
   const [hasPinnedVisualizationSelection, setHasPinnedVisualizationSelection] =
     useState(false);
+  const lastAutoSelectedGeneratedVisualizationIdRef = useRef<string | null>(
+    null,
+  );
 
   const getLastSelectableVisualizationIdForMessage = useCallback(
     (message: UIMessage) => {
-      if (!message.parts) {
-        return null;
-      }
-
       let lastVisualizationId: string | null = null;
+      const sqlArtifacts = extractSqlArtifactParts(
+        message.parts,
+        executeSqlArtifactType,
+      );
 
-      for (
-        let partIndex = 0;
-        partIndex < message.parts.length;
-        partIndex += 1
-      ) {
-        const part = message.parts[partIndex];
-        if (part.type !== executeSqlArtifactType) {
-          continue;
-        }
-
-        const artifactPart = part as {
-          data?: {
-            id?: string;
-            status?: ArtifactStatus;
-            progress?: number;
-            error?: string;
-            payload?: SqlAnalysisData;
-          };
-        };
-        const artifactData = artifactPart.data;
-
+      for (const { partIndex, artifactData } of sqlArtifacts) {
         if (!artifactData || artifactData.status === "error") {
           continue;
         }
@@ -93,26 +87,12 @@ export function useVisualizationSelection({
     const vizList: VisualizationEntry[] = [];
 
     messages.forEach((message) => {
-      if (!message.parts) {
-        return;
-      }
+      const sqlArtifacts = extractSqlArtifactParts(
+        message.parts,
+        executeSqlArtifactType,
+      );
 
-      message.parts.forEach((part, partIndex) => {
-        if (part.type !== executeSqlArtifactType) {
-          return;
-        }
-
-        const artifactPart = part as {
-          data?: {
-            id?: string;
-            status?: ArtifactStatus;
-            progress?: number;
-            error?: string;
-            payload?: SqlAnalysisData;
-          };
-        };
-        const artifactData = artifactPart.data;
-
+      sqlArtifacts.forEach(({ partIndex, artifactData }) => {
         if (!artifactData || artifactData.status === "error") {
           return;
         }
@@ -143,12 +123,22 @@ export function useVisualizationSelection({
           data: payload,
           stage: derivedStage,
           progress: progressValue,
+          artifactId: artifactData.id,
+          source: "artifact",
         });
       });
     });
 
+    supplementalVisualizations.forEach((visualization) => {
+      if (!visualization.data) {
+        return;
+      }
+
+      vizList.push(visualization);
+    });
+
     return vizList;
-  }, [messages, executeSqlArtifactType]);
+  }, [messages, executeSqlArtifactType, supplementalVisualizations]);
 
   useEffect(() => {
     if (visualizations.length === 0) {
@@ -158,13 +148,42 @@ export function useVisualizationSelection({
       if (hasPinnedVisualizationSelection) {
         setHasPinnedVisualizationSelection(false);
       }
+      lastAutoSelectedGeneratedVisualizationIdRef.current = null;
       return;
     }
 
-    const latestVisualizationId = visualizations[visualizations.length - 1]?.id;
+    const latestVisualization = visualizations[visualizations.length - 1];
+    const latestPersistedVisualization =
+      [...visualizations]
+        .reverse()
+        .find((visualization) => visualization.source !== "manual-repl") ??
+      null;
+    const latestVisualizationId =
+      latestPersistedVisualization?.id ?? latestVisualization?.id;
     const activeSelectionExists = visualizations.some(
       (visualization) => visualization.id === activeVisualizationId,
     );
+    const latestVisualizationIsGeneratedChart =
+      latestPersistedVisualization?.stage === "complete" &&
+      (latestPersistedVisualization.data?.visualType === "chart" ||
+        latestPersistedVisualization.data?.visualType === "card");
+    const isNewGeneratedVisualization =
+      latestVisualizationId &&
+      latestVisualizationId !==
+        lastAutoSelectedGeneratedVisualizationIdRef.current;
+
+    if (
+      latestVisualizationIsGeneratedChart &&
+      isNewGeneratedVisualization &&
+      latestVisualizationId &&
+      activeVisualizationId !== latestVisualizationId
+    ) {
+      lastAutoSelectedGeneratedVisualizationIdRef.current =
+        latestVisualizationId;
+      setHasPinnedVisualizationSelection(false);
+      setActiveVisualizationId(latestVisualizationId);
+      return;
+    }
 
     if (hasPinnedVisualizationSelection) {
       if (!activeSelectionExists) {
@@ -179,10 +198,13 @@ export function useVisualizationSelection({
     }
   }, [activeVisualizationId, hasPinnedVisualizationSelection, visualizations]);
 
-  const handleSelectVisualization = useCallback((visualizationId: string) => {
-    setHasPinnedVisualizationSelection(true);
-    setActiveVisualizationId(visualizationId);
-  }, []);
+  const handleSelectVisualization = useCallback(
+    (visualizationId: string, options?: { pinned?: boolean }) => {
+      setHasPinnedVisualizationSelection(options?.pinned ?? true);
+      setActiveVisualizationId(visualizationId);
+    },
+    [],
+  );
 
   return {
     visualizations,

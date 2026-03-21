@@ -4,17 +4,25 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import * as Dialog from "@radix-ui/react-dialog";
-import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiFetch } from "@/lib/api/client";
+import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import { appendConnectedTable } from "@/lib/connected-tables";
+import {
+  buildAttachmentPlan,
+  buildDetachStatement,
+} from "@/lib/duckdb/duckdb-attachments";
+import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
+import {
+  buildMotherDuckIdentifier,
+  extractMotherDuckDatabaseName,
+} from "@/lib/duckdb/motherduck";
 import {
   buildPostgresConnectionString,
   type PostgresUrlComponents,
 } from "@/lib/duckdb/path";
-import { useTheme } from "@/lib/theme-provider";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 
 type DatabaseType =
@@ -48,7 +56,6 @@ const SCHEMALESS_DATABASES = new Set<DatabaseType>([
 const DATABASE_OPTIONS: Array<{
   label: string;
   value: Exclude<DatabaseType, null>;
-  disabled?: boolean;
   description?: string;
 }> = [
   {
@@ -71,31 +78,11 @@ const DATABASE_OPTIONS: Array<{
     value: "sqlite",
     description: "Attach a SQLite database file",
   },
-  {
-    label: "Apache Iceberg",
-    value: "iceberg",
-    description: "Connect to Iceberg tables or REST catalogs",
-  },
-  {
-    label: "Delta Lake",
-    value: "delta_lake",
-    description: "Query Delta Lake tables",
-  },
-  {
-    label: "DuckLake",
-    value: "ducklake",
-    description: "Connect to a DuckLake catalog",
-  },
-  {
-    label: "HTTP/HTTPS (httpfs)",
-    value: "httpfs",
-    description: "Query remote files over HTTP/S via httpfs",
-  },
-  {
-    label: "Custom Extension",
-    value: "extension",
-    description: "Install + attach a DuckDB extension (advanced)",
-  },
+  // {
+  //   label: "Custom Extension",
+  //   value: "extension",
+  //   description: "Install + attach a DuckDB extension (advanced)",
+  // },
 ];
 
 const resolveDuckdbExtension = (dbType: DatabaseType): string | undefined => {
@@ -108,74 +95,77 @@ const resolveDuckdbExtension = (dbType: DatabaseType): string | undefined => {
       return "mysql";
     case "sqlite":
       return "sqlite";
-    case "httpfs":
-      return "httpfs";
-    case "iceberg":
-      return "iceberg";
-    case "delta_lake":
-      return "delta";
-    case "ducklake":
-      return "ducklake";
     default:
       return undefined;
   }
 };
 
-// Removed unused DuckDB preview constants
-
-async function fetchSchemas(dbIdentifier: string): Promise<string[]> {
-  const response = await apiFetch(
-    `/api/tables?id=${encodeURIComponent(dbIdentifier)}`,
-    { cache: "no-store" },
-  );
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => ({}))) as {
-      error?: string;
-    };
-    throw new Error(payload.error || "Failed to fetch schemas.");
-  }
-  const payload = (await response.json()) as { schemas?: string[] };
-  return payload.schemas ?? [];
-}
-
-async function fetchTablesForSchema(
-  dbIdentifier: string,
-  schema: string,
-  limit = 20,
-): Promise<string[]> {
-  const response = await apiFetch(
-    `/api/tables?id=${encodeURIComponent(dbIdentifier)}&schema=${encodeURIComponent(schema)}&limit=${limit}`,
-    { cache: "no-store" },
-  );
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => ({}))) as {
-      error?: string;
-    };
-    throw new Error(payload.error || "Failed to fetch tables for schema.");
-  }
-  const payload = (await response.json()) as { tables?: string[] };
-  return payload.tables ?? [];
-}
-
 type ConnectDataDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // Optional initial values to prefill the form when opening
   initialSelectedDatabase?: DatabaseType;
   initialDatabasePath?: string;
+  effectiveSqlBackend?: SqlBackend;
 };
+
+type MotherDuckConnectionState = "idle" | "auth_pending" | "confirmed";
+
+const MOTHERDUCK_ALIAS = "motherduck";
+
+function requiresSchemaSelection(dbType: DatabaseType): boolean {
+  return (
+    dbType !== "extension" &&
+    dbType !== "motherduck" &&
+    !!dbType &&
+    !SCHEMALESS_DATABASES.has(dbType)
+  );
+}
+
+function extractMotherDuckTableNames(
+  rows: Record<string, unknown>[],
+): string[] {
+  return rows
+    .map((row) => {
+      const explicitName = row.name ?? row.table_name;
+      if (explicitName !== undefined && explicitName !== null) {
+        return String(explicitName);
+      }
+      const firstValue = Object.values(row)[0];
+      return firstValue === undefined || firstValue === null
+        ? ""
+        : String(firstValue);
+    })
+    .filter(Boolean);
+}
+
+async function runRemoteSql(
+  effectiveSqlBackend: SqlBackend,
+  sql: string,
+): Promise<Record<string, unknown>[]> {
+  if (effectiveSqlBackend === "bridge") {
+    const result = await runBridgeQuery(sql);
+    return result.rows;
+  }
+  if (effectiveSqlBackend === "duckdb-http") {
+    const result = await runDuckDbHttpQuery(sql);
+    return result.rows;
+  }
+  throw new Error(
+    "Cannot run remote SQL: active runtime is DuckDB WASM. Switch to Bridge or DuckDB over HTTP in Settings.",
+  );
+}
 
 export function ConnectDataDialog({
   open,
   onOpenChange,
   initialSelectedDatabase,
   initialDatabasePath,
+  effectiveSqlBackend = "duckdb-wasm",
 }: ConnectDataDialogProps) {
-  const { theme } = useTheme();
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [selectedDatabase, setSelectedDatabase] = useState<DatabaseType>(null);
   const [databasePath, setDatabasePath] = useState("");
-  const [motherduckToken, setMotherduckToken] = useState("");
+  const [motherDuckConnectionState, setMotherDuckConnectionState] =
+    useState<MotherDuckConnectionState>("idle");
   // Postgres-specific connection fields
   const [postgresHost, setPostgresHost] = useState("");
   const [postgresPort, setPostgresPort] = useState("5432");
@@ -192,17 +182,6 @@ export function ConnectDataDialog({
   // SQLite-specific fields
   const [sqlitePath, setSqlitePath] = useState("");
   const [sqliteAlias, setSqliteAlias] = useState("");
-  // Iceberg-specific fields
-  const [icebergEndpoint, setIcebergEndpoint] = useState("");
-  const [icebergWarehouse, setIcebergWarehouse] = useState("");
-  const [icebergPath, setIcebergPath] = useState("");
-  // Delta Lake-specific fields
-  const [deltaPath, setDeltaPath] = useState("");
-  const [deltaAlias, setDeltaAlias] = useState("");
-  // DuckLake-specific fields
-  const [ducklakeMetadataPath, setDucklakeMetadataPath] = useState("");
-  const [ducklakeDataPath, setDucklakeDataPath] = useState("");
-  const [ducklakeAlias, setDucklakeAlias] = useState("");
   // Custom extension fields
   const [customExtensionName, setCustomExtensionName] = useState("");
   const [customAttachStatement, setCustomAttachStatement] = useState("");
@@ -216,11 +195,14 @@ export function ConnectDataDialog({
   const [tableDescription, setTableDescription] = useState("");
   const [hasConnected, setHasConnected] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const motherDuckAttachPromiseRef = useRef<Promise<void> | null>(null);
+
+  const isWasmActive = effectiveSqlBackend === "duckdb-wasm";
 
   const resetState = useCallback(() => {
     setSelectedDatabase(null);
     setDatabasePath("");
-    setMotherduckToken("");
+    setMotherDuckConnectionState("idle");
     setPostgresHost("");
     setPostgresPort("5432");
     setPostgresUser("");
@@ -234,23 +216,17 @@ export function ConnectDataDialog({
     setMysqlDatabase("");
     setSqlitePath("");
     setSqliteAlias("");
-    setIcebergEndpoint("");
-    setIcebergWarehouse("");
-    setIcebergPath("");
-    setDeltaPath("");
-    setDeltaAlias("");
-    setDucklakeMetadataPath("");
-    setDucklakeDataPath("");
-    setDucklakeAlias("");
     setCustomExtensionName("");
     setCustomAttachStatement("");
     setCustomAttachAlias("");
     setSchemas([]);
     setSelectedSchema("");
     setSchemaTablesPreview([]);
+    setSelectedTables(new Set());
     setTableDescription("");
     setHasConnected(false);
     setErrorMessage(null);
+    motherDuckAttachPromiseRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -259,82 +235,51 @@ export function ConnectDataDialog({
     }
   }, [open, resetState]);
 
-  // Prefill values when opening the dialog
   useEffect(() => {
-    if (open) {
-      if (initialSelectedDatabase) {
-        // Convert "duckdb" to "motherduck" for backward compatibility
-        const dbType =
-          initialSelectedDatabase === "duckdb"
-            ? "motherduck"
-            : initialSelectedDatabase;
-        setSelectedDatabase(dbType);
-      }
-      if (initialDatabasePath) {
-        setDatabasePath(initialDatabasePath);
-      }
+    if (open && initialSelectedDatabase) {
+      setSelectedDatabase(initialSelectedDatabase);
+    }
+    if (open && initialDatabasePath) {
+      setDatabasePath(
+        initialSelectedDatabase === "motherduck"
+          ? extractMotherDuckDatabaseName(initialDatabasePath)
+          : initialDatabasePath,
+      );
     }
   }, [open, initialSelectedDatabase, initialDatabasePath]);
 
-  // Theme detection for logo selection
-  useEffect(() => {
-    const updateDarkMode = () => {
-      if (theme === "dark") {
-        setIsDarkMode(true);
-      } else if (theme === "light") {
-        setIsDarkMode(false);
-      } else {
-        // system theme
-        setIsDarkMode(
-          window.matchMedia("(prefers-color-scheme: dark)").matches,
-        );
-      }
-    };
+  const buildMotherDuckDbIdentifier = useCallback(
+    (databaseName = databasePath): string =>
+      buildMotherDuckIdentifier(databaseName),
+    [databasePath],
+  );
 
-    updateDarkMode();
+  const buildMotherDuckConnection = useCallback(
+    (databaseName = databasePath) => ({
+      type: "motherduck",
+      identifier: buildMotherDuckDbIdentifier(databaseName),
+      alias: MOTHERDUCK_ALIAS,
+      readOnly: false,
+      duckdbExtension: "motherduck",
+    }),
+    [databasePath, buildMotherDuckDbIdentifier],
+  );
 
-    if (theme === "system") {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handleChange = () => updateDarkMode();
-      mediaQuery.addEventListener("change", handleChange);
-      return () => mediaQuery.removeEventListener("change", handleChange);
-    }
-  }, [theme]);
-
-  const getDatabaseLogo = (dbType: string): string | null => {
-    switch (dbType) {
-      case "motherduck":
-        return "/sources/motherduck.png";
-      case "postgres":
-        return "/Postgresql_elephant.png";
-      case "mysql":
-        return isDarkMode ? "/mysql-icon-dark.svg" : "/mysql-icon-light.svg";
-      case "sqlite":
-        return "/file.svg";
-      case "iceberg":
-        return "/sources/Apache_Iceberg_Logo.svg";
-      case "delta_lake":
-        return "/sources/delta_lake.png";
-      case "ducklake":
-        return "/sources/DuckLake_Logo-horizontal.svg";
-      case "snowflake":
-        return "/sources/snowflake.svg";
-      case "web":
-        return "/globe.svg";
-      default:
-        return null;
-    }
-  };
-
-  // Build Postgres connection string from individual fields
   const buildPostgresConnectionStringFromFields = useCallback((): string => {
+    const host = postgresHost.trim() || "localhost";
+    const port = parseInt(postgresPort.trim() || "5432", 10);
+    const user = postgresUser.trim() || "postgres";
+    const password = postgresPassword;
+    const database = postgresDatabase.trim() || "postgres";
+    const sslmode = postgresSslMode.trim() as PostgresUrlComponents["sslmode"];
+
     const components: PostgresUrlComponents = {
-      host: postgresHost.trim() || "localhost",
-      port: parseInt(postgresPort.trim() || "5432", 10),
-      user: postgresUser.trim() || "postgres",
-      password: postgresPassword,
-      database: postgresDatabase.trim() || "postgres",
-      sslmode: postgresSslMode.trim() || undefined,
+      host,
+      port,
+      user,
+      password,
+      database,
+      sslmode: sslmode || undefined,
     };
     return buildPostgresConnectionString(components);
   }, [
@@ -352,7 +297,6 @@ export function ConnectDataDialog({
     const user = mysqlUser.trim() || "root";
     const password = mysqlPassword;
     const database = mysqlDatabase.trim() || "mysql";
-
     const authPart =
       user || password
         ? `${encodeURIComponent(user)}${password ? `:${encodeURIComponent(password)}` : ""}@`
@@ -360,35 +304,84 @@ export function ConnectDataDialog({
     return `mysql://${authPart}${host}:${port}/${database}`;
   }, [mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase]);
 
-  // Extract a friendly database name from the database path
   const extractDatabaseName = useCallback(
     (dbType: DatabaseType, dbPath: string): string => {
       if (dbType === "postgres") {
-        // For Postgres, use the database name from the connection string
         return postgresDatabase.trim() || "postgres";
-      } else if (dbType === "mysql") {
+      }
+      if (dbType === "mysql") {
         return mysqlDatabase.trim() || "mysql";
-      } else if (dbType === "extension") {
+      }
+      if (dbType === "extension") {
         return (
           customAttachAlias.trim() || customExtensionName.trim() || "extension"
         );
-      } else if (dbType === "motherduck") {
-        // For MotherDuck, remove "md:" prefix and query parameters
-        const withoutPrefix = dbPath.startsWith("md:")
-          ? dbPath.slice(3)
-          : dbPath;
-        const withoutQuery = withoutPrefix.split("?")[0];
-        return withoutQuery.trim() || "motherduck";
-      } else {
-        // For other types, use the path or a default name
-        return dbPath.trim() || dbType || "database";
       }
+      if (dbType === "motherduck") {
+        return extractMotherDuckDatabaseName(dbPath) || "motherduck";
+      }
+      return dbPath.trim() || dbType || "database";
     },
     [postgresDatabase, mysqlDatabase, customAttachAlias, customExtensionName],
   );
 
+  const runMotherDuckAttachSequence = useCallback(
+    async (databaseName = databasePath): Promise<void> => {
+      const connection = buildMotherDuckConnection(databaseName);
+      const plan = buildAttachmentPlan(connection);
+
+      try {
+        await runRemoteSql(
+          effectiveSqlBackend,
+          buildDetachStatement(plan.alias, { ifExists: true }),
+        );
+      } catch {
+        // Best-effort cleanup of any existing alias before reattaching.
+      }
+
+      for (const statement of plan.statements) {
+        await runRemoteSql(effectiveSqlBackend, statement);
+      }
+    },
+    [databasePath, buildMotherDuckConnection, effectiveSqlBackend],
+  );
+
+  const handleConfirmMotherDuckClick = useCallback(async () => {
+    if (isWasmActive) return;
+
+    try {
+      setIsLoadingTables(true);
+      setErrorMessage(null);
+
+      if (motherDuckAttachPromiseRef.current) {
+        await motherDuckAttachPromiseRef.current;
+      } else {
+        await runMotherDuckAttachSequence();
+      }
+
+      const rows = await runRemoteSql(
+        effectiveSqlBackend,
+        `SHOW TABLES FROM ${MOTHERDUCK_ALIAS};`,
+      );
+      const tableNames = extractMotherDuckTableNames(rows);
+      setSchemaTablesPreview(tableNames);
+      setSelectedTables(new Set());
+      setHasConnected(true);
+      setMotherDuckConnectionState("confirmed");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e ?? "");
+      setErrorMessage(
+        msg || "Failed to confirm MotherDuck authentication or load tables.",
+      );
+    } finally {
+      setIsLoadingTables(false);
+    }
+  }, [isWasmActive, effectiveSqlBackend, runMotherDuckAttachSequence]);
+
   const handleConnectClick = useCallback(async () => {
-    // For Postgres, validate required fields
+    if (isWasmActive) return;
+
+    // Field validation
     if (selectedDatabase === "postgres") {
       if (
         !postgresHost.trim() ||
@@ -412,31 +405,6 @@ export function ConnectDataDialog({
         setErrorMessage("Enter a SQLite database file path.");
         return;
       }
-    } else if (selectedDatabase === "iceberg") {
-      if (
-        (!icebergEndpoint.trim() || !icebergWarehouse.trim()) &&
-        !icebergPath.trim()
-      ) {
-        setErrorMessage(
-          "Provide either Iceberg endpoint + warehouse or a direct Iceberg path.",
-        );
-        return;
-      }
-    } else if (selectedDatabase === "delta_lake") {
-      if (!deltaPath.trim()) {
-        setErrorMessage("Enter a Delta Lake table path.");
-        return;
-      }
-    } else if (selectedDatabase === "ducklake") {
-      if (!ducklakeMetadataPath.trim()) {
-        setErrorMessage("Enter a DuckLake metadata path.");
-        return;
-      }
-    } else if (selectedDatabase === "httpfs") {
-      if (!databasePath.trim()) {
-        setErrorMessage("Enter an HTTP(S) URL to query.");
-        return;
-      }
     } else if (selectedDatabase === "extension") {
       if (
         !customExtensionName.trim() ||
@@ -457,9 +425,6 @@ export function ConnectDataDialog({
       setIsLoadingSchemas(true);
       setErrorMessage(null);
 
-      // Build database path - prepend "md:" for MotherDuck and add token if provided
-      // For Postgres, build connection string from individual fields
-      // For MySQL, build connection string from individual fields
       let dbPath: string;
       if (selectedDatabase === "postgres") {
         dbPath = buildPostgresConnectionStringFromFields();
@@ -467,55 +432,92 @@ export function ConnectDataDialog({
         dbPath = buildMysqlConnectionStringFromFields();
       } else if (selectedDatabase === "sqlite") {
         dbPath = `sqlite:${sqlitePath.trim()}`;
-      } else if (selectedDatabase === "iceberg") {
-        // Skip schema discovery for Iceberg (schema-less)
-        setSchemas([]);
-        setHasConnected(true);
-        return;
-      } else if (selectedDatabase === "delta_lake") {
-        // Skip schema discovery for Delta Lake (schema-less)
-        setSchemas([]);
-        setHasConnected(true);
-        return;
-      } else if (selectedDatabase === "ducklake") {
-        // Skip schema discovery for DuckLake (schema-less)
-        setSchemas([]);
-        setHasConnected(true);
-        return;
-      } else if (selectedDatabase === "httpfs") {
-        // Schema-less; httpfs just needs the extension loaded at query time
-        setSchemas([]);
-        setHasConnected(true);
-        return;
       } else if (selectedDatabase === "extension") {
         // Skip schema discovery for custom extensions
         setSchemas([]);
         setHasConnected(true);
         return;
       } else if (selectedDatabase === "motherduck") {
-        dbPath = databasePath.trim();
-        dbPath = `md:${dbPath}`;
-        if (motherduckToken.trim()) {
-          const encodedToken = encodeURIComponent(motherduckToken.trim());
-          dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
-        }
+        setSchemas([]);
+        setSelectedSchema("");
+        setSchemaTablesPreview([]);
+        setSelectedTables(new Set());
+        setHasConnected(false);
+        setMotherDuckConnectionState("auth_pending");
+
+        const attachPromise = runMotherDuckAttachSequence(databasePath);
+        motherDuckAttachPromiseRef.current = attachPromise;
+        void attachPromise
+          .catch((e: unknown) => {
+            const msg = e instanceof Error ? e.message : String(e ?? "");
+            setMotherDuckConnectionState("idle");
+            setErrorMessage(
+              msg || "Failed to initialize MotherDuck authentication flow.",
+            );
+          })
+          .finally(() => {
+            if (motherDuckAttachPromiseRef.current === attachPromise) {
+              motherDuckAttachPromiseRef.current = null;
+            }
+          });
+        return;
       } else {
         dbPath = databasePath.trim();
       }
 
-      const fetchedSchemas = await fetchSchemas(dbPath);
+      // Build a SourceConnectionConfig and use buildAttachmentPlan for INSTALL/LOAD/ATTACH
+      const extension = resolveDuckdbExtension(selectedDatabase);
+      const connection = {
+        type: selectedDatabase ?? "duckdb",
+        identifier: dbPath,
+        alias:
+          selectedDatabase === "postgres"
+            ? postgresDatabase.trim() || "source"
+            : selectedDatabase === "mysql"
+              ? mysqlDatabase.trim() || "source"
+              : selectedDatabase === "sqlite"
+                ? sqliteAlias.trim() || "source"
+                : "source",
+        readOnly: true,
+        duckdbExtension: extension,
+      };
+
+      const plan = buildAttachmentPlan(connection);
+
+      // Execute INSTALL/LOAD/ATTACH
+      for (const stmt of plan.statements) {
+        await runRemoteSql(effectiveSqlBackend, stmt);
+      }
+
+      // Introspect schemas from the attached alias
+      const schemaRows = await runRemoteSql(
+        effectiveSqlBackend,
+        `SELECT DISTINCT table_schema FROM ${plan.alias}.information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') ORDER BY 1`,
+      );
+      const fetchedSchemas = schemaRows
+        .map((r) => String(r.table_schema ?? ""))
+        .filter(Boolean);
       setSchemas(fetchedSchemas);
       setHasConnected(true);
+
+      // Detach to keep the remote runtime clean; re-attach happens on each interaction
+      try {
+        await runRemoteSql(
+          effectiveSqlBackend,
+          buildDetachStatement(plan.alias, { ifExists: true }),
+        );
+      } catch {
+        // Best-effort detach; ignore errors
+      }
     } catch (e: unknown) {
-      console.error(e);
       const msg = e instanceof Error ? e.message : String(e ?? "");
       setErrorMessage(msg || "Failed to connect or fetch schemas.");
     } finally {
       setIsLoadingSchemas(false);
     }
   }, [
+    isWasmActive,
     databasePath,
-    motherduckToken,
     selectedDatabase,
     postgresHost,
     postgresUser,
@@ -529,43 +531,69 @@ export function ConnectDataDialog({
     customAttachStatement,
     customAttachAlias,
     sqlitePath,
-    icebergEndpoint,
-    icebergWarehouse,
-    icebergPath,
-    deltaPath,
-    ducklakeMetadataPath,
+    sqliteAlias,
+    effectiveSqlBackend,
+    runMotherDuckAttachSequence,
   ]);
 
   const handleSchemaSelect = useCallback(
     async (schema: string) => {
+      if (isWasmActive) return;
       setSelectedSchema(schema);
       setSelectedTables(new Set());
       try {
         setIsLoadingTables(true);
-        // Build database path - prepend "md:" for MotherDuck and add token if provided
-        // For Postgres, build connection string from individual fields
-        // For MySQL, build connection string from individual fields
+
         let dbPath: string;
         if (selectedDatabase === "postgres") {
           dbPath = buildPostgresConnectionStringFromFields();
         } else if (selectedDatabase === "mysql") {
           dbPath = buildMysqlConnectionStringFromFields();
-        } else if (selectedDatabase === "motherduck") {
-          dbPath = databasePath.trim();
-          dbPath = `md:${dbPath}`;
-          if (motherduckToken.trim()) {
-            const encodedToken = encodeURIComponent(motherduckToken.trim());
-            dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
-          }
+        } else if (selectedDatabase === "sqlite") {
+          dbPath = `sqlite:${sqlitePath.trim()}`;
         } else {
           dbPath = databasePath.trim();
         }
-        console.log("Calling getTablesForSchema with:", { dbPath, schema });
-        const tables = await fetchTablesForSchema(dbPath, schema, 20);
-        console.log("getTablesForSchema returned:", tables);
-        setSchemaTablesPreview(tables);
+
+        const extension = resolveDuckdbExtension(selectedDatabase);
+        const connection = {
+          type: selectedDatabase ?? "duckdb",
+          identifier: dbPath,
+          alias:
+            selectedDatabase === "postgres"
+              ? postgresDatabase.trim() || "source"
+              : selectedDatabase === "mysql"
+                ? mysqlDatabase.trim() || "source"
+                : selectedDatabase === "sqlite"
+                  ? sqliteAlias.trim() || "source"
+                  : "source",
+          readOnly: true,
+          duckdbExtension: extension,
+        };
+        const plan = buildAttachmentPlan(connection);
+
+        for (const stmt of plan.statements) {
+          await runRemoteSql(effectiveSqlBackend, stmt);
+        }
+
+        const safeSchema = schema.replace(/'/g, "''");
+        const tableRows = await runRemoteSql(
+          effectiveSqlBackend,
+          `SELECT table_name FROM ${plan.alias}.information_schema.tables WHERE table_schema = '${safeSchema}' AND table_type = 'BASE TABLE' ORDER BY table_name LIMIT 20`,
+        );
+        setSchemaTablesPreview(
+          tableRows.map((r) => String(r.table_name ?? "")).filter(Boolean),
+        );
+
+        try {
+          await runRemoteSql(
+            effectiveSqlBackend,
+            buildDetachStatement(plan.alias, { ifExists: true }),
+          );
+        } catch {
+          // Best-effort
+        }
       } catch (e: unknown) {
-        console.error("Error in handleSchemaSelect:", e);
         setSchemaTablesPreview([]);
         const msg = e instanceof Error ? e.message : String(e ?? "");
         setErrorMessage(`Failed to load tables: ${msg}`);
@@ -574,21 +602,24 @@ export function ConnectDataDialog({
       }
     },
     [
+      isWasmActive,
       databasePath,
-      motherduckToken,
       selectedDatabase,
       buildPostgresConnectionStringFromFields,
       buildMysqlConnectionStringFromFields,
+      postgresDatabase,
+      mysqlDatabase,
+      sqliteAlias,
+      sqlitePath,
+      effectiveSqlBackend,
     ],
   );
 
   const handleAddTable = useCallback(async () => {
-    const requiresSchema =
-      selectedDatabase !== "extension" &&
-      !!selectedDatabase &&
-      !SCHEMALESS_DATABASES.has(selectedDatabase);
+    if (isWasmActive) return;
 
-    // For Postgres, validate required fields
+    const requiresSchema = requiresSchemaSelection(selectedDatabase);
+
     if (selectedDatabase === "postgres") {
       if (
         !postgresHost.trim() ||
@@ -596,7 +627,6 @@ export function ConnectDataDialog({
         !postgresDatabase.trim() ||
         (requiresSchema && !selectedSchema.trim())
       ) {
-        console.log("handleAddTable: disabled for Postgres");
         return;
       }
     } else if (selectedDatabase === "mysql") {
@@ -606,53 +636,26 @@ export function ConnectDataDialog({
         !mysqlDatabase.trim() ||
         (requiresSchema && !selectedSchema.trim())
       ) {
-        console.log("handleAddTable: disabled for MySQL");
         return;
       }
     } else if (selectedDatabase === "sqlite") {
-      if (!sqlitePath.trim() || !sqliteAlias.trim()) {
-        console.log("handleAddTable: disabled for SQLite");
-        return;
-      }
-    } else if (selectedDatabase === "iceberg") {
-      if (
-        (!icebergEndpoint.trim() || !icebergWarehouse.trim()) &&
-        !icebergPath.trim()
-      ) {
-        console.log("handleAddTable: disabled for Iceberg");
-        return;
-      }
-    } else if (selectedDatabase === "delta_lake") {
-      if (!deltaPath.trim() || !deltaAlias.trim()) {
-        console.log("handleAddTable: disabled for Delta Lake");
-        return;
-      }
-    } else if (selectedDatabase === "ducklake") {
-      if (!ducklakeMetadataPath.trim() || !ducklakeAlias.trim()) {
-        console.log("handleAddTable: disabled for DuckLake");
-        return;
-      }
+      if (!sqlitePath.trim() || !sqliteAlias.trim()) return;
     } else if (selectedDatabase === "extension") {
       if (
         !customExtensionName.trim() ||
         !customAttachStatement.trim() ||
         !customAttachAlias.trim()
-      ) {
-        console.log("handleAddTable: disabled for extension");
+      )
         return;
-      }
     } else if (
       !selectedDatabase ||
       (requiresSchema && !selectedSchema.trim()) ||
       !databasePath.trim()
     ) {
-      console.log("handleAddTable: disabled");
       return;
     }
+
     try {
-      // Build database path - prepend "md:" for MotherDuck and add token if provided
-      // For Postgres, build connection string from individual fields
-      // For MySQL, build connection string from individual fields
       let dbPath: string;
       if (selectedDatabase === "postgres") {
         dbPath = buildPostgresConnectionStringFromFields();
@@ -660,29 +663,10 @@ export function ConnectDataDialog({
         dbPath = buildMysqlConnectionStringFromFields();
       } else if (selectedDatabase === "sqlite") {
         dbPath = `sqlite:${sqlitePath.trim()}`;
-      } else if (selectedDatabase === "iceberg") {
-        if (icebergPath.trim()) {
-          dbPath = `iceberg:${icebergPath.trim()}`;
-        } else {
-          const warehouse = icebergWarehouse.trim();
-          const endpoint = icebergEndpoint.trim();
-          dbPath = `iceberg:${warehouse}?endpoint=${encodeURIComponent(endpoint)}`;
-        }
-      } else if (selectedDatabase === "delta_lake") {
-        dbPath = `delta:${deltaPath.trim()}`;
-      } else if (selectedDatabase === "ducklake") {
-        const metadata = ducklakeMetadataPath.trim();
-        const data = ducklakeDataPath.trim();
-        dbPath = `ducklake:${metadata}${data ? `?data_path=${encodeURIComponent(data)}` : ""}`;
       } else if (selectedDatabase === "extension") {
         dbPath = customAttachStatement.trim();
       } else if (selectedDatabase === "motherduck") {
-        dbPath = databasePath.trim();
-        dbPath = `md:${dbPath}`;
-        if (motherduckToken.trim()) {
-          const encodedToken = encodeURIComponent(motherduckToken.trim());
-          dbPath = `${dbPath}?motherduck_token=${encodedToken}`;
-        }
+        dbPath = buildMotherDuckDbIdentifier();
       } else {
         dbPath = databasePath.trim();
       }
@@ -692,34 +676,29 @@ export function ConnectDataDialog({
           ? customAttachAlias.trim()
           : selectedDatabase === "sqlite"
             ? sqliteAlias.trim()
-            : selectedDatabase === "delta_lake"
-              ? deltaAlias.trim()
-              : selectedDatabase === "ducklake"
-                ? ducklakeAlias.trim()
-                : selectedDatabase === "iceberg"
-                  ? icebergWarehouse.trim() || dbPath
-                  : selectedDatabase === "motherduck"
-                    ? databasePath.trim() || "motherduck"
-                    : selectedDatabase === "postgres"
-                      ? postgresDatabase.trim() || "postgres"
-                      : selectedDatabase === "mysql"
-                        ? mysqlDatabase.trim() || "mysql"
-                        : databasePath.trim() || "source";
-      // .trim()
-      // .replace(/[^A-Za-z0-9_]/g, "_")
-      // .replace(/^_+/g, "")
-      // .replace(/_+/g, "_");
+            : selectedDatabase === "motherduck"
+              ? MOTHERDUCK_ALIAS
+              : selectedDatabase === "postgres"
+                ? postgresDatabase.trim() || "postgres"
+                : selectedDatabase === "mysql"
+                  ? mysqlDatabase.trim() || "mysql"
+                  : databasePath.trim() || "source";
+
       const sanitizedAlias =
         attachAs && !/^[0-9]/.test(attachAs)
           ? attachAs
           : attachAs
             ? `_${attachAs}`
             : "source";
+
       const connectionType = selectedDatabase ?? "motherduck";
       const duckdbExtension =
         connectionType === "extension"
           ? customExtensionName.trim()
-          : resolveDuckdbExtension(connectionType);
+          : connectionType === "motherduck"
+            ? "motherduck"
+            : resolveDuckdbExtension(connectionType);
+
       const databaseName = extractDatabaseName(selectedDatabase, dbPath);
       const entrySchema =
         connectionType === "extension" || !requiresSchema ? "" : selectedSchema;
@@ -727,6 +706,7 @@ export function ConnectDataDialog({
         connectionType === "extension" || !requiresSchema
           ? []
           : Array.from(selectedTables);
+
       const newEntry = {
         type: connectionType,
         databasePath: dbPath,
@@ -738,6 +718,7 @@ export function ConnectDataDialog({
         readOnly: connectionType !== "motherduck",
         duckdbExtension,
       };
+
       await appendConnectedTable(newEntry);
       onOpenChange(false);
     } catch (error) {
@@ -745,8 +726,8 @@ export function ConnectDataDialog({
       setErrorMessage("Failed to store table selection. Please try again.");
     }
   }, [
+    isWasmActive,
     databasePath,
-    motherduckToken,
     onOpenChange,
     selectedDatabase,
     selectedSchema,
@@ -766,30 +747,19 @@ export function ConnectDataDialog({
     customAttachAlias,
     sqlitePath,
     sqliteAlias,
-    icebergEndpoint,
-    icebergWarehouse,
-    icebergPath,
-    deltaPath,
-    deltaAlias,
-    ducklakeMetadataPath,
-    ducklakeDataPath,
-    ducklakeAlias,
+    buildMotherDuckDbIdentifier,
   ]);
 
   const isAddDisabled = useMemo(() => {
-    const requiresSchema =
-      selectedDatabase !== "extension" &&
-      !!selectedDatabase &&
-      !SCHEMALESS_DATABASES.has(selectedDatabase);
+    if (isWasmActive) return true;
+    const requiresSchema = requiresSchemaSelection(selectedDatabase);
 
-    if (!selectedDatabase || !tableDescription.trim()) {
-      return true;
+    if (!selectedDatabase || !tableDescription.trim()) return true;
+    if (requiresSchema && !selectedSchema.trim()) return true;
+    if (selectedDatabase === "motherduck") {
+      return selectedTables.size === 0 || !tableDescription.trim();
     }
 
-    if (requiresSchema && !selectedSchema.trim()) {
-      return true;
-    }
-    // For Postgres, check individual fields
     if (selectedDatabase === "postgres") {
       return (
         !postgresHost.trim() || !postgresUser.trim() || !postgresDatabase.trim()
@@ -801,18 +771,6 @@ export function ConnectDataDialog({
     if (selectedDatabase === "sqlite") {
       return !sqlitePath.trim() || !sqliteAlias.trim();
     }
-    if (selectedDatabase === "iceberg") {
-      return (
-        (!icebergEndpoint.trim() || !icebergWarehouse.trim()) &&
-        !icebergPath.trim()
-      );
-    }
-    if (selectedDatabase === "delta_lake") {
-      return !deltaPath.trim() || !deltaAlias.trim();
-    }
-    if (selectedDatabase === "ducklake") {
-      return !ducklakeMetadataPath.trim() || !ducklakeAlias.trim();
-    }
     if (selectedDatabase === "extension") {
       return (
         !customExtensionName.trim() ||
@@ -821,12 +779,13 @@ export function ConnectDataDialog({
         !tableDescription.trim()
       );
     }
-    // For other databases, check databasePath
     return !databasePath.trim();
   }, [
+    isWasmActive,
     databasePath,
     selectedDatabase,
     selectedSchema,
+    selectedTables,
     tableDescription,
     postgresHost,
     postgresUser,
@@ -839,28 +798,533 @@ export function ConnectDataDialog({
     customAttachAlias,
     sqlitePath,
     sqliteAlias,
-    icebergEndpoint,
-    icebergWarehouse,
-    icebergPath,
-    deltaPath,
-    deltaAlias,
-    ducklakeMetadataPath,
-    ducklakeAlias,
   ]);
+
+  const isConnectDisabled = useMemo(() => {
+    if (isWasmActive) return true;
+    if (!selectedDatabase) return true;
+
+    if (selectedDatabase === "postgres") {
+      return (
+        !postgresHost.trim() || !postgresUser.trim() || !postgresDatabase.trim()
+      );
+    }
+    if (selectedDatabase === "mysql") {
+      return !mysqlHost.trim() || !mysqlUser.trim() || !mysqlDatabase.trim();
+    }
+    if (selectedDatabase === "sqlite") {
+      return !sqlitePath.trim();
+    }
+    if (selectedDatabase === "extension") {
+      return (
+        !customExtensionName.trim() ||
+        !customAttachStatement.trim() ||
+        !customAttachAlias.trim()
+      );
+    }
+    return !databasePath.trim();
+  }, [
+    isWasmActive,
+    selectedDatabase,
+    postgresHost,
+    postgresUser,
+    postgresDatabase,
+    mysqlHost,
+    mysqlUser,
+    mysqlDatabase,
+    customExtensionName,
+    customAttachStatement,
+    customAttachAlias,
+    sqlitePath,
+    databasePath,
+  ]);
+
+  const renderDatabaseSelector = () => (
+    <div className="grid grid-cols-1 gap-2">
+      {DATABASE_OPTIONS.map((opt) => {
+        const isSelected = selectedDatabase === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => {
+              setSelectedDatabase(opt.value);
+              setMotherDuckConnectionState("idle");
+              setHasConnected(false);
+              setSchemas([]);
+              setSelectedSchema("");
+              setSchemaTablesPreview([]);
+              setSelectedTables(new Set());
+              setErrorMessage(null);
+              motherDuckAttachPromiseRef.current = null;
+            }}
+            className={cn(
+              "flex items-center gap-3 rounded-lg border p-3 text-left text-sm transition-colors",
+              isSelected
+                ? "border-primary bg-primary/5 text-foreground"
+                : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:bg-accent/30 hover:text-foreground",
+            )}
+          >
+            <LinkIcon className="h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-medium text-foreground">{opt.label}</p>
+              {opt.description && (
+                <p className="text-xs text-muted-foreground">
+                  {opt.description}
+                </p>
+              )}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const renderConnectionForm = () => {
+    if (!selectedDatabase) return null;
+
+    if (selectedDatabase === "postgres") {
+      return (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold">Postgres Connection</h3>
+          <div className="grid grid-cols-[1fr_120px] gap-2">
+            <Input
+              placeholder="Host (e.g. localhost or db.example.com)"
+              value={postgresHost}
+              onChange={(e) => setPostgresHost(e.target.value)}
+            />
+            <Input
+              placeholder="Port"
+              value={postgresPort}
+              onChange={(e) => setPostgresPort(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              placeholder="Username"
+              value={postgresUser}
+              onChange={(e) => setPostgresUser(e.target.value)}
+            />
+            <Input
+              type="password"
+              placeholder="Password"
+              value={postgresPassword}
+              onChange={(e) => setPostgresPassword(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              placeholder="Database name"
+              value={postgresDatabase}
+              onChange={(e) => setPostgresDatabase(e.target.value)}
+            />
+            <Input
+              placeholder="SSL mode (optional)"
+              value={postgresSslMode}
+              onChange={(e) => setPostgresSslMode(e.target.value)}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (selectedDatabase === "mysql") {
+      return (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold">MySQL Connection</h3>
+          <div className="grid grid-cols-[1fr_120px] gap-2">
+            <Input
+              placeholder="Host"
+              value={mysqlHost}
+              onChange={(e) => setMysqlHost(e.target.value)}
+            />
+            <Input
+              placeholder="Port"
+              value={mysqlPort}
+              onChange={(e) => setMysqlPort(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              placeholder="Username"
+              value={mysqlUser}
+              onChange={(e) => setMysqlUser(e.target.value)}
+            />
+            <Input
+              type="password"
+              placeholder="Password"
+              value={mysqlPassword}
+              onChange={(e) => setMysqlPassword(e.target.value)}
+            />
+          </div>
+          <Input
+            placeholder="Database name"
+            value={mysqlDatabase}
+            onChange={(e) => setMysqlDatabase(e.target.value)}
+          />
+        </div>
+      );
+    }
+
+    if (selectedDatabase === "sqlite") {
+      return (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold">SQLite Database</h3>
+          <Input
+            placeholder="Path to .db or .sqlite file (e.g. /data/app.db)"
+            value={sqlitePath}
+            onChange={(e) => setSqlitePath(e.target.value)}
+          />
+          <Input
+            placeholder="Attach as alias (e.g. mydb)"
+            value={sqliteAlias}
+            onChange={(e) => setSqliteAlias(e.target.value)}
+          />
+        </div>
+      );
+    }
+
+    if (selectedDatabase === "motherduck") {
+      return (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold">MotherDuck</h3>
+          <Input
+            placeholder="Database name (e.g. my_db)"
+            value={databasePath}
+            onChange={(e) => setDatabasePath(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            This flow attaches <code>md:&lt;database&gt;</code> on the remote
+            DuckDB runtime and relies on MotherDuck&apos;s interactive login in
+            that shell. After starting the connection, check your DuckDB CLI or
+            server logs for the authentication link, finish login, then return
+            here and confirm.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            If you want the login to persist across restarts, save your access
+            token as <code>motherduck_token</code> in the environment used to
+            launch DuckDB, for example with{" "}
+            <code>export motherduck_token=&apos;&lt;token&gt;&apos;</code>, or
+            by adding it to <code>~/.zprofile</code>,{" "}
+            <code>~/.bash_profile</code>, or a local <code>.env</code> file.
+            Restart the app/runtime after setting it.
+          </p>
+        </div>
+      );
+    }
+
+    if (selectedDatabase === "extension") {
+      return (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold">Custom Extension</h3>
+          <Input
+            placeholder="Extension name (e.g. httpfs)"
+            value={customExtensionName}
+            onChange={(e) => setCustomExtensionName(e.target.value)}
+          />
+          <Input
+            placeholder="ATTACH statement (e.g. ATTACH '...' AS myalias (TYPE httpfs))"
+            value={customAttachStatement}
+            onChange={(e) => setCustomAttachStatement(e.target.value)}
+          />
+          <Input
+            placeholder="Alias (e.g. myalias)"
+            value={customAttachAlias}
+            onChange={(e) => setCustomAttachAlias(e.target.value)}
+          />
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const renderSchemaAndTableSelection = () => {
+    if (selectedDatabase === "motherduck") {
+      return (
+        <div className="space-y-4">
+          {motherDuckConnectionState === "auth_pending" && (
+            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
+              <h3 className="text-sm font-semibold">Finish MotherDuck Login</h3>
+              <p className="text-sm text-muted-foreground">
+                The remote DuckDB shell should now be attempting to attach
+                <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">
+                  {buildMotherDuckDbIdentifier()}
+                </code>
+                as{" "}
+                <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">
+                  {MOTHERDUCK_ALIAS}
+                </code>
+                .
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Check that shell for the MotherDuck login URL, sign in there,
+                and then click Confirm below to load tables from the attached
+                database.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                For persistent auth, store your token as{" "}
+                <code>motherduck_token</code> in the environment used to start
+                DuckDB, then restart the app/runtime before reconnecting.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleConfirmMotherDuckClick}
+                disabled={isLoadingTables}
+                className="w-full"
+              >
+                {isLoadingTables ? "Confirming…" : "Confirm"}
+              </Button>
+            </div>
+          )}
+
+          {motherDuckConnectionState === "confirmed" && (
+            <>
+              <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+                <CheckCircleIcon className="h-4 w-4" />
+                MotherDuck attached as <code>{MOTHERDUCK_ALIAS}</code>
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold">
+                  Tables in &ldquo;{MOTHERDUCK_ALIAS}&rdquo;
+                </h3>
+                {schemaTablesPreview.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
+                    {schemaTablesPreview.map((t) => {
+                      const isChecked = selectedTables.has(t);
+                      return (
+                        <label
+                          key={t}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-xs transition-colors",
+                            isChecked
+                              ? "border-primary bg-primary/10 text-foreground"
+                              : "border-border bg-muted/20 text-muted-foreground hover:bg-accent/30",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-3 w-3"
+                            checked={isChecked}
+                            onChange={() => {
+                              setSelectedTables((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(t)) {
+                                  next.delete(t);
+                                } else {
+                                  next.add(t);
+                                }
+                                return next;
+                              });
+                            }}
+                          />
+                          {t}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No tables found in this MotherDuck database.
+                  </p>
+                )}
+              </div>
+
+              {schemaTablesPreview.length > 1 && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() =>
+                      setSelectedTables(new Set(schemaTablesPreview))
+                    }
+                  >
+                    Select all
+                  </button>
+                  <span className="text-xs text-muted-foreground">·</span>
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => setSelectedTables(new Set())}
+                  >
+                    Deselect all
+                  </button>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label
+                  className="block text-sm font-medium"
+                  htmlFor="table-description"
+                >
+                  Description{" "}
+                  <span className="text-muted-foreground">(required)</span>
+                </label>
+                <Input
+                  id="table-description"
+                  placeholder="Brief description of this data source"
+                  value={tableDescription}
+                  onChange={(e) => setTableDescription(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    if (!hasConnected) return null;
+    const requiresSchema = requiresSchemaSelection(selectedDatabase);
+
+    return (
+      <div className="space-y-4">
+        {requiresSchema && schemas.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">Select Schema</h3>
+            <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
+              {schemas.map((schema) => {
+                const isSelected = selectedSchema === schema;
+                return (
+                  <button
+                    key={schema}
+                    type="button"
+                    onClick={() => handleSchemaSelect(schema)}
+                    className={cn(
+                      "rounded border px-2 py-1.5 text-left text-xs transition-colors",
+                      isSelected
+                        ? "border-primary bg-primary/10 font-medium text-foreground"
+                        : "border-border bg-muted/20 text-muted-foreground hover:bg-accent/30 hover:text-foreground",
+                    )}
+                  >
+                    {schema}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {requiresSchema && schemas.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No schemas found for this database.
+          </p>
+        )}
+
+        {selectedSchema && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">
+              Tables in &ldquo;{selectedSchema}&rdquo;
+              {isLoadingTables && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  Loading…
+                </span>
+              )}
+            </h3>
+            {schemaTablesPreview.length > 0 ? (
+              <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
+                {schemaTablesPreview.map((t) => {
+                  const isChecked = selectedTables.has(t);
+                  return (
+                    <label
+                      key={t}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-xs transition-colors",
+                        isChecked
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border bg-muted/20 text-muted-foreground hover:bg-accent/30",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3 w-3"
+                        checked={isChecked}
+                        onChange={() => {
+                          setSelectedTables((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(t)) {
+                              next.delete(t);
+                            } else {
+                              next.add(t);
+                            }
+                            return next;
+                          });
+                        }}
+                      />
+                      {t}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : !isLoadingTables ? (
+              <p className="text-xs text-muted-foreground">
+                No tables found in this schema.
+              </p>
+            ) : null}
+          </div>
+        )}
+
+        {/* Select all / deselect all */}
+        {schemaTablesPreview.length > 1 && (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="text-xs text-primary hover:underline"
+              onClick={() => setSelectedTables(new Set(schemaTablesPreview))}
+            >
+              Select all
+            </button>
+            <span className="text-xs text-muted-foreground">·</span>
+            <button
+              type="button"
+              className="text-xs text-primary hover:underline"
+              onClick={() => setSelectedTables(new Set())}
+            >
+              Deselect all
+            </button>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <label
+            className="block text-sm font-medium"
+            htmlFor="table-description"
+          >
+            Description{" "}
+            <span className="text-muted-foreground">(required)</span>
+          </label>
+          <Input
+            id="table-description"
+            placeholder="Brief description of this data source"
+            value={tableDescription}
+            onChange={(e) => setTableDescription(e.target.value)}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const runtimeLabel =
+    effectiveSqlBackend === "bridge"
+      ? "Bridge"
+      : effectiveSqlBackend === "duckdb-http"
+        ? "DuckDB over HTTP"
+        : "DuckDB WASM";
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 fixed inset-0 z-50 bg-black/60" />
-        <Dialog.Content className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95 data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 fixed left-1/2 top-1/2 z-50 w-full max-w-4xl max-h-[90vh] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card shadow-2xl focus:outline-hidden flex flex-col">
-          <div className="flex items-center justify-between border-b border-border px-6 py-4 shrink-0">
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card shadow-2xl focus:outline-hidden">
+          <div className="flex items-center justify-between border-b border-border px-6 py-4">
             <div>
               <Dialog.Title className="text-lg font-semibold text-foreground">
                 Connect Data Source
               </Dialog.Title>
               <Dialog.Description className="text-sm text-muted-foreground">
-                Choose a database, connect, and describe the table you want to
-                use.
+                {isWasmActive
+                  ? "Switch to a remote runtime to enable source connections."
+                  : `Using ${runtimeLabel} — DuckDB extensions handle the connection.`}
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
@@ -874,889 +1338,127 @@ export function ConnectDataDialog({
             </Dialog.Close>
           </div>
 
-          <div className="space-y-6 px-6 py-5 overflow-y-auto flex-1 min-h-0">
-            {schemas.length === 0 && (
-              <section className="space-y-3">
-                <header className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">
-                    Database Type
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Select a data source to connect. Some options are coming
-                    soon.
-                  </p>
-                </header>
-                <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4">
-                  {DATABASE_OPTIONS.map((option) => {
-                    const isActive = selectedDatabase === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => {
-                          if (option.disabled) return;
-                          setSelectedDatabase(option.value);
-                          setErrorMessage(null);
-                          setSchemas([]);
-                          setSchemaTablesPreview([]);
-                          setSelectedSchema("");
-                          setSelectedTables(new Set());
-                          setHasConnected(false);
-                          // Reset Postgres fields when switching away
-                          if (option.value !== "postgres") {
-                            setPostgresHost("");
-                            setPostgresPort("5432");
-                            setPostgresUser("");
-                            setPostgresPassword("");
-                            setPostgresDatabase("");
-                            setPostgresSslMode("");
-                          }
-                          // Reset MySQL fields when switching away
-                          if (option.value !== "mysql") {
-                            setMysqlHost("");
-                            setMysqlPort("3306");
-                            setMysqlUser("");
-                            setMysqlPassword("");
-                            setMysqlDatabase("");
-                          }
-                          // Reset SQLite fields when switching away
-                          if (option.value !== "sqlite") {
-                            setSqlitePath("");
-                            setSqliteAlias("");
-                          }
-                          // Reset Iceberg fields when switching away
-                          if (option.value !== "iceberg") {
-                            setIcebergEndpoint("");
-                            setIcebergWarehouse("");
-                            setIcebergPath("");
-                          }
-                          // Reset Delta Lake fields when switching away
-                          if (option.value !== "delta_lake") {
-                            setDeltaPath("");
-                            setDeltaAlias("");
-                          }
-                          // Reset DuckLake fields when switching away
-                          if (option.value !== "ducklake") {
-                            setDucklakeMetadataPath("");
-                            setDucklakeDataPath("");
-                            setDucklakeAlias("");
-                          }
-                          // Reset custom extension fields when switching away
-                          if (option.value !== "extension") {
-                            setCustomExtensionName("");
-                            setCustomAttachStatement("");
-                            setCustomAttachAlias("");
-                          }
-                        }}
-                        disabled={option.disabled}
-                        className={cn(
-                          "flex h-full flex-col items-start gap-2 rounded-xl border px-4 py-3 text-left transition",
-                          option.disabled
-                            ? "cursor-not-allowed border-border/60 bg-muted/30 text-muted-foreground"
-                            : "hover:border-primary hover:bg-primary/5",
-                          isActive && !option.disabled
-                            ? "border-primary bg-primary/10"
-                            : "border-border",
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          {(() => {
-                            const logoPath = getDatabaseLogo(option.value);
-                            return logoPath ? (
-                              <Image
-                                src={logoPath}
-                                alt={option.label}
-                                width={20}
-                                height={20}
-                                className="shrink-0"
-                              />
-                            ) : null;
-                          })()}
-                          <span className="text-sm font-medium">
-                            {option.label}
-                          </span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {option.disabled
-                            ? (option.description ?? "Unavailable")
-                            : (option.description ??
-                              "Connect with a local DuckDB file")}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            {selectedDatabase && (
-              <section className="space-y-3">
-                <header className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">
-                    {selectedDatabase === "motherduck"
-                      ? "MotherDuck Database"
-                      : selectedDatabase === "postgres"
-                        ? "Postgres Connection"
-                        : selectedDatabase === "mysql"
-                          ? "MySQL Connection"
-                          : selectedDatabase === "sqlite"
-                            ? "SQLite Connection"
-                            : selectedDatabase === "iceberg"
-                              ? "Apache Iceberg Connection"
-                              : selectedDatabase === "delta_lake"
-                                ? "Delta Lake Connection"
-                                : selectedDatabase === "ducklake"
-                                  ? "DuckLake Connection"
-                                  : selectedDatabase === "httpfs"
-                                    ? "HTTP/HTTPS (httpfs)"
-                                    : selectedDatabase === "extension"
-                                      ? "Custom Extension"
-                                      : "Connection"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedDatabase === "motherduck"
-                      ? "Provide the name of your MotherDuck database (e.g., my_db)."
-                      : selectedDatabase === "postgres"
-                        ? "Enter your Postgres connection details."
-                        : selectedDatabase === "mysql"
-                          ? "Enter your MySQL connection details."
-                          : selectedDatabase === "sqlite"
-                            ? "Attach a SQLite database file."
-                            : selectedDatabase === "iceberg"
-                              ? "Provide a REST catalog endpoint + warehouse or a direct Iceberg table path."
-                              : selectedDatabase === "delta_lake"
-                                ? "Provide the Delta Lake table path (e.g., s3://bucket/table)."
-                                : selectedDatabase === "ducklake"
-                                  ? "Provide DuckLake metadata path and optional data path."
-                                  : selectedDatabase === "httpfs"
-                                    ? "Provide an HTTP(S) URL to query (Parquet/CSV/JSON)."
-                                    : selectedDatabase === "extension"
-                                      ? "Install + load a DuckDB extension, then attach using your custom statement."
-                                      : null}
-                  </p>
-                </header>
-                <div className="flex flex-col gap-3">
-                  {selectedDatabase === "postgres" ? (
-                    <div className="space-y-3">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="postgres-host"
-                            className="text-xs font-medium text-foreground"
-                          >
-                            Host <span className="text-destructive">*</span>
-                          </label>
-                          <Input
-                            id="postgres-host"
-                            placeholder="localhost"
-                            value={postgresHost}
-                            onChange={(event) =>
-                              setPostgresHost(event.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="postgres-port"
-                            className="text-xs font-medium text-foreground"
-                          >
-                            Port
-                          </label>
-                          <Input
-                            id="postgres-port"
-                            type="number"
-                            placeholder="5432"
-                            value={postgresPort}
-                            onChange={(event) =>
-                              setPostgresPort(event.target.value)
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="postgres-user"
-                            className="text-xs font-medium text-foreground"
-                          >
-                            Username <span className="text-destructive">*</span>
-                          </label>
-                          <Input
-                            id="postgres-user"
-                            placeholder="postgres"
-                            value={postgresUser}
-                            onChange={(event) =>
-                              setPostgresUser(event.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="postgres-password"
-                            className="text-xs font-medium text-foreground"
-                          >
-                            Password
-                          </label>
-                          <Input
-                            id="postgres-password"
-                            type="password"
-                            placeholder="password"
-                            value={postgresPassword}
-                            onChange={(event) =>
-                              setPostgresPassword(event.target.value)
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="postgres-database"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          Database <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          id="postgres-database"
-                          placeholder="postgres"
-                          value={postgresDatabase}
-                          onChange={(event) =>
-                            setPostgresDatabase(event.target.value)
-                          }
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full sm:w-fit"
-                        onClick={handleConnectClick}
-                      >
-                        {isLoadingSchemas ? (
-                          <span className="flex items-center gap-2">
-                            <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                            Connecting...
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-2">
-                            <LinkIcon className="size-4" />
-                            Connect
-                          </span>
-                        )}
-                      </Button>
-                    </div>
-                  ) : selectedDatabase === "mysql" ? (
-                    <div className="space-y-3">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="mysql-host"
-                            className="text-xs font-medium text-foreground"
-                          >
-                            Host <span className="text-destructive">*</span>
-                          </label>
-                          <Input
-                            id="mysql-host"
-                            placeholder="localhost"
-                            value={mysqlHost}
-                            onChange={(event) =>
-                              setMysqlHost(event.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="mysql-port"
-                            className="text-xs font-medium text-foreground"
-                          >
-                            Port
-                          </label>
-                          <Input
-                            id="mysql-port"
-                            type="number"
-                            placeholder="3306"
-                            value={mysqlPort}
-                            onChange={(event) =>
-                              setMysqlPort(event.target.value)
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="mysql-user"
-                            className="text-xs font-medium text-foreground"
-                          >
-                            Username <span className="text-destructive">*</span>
-                          </label>
-                          <Input
-                            id="mysql-user"
-                            placeholder="root"
-                            value={mysqlUser}
-                            onChange={(event) =>
-                              setMysqlUser(event.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="mysql-password"
-                            className="text-xs font-medium text-foreground"
-                          >
-                            Password
-                          </label>
-                          <Input
-                            id="mysql-password"
-                            type="password"
-                            placeholder="password"
-                            value={mysqlPassword}
-                            onChange={(event) =>
-                              setMysqlPassword(event.target.value)
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="mysql-database"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          Database <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          id="mysql-database"
-                          placeholder="mysql"
-                          value={mysqlDatabase}
-                          onChange={(event) =>
-                            setMysqlDatabase(event.target.value)
-                          }
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full sm:w-fit"
-                        onClick={handleConnectClick}
-                      >
-                        {isLoadingSchemas ? (
-                          <span className="flex items-center gap-2">
-                            <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                            Connecting...
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-2">
-                            <LinkIcon className="size-4" />
-                            Connect
-                          </span>
-                        )}
-                      </Button>
-                    </div>
-                  ) : selectedDatabase === "sqlite" ? (
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="sqlite-path"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          Database file path{" "}
-                          <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          id="sqlite-path"
-                          placeholder="/path/to/db.sqlite"
-                          value={sqlitePath}
-                          onChange={(event) =>
-                            setSqlitePath(event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="sqlite-alias"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          Attach alias (AS){" "}
-                          <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          id="sqlite-alias"
-                          placeholder="sqlite_db"
-                          value={sqliteAlias}
-                          onChange={(event) =>
-                            setSqliteAlias(event.target.value)
-                          }
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full sm:w-fit"
-                        onClick={handleConnectClick}
-                      >
-                        {isLoadingSchemas ? (
-                          <span className="flex items-center gap-2">
-                            <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                            Connecting...
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-2">
-                            <LinkIcon className="size-4" />
-                            Connect
-                          </span>
-                        )}
-                      </Button>
-                    </div>
-                  ) : selectedDatabase === "iceberg" ? (
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="iceberg-endpoint"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          REST catalog endpoint
-                        </label>
-                        <Input
-                          id="iceberg-endpoint"
-                          placeholder="https://example.com"
-                          value={icebergEndpoint}
-                          onChange={(event) =>
-                            setIcebergEndpoint(event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="iceberg-warehouse"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          Warehouse (alias)
-                        </label>
-                        <Input
-                          id="iceberg-warehouse"
-                          placeholder="warehouse"
-                          value={icebergWarehouse}
-                          onChange={(event) =>
-                            setIcebergWarehouse(event.target.value)
-                          }
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Alternatively, provide a direct Iceberg path below.
-                        </p>
-                      </div>
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="iceberg-path"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          Direct Iceberg path (optional)
-                        </label>
-                        <Input
-                          id="iceberg-path"
-                          placeholder="s3://bucket/db/table/metadata/v2.metadata.json"
-                          value={icebergPath}
-                          onChange={(event) =>
-                            setIcebergPath(event.target.value)
-                          }
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full sm:w-fit"
-                        onClick={handleConnectClick}
-                      >
-                        <span className="flex items-center gap-2">
-                          <LinkIcon className="size-4" />
-                          Validate
-                        </span>
-                      </Button>
-                    </div>
-                  ) : selectedDatabase === "delta_lake" ? (
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="delta-path"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          Delta Lake path{" "}
-                          <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          id="delta-path"
-                          placeholder="s3://bucket/table"
-                          value={deltaPath}
-                          onChange={(event) => setDeltaPath(event.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="delta-alias"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          Attach alias (AS){" "}
-                          <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          id="delta-alias"
-                          placeholder="delta_source"
-                          value={deltaAlias}
-                          onChange={(event) =>
-                            setDeltaAlias(event.target.value)
-                          }
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full sm:w-fit"
-                        onClick={handleConnectClick}
-                      >
-                        <span className="flex items-center gap-2">
-                          <LinkIcon className="size-4" />
-                          Validate
-                        </span>
-                      </Button>
-                    </div>
-                  ) : selectedDatabase === "ducklake" ? (
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="ducklake-metadata"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          Metadata path{" "}
-                          <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          id="ducklake-metadata"
-                          placeholder="ducklake:metadata.ducklake"
-                          value={ducklakeMetadataPath}
-                          onChange={(event) =>
-                            setDucklakeMetadataPath(event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="ducklake-data"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          Data path (optional)
-                        </label>
-                        <Input
-                          id="ducklake-data"
-                          placeholder="s3://bucket/data"
-                          value={ducklakeDataPath}
-                          onChange={(event) =>
-                            setDucklakeDataPath(event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="ducklake-alias"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          Attach alias (AS){" "}
-                          <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          id="ducklake-alias"
-                          placeholder="ducklake_source"
-                          value={ducklakeAlias}
-                          onChange={(event) =>
-                            setDucklakeAlias(event.target.value)
-                          }
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full sm:w-fit"
-                        onClick={handleConnectClick}
-                      >
-                        <span className="flex items-center gap-2">
-                          <LinkIcon className="size-4" />
-                          Validate
-                        </span>
-                      </Button>
-                    </div>
-                  ) : selectedDatabase === "extension" ? (
-                    <div className="space-y-3">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="extension-name"
-                            className="text-xs font-medium text-foreground"
-                          >
-                            Extension name{" "}
-                            <span className="text-destructive">*</span>
-                          </label>
-                          <Input
-                            id="extension-name"
-                            placeholder="spatial, parquet, etc."
-                            value={customExtensionName}
-                            onChange={(event) =>
-                              setCustomExtensionName(event.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="extension-alias"
-                            className="text-xs font-medium text-foreground"
-                          >
-                            Attach alias (AS){" "}
-                            <span className="text-destructive">*</span>
-                          </label>
-                          <Input
-                            id="extension-alias"
-                            placeholder="my_ext"
-                            value={customAttachAlias}
-                            onChange={(event) =>
-                              setCustomAttachAlias(event.target.value)
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="extension-attach"
-                          className="text-xs font-medium text-foreground"
-                        >
-                          ATTACH statement (without AS){" "}
-                          <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          id="extension-attach"
-                          placeholder="postgresql://... or s3://... etc."
-                          value={customAttachStatement}
-                          onChange={(event) =>
-                            setCustomAttachStatement(event.target.value)
-                          }
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          We will run: INSTALL/LOAD{" "}
-                          {customExtensionName || "<extension>"} and ATTACH{" "}
-                          {"<your statement>"} AS{" "}
-                          {customAttachAlias || "<alias>"}.
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full sm:w-fit"
-                        onClick={handleConnectClick}
-                      >
-                        <span className="flex items-center gap-2">
-                          <LinkIcon className="size-4" />
-                          Validate
-                        </span>
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                      <Input
-                        placeholder={
-                          selectedDatabase === "motherduck" ? "my_db" : ""
-                        }
-                        value={databasePath}
-                        onChange={(event) =>
-                          setDatabasePath(event.target.value)
-                        }
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="sm:w-fit"
-                        onClick={handleConnectClick}
-                      >
-                        {isLoadingSchemas ? (
-                          <span className="flex items-center gap-2">
-                            <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                            Connecting...
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-2">
-                            <LinkIcon className="size-4" />
-                            Connect
-                          </span>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                  {selectedDatabase === "motherduck" && (
-                    <div>
-                      <Input
-                        type="password"
-                        placeholder="MotherDuck token"
-                        value={motherduckToken}
-                        onChange={(event) =>
-                          setMotherduckToken(event.target.value)
-                        }
-                        className="w-full"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Enter your MotherDuck token to connect to a different
-                        account
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {hasConnected && (
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-xs text-primary">
-                    <div className="flex items-center gap-2">
-                      <CheckCircleIcon className="size-4" />
-                      <span>
-                        Connected to {selectedDatabase?.toUpperCase()}. Select a
-                        table to continue.
-                      </span>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => resetState()}
-                    >
-                      Change database
-                    </Button>
-                  </div>
-                )}
-              </section>
-            )}
-
-            {schemas.length > 0 && (
-              <section className="space-y-3">
-                <header className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">Schemas</p>
-                  <p className="text-xs text-muted-foreground">
-                    Choose a schema to add from the connected database.
-                  </p>
-                </header>
-                <div className="max-h-56 overflow-y-auto pr-2">
-                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                    {schemas.map((schema) => {
-                      const isSelected = selectedSchema === schema;
-                      return (
-                        <button
-                          key={schema}
-                          type="button"
-                          onClick={() => handleSchemaSelect(schema)}
-                          className={cn(
-                            "rounded-xl border px-4 py-3 text-left text-sm font-medium transition",
-                            isSelected
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border hover:border-primary hover:bg-primary/5",
-                          )}
-                        >
-                          {schema}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {selectedSchema && (
-              <section className="space-y-3">
-                <header className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">
-                    Tables in "{selectedSchema}"
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Preview of up to 20 tables in the selected schema.
-                  </p>
-                </header>
-                <div className="max-h-40 overflow-y-auto pr-2">
-                  {isLoadingTables ? (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                      Loading tables...
-                    </div>
-                  ) : (
-                    <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                      {schemaTablesPreview.length === 0 ? (
-                        <span className="text-xs text-muted-foreground col-span-full">
-                          No tables found or failed to load.
-                        </span>
-                      ) : (
-                        schemaTablesPreview.map((t) => {
-                          const isChecked = selectedTables.has(t);
-                          return (
-                            <label
-                              key={t}
-                              className={cn(
-                                "rounded-xl border px-4 py-2 text-left text-xs flex items-center gap-2 cursor-pointer",
-                                isChecked
-                                  ? "border-primary bg-primary/10 text-primary"
-                                  : "border-border hover:border-primary hover:bg-primary/5 text-muted-foreground",
-                              )}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  setSelectedTables((prev) => {
-                                    const next = new Set(prev);
-                                    if (e.target.checked) next.add(t);
-                                    else next.delete(t);
-                                    return next;
-                                  });
-                                }}
-                              />
-                              <span className="truncate">{t}</span>
-                            </label>
-                          );
-                        })
-                      )}
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
-
-            {schemas.length > 0 && (
-              <section className="space-y-3">
-                <header className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">
-                    Schema Description
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Describe the schema so your collaborators understand its
-                    contents.
-                  </p>
-                </header>
-                <textarea
-                  className="min-h-[90px] w-full rounded-xl border border-input bg-transparent px-3 py-2 text-sm text-foreground shadow-xs outline-none transition focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                  value={tableDescription}
-                  onChange={(event) => setTableDescription(event.target.value)}
-                  placeholder="e.g. Business intelligence curated tables for analytics."
-                />
-              </section>
-            )}
-
-            {errorMessage && (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-                {errorMessage}
+          {/* WASM disabled state */}
+          {isWasmActive ? (
+            <div className="space-y-3 px-6 py-5">
+              <p className="text-sm text-muted-foreground">
+                Source connections via DuckDB extensions require a remote
+                runtime (Bridge or DuckDB over HTTP). The current active runtime
+                is <strong>DuckDB WASM</strong>.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Go to <strong>Settings → Query Runtime</strong> and switch to
+                Bridge or DuckDB over HTTP to enable this flow.
+              </p>
+              <div className="flex justify-end border-t border-border pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Close
+                </Button>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-5">
+              {/* Step 1: Source type */}
+              {!selectedDatabase && (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Choose a data source to connect. The selected DuckDB
+                    extension will be installed and loaded on the active
+                    runtime.
+                  </p>
+                  {renderDatabaseSelector()}
+                </div>
+              )}
 
-          <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4 shrink-0">
-            <Dialog.Close asChild>
-              <Button type="button" variant="ghost">
+              {/* Selected source + connection form */}
+              {selectedDatabase && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold capitalize">
+                      {DATABASE_OPTIONS.find(
+                        (o) => o.value === selectedDatabase,
+                      )?.label ?? selectedDatabase}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setSelectedDatabase(null);
+                        setMotherDuckConnectionState("idle");
+                        setHasConnected(false);
+                        setSchemas([]);
+                        setSelectedSchema("");
+                        setSchemaTablesPreview([]);
+                        setSelectedTables(new Set());
+                        setErrorMessage(null);
+                        motherDuckAttachPromiseRef.current = null;
+                      }}
+                    >
+                      ← Back
+                    </button>
+                  </div>
+
+                  {renderConnectionForm()}
+
+                  {errorMessage && (
+                    <p className="text-sm text-destructive">{errorMessage}</p>
+                  )}
+
+                  {selectedDatabase === "motherduck" &&
+                    renderSchemaAndTableSelection()}
+
+                  {!hasConnected &&
+                    !(
+                      selectedDatabase === "motherduck" &&
+                      motherDuckConnectionState !== "idle"
+                    ) && (
+                      <Button
+                        type="button"
+                        disabled={isConnectDisabled || isLoadingSchemas}
+                        onClick={handleConnectClick}
+                        className="w-full"
+                      >
+                        {isLoadingSchemas ? "Connecting…" : "Connect"}
+                      </Button>
+                    )}
+
+                  {hasConnected && selectedDatabase !== "motherduck" && (
+                    <>
+                      <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+                        <CheckCircleIcon className="h-4 w-4" />
+                        Connected
+                      </div>
+                      {renderSchemaAndTableSelection()}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Footer (only shown in enabled state and when something is selected) */}
+          {!isWasmActive && hasConnected && (
+            <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
                 Cancel
               </Button>
-            </Dialog.Close>
-            <Button
-              type="button"
-              onClick={handleAddTable}
-              disabled={isAddDisabled}
-            >
-              Add Schema
-            </Button>
-          </div>
+              <Button
+                type="button"
+                disabled={isAddDisabled}
+                onClick={handleAddTable}
+              >
+                Add Source
+              </Button>
+            </div>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

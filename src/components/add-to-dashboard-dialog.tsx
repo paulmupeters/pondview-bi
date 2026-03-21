@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,34 +14,61 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  DEFAULT_WASM_DB_IDENTIFIER,
+  isWasmLocalIdentifier,
+  type SqlBackend,
+} from "@/lib/sql/sql-runtime";
 import type { CardConfig, Config, TableConfig, VisualType } from "@/lib/types";
+import {
+  addChartToDashboard,
+  createDashboard,
+  listDashboards,
+} from "@/lib/workspace/dashboard-repo";
 
 export type AddToDashboardVisualOption =
   | {
-    type: "chart";
-    config: Config;
-    columns?: { name: string; type?: string }[];
-    rows?: Record<string, unknown>[];
-  }
+      type: "chart";
+      config: Config;
+      columns?: { name: string; type?: string }[];
+      rows?: Record<string, unknown>[];
+    }
   | {
-    type: "table";
-    config: TableConfig;
-    columns: { name: string; type?: string }[];
-    rows: Record<string, unknown>[];
-  }
+      type: "table";
+      config: TableConfig;
+      columns: { name: string; type?: string }[];
+      rows: Record<string, unknown>[];
+    }
   | {
-    type: "card";
-    config: CardConfig;
-    columns: { name: string; type?: string }[];
-    rows: Record<string, unknown>[];
-  };
+      type: "card";
+      config: CardConfig;
+      columns: { name: string; type?: string }[];
+      rows: Record<string, unknown>[];
+    };
 
 type DashboardLite = { id: string; title: string | null; updatedAt: number };
+
+function resolveStoredChartDbIdentifier(
+  dbIdentifier: string | null | undefined,
+  sqlBackend: SqlBackend | null,
+): string | null {
+  const normalized = dbIdentifier?.trim() ?? "";
+  if (sqlBackend === "duckdb-wasm") {
+    return normalized || DEFAULT_WASM_DB_IDENTIFIER;
+  }
+
+  if (sqlBackend === "bridge" || sqlBackend === "duckdb-http") {
+    return normalized && !isWasmLocalIdentifier(normalized) ? normalized : null;
+  }
+
+  return normalized || DEFAULT_WASM_DB_IDENTIFIER;
+}
 
 export function AddToDashboardDialog({
   trigger,
   sql,
   dbIdentifier,
+  sqlBackend,
   defaultTitle,
   tooltip,
   visualOptions,
@@ -49,11 +76,12 @@ export function AddToDashboardDialog({
 }: {
   trigger: React.ReactNode;
   sql: string;
-    dbIdentifier?: string | null;
+  dbIdentifier?: string | null;
+  sqlBackend?: SqlBackend;
   defaultTitle?: string;
   tooltip?: string;
-    visualOptions: AddToDashboardVisualOption[];
-    defaultVisualType?: VisualType;
+  visualOptions: AddToDashboardVisualOption[];
+  defaultVisualType?: VisualType;
 }) {
   const [open, setOpen] = useState(false);
   const [dashboards, setDashboards] = useState<DashboardLite[]>([]);
@@ -62,6 +90,7 @@ export function AddToDashboardDialog({
     string | "new"
   >("new");
   const [newDashboardTitle, setNewDashboardTitle] = useState("My Dashboard");
+  const newDashboardTitleId = useId();
   const resolvedDefaultType = useMemo<VisualType | null>(() => {
     if (!visualOptions.length) return null;
     if (
@@ -136,11 +165,9 @@ export function AddToDashboardDialog({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/dashboards", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as { dashboards: DashboardLite[] };
-        if (!cancelled) setDashboards(data.dashboards ?? []);
-      } catch { }
+        const dashboardList = await listDashboards();
+        if (!cancelled) setDashboards(dashboardList);
+      } catch {}
     })();
     return () => {
       cancelled = true;
@@ -167,13 +194,7 @@ export function AddToDashboardDialog({
     try {
       let dashboardId = selectedDashboardId as string;
       if (selectedDashboardId === "new") {
-        const res = await fetch("/api/dashboards", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: newDashboardTitle.trim() }),
-        });
-        if (!res.ok) throw new Error("Failed to create dashboard");
-        const data = (await res.json()) as { id: string };
+        const data = await createDashboard(newDashboardTitle.trim());
         dashboardId = data.id;
       }
 
@@ -200,18 +221,18 @@ export function AddToDashboardDialog({
         };
       }
 
-      const res2 = await fetch(`/api/dashboard/${dashboardId}/charts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: currentFormState.title,
-          description: currentFormState.description,
-          sql,
-          dbIdentifier: dbIdentifier ?? "md:my_db",
-          chartConfigJson: JSON.stringify(configJson),
-        }),
+      await addChartToDashboard({
+        dashboardId,
+        title: currentFormState.title,
+        description: currentFormState.description,
+        sql,
+        dbIdentifier: resolveStoredChartDbIdentifier(
+          dbIdentifier,
+          sqlBackend ?? null,
+        ),
+        sqlBackend: sqlBackend ?? null,
+        chartConfigJson: JSON.stringify(configJson),
       });
-      if (!res2.ok) throw new Error("Failed to add chart");
       setOpen(false);
     } catch {
       // no-op for now; could show a toast
@@ -241,7 +262,7 @@ export function AddToDashboardDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="dashboard-select" className="text-sm font-medium">
+            <label htmlFor={useId()} className="text-sm font-medium">
               Select dashboard
             </label>
             <select
@@ -261,13 +282,13 @@ export function AddToDashboardDialog({
           {selectedDashboardId === "new" && (
             <div className="space-y-2">
               <label
-                htmlFor="new-dashboard-title"
+                htmlFor={newDashboardTitleId}
                 className="text-sm font-medium"
               >
                 New dashboard title
               </label>
               <Input
-                id="new-dashboard-title"
+                id={newDashboardTitleId}
                 value={newDashboardTitle}
                 onChange={(e) => setNewDashboardTitle(e.target.value)}
                 placeholder="e.g. Sales KPIs"
@@ -319,12 +340,12 @@ export function AddToDashboardDialog({
             <label htmlFor="visual-title" className="text-sm font-medium">
               {selectedVisualType
                 ? selectedVisualType.charAt(0).toUpperCase() +
-                selectedVisualType.slice(1)
+                  selectedVisualType.slice(1)
                 : "Visual"}{" "}
               title
             </label>
             <Input
-              id="visual-title"
+              id={useId()}
               value={currentFormState.title}
               onChange={(e) => {
                 const value = e.target.value;
@@ -346,12 +367,12 @@ export function AddToDashboardDialog({
             <label htmlFor="visual-description" className="text-sm font-medium">
               {selectedVisualType
                 ? selectedVisualType.charAt(0).toUpperCase() +
-                selectedVisualType.slice(1)
+                  selectedVisualType.slice(1)
                 : "Visual"}{" "}
               description (optional)
             </label>
             <Input
-              id="visual-description"
+              id={useId()}
               value={currentFormState.description}
               onChange={(e) => {
                 const value = e.target.value;

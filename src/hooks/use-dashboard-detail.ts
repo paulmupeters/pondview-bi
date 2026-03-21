@@ -1,7 +1,15 @@
 import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useCallback, useEffect, useState } from "react";
-import type { CardConfig, Config, Result } from "@/lib/types";
+import { runQuery } from "@/lib/sql/run-query";
+import type { Result } from "@/lib/types";
+import {
+  listChartsByDashboard,
+  listDashboards,
+  removeChartFromDashboard,
+  reorderDashboardCharts,
+  updateChartConfig,
+} from "@/lib/workspace/dashboard-repo";
 
 export type Dashboard = {
   id: string;
@@ -33,7 +41,7 @@ type UseDashboardDetailReturn = {
 };
 
 export function useDashboardDetail(
-  dashboardId: string
+  dashboardId: string,
 ): UseDashboardDetailReturn {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [charts, setCharts] = useState<DashboardChart[]>([]);
@@ -45,13 +53,11 @@ export function useDashboardDetail(
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/dashboards`);
-        if (!res.ok) return;
-        const list = (await res.json()) as { dashboards: Dashboard[] };
+        const dashboards = await listDashboards();
         const foundDashboard =
-          list.dashboards.find((item) => item.id === dashboardId) ?? null;
+          dashboards.find((item) => item.id === dashboardId) ?? null;
         if (!cancelled) {
-          setDashboard(foundDashboard);
+          setDashboard(foundDashboard as Dashboard | null);
         }
       } finally {
         if (!cancelled) {
@@ -68,23 +74,34 @@ export function useDashboardDetail(
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const res = await fetch(`/api/dashboard/${dashboardId}/data`, {
-        cache: "no-store",
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        charts: (DashboardChart & { rows: Result[] })[];
-      };
-      if (cancelled) return;
-      const sortedCharts = [...data.charts].sort(
-        (a, b) => a.position - b.position
+      const dashboardCharts = await listChartsByDashboard(dashboardId);
+      const sortedCharts = [...dashboardCharts].sort(
+        (a, b) => a.position - b.position,
       );
-      setCharts(sortedCharts);
-      const map: Record<string, Result[]> = {};
-      for (const chart of data.charts) {
-        map[chart.id] = chart.rows;
+      if (cancelled) {
+        return;
       }
-      setChartData(map);
+
+      setCharts(sortedCharts);
+
+      const map: Record<string, Result[]> = {};
+      await Promise.all(
+        sortedCharts.map(async (chart) => {
+          try {
+            const result = await runQuery({
+              sql: chart.sql,
+              dbIdentifier: chart.dbIdentifier ?? undefined,
+            });
+            map[chart.id] = result.rows as Result[];
+          } catch {
+            map[chart.id] = [];
+          }
+        }),
+      );
+
+      if (!cancelled) {
+        setChartData(map);
+      }
     })();
 
     return () => {
@@ -95,20 +112,16 @@ export function useDashboardDetail(
   const persistOrder = useCallback(
     async (previousOrder: DashboardChart[], nextOrder: DashboardChart[]) => {
       try {
-        const res = await fetch(`/api/dashboard/${dashboardId}/charts`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chartIds: nextOrder.map((chart) => chart.id),
-          }),
-        });
-        if (!res.ok) throw new Error("Failed to save order");
+        await reorderDashboardCharts(
+          dashboardId,
+          nextOrder.map((chart) => chart.id),
+        );
       } catch (error) {
         console.error(error);
         setCharts(previousOrder);
       }
     },
-    [dashboardId]
+    [dashboardId],
   );
 
   const handleDragEnd = useCallback(
@@ -132,47 +145,34 @@ export function useDashboardDetail(
         return nextOrder;
       });
     },
-    [persistOrder]
+    [persistOrder],
   );
 
   const handleChartConfigChange = useCallback(
     async (chartId: string, newJson: string) => {
       setCharts((prev) =>
         prev.map((chart) =>
-          chart.id === chartId ? { ...chart, chartConfigJson: newJson } : chart
-        )
+          chart.id === chartId ? { ...chart, chartConfigJson: newJson } : chart,
+        ),
       );
-      await fetch(`/api/charts/${chartId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chartConfigJson: newJson }),
-      });
+      await updateChartConfig(chartId, newJson);
     },
-    []
+    [],
   );
 
-  const handleChartDelete = useCallback(
-    async (chartId: string) => {
-      try {
-        const res = await fetch(
-          `/api/dashboard/${dashboardId}/charts?chartId=${chartId}`,
-          {
-            method: "DELETE",
-          }
-        );
-        if (!res.ok) throw new Error("Failed to delete chart");
-        setCharts((prev) => prev.filter((chart) => chart.id !== chartId));
-        setChartData((prev) => {
-          const next = { ...prev };
-          delete next[chartId];
-          return next;
-        });
-      } catch (error) {
-        console.error(error);
-      }
-    },
-    [dashboardId]
-  );
+  const handleChartDelete = useCallback(async (chartId: string) => {
+    try {
+      await removeChartFromDashboard(chartId);
+      setCharts((prev) => prev.filter((chart) => chart.id !== chartId));
+      setChartData((prev) => {
+        const next = { ...prev };
+        delete next[chartId];
+        return next;
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
 
   return {
     dashboard,

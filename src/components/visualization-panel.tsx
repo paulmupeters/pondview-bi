@@ -1,18 +1,10 @@
 import { useMemo } from "react";
+import type { VisualizationEntry } from "@/components/chat/hooks/use-visualization-selection";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
-import type {
-  SqlAnalysisData,
-  SqlAnalysisStage,
-} from "@/components/sql-analysis-display.types";
 import { cn } from "@/lib/utils";
 
 export interface VisualizationPanelProps {
-  visualizations: Array<{
-    id: string;
-    data: SqlAnalysisData | null;
-    stage?: SqlAnalysisStage;
-    progress?: number;
-  }>;
+  visualizations: VisualizationEntry[];
   selectedVisualizationId?: string | null;
   className?: string;
 }
@@ -71,15 +63,20 @@ export function VisualizationPanel({
         <div className="flex-1 flex flex-col min-h-0 bg-background border border-border shadow-xl">
           {/* Visualization Display */}
           <div className="flex-1 overflow-y-auto p-0 min-h-0">
-            <SqlAnalysisDisplay
-              key={currentViz.id}
-              data={currentViz.data}
-              stage={currentViz.stage}
-              progress={currentViz.progress}
-              showStageIndicator={true}
-              className="w-full"
-              artifactId={currentViz.id}
-            />
+            <div className="min-h-full flex flex-col items-center justify-start">
+              <SqlAnalysisDisplay
+                key={currentViz.id}
+                data={currentViz.data}
+                stage={currentViz.stage}
+                progress={currentViz.progress}
+                showStageIndicator={true}
+                className="w-full"
+                artifactId={currentViz.artifactId}
+                canAddToChat={currentViz.canAddToChat}
+                onConfigChange={currentViz.onConfigChange}
+                onVisualTypeChange={currentViz.onVisualTypeChange}
+              />
+            </div>
           </div>
         </div>
       )}

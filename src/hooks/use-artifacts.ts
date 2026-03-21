@@ -216,11 +216,14 @@ function extractAllArtifactsFromMessages(
           }
         }
 
-        // Also check tool call results that might contain artifacts
-        if (part.type.startsWith("tool-") && "result" in part && part.result) {
-          const result = part.result;
-          if (typeof result === "object" && result && "parts" in result) {
-            const parts = (result as { parts?: ArtifactPart<unknown>[] }).parts;
+        // Also check tool call outputs that might contain artifacts
+        if (part.type.startsWith("tool-")) {
+          const output =
+            ("output" in part ? part.output : undefined) ??
+            ("result" in part ? part.result : undefined);
+
+          if (typeof output === "object" && output && "parts" in output) {
+            const parts = (output as { parts?: ArtifactPart<unknown>[] }).parts;
             if (Array.isArray(parts)) {
               for (const nestedPart of parts) {
                 if (nestedPart.type.startsWith("data-") && nestedPart.data) {
@@ -280,11 +283,14 @@ function extractArtifactsFromMessages<T>(
           }
         }
 
-        // Also check tool call results that might contain artifacts
-        if (part.type.startsWith("tool-") && "result" in part && part.result) {
-          const result = part.result;
-          if (typeof result === "object" && result && "parts" in result) {
-            const parts = (result as { parts?: ArtifactPart<T>[] }).parts;
+        // Also check tool call outputs that might contain artifacts
+        if (part.type.startsWith("tool-")) {
+          const output =
+            ("output" in part ? part.output : undefined) ??
+            ("result" in part ? part.result : undefined);
+
+          if (typeof output === "object" && output && "parts" in output) {
+            const parts = (output as { parts?: ArtifactPart<T>[] }).parts;
             if (Array.isArray(parts)) {
               for (const nestedPart of parts) {
                 if (

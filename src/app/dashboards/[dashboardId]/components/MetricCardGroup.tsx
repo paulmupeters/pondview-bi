@@ -5,7 +5,10 @@ import { MetricCardInGroup } from "./MetricCardInGroup";
 export function MetricCardGroup({
   charts,
   chartData,
+  measuresById,
+  measureValuesById,
   onConfigChange,
+  onMeasureChange,
   onDelete,
   expandedSqlChartId,
   onToggleSql,
@@ -13,6 +16,7 @@ export function MetricCardGroup({
   totalColumns,
   selectedChartId,
   onChartSelect,
+  onPreviewChart,
 }: MetricCardGroupProps) {
   const colSpanClass = getColSpanClass(
     Math.min(charts.length, totalColumns),
@@ -28,7 +32,32 @@ export function MetricCardGroup({
           key={chart.id}
           chart={chart}
           chartData={chartData}
+          measure={(() => {
+            try {
+              const parsed = JSON.parse(chart.chartConfigJson) as {
+                measureId?: string;
+              };
+              return parsed.measureId
+                ? (measuresById[parsed.measureId] ?? null)
+                : null;
+            } catch {
+              return null;
+            }
+          })()}
+          measureValue={(() => {
+            try {
+              const parsed = JSON.parse(chart.chartConfigJson) as {
+                measureId?: string;
+              };
+              return parsed.measureId
+                ? (measureValuesById[parsed.measureId] ?? "")
+                : undefined;
+            } catch {
+              return undefined;
+            }
+          })()}
           onConfigChange={onConfigChange}
+          onMeasureChange={onMeasureChange}
           onDelete={onDelete}
           expandedSqlChartId={expandedSqlChartId}
           onToggleSql={onToggleSql}
@@ -37,6 +66,7 @@ export function MetricCardGroup({
           isLast={index === charts.length - 1}
           isSelected={selectedChartId === chart.id}
           onSelect={onChartSelect}
+          onPreviewChart={onPreviewChart}
         />
       ))}
     </div>

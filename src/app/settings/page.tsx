@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  type AiProvider,
+  getAiProviderDisplayName,
+  getApiKeyStorageKeyForProvider,
+  getMissingRequiredSetting,
+  loadAiSettingsFromStorage,
+  saveAiSettingsToStorage,
+} from "@/ai/settings";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -20,11 +28,50 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  clearSessionSecret,
+  hasSessionSecret,
+  setSessionSecret,
+} from "@/lib/bridge/pondview-bridge";
+import {
+  setExecuteSqlRawOutputPreference,
+  setShowToolCallsPreference,
+  useExecuteSqlRawOutputPreference,
+  useShowToolCallsPreference,
+} from "@/lib/chat-display-preferences";
+import {
   applyCustomCss,
   applyTheme,
   getSelectedTheme,
   setSelectedTheme as setThemeInStorage,
 } from "@/lib/custom-css";
+import {
+  clearDuckDbHttpConfigInStorage,
+  clearDuckDbHttpSessionAuth,
+  getDuckDbHttpConfigFromStorage,
+  hasDuckDbHttpSessionAuth,
+  refreshDuckDbHttpHealth,
+  setDuckDbHttpConfigInStorage,
+  setDuckDbHttpSessionAuth,
+} from "@/lib/duckdb/duckdb-http-browser";
+
+import {
+  getSqlBackendPreferenceFromStorage,
+  refreshBridgeHealth,
+  type SqlBackend,
+  setSqlBackendPreferenceInStorage,
+} from "@/lib/sql/sql-runtime";
+import {
+  useBridgeHealthStatus,
+  useDuckDbHttpConfig,
+  useDuckDbHttpHealthStatus,
+  useSqlBackendPreference,
+} from "@/lib/sql/use-sql-backend";
+import {
+  exportWorkspace,
+  importWorkspace,
+  validateWorkspaceImport,
+} from "@/lib/workspace/export-import";
+import { switchToFreshWorkspaceDatabase } from "@/lib/workspace/workspace-db";
 import { getAllThemes } from "@/themes";
 
 const CSS_PLACEHOLDER = `:root{
@@ -43,31 +90,104 @@ const CSS_PLACEHOLDER = `:root{
 const CUSTOM_THEME_VALUE = "custom";
 
 export default function SettingsPage() {
+  const [aiProvider, setAiProvider] = useState<AiProvider>("gateway");
+  const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [openResponsesUrl, setOpenResponsesUrl] = useState("");
+  const [openResponsesName, setOpenResponsesName] = useState("");
   const [cssCode, setCssCode] = useState("");
   const [selectedTheme, setSelectedTheme] =
     useState<string>(CUSTOM_THEME_VALUE);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [bridgeSecret, setBridgeSecret] = useState("");
+  const [hasBridgeSecret, setHasBridgeSecret] = useState(false);
+  const [duckDbHttpHost, setDuckDbHttpHost] = useState("");
+  const [duckDbHttpPort, setDuckDbHttpPort] = useState("");
+  const [duckDbHttpAuth, setDuckDbHttpAuth] = useState("");
+  const [hasDuckDbHttpAuth, setHasDuckDbHttpAuth] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [secrets, setSecrets] = useState<{ name: string; provider: string }[]>(
-    []
-  );
-  const [secretsError, setSecretsError] = useState<string | null>(null);
-  const [isSecretsLoading, setIsSecretsLoading] = useState(false);
+  const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
+  const [runtimeSettingsError, setRuntimeSettingsError] = useState<
+    string | null
+  >(null);
+  const [runtimeSettingsSuccess, setRuntimeSettingsSuccess] = useState<
+    string | null
+  >(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [isTestingHttpConnection, setIsTestingHttpConnection] = useState(false);
+  const [isExportingWorkspace, setIsExportingWorkspace] = useState(false);
+  const [isImportingWorkspace, setIsImportingWorkspace] = useState(false);
+  const [isResettingWorkspace, setIsResettingWorkspace] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
+  const sqlBackendPreference = useSqlBackendPreference();
+  const bridgeHealthStatus = useBridgeHealthStatus();
+  const duckDbHttpConfig = useDuckDbHttpConfig();
+  const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
+  const showToolCalls = useShowToolCallsPreference();
+  const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
+  const isBridgeAvailable = hasBridgeSecret && bridgeHealthStatus === "online";
+  const isDuckDbHttpConfigured = Boolean(duckDbHttpConfig);
+  const selectedSqlBackend: SqlBackend =
+    sqlBackendPreference === "bridge" || sqlBackendPreference === "duckdb-http"
+      ? sqlBackendPreference
+      : "duckdb-wasm";
 
   // Load settings from localStorage on mount
   useEffect(() => {
-    const savedApiKey = localStorage.getItem("AI_GATEWAY_API_KEY") || "";
+    const aiSettings = loadAiSettingsFromStorage();
     const savedCss = localStorage.getItem("CUSTOM_CSS") || "";
     const savedTheme = getSelectedTheme();
 
-    setApiKey(savedApiKey);
+    setAiProvider(aiSettings.provider);
+    setModel(aiSettings.model);
+    setApiKey(aiSettings.apiKey);
+    setOpenResponsesUrl(aiSettings.openResponsesUrl ?? "");
+    setOpenResponsesName(aiSettings.openResponsesName ?? "");
     setCssCode(savedCss);
     // Set selected theme, or "custom" if no theme is selected but custom CSS exists
     setSelectedTheme(savedTheme || (savedCss ? CUSTOM_THEME_VALUE : "default"));
+    const hasSecret = hasSessionSecret();
+    setHasBridgeSecret(hasSecret);
+    setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
+
+    const savedDuckDbHttpConfig = getDuckDbHttpConfigFromStorage();
+    setDuckDbHttpHost(savedDuckDbHttpConfig?.host ?? "");
+    setDuckDbHttpPort(
+      savedDuckDbHttpConfig ? String(savedDuckDbHttpConfig.port) : "",
+    );
+
+    const savedBackendPreference = getSqlBackendPreferenceFromStorage();
+    if (
+      savedBackendPreference === "bridge" ||
+      savedBackendPreference === "duckdb-http" ||
+      savedBackendPreference === "duckdb-wasm"
+    ) {
+      const resolvedPreference =
+        savedBackendPreference === "bridge" && !hasSecret
+          ? "duckdb-wasm"
+          : savedBackendPreference === "duckdb-http" && !savedDuckDbHttpConfig
+            ? "duckdb-wasm"
+            : savedBackendPreference;
+      if (resolvedPreference !== savedBackendPreference) {
+        setSqlBackendPreferenceInStorage(resolvedPreference);
+      }
+    } else {
+      const defaultPreference = hasSecret ? "bridge" : "duckdb-wasm";
+      setSqlBackendPreferenceInStorage(defaultPreference);
+    }
+
+    void refreshBridgeHealth();
+    if (savedDuckDbHttpConfig) {
+      void refreshDuckDbHttpHealth();
+    }
   }, []);
+
+  useEffect(() => {
+    setDuckDbHttpHost(duckDbHttpConfig?.host ?? "");
+    setDuckDbHttpPort(duckDbHttpConfig ? String(duckDbHttpConfig.port) : "");
+  }, [duckDbHttpConfig]);
 
   // Apply CSS on component mount (only if custom theme is selected)
   useEffect(() => {
@@ -76,44 +196,291 @@ export default function SettingsPage() {
     }
   }, [cssCode, selectedTheme]);
 
-  const fetchSecrets = useCallback(async () => {
-    setIsSecretsLoading(true);
-    setSecretsError(null);
-    try {
-      const response = await fetch("/api/duckdb/secrets");
-      const data = (await response.json().catch(() => ({}))) as {
-        secrets?: { name: string; provider: string }[];
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load DuckDB secrets.");
-      }
-
-      setSecrets(Array.isArray(data.secrets) ? data.secrets : []);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to load secrets.";
-      setSecrets([]);
-      setSecretsError(message);
-    } finally {
-      setIsSecretsLoading(false);
+  useEffect(() => {
+    if (!hasBridgeSecret && selectedSqlBackend === "bridge") {
+      setSqlBackendPreferenceInStorage("duckdb-wasm");
     }
-  }, []);
+  }, [hasBridgeSecret, selectedSqlBackend]);
 
   useEffect(() => {
-    void fetchSecrets();
-  }, [fetchSecrets]);
+    if (!hasBridgeSecret) {
+      return;
+    }
 
-  const handleSaveApiKey = async () => {
+    void refreshBridgeHealth();
+    const intervalId = window.setInterval(() => {
+      void refreshBridgeHealth();
+    }, 15000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [hasBridgeSecret]);
+
+  useEffect(() => {
+    if (!isDuckDbHttpConfigured) {
+      return;
+    }
+
+    void refreshDuckDbHttpHealth();
+    const intervalId = window.setInterval(() => {
+      void refreshDuckDbHttpHealth();
+    }, 15000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isDuckDbHttpConfigured]);
+
+  const effectiveSqlBackend: SqlBackend =
+    selectedSqlBackend === "bridge" && isBridgeAvailable
+      ? "bridge"
+      : selectedSqlBackend === "duckdb-http" && isDuckDbHttpConfigured
+        ? "duckdb-http"
+        : "duckdb-wasm";
+  const handleSetBridgeSecret = () => {
+    setSessionSecret(bridgeSecret);
+    setHasBridgeSecret(hasSessionSecret());
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
+    void refreshBridgeHealth();
+    setBridgeSecret("");
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleClearBridgeSecret = () => {
+    clearSessionSecret();
+    setHasBridgeSecret(false);
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
+    void refreshBridgeHealth();
+    if (selectedSqlBackend === "bridge") {
+      setSqlBackendPreferenceInStorage("duckdb-wasm");
+    }
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleSqlBackendChange = (backend: SqlBackend) => {
+    if (backend === "bridge" && !isBridgeAvailable) {
+      return;
+    }
+
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
+    setSqlBackendPreferenceInStorage(backend);
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleSaveDuckDbHttpConfig = () => {
+    const host = duckDbHttpHost.trim();
+    const port = Number.parseInt(duckDbHttpPort.trim(), 10);
+    const auth = duckDbHttpAuth.trim();
+
+    if (!host) {
+      setRuntimeSettingsError("DuckDB HTTP host is required.");
+      setRuntimeSettingsSuccess(null);
+      return;
+    }
+
+    if (!Number.isFinite(port) || port < 1 || port > 65535) {
+      setRuntimeSettingsError(
+        "DuckDB HTTP port must be a valid number between 1 and 65535.",
+      );
+      setRuntimeSettingsSuccess(null);
+      return;
+    }
+
+    if (auth.length) {
+      setDuckDbHttpSessionAuth(auth);
+      setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
+      setDuckDbHttpAuth("");
+    }
+
+    setDuckDbHttpConfigInStorage({ host, port });
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess("DuckDB HTTP connection settings saved.");
+    void refreshDuckDbHttpHealth();
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleClearDuckDbHttpConfig = () => {
+    clearDuckDbHttpConfigInStorage();
+    setDuckDbHttpHost("");
+    setDuckDbHttpPort("");
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess("DuckDB HTTP connection settings cleared.");
+    if (selectedSqlBackend === "duckdb-http") {
+      setSqlBackendPreferenceInStorage("duckdb-wasm");
+    }
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleClearDuckDbHttpAuth = () => {
+    clearDuckDbHttpSessionAuth();
+    setHasDuckDbHttpAuth(false);
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess("DuckDB HTTP auth cleared.");
+    void refreshDuckDbHttpHealth();
+    if (selectedSqlBackend === "duckdb-http" && !isDuckDbHttpConfigured) {
+      setSqlBackendPreferenceInStorage("duckdb-wasm");
+    }
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleTestDuckDbHttpConnection = async () => {
+    const host = duckDbHttpHost.trim();
+    const port = Number.parseInt(duckDbHttpPort.trim(), 10);
+
+    if (!host) {
+      setRuntimeSettingsError("DuckDB HTTP host is required.");
+      setRuntimeSettingsSuccess(null);
+      return;
+    }
+
+    if (!Number.isFinite(port) || port < 1 || port > 65535) {
+      setRuntimeSettingsError(
+        "DuckDB HTTP port must be a valid number between 1 and 65535.",
+      );
+      setRuntimeSettingsSuccess(null);
+      return;
+    }
+
+    setIsTestingHttpConnection(true);
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
+
+    try {
+      setDuckDbHttpConfigInStorage({ host, port });
+      const status = await refreshDuckDbHttpHealth(undefined, { host, port });
+      if (status === "online") {
+        setRuntimeSettingsSuccess(
+          "Connection successful — DuckDB HTTP is reachable.",
+        );
+        setShowSuccessMessage(true);
+        setTimeout(() => setShowSuccessMessage(false), 3000);
+      } else {
+        setRuntimeSettingsSuccess(null);
+        setRuntimeSettingsError(
+          "Connection failed — DuckDB HTTP server is not reachable.",
+        );
+      }
+    } catch {
+      setRuntimeSettingsSuccess(null);
+      setRuntimeSettingsError("Connection test failed unexpectedly.");
+    } finally {
+      setIsTestingHttpConnection(false);
+    }
+  };
+
+  const handleExportWorkspace = async () => {
+    setIsExportingWorkspace(true);
+    try {
+      const payload = await exportWorkspace();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = "pondview-workspace-v1.json";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(href);
+    } finally {
+      setIsExportingWorkspace(false);
+    }
+  };
+
+  const handleImportWorkspace = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setIsImportingWorkspace(true);
+    try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw);
+      const payload = validateWorkspaceImport(parsed);
+      await importWorkspace(payload);
+      location.reload();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to import workspace.";
+      setWorkspaceError(message);
+    } finally {
+      setIsImportingWorkspace(false);
+      if (importFileRef.current) {
+        importFileRef.current.value = "";
+      }
+    }
+  };
+
+  const handleResetWorkspace = async () => {
+    if (
+      !confirm(
+        "Reset all browser workspace data (chats, dashboards, preferences)? This cannot be undone.",
+      )
+    ) {
+      return;
+    }
+
+    setIsResettingWorkspace(true);
+    try {
+      switchToFreshWorkspaceDatabase();
+      location.reload();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to reset workspace data.";
+      setWorkspaceError(message);
+      setIsResettingWorkspace(false);
+    }
+  };
+
+  const handleSaveAiSettings = async () => {
+    const settings = {
+      provider: aiProvider,
+      model,
+      apiKey,
+      openResponsesUrl,
+      openResponsesName,
+    };
+    const missingSetting = getMissingRequiredSetting(settings);
+    if (missingSetting) {
+      setAiSettingsError(`Missing ${missingSetting}.`);
+      return;
+    }
+
     setIsSaving(true);
     try {
-      localStorage.setItem("AI_GATEWAY_API_KEY", apiKey);
+      saveAiSettingsToStorage(settings);
+      setAiSettingsError(null);
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleAiProviderChange = (provider: AiProvider) => {
+    const persistedApiKey = localStorage.getItem(
+      getApiKeyStorageKeyForProvider(provider),
+    );
+
+    setAiProvider(provider);
+    setApiKey((persistedApiKey ?? "").trim());
+    setAiSettingsError(null);
   };
 
   const handleSaveCss = async () => {
@@ -155,6 +522,22 @@ export default function SettingsPage() {
     }
   };
 
+  const effectiveRuntimeLabel =
+    effectiveSqlBackend === "bridge"
+      ? "Bridge"
+      : effectiveSqlBackend === "duckdb-http"
+        ? "DuckDB over HTTP"
+        : selectedSqlBackend === "bridge" && bridgeHealthStatus === "offline"
+          ? "DuckDB WASM (bridge unavailable)"
+          : selectedSqlBackend === "duckdb-http" &&
+              duckDbHttpHealthStatus === "offline"
+            ? "DuckDB WASM (HTTP unavailable)"
+            : selectedSqlBackend === "duckdb-http" && isDuckDbHttpConfigured
+              ? "DuckDB WASM (HTTP pending)"
+              : selectedSqlBackend === "bridge" && hasBridgeSecret
+                ? "DuckDB WASM (bridge pending)"
+                : "DuckDB WASM";
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-auto">
@@ -170,96 +553,450 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* API Key Section */}
+          {/* AI Provider Section */}
           <Card className="p-6 mb-6">
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold mb-2">API Key</h2>
+                <h2 className="text-xl font-semibold mb-2">
+                  AI Provider Configuration
+                </h2>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Configure your AI Gateway API key for enhanced functionality.
+                  Configure provider credentials and model selection for AI
+                  requests.
                 </p>
               </div>
 
               <div>
                 <label
+                  htmlFor="ai-provider"
+                  className="text-sm font-medium mb-2 block"
+                >
+                  Provider
+                </label>
+                <Select
+                  value={aiProvider}
+                  onValueChange={(value) =>
+                    handleAiProviderChange(value as AiProvider)
+                  }
+                >
+                  <SelectTrigger id="ai-provider" className="mb-4">
+                    <SelectValue placeholder="Select provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gateway">Gateway</SelectItem>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="anthropic">Anthropic</SelectItem>
+                    <SelectItem value="open-responses">
+                      Open Responses
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <label
+                  htmlFor="model-id"
+                  className="text-sm font-medium mb-2 block"
+                >
+                  Model
+                </label>
+                <Input
+                  id="model-id"
+                  type="text"
+                  name="ai-model-id"
+                  autoComplete="off"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="Enter model ID"
+                  className="mb-4"
+                />
+
+                <label
                   htmlFor="api-key"
                   className="text-sm font-medium mb-2 block"
                 >
-                  AI_GATEWAY_API_KEY
+                  {getApiKeyStorageKeyForProvider(aiProvider)}
                 </label>
                 <Input
                   id="api-key"
                   type="password"
+                  name="settings-ai-provider-secret"
+                  autoComplete="off"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  data-form-type="other"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="Enter your API key"
                   className="mb-4"
                 />
+                {aiProvider === "open-responses" && (
+                  <>
+                    <label
+                      htmlFor="open-responses-url"
+                      className="text-sm font-medium mb-2 block"
+                    >
+                      Open Responses URL
+                    </label>
+                    <Input
+                      id="open-responses-url"
+                      type="text"
+                      name="open-responses-url"
+                      autoComplete="off"
+                      value={openResponsesUrl}
+                      onChange={(e) => setOpenResponsesUrl(e.target.value)}
+                      placeholder="https://api.example.com/v1"
+                      className="mb-4"
+                    />
+
+                    <label
+                      htmlFor="open-responses-name"
+                      className="text-sm font-medium mb-2 block"
+                    >
+                      Open Responses Provider Name
+                    </label>
+                    <Input
+                      id="open-responses-name"
+                      type="text"
+                      name="open-responses-provider-name"
+                      autoComplete="off"
+                      value={openResponsesName}
+                      onChange={(e) => setOpenResponsesName(e.target.value)}
+                      placeholder="openresponses"
+                      className="mb-4"
+                    />
+                  </>
+                )}
+                {aiSettingsError && (
+                  <p className="mb-4 text-sm text-red-600 dark:text-red-400">
+                    {aiSettingsError}
+                  </p>
+                )}
                 <Button
-                  onClick={handleSaveApiKey}
+                  onClick={handleSaveAiSettings}
                   disabled={isSaving}
                   className="w-full sm:w-auto"
                 >
-                  {isSaving ? "Saving..." : "Save API Key"}
+                  {isSaving
+                    ? "Saving..."
+                    : `Save ${getAiProviderDisplayName(aiProvider)} Settings`}
                 </Button>
               </div>
             </div>
           </Card>
 
-          {/* DuckDB Secrets Section */}
           <Card className="p-6 mb-6">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                  <h2 className="text-xl font-semibold mb-2">DuckDB Secrets</h2>
-                  <p className="text-sm text-muted-foreground">
-                    View persistent secrets managed by DuckDB. Use{" "}
-                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                      CREATE PERSISTENT SECRET
-                    </code>{" "}
-                    in the DuckDB shell to add one.
-                  </p>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Query Runtime</h2>
+                <p className="text-sm text-muted-foreground">
+                  Choose where SQL runs. Bridge uses Pondview endpoints, while
+                  DuckDB over HTTP connects directly from the browser to a
+                  DuckDB `httpserver` instance.
+                </p>
+              </div>
+              <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs flex items-center justify-between">
+                <span className="text-muted-foreground">Active runtime</span>
+                <span
+                  className={
+                    effectiveSqlBackend === "duckdb-wasm"
+                      ? "text-muted-foreground"
+                      : "text-green-600 dark:text-green-400"
+                  }
+                >
+                  {effectiveRuntimeLabel}
+                </span>
+              </div>
+              <div>
+                <label
+                  htmlFor="sql-backend-select"
+                  className="text-sm font-medium mb-2 block"
+                >
+                  Query Runtime
+                </label>
+                <Select
+                  value={selectedSqlBackend}
+                  onValueChange={(value) =>
+                    handleSqlBackendChange(value as SqlBackend)
+                  }
+                >
+                  <SelectTrigger
+                    id="sql-backend-select"
+                    className="w-full sm:w-auto"
+                  >
+                    <SelectValue placeholder="Select query runtime" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="duckdb-wasm">DuckDB WASM</SelectItem>
+                    <SelectItem value="bridge" disabled={!isBridgeAvailable}>
+                      Bridge {isBridgeAvailable ? "" : "(Unavailable)"}
+                    </SelectItem>
+                    <SelectItem value="duckdb-http">
+                      DuckDB over HTTP
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {runtimeSettingsError && (
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {runtimeSettingsError}
+                </p>
+              )}
+              {runtimeSettingsSuccess && (
+                <p className="text-sm text-green-600 dark:text-green-400">
+                  {runtimeSettingsSuccess}
+                </p>
+              )}
+
+              {selectedSqlBackend === "bridge" && (
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">Bridge Auth</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Optional session-only Pondview secret for authenticated
+                      bridge queries. Leave empty when Pondview is started with
+                      an empty secret.
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Health: {bridgeHealthStatus}
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      type="password"
+                      name="settings-bridge-secret"
+                      autoComplete="off"
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      data-form-type="other"
+                      value={bridgeSecret}
+                      onChange={(event) => setBridgeSecret(event.target.value)}
+                      placeholder="Enter Pondview secret"
+                    />
+                    <Button
+                      onClick={handleSetBridgeSecret}
+                      disabled={!bridgeSecret.trim().length}
+                    >
+                      Set Session Secret
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleClearBridgeSecret}
+                      disabled={!hasBridgeSecret}
+                    >
+                      Clear
+                    </Button>
+                  </div>
                 </div>
+              )}
+
+              {selectedSqlBackend === "duckdb-http" && (
+                <div className="space-y-4 rounded-lg border p-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      DuckDB HTTP Connection
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Configure host, port, and optional auth for a remote
+                      DuckDB{" "}
+                      <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                        httpserver
+                      </code>{" "}
+                      instance.
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Health: {duckDbHttpHealthStatus}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+                    <Input
+                      type="text"
+                      value={duckDbHttpHost}
+                      onChange={(event) =>
+                        setDuckDbHttpHost(event.target.value)
+                      }
+                      placeholder="http://127.0.0.1 or duckdb-host.local"
+                    />
+                    <Input
+                      type="text"
+                      value={duckDbHttpPort}
+                      onChange={(event) =>
+                        setDuckDbHttpPort(event.target.value)
+                      }
+                      placeholder="8123"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="duckdb-http-auth"
+                      className="text-sm font-medium mb-2 block"
+                    >
+                      Auth{" "}
+                      <span className="font-normal text-muted-foreground">
+                        ({hasDuckDbHttpAuth ? "set" : "not set"})
+                      </span>
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        id="duckdb-http-auth"
+                        type="password"
+                        name="settings-duckdb-http-auth"
+                        autoComplete="off"
+                        data-1p-ignore="true"
+                        data-lpignore="true"
+                        data-form-type="other"
+                        value={duckDbHttpAuth}
+                        onChange={(event) =>
+                          setDuckDbHttpAuth(event.target.value)
+                        }
+                        placeholder={
+                          hasDuckDbHttpAuth
+                            ? "••••••••  (enter new value, then Save Config)"
+                            : "token or user:pass"
+                        }
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={handleClearDuckDbHttpAuth}
+                        disabled={!hasDuckDbHttpAuth}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={handleSaveDuckDbHttpConfig}>
+                      Save Connection
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => void handleTestDuckDbHttpConnection()}
+                      disabled={isTestingHttpConnection}
+                    >
+                      {isTestingHttpConnection
+                        ? "Testing..."
+                        : "Test Connection"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleClearDuckDbHttpConfig}
+                      disabled={!isDuckDbHttpConfigured}
+                    >
+                      Clear Config
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6 mb-6">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Workspace Data</h2>
+                <p className="text-sm text-muted-foreground">
+                  Export, import, or reset browser-local workspace state.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => void fetchSecrets()}
-                  disabled={isSecretsLoading}
-                  className="whitespace-nowrap"
+                  onClick={() => void handleExportWorkspace()}
+                  disabled={isExportingWorkspace}
                 >
-                  {isSecretsLoading ? "Refreshing..." : "Refresh"}
+                  {isExportingWorkspace ? "Exporting..." : "Export Workspace"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => importFileRef.current?.click()}
+                  disabled={isImportingWorkspace}
+                >
+                  {isImportingWorkspace ? "Importing..." : "Import Workspace"}
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => void handleResetWorkspace()}
+                  disabled={isResettingWorkspace}
+                >
+                  {isResettingWorkspace ? "Resetting..." : "Reset Workspace"}
                 </Button>
               </div>
 
-              <div className="border rounded-lg divide-y bg-muted/20">
-                {isSecretsLoading ? (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    Loading secrets...
-                  </div>
-                ) : secretsError ? (
-                  <div className="p-4 text-sm text-red-600 dark:text-red-400">
-                    {secretsError}
-                  </div>
-                ) : secrets.length === 0 ? (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    No persistent secrets found. Create one and it will appear
-                    here.
-                  </div>
-                ) : (
-                  secrets.map((secret) => (
-                    <div
-                      key={`${secret.provider}:${secret.name}`}
-                      className="p-4 flex justify-between items-center gap-4"
-                    >
-                      <div>
-                        <p className="font-medium">{secret.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Provider: {secret.provider || "unknown"}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                )}
+              {workspaceError && (
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {workspaceError}
+                </p>
+              )}
+
+              <input
+                ref={importFileRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={handleImportWorkspace}
+              />
+            </div>
+          </Card>
+
+          <Card className="p-6 mb-6">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Chat Display</h2>
+                <p className="text-sm text-muted-foreground">
+                  Configure how tool results are shown in chat messages.
+                </p>
               </div>
+
+              <label
+                htmlFor="show-tool-calls"
+                className="flex items-center justify-between gap-4 rounded-md border border-border p-3"
+              >
+                <div>
+                  <p className="text-sm font-medium">Show tool calls</p>
+                  <p className="text-xs text-muted-foreground">
+                    When disabled, chat hides `tool-*` cards entirely while
+                    keeping SQL result blocks and visuals visible.
+                  </p>
+                </div>
+                <input
+                  id="show-tool-calls"
+                  type="checkbox"
+                  checked={showToolCalls}
+                  onChange={(event) =>
+                    setShowToolCallsPreference(event.target.checked)
+                  }
+                  className="h-4 w-4 rounded border-border"
+                />
+              </label>
+
+              <label
+                htmlFor="show-execute-sql-raw-output"
+                className="flex items-center justify-between gap-4 rounded-md border border-border p-3 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <div>
+                  <p className="text-sm font-medium">
+                    Show raw executeSql output JSON
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    When enabled, the tool card shows raw `tool-executeSql`
+                    output in addition to the SQL result block. This only
+                    applies when tool calls are visible.
+                  </p>
+                </div>
+                <input
+                  id="show-execute-sql-raw-output"
+                  type="checkbox"
+                  checked={showExecuteSqlRawOutput}
+                  disabled={!showToolCalls}
+                  onChange={(event) =>
+                    setExecuteSqlRawOutputPreference(event.target.checked)
+                  }
+                  className="h-4 w-4 rounded border-border"
+                />
+              </label>
             </div>
           </Card>
 

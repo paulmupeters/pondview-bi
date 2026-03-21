@@ -1,6 +1,5 @@
 import { Squares2X2Icon } from "@heroicons/react/24/outline";
-import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   AddToDashboardDialog,
   type AddToDashboardVisualOption,
@@ -8,7 +7,6 @@ import {
 import { InlineChartConfig } from "@/components/inline-chart-config";
 import { MetricCard } from "@/components/metric-card";
 import { SqlChart } from "@/components/sql-chart";
-import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import type { CardConfig, Config, TableConfig } from "@/lib/types";
 import type {
@@ -17,6 +15,7 @@ import type {
   SelectedForTable,
   SqlAnalysisData,
 } from "../sql-analysis-display.types";
+import { SqlControls } from "./sql-controls";
 
 interface ChartViewProps {
   data: SqlAnalysisData;
@@ -30,11 +29,6 @@ interface ChartViewProps {
   onCardConfigChange: (config: CardConfig | null) => void;
   showVisualOptions: boolean;
   onShowVisualOptionsChange: (open: boolean) => void;
-  renderSqlControls: (
-    extraControls?: ReactNode,
-    editorId?: string,
-  ) => ReactNode;
-  renderSqlEditor: (editorId?: string) => ReactNode;
 }
 
 export function ChartView({
@@ -49,17 +43,7 @@ export function ChartView({
   onCardConfigChange,
   showVisualOptions,
   onShowVisualOptionsChange,
-  renderSqlControls,
-  renderSqlEditor,
 }: ChartViewProps) {
-  const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
-
-  useEffect(() => {
-    if (!showVisualOptions) {
-      setShowAdvancedConfig(false);
-    }
-  }, [showVisualOptions]);
-
   const defaultChartConfig = useMemo<Config>(() => {
     const xKey = columnsForDialog[0]?.name ?? "";
     const fallbackYKey = columnsForDialog[1]?.name;
@@ -187,45 +171,89 @@ export function ChartView({
     resolvedTableConfig,
   ]);
 
+  const updateChartMeta = (
+    field: "title" | "description" | "takeaway",
+    value: string,
+  ) => {
+    if (field === "title") {
+      onChartConfigChange({
+        ...effectiveChartConfig,
+        title: value,
+      });
+      return;
+    }
+    if (field === "description") {
+      onChartConfigChange({
+        ...effectiveChartConfig,
+        description: value,
+      });
+      return;
+    }
+    onChartConfigChange({
+      ...effectiveChartConfig,
+      takeaway: value.trim() ? value : undefined,
+    });
+  };
+
+  const baseCardConfig: CardConfig = resolvedCardConfig ?? {
+    configType: "card",
+    title: selectedForCard?.columnName ?? "Value",
+    description: "",
+  };
+
+  const updateCardMeta = (
+    field: "title" | "description" | "takeaway",
+    value: string,
+  ) => {
+    if (field === "title") {
+      onCardConfigChange({
+        ...baseCardConfig,
+        title: value,
+      });
+      return;
+    }
+    if (field === "description") {
+      onCardConfigChange({
+        ...baseCardConfig,
+        description: value,
+      });
+      return;
+    }
+    onCardConfigChange({
+      ...baseCardConfig,
+      takeaway: value.trim() ? value : undefined,
+    });
+  };
+
   return (
     <div className="group relative flex flex-col bg-background">
       {selectedForCard ? (
         <>
-          {renderSqlControls(
-            visualOptions.length > 0 ? (
-              <AddToDashboardDialog
-                trigger={
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    aria-label="Add to dashboard"
-                    title="Add to dashboard"
-                  >
-                    <Squares2X2Icon className="h-4 w-4" />
-                  </button>
-                }
-                sql={data.query ?? ""}
-                dbIdentifier={data.dbIdentifier}
-                defaultTitle={cardConfig?.title ?? data.cardConfig?.title}
-                tooltip="Add to dashboard"
-                visualOptions={visualOptions}
-                defaultVisualType="card"
-              />
-            ) : undefined,
-            "sql-editor-analysis-card",
-          )}
-          {columnsForDialog.length > 0 && (
-            <InlineChartConfig
-              chartConfig={null}
-              defaultChartConfig={defaultChartConfig}
-              onChartConfigChange={() => {}}
-              columns={columnsForDialog}
-              rows={selectedForChart?.rows}
-              cardConfig={cardConfig}
-              onCardConfigChange={onCardConfigChange}
-              isCardMode={true}
-            />
-          )}
+          <SqlControls
+            extraControls={
+              visualOptions.length > 0 ? (
+                <AddToDashboardDialog
+                  trigger={
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label="Add to dashboard"
+                      title="Add to dashboard"
+                    >
+                      <Squares2X2Icon className="h-4 w-4" />
+                    </button>
+                  }
+                  sql={data.query ?? ""}
+                  dbIdentifier={data.dbIdentifier}
+                  sqlBackend={data.sqlBackend}
+                  defaultTitle={cardConfig?.title ?? data.cardConfig?.title}
+                  tooltip="Add to dashboard"
+                  visualOptions={visualOptions}
+                  defaultVisualType="card"
+                />
+              ) : undefined
+            }
+          />
           <MetricCard
             value={selectedForCard.value as string | number | boolean | Date}
             title={
@@ -237,35 +265,42 @@ export function ChartView({
               cardConfig?.description ?? data.cardConfig?.description
             }
             takeaway={cardConfig?.takeaway ?? data.cardConfig?.takeaway}
+            editable={true}
+            onTitleChange={(value) => updateCardMeta("title", value)}
+            onDescriptionChange={(value) =>
+              updateCardMeta("description", value)
+            }
+            onTakeawayChange={(value) => updateCardMeta("takeaway", value)}
             className="mx-auto w-fit border-0 shadow-none"
           />
-          {renderSqlEditor("sql-editor-analysis-card")}
         </>
       ) : (
         <>
-          {renderSqlControls(
-            visualOptions.length > 0 && (
-              <AddToDashboardDialog
-                trigger={
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    aria-label="Add to dashboard"
-                    title="Add to dashboard"
-                  >
-                    <Squares2X2Icon className="h-4 w-4" />
-                  </button>
-                }
-                sql={data.query ?? ""}
-                defaultTitle={effectiveChartConfig.title}
-                tooltip="Add to dashboard"
-                dbIdentifier={data.dbIdentifier}
-                visualOptions={visualOptions}
-                defaultVisualType="chart"
-              />
-            ),
-            "sql-editor-analysis-chart",
-          )}
+          <SqlControls
+            extraControls={
+              visualOptions.length > 0 ? (
+                <AddToDashboardDialog
+                  trigger={
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label="Add to dashboard"
+                      title="Add to dashboard"
+                    >
+                      <Squares2X2Icon className="h-4 w-4" />
+                    </button>
+                  }
+                  sql={data.query ?? ""}
+                  defaultTitle={effectiveChartConfig.title}
+                  tooltip="Add to dashboard"
+                  dbIdentifier={data.dbIdentifier}
+                  sqlBackend={data.sqlBackend}
+                  visualOptions={visualOptions}
+                  defaultVisualType="chart"
+                />
+              ) : undefined
+            }
+          />
           {columnsForDialog.length > 0 && (
             <Collapsible
               open={showVisualOptions}
@@ -275,24 +310,14 @@ export function ChartView({
                 id="chart-visual-options"
                 className="px-4 pt-4"
               >
-                <div className="pb-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="text-xs font-mono"
-                    onClick={() => setShowAdvancedConfig(!showAdvancedConfig)}
-                  >
-                    Advanced config
-                  </Button>
-                </div>
                 <InlineChartConfig
                   chartConfig={chartConfig}
                   defaultChartConfig={defaultChartConfig}
                   onChartConfigChange={onChartConfigChange}
                   columns={columnsForDialog}
                   rows={selectedForChart?.rows}
-                  showAdvancedConfig={showAdvancedConfig}
+                  showAdvancedConfig={true}
+                  hideNarrativeFields={true}
                 />
               </CollapsibleContent>
             </Collapsible>
@@ -301,13 +326,16 @@ export function ChartView({
             <SqlChart
               customChartConfig={effectiveChartConfig}
               dataOverride={selectedForChart}
+              onTitleChange={(value) => updateChartMeta("title", value)}
+              onDescriptionChange={(value) =>
+                updateChartMeta("description", value)
+              }
+              onTakeawayChange={(value) => updateChartMeta("takeaway", value)}
             />
           ) : !selectedForChart && !selectedForCard ? (
-            // When there's no data, the SQL editor will be shown via renderSqlEditor
-            // This empty div ensures the layout is maintained
+            // Keep layout stable when no chart/card data can be rendered yet.
             <div className="min-h-[200px]" />
           ) : null}
-          {renderSqlEditor("sql-editor-analysis-chart")}
         </>
       )}
     </div>
