@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { listMaterializedTablesForBackend } from "@/lib/dashboard/browser-filter-engine";
-import { subscribeDuckDbHttpHealth } from "@/lib/duckdb/duckdb-http-browser";
 import {
   isMaterializedTablesCacheFresh,
   readMaterializedTablesCache,
@@ -11,64 +10,33 @@ import {
   resolveSqlRuntimeFingerprint,
 } from "@/lib/sql/runtime-fingerprint";
 import {
-  getSqlBackendPreference,
-  resolveSqlBackend,
-  type SqlBackend,
-  subscribeBridgeHealth,
-  subscribeSqlBackendPreference,
-} from "@/lib/sql/sql-runtime";
-
-function resolveActiveBackend(): SqlBackend {
-  return resolveSqlBackend({
-    backendPreference: getSqlBackendPreference(),
-  });
-}
+  useResolvedSqlBackend,
+  useSqlBackendPreference,
+} from "@/lib/sql/use-sql-backend";
 
 export function useMaterializedTables() {
-  const [backend, setBackend] = useState<SqlBackend>(() =>
-    resolveActiveBackend(),
-  );
+  const sqlBackendPreference = useSqlBackendPreference();
+  const backend = useResolvedSqlBackend({
+    backendPreference: sqlBackendPreference,
+  });
   const [runtimeFingerprint, setRuntimeFingerprint] = useState<string | null>(
-    () => getDefaultSqlRuntimeFingerprint(resolveActiveBackend()),
+    () => getDefaultSqlRuntimeFingerprint(backend),
   );
   const [tables, setTables] = useState<string[]>(() => {
-    const initialBackend = resolveActiveBackend();
-    const initialFingerprint = getDefaultSqlRuntimeFingerprint(initialBackend);
+    const initialFingerprint = getDefaultSqlRuntimeFingerprint(backend);
     const cache = initialFingerprint
-      ? readMaterializedTablesCache(initialBackend, initialFingerprint)
+      ? readMaterializedTablesCache(backend, initialFingerprint)
       : null;
     return isMaterializedTablesCacheFresh(cache) && cache ? cache.tables : [];
   });
   const [isLoading, setIsLoading] = useState(() => {
-    const initialBackend = resolveActiveBackend();
-    const initialFingerprint = getDefaultSqlRuntimeFingerprint(initialBackend);
+    const initialFingerprint = getDefaultSqlRuntimeFingerprint(backend);
     const cache = initialFingerprint
-      ? readMaterializedTablesCache(initialBackend, initialFingerprint)
+      ? readMaterializedTablesCache(backend, initialFingerprint)
       : null;
     return !isMaterializedTablesCacheFresh(cache);
   });
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const updateBackend = () => {
-      const nextBackend = resolveActiveBackend();
-      setBackend((current) =>
-        current === nextBackend ? current : nextBackend,
-      );
-    };
-
-    const unsubscribeBackendPreference =
-      subscribeSqlBackendPreference(updateBackend);
-    const unsubscribeBridgeHealth = subscribeBridgeHealth(updateBackend);
-    const unsubscribeDuckDbHttpHealth =
-      subscribeDuckDbHttpHealth(updateBackend);
-
-    return () => {
-      unsubscribeBackendPreference();
-      unsubscribeBridgeHealth();
-      unsubscribeDuckDbHttpHealth();
-    };
-  }, []);
 
   useEffect(() => {
     const defaultFingerprint = getDefaultSqlRuntimeFingerprint(backend);

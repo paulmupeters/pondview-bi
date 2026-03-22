@@ -1,8 +1,16 @@
+export interface PondviewBridgeConfig {
+  host: string;
+  port: number;
+  requiresAuth: boolean;
+}
+
 export interface PondviewBridgeSession {
   host: string;
   port: number;
+  requiresAuth: boolean;
   secret?: string;
   hasSecret: boolean;
+  isQueryReady: boolean;
 }
 
 export interface PondviewJsonCompactResponse {
@@ -22,8 +30,11 @@ export interface BridgeQueryResult {
   durationMs: number;
 }
 
-let sessionSecret: string | undefined;
-let cachedBridgeConfig: { host: string; port: number } | null = null;
+const BRIDGE_SESSION_SECRET_KEY = "bi.bridge.session-secret";
+const BRIDGE_CONFIG_EVENT = "bi:bridge-config-change";
+const BRIDGE_SESSION_SECRET_EVENT = "bi:bridge-session-secret-change";
+
+let cachedBridgeConfig: PondviewBridgeConfig | null = null;
 
 function nowMs(): number {
   if (
@@ -35,20 +46,40 @@ function nowMs(): number {
   return Date.now();
 }
 
-function resolveDefaultBridgePort(): number {
-  if (typeof window === "undefined") {
-    return 80;
+function isBrowser(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.sessionStorage !== "undefined"
+  );
+}
+
+function notifyBridgeConfigChange(): void {
+  if (!isBrowser()) {
+    return;
   }
 
-  const parsedPort = Number.parseInt(window.location.port, 10);
-  if (Number.isFinite(parsedPort) && parsedPort > 0) {
-    return parsedPort;
+  window.dispatchEvent(new Event(BRIDGE_CONFIG_EVENT));
+}
+
+function notifyBridgeSessionSecretChange(): void {
+  if (!isBrowser()) {
+    return;
   }
 
-  return window.location.protocol === "https:" ? 443 : 80;
+  window.dispatchEvent(new Event(BRIDGE_SESSION_SECRET_EVENT));
+}
+
+function getSessionSecret(): string | undefined {
+  if (!isBrowser()) {
+    return undefined;
+  }
+
+  const value = window.sessionStorage.getItem(BRIDGE_SESSION_SECRET_KEY);
+  return value?.trim().length ? value : undefined;
 }
 
 function getAuthHeaders(): Record<string, string> {
+  const sessionSecret = getSessionSecret();
   if (!sessionSecret) {
     return {};
   }
@@ -106,43 +137,167 @@ async function parseError(response: Response): Promise<string> {
 
 export function setSessionSecret(secret: string): void {
   const trimmed = secret.trim();
-  sessionSecret = trimmed.length > 0 ? trimmed : undefined;
+  const nextSecret = trimmed.length > 0 ? trimmed : undefined;
+  const previousSecret = getSessionSecret();
+
+  if (!isBrowser()) {
+    return;
+  }
+
+  if (nextSecret) {
+    window.sessionStorage.setItem(BRIDGE_SESSION_SECRET_KEY, nextSecret);
+  } else {
+    window.sessionStorage.removeItem(BRIDGE_SESSION_SECRET_KEY);
+  }
+
+  if (previousSecret !== nextSecret) {
+    notifyBridgeSessionSecretChange();
+  }
 }
 
 export function clearSessionSecret(): void {
-  sessionSecret = undefined;
+  const previousSecret = getSessionSecret();
+  if (!isBrowser()) {
+    return;
+  }
+
+  window.sessionStorage.removeItem(BRIDGE_SESSION_SECRET_KEY);
+  if (previousSecret !== undefined) {
+    notifyBridgeSessionSecretChange();
+  }
 }
 
 export function hasSessionSecret(): boolean {
-  return Boolean(sessionSecret);
+  return Boolean(getSessionSecret());
 }
 
-export async function getBridgeConfig(): Promise<{
-  host: string;
-  port: number;
-}> {
+function parseBridgeConfig(payload: unknown): PondviewBridgeConfig | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const candidate = payload as {
+    host?: unknown;
+    port?: unknown;
+    requires_auth?: unknown;
+  };
+  const host = typeof candidate.host === "string" ? candidate.host.trim() : "";
+  const port =
+    typeof candidate.port === "number"
+      ? candidate.port
+      : typeof candidate.port === "string"
+        ? Number.parseInt(candidate.port, 10)
+        : Number.NaN;
+  const requiresAuth = candidate.requires_auth === true;
+
+  if (!host || !Number.isFinite(port) || port < 1 || port > 65535) {
+    return null;
+  }
+
+  return {
+    host,
+    port,
+    requiresAuth,
+  };
+}
+
+function bridgeConfigChanged(
+  previousConfig: PondviewBridgeConfig | null,
+  nextConfig: PondviewBridgeConfig | null,
+): boolean {
+  return (
+    previousConfig?.host !== nextConfig?.host ||
+    previousConfig?.port !== nextConfig?.port ||
+    previousConfig?.requiresAuth !== nextConfig?.requiresAuth
+  );
+}
+
+export function getBridgeConfigFromCache(): PondviewBridgeConfig | null {
+  return cachedBridgeConfig;
+}
+
+export function clearBridgeConfigCache(): void {
+  const previousConfig = cachedBridgeConfig;
+  cachedBridgeConfig = null;
+
+  if (bridgeConfigChanged(previousConfig, cachedBridgeConfig)) {
+    notifyBridgeConfigChange();
+  }
+}
+
+export async function refreshBridgeConfig(
+  signal?: AbortSignal,
+): Promise<PondviewBridgeConfig> {
+  const response = await fetch("/api/duckdb/config", {
+    method: "GET",
+    cache: "no-store",
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const payload = (await response.json().catch(() => null)) as unknown;
+  const nextConfig = parseBridgeConfig(payload);
+  if (!nextConfig) {
+    throw new Error("Bridge config response is invalid.");
+  }
+
+  const previousConfig = cachedBridgeConfig;
+  cachedBridgeConfig = nextConfig;
+  if (bridgeConfigChanged(previousConfig, cachedBridgeConfig)) {
+    notifyBridgeConfigChange();
+  }
+
+  return nextConfig;
+}
+
+export function subscribeBridgeConfig(listener: () => void): () => void {
+  if (!isBrowser()) {
+    return () => {};
+  }
+
+  window.addEventListener(BRIDGE_CONFIG_EVENT, listener);
+  return () => {
+    window.removeEventListener(BRIDGE_CONFIG_EVENT, listener);
+  };
+}
+
+export function subscribeBridgeSessionSecret(listener: () => void): () => void {
+  if (!isBrowser()) {
+    return () => {};
+  }
+
+  window.addEventListener(BRIDGE_SESSION_SECRET_EVENT, listener);
+  return () => {
+    window.removeEventListener(BRIDGE_SESSION_SECRET_EVENT, listener);
+  };
+}
+
+export async function getBridgeConfig(): Promise<PondviewBridgeConfig> {
   if (cachedBridgeConfig) {
     return cachedBridgeConfig;
   }
 
-  if (typeof window === "undefined") {
+  if (!isBrowser()) {
     throw new Error("Bridge config is unavailable outside the browser.");
   }
 
-  cachedBridgeConfig = {
-    host: window.location.hostname,
-    port: resolveDefaultBridgePort(),
-  };
-  return cachedBridgeConfig;
+  return refreshBridgeConfig();
 }
 
 export async function getBridgeSession(): Promise<PondviewBridgeSession> {
   const config = cachedBridgeConfig ?? (await getBridgeConfig());
+  const secret = getSessionSecret();
+  const hasSecret = Boolean(secret);
   return {
     host: config.host,
     port: config.port,
-    secret: sessionSecret,
-    hasSecret: Boolean(sessionSecret),
+    requiresAuth: config.requiresAuth,
+    secret,
+    hasSecret,
+    isQueryReady: !config.requiresAuth || hasSecret,
   };
 }
 
