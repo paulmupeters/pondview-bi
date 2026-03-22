@@ -9,6 +9,7 @@ import ShellPage from "@/app/shell/page";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CustomCssLoader } from "@/components/custom-css-loader";
 import { SidebarLayout } from "@/components/sidebar-layout";
+import { SqlRuntimeBootstrap } from "@/components/sql-runtime-bootstrap";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme-provider";
 
@@ -31,6 +32,7 @@ export function App() {
     <ThemeProvider defaultTheme="system" storageKey="bi-chat-theme">
       <TooltipProvider>
         <CustomCssLoader />
+        <SqlRuntimeBootstrap />
         <CommandPalette />
         <SidebarLayout>
           <Routes>

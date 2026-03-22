@@ -29,7 +29,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   clearSessionSecret,
-  hasSessionSecret,
   setSessionSecret,
 } from "@/lib/bridge/pondview-bridge";
 import {
@@ -55,16 +54,16 @@ import {
 } from "@/lib/duckdb/duckdb-http-browser";
 
 import {
-  getSqlBackendPreferenceFromStorage,
   refreshBridgeHealth,
   type SqlBackend,
   setSqlBackendPreferenceInStorage,
 } from "@/lib/sql/sql-runtime";
 import {
-  useBridgeHealthStatus,
+  useBridgeRuntimeState,
   useDuckDbHttpConfig,
   useDuckDbHttpHealthStatus,
-  useSqlBackendPreference,
+  useResolvedSqlBackend,
+  useSelectedSqlBackend,
 } from "@/lib/sql/use-sql-backend";
 import {
   exportWorkspace,
@@ -101,7 +100,6 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [bridgeSecret, setBridgeSecret] = useState("");
-  const [hasBridgeSecret, setHasBridgeSecret] = useState(false);
   const [duckDbHttpHost, setDuckDbHttpHost] = useState("");
   const [duckDbHttpPort, setDuckDbHttpPort] = useState("");
   const [duckDbHttpAuth, setDuckDbHttpAuth] = useState("");
@@ -121,18 +119,19 @@ export default function SettingsPage() {
   const [isResettingWorkspace, setIsResettingWorkspace] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
-  const sqlBackendPreference = useSqlBackendPreference();
-  const bridgeHealthStatus = useBridgeHealthStatus();
+  const bridgeRuntimeState = useBridgeRuntimeState();
   const duckDbHttpConfig = useDuckDbHttpConfig();
   const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
   const showToolCalls = useShowToolCallsPreference();
   const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
-  const isBridgeAvailable = hasBridgeSecret && bridgeHealthStatus === "online";
+  const bridgeHealthStatus = bridgeRuntimeState.healthStatus;
+  const bridgeConfig = bridgeRuntimeState.config;
+  const hasBridgeSessionSecret = bridgeRuntimeState.hasSessionSecret;
+  const isBridgeDiscoverable = bridgeRuntimeState.isDiscoverable;
+  const isBridgeQueryReady = bridgeRuntimeState.isQueryReady;
   const isDuckDbHttpConfigured = Boolean(duckDbHttpConfig);
-  const selectedSqlBackend: SqlBackend =
-    sqlBackendPreference === "bridge" || sqlBackendPreference === "duckdb-http"
-      ? sqlBackendPreference
-      : "duckdb-wasm";
+  const selectedSqlBackend = useSelectedSqlBackend();
+  const effectiveSqlBackend = useResolvedSqlBackend();
 
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -148,8 +147,6 @@ export default function SettingsPage() {
     setCssCode(savedCss);
     // Set selected theme, or "custom" if no theme is selected but custom CSS exists
     setSelectedTheme(savedTheme || (savedCss ? CUSTOM_THEME_VALUE : "default"));
-    const hasSecret = hasSessionSecret();
-    setHasBridgeSecret(hasSecret);
     setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
 
     const savedDuckDbHttpConfig = getDuckDbHttpConfigFromStorage();
@@ -157,26 +154,6 @@ export default function SettingsPage() {
     setDuckDbHttpPort(
       savedDuckDbHttpConfig ? String(savedDuckDbHttpConfig.port) : "",
     );
-
-    const savedBackendPreference = getSqlBackendPreferenceFromStorage();
-    if (
-      savedBackendPreference === "bridge" ||
-      savedBackendPreference === "duckdb-http" ||
-      savedBackendPreference === "duckdb-wasm"
-    ) {
-      const resolvedPreference =
-        savedBackendPreference === "bridge" && !hasSecret
-          ? "duckdb-wasm"
-          : savedBackendPreference === "duckdb-http" && !savedDuckDbHttpConfig
-            ? "duckdb-wasm"
-            : savedBackendPreference;
-      if (resolvedPreference !== savedBackendPreference) {
-        setSqlBackendPreferenceInStorage(resolvedPreference);
-      }
-    } else {
-      const defaultPreference = hasSecret ? "bridge" : "duckdb-wasm";
-      setSqlBackendPreferenceInStorage(defaultPreference);
-    }
 
     void refreshBridgeHealth();
     if (savedDuckDbHttpConfig) {
@@ -197,27 +174,6 @@ export default function SettingsPage() {
   }, [cssCode, selectedTheme]);
 
   useEffect(() => {
-    if (!hasBridgeSecret && selectedSqlBackend === "bridge") {
-      setSqlBackendPreferenceInStorage("duckdb-wasm");
-    }
-  }, [hasBridgeSecret, selectedSqlBackend]);
-
-  useEffect(() => {
-    if (!hasBridgeSecret) {
-      return;
-    }
-
-    void refreshBridgeHealth();
-    const intervalId = window.setInterval(() => {
-      void refreshBridgeHealth();
-    }, 15000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [hasBridgeSecret]);
-
-  useEffect(() => {
     if (!isDuckDbHttpConfigured) {
       return;
     }
@@ -232,15 +188,8 @@ export default function SettingsPage() {
     };
   }, [isDuckDbHttpConfigured]);
 
-  const effectiveSqlBackend: SqlBackend =
-    selectedSqlBackend === "bridge" && isBridgeAvailable
-      ? "bridge"
-      : selectedSqlBackend === "duckdb-http" && isDuckDbHttpConfigured
-        ? "duckdb-http"
-        : "duckdb-wasm";
   const handleSetBridgeSecret = () => {
     setSessionSecret(bridgeSecret);
-    setHasBridgeSecret(hasSessionSecret());
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(null);
     void refreshBridgeHealth();
@@ -251,19 +200,15 @@ export default function SettingsPage() {
 
   const handleClearBridgeSecret = () => {
     clearSessionSecret();
-    setHasBridgeSecret(false);
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(null);
     void refreshBridgeHealth();
-    if (selectedSqlBackend === "bridge") {
-      setSqlBackendPreferenceInStorage("duckdb-wasm");
-    }
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
   };
 
   const handleSqlBackendChange = (backend: SqlBackend) => {
-    if (backend === "bridge" && !isBridgeAvailable) {
+    if (backend === "bridge" && !isBridgeDiscoverable) {
       return;
     }
 
@@ -527,16 +472,28 @@ export default function SettingsPage() {
       ? "Bridge"
       : effectiveSqlBackend === "duckdb-http"
         ? "DuckDB over HTTP"
-        : selectedSqlBackend === "bridge" && bridgeHealthStatus === "offline"
+        : selectedSqlBackend === "bridge" && !isBridgeDiscoverable
           ? "DuckDB WASM (bridge unavailable)"
-          : selectedSqlBackend === "duckdb-http" &&
-              duckDbHttpHealthStatus === "offline"
-            ? "DuckDB WASM (HTTP unavailable)"
-            : selectedSqlBackend === "duckdb-http" && isDuckDbHttpConfigured
-              ? "DuckDB WASM (HTTP pending)"
-              : selectedSqlBackend === "bridge" && hasBridgeSecret
-                ? "DuckDB WASM (bridge pending)"
+          : selectedSqlBackend === "bridge" && !isBridgeQueryReady
+            ? "DuckDB WASM (bridge selected, waiting for auth)"
+            : selectedSqlBackend === "duckdb-http" &&
+                duckDbHttpHealthStatus === "offline"
+              ? "DuckDB WASM (HTTP unavailable)"
+              : selectedSqlBackend === "duckdb-http" && isDuckDbHttpConfigured
+                ? "DuckDB WASM (HTTP pending)"
                 : "DuckDB WASM";
+  const bridgeOptionLabel = !isBridgeDiscoverable
+    ? "Bridge (Unavailable)"
+    : !isBridgeQueryReady
+      ? "Bridge (Auth required)"
+      : "Bridge (Available)";
+  const bridgeAuthStatusLabel = bridgeConfig
+    ? bridgeConfig.requiresAuth
+      ? hasBridgeSessionSecret
+        ? "session secret set"
+        : "required"
+      : "not required"
+    : "unknown";
 
   return (
     <div className="flex flex-col h-full">
@@ -726,8 +683,8 @@ export default function SettingsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="duckdb-wasm">DuckDB WASM</SelectItem>
-                    <SelectItem value="bridge" disabled={!isBridgeAvailable}>
-                      Bridge {isBridgeAvailable ? "" : "(Unavailable)"}
+                    <SelectItem value="bridge" disabled={!isBridgeDiscoverable}>
+                      {bridgeOptionLabel}
                     </SelectItem>
                     <SelectItem value="duckdb-http">
                       DuckDB over HTTP
@@ -758,6 +715,9 @@ export default function SettingsPage() {
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Health: {bridgeHealthStatus}
+                      {bridgeConfig
+                        ? ` • Endpoint: ${bridgeConfig.host}:${bridgeConfig.port} • Auth: ${bridgeAuthStatusLabel}`
+                        : ` • Auth: ${bridgeAuthStatusLabel}`}
                     </p>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2">
@@ -781,7 +741,7 @@ export default function SettingsPage() {
                     <Button
                       variant="outline"
                       onClick={handleClearBridgeSecret}
-                      disabled={!hasBridgeSecret}
+                      disabled={!hasBridgeSessionSecret}
                     >
                       Clear
                     </Button>

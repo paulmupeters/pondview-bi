@@ -33,10 +33,9 @@ import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
-  resolveSqlBackend,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
-import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
+import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { addChartToDashboard } from "@/lib/workspace/dashboard-repo";
@@ -281,7 +280,6 @@ export function DashboardDataCardDialog({
   existingMeasures,
   onSaved,
 }: DashboardDataCardDialogProps) {
-  const sqlBackendPreference = useSqlBackendPreference();
   const [sourceMode, setSourceMode] =
     useState<SourceMode>(getDefaultSourceMode);
   const [selectedMeasureId, setSelectedMeasureId] = useState<string | null>(
@@ -369,10 +367,7 @@ export function DashboardDataCardDialog({
     });
   }, [selectedMeasure]);
 
-  const resolvedSqlBackend = resolveSqlBackend({
-    backendPreference: sqlBackendPreference,
-    dbIdentifier: undefined,
-  });
+  const resolvedSqlBackend = useResolvedSqlBackend();
   const resolvedDbIdentifier = resolveStoredDbIdentifier(resolvedSqlBackend);
 
   const measurePreviewValue = selectedMeasure?.value ?? null;

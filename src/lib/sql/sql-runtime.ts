@@ -1,4 +1,11 @@
-import { hasSessionSecret, pingBridge } from "@/lib/bridge/pondview-bridge";
+import {
+  clearBridgeConfigCache,
+  getBridgeConfigFromCache,
+  hasSessionSecret,
+  type PondviewBridgeConfig,
+  pingBridge,
+  refreshBridgeConfig,
+} from "@/lib/bridge/pondview-bridge";
 import {
   type DuckDbHttpHealthStatus,
   getDuckDbHttpHealthStatus,
@@ -10,6 +17,13 @@ export type SqlBackendPreference = "auto" | SqlBackend;
 export type BridgeHealthStatus = "unknown" | "online" | "offline";
 export type { DuckDbHttpHealthStatus };
 export type DbIdentifierKind = "local-wasm" | "bridge-remote" | "unknown";
+export type BridgeRuntimeState = {
+  healthStatus: BridgeHealthStatus;
+  config: PondviewBridgeConfig | null;
+  hasSessionSecret: boolean;
+  isDiscoverable: boolean;
+  isQueryReady: boolean;
+};
 
 export const DEFAULT_WASM_DB_IDENTIFIER = "wasm:local";
 const LEGACY_WASM_COMPAT_IDENTIFIER = "md:my_db";
@@ -30,14 +44,15 @@ const REMOTE_IDENTIFIER_PREFIXES = [
   "md:",
 ] as const;
 
-type ResolveSqlBackendOptions = {
+export type ResolveSqlBackendOptions = {
   backendPreference?: SqlBackendPreference;
   dbIdentifier?: string;
 };
 
-type RuntimeDeps = {
+export type RuntimeDeps = {
   hasBridgeSecret: () => boolean;
   getBridgeHealthStatus: () => BridgeHealthStatus;
+  getBridgeConfig: () => PondviewBridgeConfig | null;
   hasDuckDbHttpConfig: () => boolean;
   getDuckDbHttpHealthStatus: () => DuckDbHttpHealthStatus;
 };
@@ -45,6 +60,7 @@ type RuntimeDeps = {
 const defaultDeps: RuntimeDeps = {
   hasBridgeSecret: hasSessionSecret,
   getBridgeHealthStatus: getBridgeHealthStatus,
+  getBridgeConfig: getBridgeConfigFromCache,
   hasDuckDbHttpConfig,
   getDuckDbHttpHealthStatus,
 };
@@ -140,19 +156,35 @@ export function getBridgeHealthStatus(): BridgeHealthStatus {
   return bridgeHealthCache;
 }
 
+export function getBridgeRuntimeState(): BridgeRuntimeState {
+  const config = getBridgeConfigFromCache();
+  const hasSecret = hasSessionSecret();
+  const isDiscoverable = bridgeHealthCache === "online" && config !== null;
+
+  return {
+    healthStatus: bridgeHealthCache,
+    config,
+    hasSessionSecret: hasSecret,
+    isDiscoverable,
+    isQueryReady: isDiscoverable && (!config.requiresAuth || hasSecret),
+  };
+}
+
 export async function refreshBridgeHealth(
   signal?: AbortSignal,
 ): Promise<BridgeHealthStatus> {
-  if (!hasSessionSecret()) {
-    if (bridgeHealthCache !== "offline") {
-      bridgeHealthCache = "offline";
-      notifyBridgeHealthChange();
-    }
-    return bridgeHealthCache;
-  }
-
   const isOnline = await pingBridge(signal).catch(() => false);
   const nextStatus: BridgeHealthStatus = isOnline ? "online" : "offline";
+
+  if (isOnline) {
+    try {
+      await refreshBridgeConfig(signal);
+    } catch {
+      clearBridgeConfigCache();
+    }
+  } else {
+    clearBridgeConfigCache();
+  }
 
   if (bridgeHealthCache !== nextStatus) {
     bridgeHealthCache = nextStatus;
@@ -175,6 +207,21 @@ export function subscribeBridgeHealth(listener: () => void): () => void {
   return () => {
     window.removeEventListener(BRIDGE_HEALTH_EVENT, onBridgeHealthChange);
   };
+}
+
+function isBridgeDiscoverable(deps: RuntimeDeps): boolean {
+  return (
+    deps.getBridgeHealthStatus() === "online" && deps.getBridgeConfig() !== null
+  );
+}
+
+function isBridgeQueryReady(deps: RuntimeDeps): boolean {
+  const config = deps.getBridgeConfig();
+  return (
+    deps.getBridgeHealthStatus() === "online" &&
+    config !== null &&
+    (!config.requiresAuth || deps.hasBridgeSecret())
+  );
 }
 
 export function isLegacyWasmCompatIdentifier(dbIdentifier?: string): boolean {
@@ -233,11 +280,38 @@ export function assertWasmCompatibleDbIdentifier(dbIdentifier?: string): void {
 }
 
 function isBridgeAvailable(deps: RuntimeDeps): boolean {
-  return deps.hasBridgeSecret() && deps.getBridgeHealthStatus() === "online";
+  return isBridgeQueryReady(deps);
 }
 
 function isDuckDbHttpAvailable(deps: RuntimeDeps): boolean {
   return deps.hasDuckDbHttpConfig();
+}
+
+function resolvePreference(
+  backendPreference: SqlBackendPreference | undefined,
+): SqlBackendPreference {
+  return backendPreference === undefined || backendPreference === "auto"
+    ? getSqlBackendPreference()
+    : backendPreference;
+}
+
+export function resolveSelectedSqlBackend(
+  options: ResolveSqlBackendOptions,
+  deps: RuntimeDeps = defaultDeps,
+): SqlBackend {
+  if (
+    normalizeIdentifier(options.dbIdentifier).length > 0 &&
+    classifyDbIdentifier(options.dbIdentifier) === "local-wasm"
+  ) {
+    return "duckdb-wasm";
+  }
+
+  const preference = resolvePreference(options.backendPreference);
+  if (preference !== "auto") {
+    return preference;
+  }
+
+  return isBridgeDiscoverable(deps) ? "bridge" : "duckdb-wasm";
 }
 
 export function resolveSqlBackend(
@@ -251,11 +325,7 @@ export function resolveSqlBackend(
     return "duckdb-wasm";
   }
 
-  const preference =
-    options.backendPreference === undefined ||
-    options.backendPreference === "auto"
-      ? getSqlBackendPreference()
-      : options.backendPreference;
+  const preference = resolvePreference(options.backendPreference);
 
   if (preference !== "auto") {
     if (preference === "bridge" && !isBridgeAvailable(deps)) {

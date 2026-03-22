@@ -39,10 +39,12 @@ import { runQuery } from "@/lib/sql/run-query";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
-  resolveSqlBackend,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
-import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
+import {
+  useResolvedSqlBackend,
+  useResolveSqlBackend,
+} from "@/lib/sql/use-sql-backend";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -192,10 +194,8 @@ export function DuckdbRepl({
   >(catalogContext ?? null);
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(true);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
-  const sqlBackendPreference = useSqlBackendPreference();
-  const effectiveSqlBackend = resolveSqlBackend({
-    backendPreference: sqlBackendPreference,
-  });
+  const resolveCurrentSqlBackend = useResolveSqlBackend();
+  const effectiveSqlBackend = useResolvedSqlBackend();
 
   const connectedEntry = useMemo((): ConnectedTable | undefined => {
     if (!selectedDb || isWasmLocalIdentifier(selectedDb)) return undefined;
@@ -365,8 +365,7 @@ export function DuckdbRepl({
   );
 
   const handleCancelQuery = async () => {
-    const backend = resolveSqlBackend({
-      backendPreference: "auto",
+    const backend = resolveCurrentSqlBackend({
       dbIdentifier: selectedDbIdentifier,
     });
 
