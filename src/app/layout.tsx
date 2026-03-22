@@ -2,6 +2,7 @@ import "./globals.css";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CustomCssLoader } from "@/components/custom-css-loader";
 import { SidebarLayout } from "@/components/sidebar-layout";
+import { SqlRuntimeBootstrap } from "@/components/sql-runtime-bootstrap";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   CUSTOM_CSS_KEY,
@@ -68,6 +69,7 @@ export default function RootLayout({
         <ThemeProvider defaultTheme="system" storageKey="bi-chat-theme">
           <TooltipProvider>
             <CustomCssLoader />
+            <SqlRuntimeBootstrap />
             <CommandPalette />
             <SidebarLayout>{children}</SidebarLayout>
           </TooltipProvider>
