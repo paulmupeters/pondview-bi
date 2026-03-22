@@ -298,7 +298,17 @@ export function DashboardBuilderPanel({
     setError(null);
 
     try {
-      const { id: dashboardId } = await createDashboard(trimmedTitle);
+      const firstSelectedChart = selectedCharts[0];
+      const firstChartBackend =
+        firstSelectedChart?.payload.sqlBackend ?? selectedSqlBackend ?? null;
+      const { id: dashboardId } = await createDashboard(trimmedTitle, {
+        dbIdentifier: resolveStoredChartDbIdentifier({
+          sqlBackend: firstChartBackend,
+          payloadDbIdentifier: firstSelectedChart?.payload.dbIdentifier,
+          selectedDbIdentifier,
+        }),
+        sqlBackend: firstChartBackend,
+      });
 
       for (const snapshot of selectedCharts) {
         const { payload, type } = snapshot;

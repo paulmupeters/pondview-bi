@@ -1,6 +1,7 @@
 import { Pencil } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Dashboard } from "../types";
@@ -124,9 +125,14 @@ export function DashboardHeader({
         </form>
       ) : (
         <div className="group flex items-center gap-2">
-          <h1 className="text-2xl md:text-4xl font-semibold leading-tight py-4">
-            {dashboard.title}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2 py-4">
+            <h1 className="text-2xl md:text-4xl font-semibold leading-tight">
+              {dashboard.title}
+            </h1>
+            {dashboard.storageStatus === "best-effort" ? (
+              <Badge variant="secondary">Best-effort storage</Badge>
+            ) : null}
+          </div>
           <Button
             type="button"
             variant="ghost"

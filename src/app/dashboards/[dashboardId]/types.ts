@@ -17,6 +17,11 @@ export type Dashboard = {
   title: string;
   createdAt: number;
   updatedAt: number;
+  columns?: number;
+  autoFitRows?: boolean;
+  homeDbIdentifier?: string | null;
+  homeSqlBackend?: SqlBackend | null;
+  storageStatus?: "shared" | "best-effort" | null;
 };
 
 export type DashboardChart = {

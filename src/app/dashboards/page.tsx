@@ -13,10 +13,14 @@ import {
   deleteDashboard,
   listDashboards,
 } from "@/lib/workspace/dashboard-repo";
-import { switchToFreshWorkspaceDatabase } from "@/lib/workspace/workspace-db";
 import Link from "@/vite/next-link";
 
-type DashboardLite = { id: string; title: string | null; updatedAt: number };
+type DashboardLite = {
+  id: string;
+  title: string | null;
+  updatedAt: number;
+  storageStatus?: "shared" | "best-effort" | null;
+};
 
 function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
@@ -38,7 +42,6 @@ export default function DashboardsPage() {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [resettingDb, setResettingDb] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,16 +71,6 @@ export default function DashboardsPage() {
       await load();
     } finally {
       setCreating(false);
-    }
-  };
-
-  const handleResetWorkspaceDb = async () => {
-    setResettingDb(true);
-    try {
-      switchToFreshWorkspaceDatabase();
-      window.location.reload();
-    } catch {
-      setResettingDb(false);
     }
   };
 
@@ -138,19 +131,12 @@ export default function DashboardsPage() {
       ) : loadError ? (
         <Card className="border-destructive/40">
           <CardHeader>
-            <CardTitle>Workspace database unavailable</CardTitle>
+            <CardTitle>Dashboard storage unavailable</CardTitle>
             <CardDescription>{loadError}</CardDescription>
           </CardHeader>
-          <CardContent className="flex gap-3">
+          <CardContent>
             <Button variant="outline" onClick={() => void load()}>
               Retry
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => void handleResetWorkspaceDb()}
-              disabled={resettingDb}
-            >
-              {resettingDb ? "Resetting..." : "Reset local workspace data"}
             </Button>
           </CardContent>
         </Card>
@@ -190,6 +176,11 @@ export default function DashboardsPage() {
                       <CardDescription className="mt-2 text-xs">
                         Updated {formatRelativeTime(dashboard.updatedAt)}
                       </CardDescription>
+                      {dashboard.storageStatus === "best-effort" ? (
+                        <CardDescription className="mt-1 text-xs">
+                          Best-effort storage
+                        </CardDescription>
+                      ) : null}
                     </div>
                     <Button
                       type="button"

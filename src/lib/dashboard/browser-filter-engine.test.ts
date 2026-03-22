@@ -118,7 +118,7 @@ describe("browser-filter-engine", () => {
       {
         resolveBackend: () => "duckdb-wasm",
         resolveRuntimeFingerprint: async () => "duckdb-wasm:local",
-        readJoinDefs: () => [],
+        readJoinDefs: async () => [],
         listCharts: async () => [chart],
         getMaterializationCache: () => new Map(),
         runRuntimeSql: async (sql: string) => {
@@ -181,7 +181,7 @@ describe("browser-filter-engine", () => {
       {
         resolveBackend: () => "duckdb-wasm",
         resolveRuntimeFingerprint: async () => "duckdb-wasm:local",
-        readJoinDefs: () => [
+        readJoinDefs: async () => [
           {
             leftTable: "orders",
             leftColumn: "customer_id",
@@ -246,7 +246,7 @@ describe("browser-filter-engine", () => {
       {
         resolveBackend: () => "duckdb-wasm",
         resolveRuntimeFingerprint: async () => "duckdb-wasm:local",
-        readJoinDefs: () => [],
+        readJoinDefs: async () => [],
         listCharts: async () => [chart],
         getMaterializationCache: () => new Map(),
         runChartSql: async () => [],
@@ -299,7 +299,7 @@ describe("browser-filter-engine", () => {
       {
         resolveBackend: () => "duckdb-http",
         resolveRuntimeFingerprint: async () => "duckdb-http:alpha:8080",
-        readJoinDefs: () => [],
+        readJoinDefs: async () => [],
         listCharts: async () => [chart],
         getMaterializationCache: () => cache,
         runRuntimeSql: async (sql: string) => {
@@ -320,7 +320,7 @@ describe("browser-filter-engine", () => {
       {
         resolveBackend: () => "duckdb-http",
         resolveRuntimeFingerprint: async () => "duckdb-http:beta:8080",
-        readJoinDefs: () => [],
+        readJoinDefs: async () => [],
         listCharts: async () => [chart],
         getMaterializationCache: () => cache,
         runRuntimeSql: async (sql: string) => {
@@ -370,7 +370,7 @@ describe("browser-filter-engine", () => {
       },
       {
         resolveBackend: () => "duckdb-wasm",
-        readJoinDefs: () => [],
+        readJoinDefs: async () => [],
         runRuntimeSql: async () => [],
         runChartSql: async (_chart, backend) => {
           backendCalls.push(backend);
