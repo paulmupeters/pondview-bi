@@ -19,12 +19,12 @@ import {
   readJoinDefsRawFromStorage,
   saveJoinDefsRawToStorage,
 } from "@/lib/joins/browser-storage";
-import { refreshBridgeHealth, resolveSqlBackend } from "@/lib/sql/sql-runtime";
 import {
-  useBridgeHealthStatus,
+  useBridgeRuntimeState,
   useDuckDbHttpConfig,
   useDuckDbHttpHealthStatus,
-  useSqlBackendPreference,
+  useResolvedSqlBackend,
+  useSelectedSqlBackend,
 } from "@/lib/sql/use-sql-backend";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -33,13 +33,11 @@ import Image from "@/vite/next-image";
 export default function ViewDataPage() {
   const tables = useConnectedTables();
 
-  const sqlBackendPreference = useSqlBackendPreference();
-  const bridgeHealthStatus = useBridgeHealthStatus();
+  const bridgeRuntimeState = useBridgeRuntimeState();
   const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
   const duckDbHttpConfig = useDuckDbHttpConfig();
-  const effectiveSqlBackend = resolveSqlBackend({
-    backendPreference: sqlBackendPreference,
-  });
+  const selectedSqlBackend = useSelectedSqlBackend();
+  const effectiveSqlBackend = useResolvedSqlBackend();
   const {
     tables: duckdbTables,
     isLoading: isDuckdbTablesLoading,
@@ -55,17 +53,6 @@ export default function ViewDataPage() {
   const [joinDefsRaw, setJoinDefsRaw] = useState("[]");
   const [joinDefsError, setJoinDefsError] = useState<string | null>(null);
   const [joinDefsSuccess, setJoinDefsSuccess] = useState<string | null>(null);
-
-  useEffect(() => {
-    void refreshBridgeHealth();
-    const intervalId = window.setInterval(() => {
-      void refreshBridgeHealth();
-    }, 15000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, []);
 
   useEffect(() => {
     if (!duckDbHttpConfig) {
@@ -169,11 +156,13 @@ export default function ViewDataPage() {
 
   const remoteRuntimeLabel =
     effectiveSqlBackend === "bridge" ? "Bridge" : "DuckDB over HTTP";
-  const selectedRemoteHealthStatus =
-    effectiveSqlBackend === "bridge"
-      ? bridgeHealthStatus
-      : duckDbHttpHealthStatus;
-  const _isRemoteRuntimeActive = effectiveSqlBackend !== "duckdb-wasm";
+  const selectedRuntimeLabel =
+    selectedSqlBackend === "bridge" ? "Bridge" : "DuckDB over HTTP";
+  const bridgeConnectionLabel = bridgeRuntimeState.config
+    ? `${bridgeRuntimeState.config.host}:${bridgeRuntimeState.config.port}`
+    : "configured";
+  const isBridgeSelectedButNotReady =
+    selectedSqlBackend === "bridge" && effectiveSqlBackend !== "bridge";
 
   return (
     <div className="flex h-full flex-col">
@@ -215,7 +204,28 @@ export default function ViewDataPage() {
               <h2 className="text-base font-semibold text-foreground">
                 Duckdb connection
               </h2>
-              {effectiveSqlBackend === "duckdb-wasm" ? (
+              {isBridgeSelectedButNotReady ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">
+                      Bridge {bridgeConnectionLabel}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      {bridgeRuntimeState.isDiscoverable
+                        ? "Bridge is selected, but Pondview still needs your session secret before queries can run through the active DuckDB instance."
+                        : "Bridge is selected, but the Pondview bridge is currently unavailable."}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Health: {bridgeRuntimeState.healthStatus}
+                      {bridgeRuntimeState.config
+                        ? ` • Auth: ${bridgeRuntimeState.config.requiresAuth ? (bridgeRuntimeState.hasSessionSecret ? "session secret set" : "required") : "not required"}`
+                        : ""}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : effectiveSqlBackend === "duckdb-wasm" ? (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-sm">DuckDB WASM</CardTitle>
@@ -285,8 +295,12 @@ export default function ViewDataPage() {
               ) : (
                 <Card>
                   <CardContent className="pt-6 text-sm text-muted-foreground">
-                    {remoteRuntimeLabel} is selected, but remote metadata is
-                    unavailable. Health: {selectedRemoteHealthStatus}.
+                    {selectedRuntimeLabel} is selected, but remote metadata is
+                    unavailable. Health:{" "}
+                    {selectedSqlBackend === "bridge"
+                      ? bridgeRuntimeState.healthStatus
+                      : duckDbHttpHealthStatus}
+                    .
                   </CardContent>
                 </Card>
               )}

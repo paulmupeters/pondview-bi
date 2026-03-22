@@ -3,19 +3,44 @@ import {
   assertWasmCompatibleDbIdentifier,
   classifyDbIdentifier,
   DEFAULT_WASM_DB_IDENTIFIER,
+  type RuntimeDeps,
+  resolveSelectedSqlBackend,
   resolveSqlBackend,
 } from "@/lib/sql/sql-runtime";
+
+const AUTH_REQUIRED_BRIDGE = {
+  host: "127.0.0.1",
+  port: 4386,
+  requiresAuth: true,
+} as const;
+
+const OPEN_BRIDGE = {
+  host: "127.0.0.1",
+  port: 4386,
+  requiresAuth: false,
+} as const;
+
+function createRuntimeDeps(overrides: Partial<RuntimeDeps> = {}): RuntimeDeps {
+  return {
+    hasBridgeSecret: () => false,
+    getBridgeHealthStatus: () => "offline",
+    getBridgeConfig: () => null,
+    hasDuckDbHttpConfig: () => false,
+    getDuckDbHttpHealthStatus: () => "offline",
+    ...overrides,
+  };
+}
 
 describe("resolveSqlBackend", () => {
   test("uses duckdb-wasm when bridge health is offline", () => {
     const backend = resolveSqlBackend(
-      { backendPreference: "auto" },
       {
-        hasBridgeSecret: () => true,
-        getBridgeHealthStatus: () => "offline",
-        hasDuckDbHttpConfig: () => false,
-        getDuckDbHttpHealthStatus: () => "offline",
+        backendPreference: "auto",
       },
+      createRuntimeDeps({
+        hasBridgeSecret: () => true,
+        getBridgeConfig: () => AUTH_REQUIRED_BRIDGE,
+      }),
     );
 
     expect(backend).toBe("duckdb-wasm");
@@ -23,64 +48,88 @@ describe("resolveSqlBackend", () => {
 
   test("uses bridge only when secret exists and bridge is online", () => {
     const backend = resolveSqlBackend(
-      { backendPreference: "auto" },
       {
+        backendPreference: "auto",
+      },
+      createRuntimeDeps({
         hasBridgeSecret: () => true,
         getBridgeHealthStatus: () => "online",
-        hasDuckDbHttpConfig: () => false,
-        getDuckDbHttpHealthStatus: () => "offline",
-      },
+        getBridgeConfig: () => AUTH_REQUIRED_BRIDGE,
+      }),
     );
 
     expect(backend).toBe("bridge");
   });
 
-  test("respects explicit backend preference with availability guard", () => {
+  test("keeps wasm active while bridge is discoverable but auth is still required", () => {
+    const backend = resolveSqlBackend(
+      {
+        backendPreference: "auto",
+      },
+      createRuntimeDeps({
+        hasBridgeSecret: () => false,
+        getBridgeHealthStatus: () => "online",
+        getBridgeConfig: () => AUTH_REQUIRED_BRIDGE,
+      }),
+    );
+
+    expect(backend).toBe("duckdb-wasm");
+  });
+
+  test("uses bridge automatically when auth is not required", () => {
+    const backend = resolveSqlBackend(
+      {
+        backendPreference: "auto",
+      },
+      createRuntimeDeps({
+        getBridgeHealthStatus: () => "online",
+        getBridgeConfig: () => OPEN_BRIDGE,
+      }),
+    );
+
+    expect(backend).toBe("bridge");
+  });
+
+  test("respects explicit backend preference with execution guard", () => {
     expect(
       resolveSqlBackend(
         { backendPreference: "duckdb-wasm" },
-        {
+        createRuntimeDeps({
           hasBridgeSecret: () => true,
           getBridgeHealthStatus: () => "online",
+          getBridgeConfig: () => AUTH_REQUIRED_BRIDGE,
           hasDuckDbHttpConfig: () => true,
           getDuckDbHttpHealthStatus: () => "online",
-        },
+        }),
       ),
     ).toBe("duckdb-wasm");
 
     expect(
       resolveSqlBackend(
         { backendPreference: "bridge" },
-        {
-          hasBridgeSecret: () => true,
-          getBridgeHealthStatus: () => "offline",
+        createRuntimeDeps({
+          hasBridgeSecret: () => false,
+          getBridgeHealthStatus: () => "online",
+          getBridgeConfig: () => AUTH_REQUIRED_BRIDGE,
           hasDuckDbHttpConfig: () => true,
           getDuckDbHttpHealthStatus: () => "online",
-        },
+        }),
       ),
     ).toBe("duckdb-wasm");
 
     expect(
       resolveSqlBackend(
         { backendPreference: "duckdb-http" },
-        {
-          hasBridgeSecret: () => false,
-          getBridgeHealthStatus: () => "offline",
+        createRuntimeDeps({
           hasDuckDbHttpConfig: () => true,
-          getDuckDbHttpHealthStatus: () => "offline",
-        },
+        }),
       ),
     ).toBe("duckdb-http");
 
     expect(
       resolveSqlBackend(
         { backendPreference: "duckdb-http" },
-        {
-          hasBridgeSecret: () => false,
-          getBridgeHealthStatus: () => "offline",
-          hasDuckDbHttpConfig: () => false,
-          getDuckDbHttpHealthStatus: () => "offline",
-        },
+        createRuntimeDeps(),
       ),
     ).toBe("duckdb-wasm");
   });
@@ -92,14 +141,45 @@ describe("resolveSqlBackend", () => {
           backendPreference: "bridge",
           dbIdentifier: DEFAULT_WASM_DB_IDENTIFIER,
         },
-        {
+        createRuntimeDeps({
           hasBridgeSecret: () => true,
           getBridgeHealthStatus: () => "online",
+          getBridgeConfig: () => AUTH_REQUIRED_BRIDGE,
           hasDuckDbHttpConfig: () => true,
           getDuckDbHttpHealthStatus: () => "online",
-        },
+        }),
       ),
     ).toBe("duckdb-wasm");
+  });
+});
+
+describe("resolveSelectedSqlBackend", () => {
+  test("defaults selection to bridge when the bridge is discoverable", () => {
+    const backend = resolveSelectedSqlBackend(
+      {
+        backendPreference: "auto",
+      },
+      createRuntimeDeps({
+        getBridgeHealthStatus: () => "online",
+        getBridgeConfig: () => AUTH_REQUIRED_BRIDGE,
+      }),
+    );
+
+    expect(backend).toBe("bridge");
+  });
+
+  test("preserves explicit bridge selection when auth is missing", () => {
+    const backend = resolveSelectedSqlBackend(
+      {
+        backendPreference: "bridge",
+      },
+      createRuntimeDeps({
+        getBridgeHealthStatus: () => "online",
+        getBridgeConfig: () => AUTH_REQUIRED_BRIDGE,
+      }),
+    );
+
+    expect(backend).toBe("bridge");
   });
 });
 

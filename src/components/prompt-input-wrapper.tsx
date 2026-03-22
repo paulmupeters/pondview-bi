@@ -39,8 +39,8 @@ import {
 } from "@/components/ui/tooltip";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
-import { resolveSqlBackend, type SqlBackend } from "@/lib/sql/sql-runtime";
-import { useSqlBackendPreference } from "@/lib/sql/use-sql-backend";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
+import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { getUploadedFileBlob, persistUploadedFile } from "@/lib/uploaded-files";
 import { cn } from "@/lib/utils";
@@ -95,10 +95,7 @@ interface PromptInputWrapperProps {
 
 // Inner component that uses the attachments hook within PromptInput context
 function FileAttachmentHoverCard() {
-  const sqlBackendPreference = useSqlBackendPreference();
-  const effectiveSqlBackend = resolveSqlBackend({
-    backendPreference: sqlBackendPreference,
-  });
+  const effectiveSqlBackend = useResolvedSqlBackend();
   const isFileUploadSupported = effectiveSqlBackend === "duckdb-wasm";
   const uploadedFiles = useUploadedFiles();
   const attachments = usePromptInputAttachments();

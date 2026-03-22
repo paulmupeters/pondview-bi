@@ -36,13 +36,11 @@ import {
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
-  resolveSqlBackend,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
 import {
-  useBridgeHealthStatus,
-  useDuckDbHttpHealthStatus,
-  useSqlBackendPreference,
+  useResolvedSqlBackend,
+  useResolveSqlBackend,
 } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -160,12 +158,8 @@ export default function Chat({
   const router = useRouter();
   const searchParams = useSearchParams();
   const connectedTables = useConnectedTables();
-  const sqlBackendPreference = useSqlBackendPreference();
-  useBridgeHealthStatus();
-  useDuckDbHttpHealthStatus();
-  const effectiveSqlBackend = resolveSqlBackend({
-    backendPreference: sqlBackendPreference,
-  });
+  const resolveCurrentSqlBackend = useResolveSqlBackend();
+  const effectiveSqlBackend = useResolvedSqlBackend();
   const [promptMode, setPromptMode] = useState<PromptMode>("ai");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [chatTitle, setChatTitle] = useState<string | null>(null);
@@ -543,7 +537,7 @@ export default function Chat({
         messageId,
       });
     },
-    [chatId, sendMessage, setMessages],
+    [chatId, directTransport, sendMessage, setMessages],
   );
 
   const handlePromptSubmit = useCallback(
@@ -735,8 +729,7 @@ export default function Chat({
       progress: 1,
       query: "",
       dbIdentifier: defaultDatabase,
-      sqlBackend: resolveSqlBackend({
-        backendPreference: sqlBackendPreference,
+      sqlBackend: resolveCurrentSqlBackend({
         dbIdentifier: defaultDatabase,
       }),
       isSqlExpandedInitial: true,
@@ -779,7 +772,7 @@ export default function Chat({
     } catch (error) {
       console.error("Failed to persist visual placeholder:", error);
     }
-  }, [connectedTables, persistArtifactMessage, sqlBackendPreference]);
+  }, [connectedTables, persistArtifactMessage, resolveCurrentSqlBackend]);
 
   useChatUrlParams({
     chatId,
