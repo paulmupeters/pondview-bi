@@ -1,6 +1,5 @@
 import { applyFiltersToSql } from "@/lib/filters/apply-filters";
 import { extractTableReferencesFromSql } from "@/lib/filters/parse-tables";
-import { readJoinDefsFromStorage } from "@/lib/joins/browser-storage";
 import { canonicalTable, type JoinDefinition } from "@/lib/joins/graph";
 import { runQuery } from "@/lib/sql/run-query";
 import { resolveSqlRuntimeFingerprint } from "@/lib/sql/runtime-fingerprint";
@@ -15,6 +14,7 @@ import type { AvailableDimension, Filter } from "@/lib/types/filters";
 import {
   type DbDashboardChart,
   listChartsByDashboard,
+  listJoinDefsByDashboard,
 } from "@/lib/workspace/dashboard-repo";
 
 const MATERIALIZED_SCHEMA = "mat";
@@ -68,7 +68,7 @@ export type BrowserFilterEngineDeps = {
   ) => Promise<Result[]>;
   resolveBackend: () => SqlBackend;
   resolveRuntimeFingerprint: (backend: SqlBackend) => Promise<string>;
-  readJoinDefs: () => JoinDefinition[];
+  readJoinDefs: (dashboardId: string) => Promise<JoinDefinition[]>;
   listCharts: (dashboardId: string) => Promise<DbDashboardChart[]>;
   getMaterializationCache: () => Map<string, MaterializationCacheEntry>;
 };
@@ -87,7 +87,7 @@ function defaultDeps(): BrowserFilterEngineDeps {
     runChartSql,
     resolveBackend: resolveActiveBackend,
     resolveRuntimeFingerprint: resolveRuntimeFingerprintForBackend,
-    readJoinDefs: readJoinDefsFromStorage,
+    readJoinDefs: listJoinDefsByDashboard,
     listCharts: listChartsByDashboard,
     getMaterializationCache: () => materializationCache,
   };
@@ -232,7 +232,7 @@ export async function executeDashboardChartsWithFilters(
 ): Promise<DashboardFilterExecutionResult> {
   const deps = resolveDeps(depsOverride);
   const backend = resolveDashboardBackend(options.charts, deps);
-  const joinDefs = deps.readJoinDefs();
+  const joinDefs = await deps.readJoinDefs(options.dashboardId);
   const hasAnyFilters =
     options.dashboardFilters.length > 0 ||
     Object.values(options.chartFiltersById).some(
@@ -368,7 +368,7 @@ export async function loadDashboardDimensions(
   depsOverride: Partial<BrowserFilterEngineDeps> = {},
 ): Promise<AvailableDimension[]> {
   const deps = resolveDeps(depsOverride);
-  const joinDefs = deps.readJoinDefs();
+  const joinDefs = await deps.readJoinDefs(dashboardId);
   const charts = await deps.listCharts(dashboardId);
   const backend = resolveDashboardBackend(charts, deps);
   const materialization = await ensureDashboardMaterialization(
@@ -442,7 +442,7 @@ export async function loadDashboardDimensionValues(
   const search = options.search?.trim() ?? "";
 
   const deps = resolveDeps(depsOverride);
-  const joinDefs = deps.readJoinDefs();
+  const joinDefs = await deps.readJoinDefs(options.dashboardId);
   const charts = await deps.listCharts(options.dashboardId);
   const backend = resolveDashboardBackend(charts, deps);
   const materialization = await ensureDashboardMaterialization(

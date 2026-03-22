@@ -17,12 +17,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { getRelevantTablesForChart } from "@/lib/dashboard/browser-filter-engine";
-import { readJoinDefsFromStorage } from "@/lib/joins/browser-storage";
+import type { JoinDefinition } from "@/lib/joins/graph";
 import {
   addSlicerToChart,
   addSlicerToDashboard,
   type DbChartSlicer,
   type DbDashboardSlicer,
+  listJoinDefsByDashboard,
   listSlicersByChart,
   listSlicersByDashboard,
   removeSlicerFromChart,
@@ -68,6 +69,7 @@ export function DashboardSlicersBar({
   const [loading, setLoading] = useState(true);
   const [addSlicerOpen, setAddSlicerOpen] = useState(false);
   const [addSlicerSearch, setAddSlicerSearch] = useState("");
+  const [joinDefs, setJoinDefs] = useState<JoinDefinition[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const [reservedHeight, setReservedHeight] = useState(0);
 
@@ -83,6 +85,23 @@ export function DashboardSlicersBar({
 
   useEffect(() => {
     let cancelled = false;
+
+    (async () => {
+      try {
+        const loadedJoinDefs = await listJoinDefsByDashboard(dashboardId);
+        if (!cancelled) {
+          setJoinDefs(loadedJoinDefs);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error(
+            "[DashboardSlicersBar] Failed to load join definitions:",
+            error,
+          );
+          setJoinDefs([]);
+        }
+      }
+    })();
 
     (async () => {
       setLoading(true);
@@ -122,7 +141,6 @@ export function DashboardSlicersBar({
     const selectedChart = charts.find((c) => c.id === selectedChartId);
     if (!selectedChart) return availableDimensions;
 
-    const joinDefs = readJoinDefsFromStorage();
     const relevantTables = getRelevantTablesForChart(
       selectedChart.sql,
       joinDefs,
@@ -131,7 +149,7 @@ export function DashboardSlicersBar({
     return availableDimensions.filter((dimension) =>
       relevantTables.has(dimension.exploreName),
     );
-  }, [availableDimensions, selectedChartId, charts]);
+  }, [availableDimensions, selectedChartId, charts, joinDefs]);
 
   const availableForSlicers = relevantDimensions.filter(
     (dimension) => !usedFields.has(dimension.field),

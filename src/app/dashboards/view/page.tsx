@@ -60,9 +60,9 @@ import {
   updateChartConfig,
   updateChartSql,
   updateDashboardMeasure,
+  updateDashboardSettings,
   updateDashboardTitle,
 } from "@/lib/workspace/dashboard-repo";
-import { getPreference, setPreference } from "@/lib/workspace/preferences-repo";
 import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
 import Link from "@/vite/next-link";
 import { useSearchParams } from "@/vite/next-navigation";
@@ -92,8 +92,6 @@ import {
   parseChartConfig,
 } from "../[dashboardId]/utils";
 
-const PREF_COLUMNS_PREFIX = "dashboard:columns:";
-const PREF_AUTOFIT_PREFIX = "dashboard:auto-fit:";
 const DASHBOARD_AUTH_ERROR_MESSAGE =
   "Dashboard queries need DuckDB HTTP authentication. Re-enter your DuckDB HTTP auth in Settings to load data.";
 
@@ -181,33 +179,6 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const savedColumns = await getPreference<number>(
-        `${PREF_COLUMNS_PREFIX}${dashboardId}`,
-      );
-      const savedAutoFit = await getPreference<boolean>(
-        `${PREF_AUTOFIT_PREFIX}${dashboardId}`,
-      );
-      if (cancelled) return;
-      if (
-        typeof savedColumns === "number" &&
-        savedColumns >= 1 &&
-        savedColumns <= 6
-      ) {
-        setColumns(savedColumns);
-      }
-      if (typeof savedAutoFit === "boolean") {
-        setAutoFitRows(savedAutoFit);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dashboardId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
       setLoading(true);
       try {
         const dashboards = await listDashboards();
@@ -215,6 +186,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
           dashboards.find((item) => item.id === dashboardId) ?? null;
         if (!cancelled) {
           setDashboard(selected as Dashboard | null);
+          setColumns(selected?.columns ?? 3);
+          setAutoFitRows(selected?.autoFitRows ?? false);
         }
       } finally {
         if (!cancelled) {
@@ -470,7 +443,16 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     (value: string) => {
       const newColumns = parseInt(value, 10);
       setColumns(newColumns);
-      void setPreference(`${PREF_COLUMNS_PREFIX}${dashboardId}`, newColumns);
+      setDashboard((prev) =>
+        prev
+          ? {
+              ...prev,
+              columns: newColumns,
+              updatedAt: Date.now(),
+            }
+          : prev,
+      );
+      void updateDashboardSettings(dashboardId, { columns: newColumns });
       setIsSettingsOpen(false);
     },
     [dashboardId],
@@ -479,7 +461,16 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   const handleAutoFitChange = useCallback(
     (checked: boolean) => {
       setAutoFitRows(checked);
-      void setPreference(`${PREF_AUTOFIT_PREFIX}${dashboardId}`, checked);
+      setDashboard((prev) =>
+        prev
+          ? {
+              ...prev,
+              autoFitRows: checked,
+              updatedAt: Date.now(),
+            }
+          : prev,
+      );
+      void updateDashboardSettings(dashboardId, { autoFitRows: checked });
     },
     [dashboardId],
   );

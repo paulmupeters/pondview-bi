@@ -2,20 +2,10 @@ import {
   clearWorkspaceDb,
   getAllFromStore,
   putMany,
-  STORE_CHART_SLICERS,
-  STORE_CHARTS,
   STORE_CHATS,
-  STORE_DASHBOARD_MEASURES,
-  STORE_DASHBOARD_SLICERS,
-  STORE_DASHBOARDS,
   STORE_MESSAGES,
   STORE_PREFERENCES,
-  type WorkspaceChart,
-  type WorkspaceChartSlicer,
   type WorkspaceChat,
-  type WorkspaceDashboard,
-  type WorkspaceDashboardMeasure,
-  type WorkspaceDashboardSlicer,
   type WorkspaceExport,
   type WorkspaceExportV1,
   type WorkspaceExportV2,
@@ -24,23 +14,9 @@ import {
 } from "@/lib/workspace/workspace-db";
 
 export async function exportWorkspace(): Promise<WorkspaceExportV2> {
-  const [
-    chats,
-    messages,
-    dashboards,
-    charts,
-    dashboardMeasures,
-    dashboardSlicers,
-    chartSlicers,
-    preferences,
-  ] = await Promise.all([
+  const [chats, messages, preferences] = await Promise.all([
     getAllFromStore<WorkspaceChat>(STORE_CHATS),
     getAllFromStore<WorkspaceMessage>(STORE_MESSAGES),
-    getAllFromStore<WorkspaceDashboard>(STORE_DASHBOARDS),
-    getAllFromStore<WorkspaceChart>(STORE_CHARTS),
-    getAllFromStore<WorkspaceDashboardMeasure>(STORE_DASHBOARD_MEASURES),
-    getAllFromStore<WorkspaceDashboardSlicer>(STORE_DASHBOARD_SLICERS),
-    getAllFromStore<WorkspaceChartSlicer>(STORE_CHART_SLICERS),
     getAllFromStore<WorkspacePreference>(STORE_PREFERENCES),
   ]);
 
@@ -49,11 +25,11 @@ export async function exportWorkspace(): Promise<WorkspaceExportV2> {
     exportedAt: new Date().toISOString(),
     chats,
     messages,
-    dashboards,
-    charts,
-    dashboardMeasures,
-    dashboardSlicers,
-    chartSlicers,
+    dashboards: [],
+    charts: [],
+    dashboardMeasures: [],
+    dashboardSlicers: [],
+    chartSlicers: [],
     preferences,
   };
 }
@@ -84,19 +60,13 @@ export function validateWorkspaceImport(payload: unknown): WorkspaceExportV2 {
       exportedAt: String(payload.exportedAt ?? ""),
       chats: assertArray<WorkspaceChat>(payload.chats, "chats"),
       messages: assertArray<WorkspaceMessage>(payload.messages, "messages"),
-      dashboards: assertArray<WorkspaceDashboard>(
-        payload.dashboards,
-        "dashboards",
-      ),
-      charts: assertArray<WorkspaceChart>(payload.charts, "charts"),
-      dashboardSlicers: assertArray<WorkspaceDashboardSlicer>(
+      dashboards: assertArray(payload.dashboards, "dashboards"),
+      charts: assertArray(payload.charts, "charts"),
+      dashboardSlicers: assertArray(
         payload.dashboardSlicers,
         "dashboardSlicers",
       ),
-      chartSlicers: assertArray<WorkspaceChartSlicer>(
-        payload.chartSlicers,
-        "chartSlicers",
-      ),
+      chartSlicers: assertArray(payload.chartSlicers, "chartSlicers"),
       preferences: assertArray<WorkspacePreference>(
         payload.preferences,
         "preferences",
@@ -115,23 +85,14 @@ export function validateWorkspaceImport(payload: unknown): WorkspaceExportV2 {
     exportedAt: String(payload.exportedAt ?? ""),
     chats: assertArray<WorkspaceChat>(payload.chats, "chats"),
     messages: assertArray<WorkspaceMessage>(payload.messages, "messages"),
-    dashboards: assertArray<WorkspaceDashboard>(
-      payload.dashboards,
-      "dashboards",
-    ),
-    charts: assertArray<WorkspaceChart>(payload.charts, "charts"),
-    dashboardMeasures: assertArray<WorkspaceDashboardMeasure>(
+    dashboards: assertArray(payload.dashboards, "dashboards"),
+    charts: assertArray(payload.charts, "charts"),
+    dashboardMeasures: assertArray(
       payload.dashboardMeasures,
       "dashboardMeasures",
     ),
-    dashboardSlicers: assertArray<WorkspaceDashboardSlicer>(
-      payload.dashboardSlicers,
-      "dashboardSlicers",
-    ),
-    chartSlicers: assertArray<WorkspaceChartSlicer>(
-      payload.chartSlicers,
-      "chartSlicers",
-    ),
+    dashboardSlicers: assertArray(payload.dashboardSlicers, "dashboardSlicers"),
+    chartSlicers: assertArray(payload.chartSlicers, "chartSlicers"),
     preferences: assertArray<WorkspacePreference>(
       payload.preferences,
       "preferences",
@@ -150,11 +111,6 @@ export async function importWorkspace(payload: WorkspaceExport): Promise<void> {
   await Promise.all([
     putMany(STORE_CHATS, normalizedPayload.chats),
     putMany(STORE_MESSAGES, normalizedPayload.messages),
-    putMany(STORE_DASHBOARDS, normalizedPayload.dashboards),
-    putMany(STORE_CHARTS, normalizedPayload.charts),
-    putMany(STORE_DASHBOARD_MEASURES, normalizedPayload.dashboardMeasures),
-    putMany(STORE_DASHBOARD_SLICERS, normalizedPayload.dashboardSlicers),
-    putMany(STORE_CHART_SLICERS, normalizedPayload.chartSlicers),
     putMany(STORE_PREFERENCES, normalizedPayload.preferences),
   ]);
 }

@@ -194,7 +194,13 @@ export function AddToDashboardDialog({
     try {
       let dashboardId = selectedDashboardId as string;
       if (selectedDashboardId === "new") {
-        const data = await createDashboard(newDashboardTitle.trim());
+        const data = await createDashboard(newDashboardTitle.trim(), {
+          dbIdentifier: resolveStoredChartDbIdentifier(
+            dbIdentifier,
+            sqlBackend ?? null,
+          ),
+          sqlBackend: sqlBackend ?? null,
+        });
         dashboardId = data.id;
       }
 
