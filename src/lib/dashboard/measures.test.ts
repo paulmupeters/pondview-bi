@@ -135,6 +135,7 @@ describe("dashboard measures", () => {
         source: "legacy",
         sql: "select 1000 as total_revenue",
         dbIdentifier: "warehouse",
+        catalogContext: null,
         sqlBackend: "bridge",
         sourceChartId: "metric-1",
       },
@@ -325,6 +326,7 @@ describe("dashboard measures", () => {
         measureId: "measure-1",
         sql: "select 1 as revenue",
         dbIdentifier: null,
+        catalogContext: null,
         sqlBackend: null,
       },
     ]);

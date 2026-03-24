@@ -66,9 +66,11 @@ type MaterializedTableRef = {
 type PreparedSqlPayload = {
   sql: string;
   dbIdentifier: string | null;
+  catalogContext: string | null;
   sqlBackend: SqlBackend | null;
   sourceSql: string | null;
   sourceDbIdentifier: string | null;
+  sourceCatalogContext: string | null;
   sourceSqlBackend: SqlBackend | null;
 };
 
@@ -280,6 +282,46 @@ export function resolveJoinDefsForNewDashboard(
     : dedupeJoinDefinitions(joinDefs);
 }
 
+export function resolveDashboardExternalConnection(input: {
+  sourceDbIdentifier?: string | null;
+  targetSqlBackend: SqlBackend;
+}) {
+  if (input.targetSqlBackend === "duckdb-wasm") {
+    return null;
+  }
+
+  const sourceDbIdentifier = toNullableString(input.sourceDbIdentifier);
+  return sourceDbIdentifier ? detectExternalConnection(sourceDbIdentifier) : null;
+}
+
+export type DashboardSourceMode = "runtime-direct" | "external-materialize";
+
+export async function resolveDashboardSourceMode(input: {
+  sourceDbIdentifier?: string | null;
+  targetSqlBackend: SqlBackend;
+  probeRuntimeExecution?: () => Promise<boolean>;
+}): Promise<DashboardSourceMode> {
+  const externalConnection = resolveDashboardExternalConnection({
+    sourceDbIdentifier: input.sourceDbIdentifier,
+    targetSqlBackend: input.targetSqlBackend,
+  });
+  if (!externalConnection) {
+    return "runtime-direct";
+  }
+
+  if (input.probeRuntimeExecution) {
+    try {
+      if (await input.probeRuntimeExecution()) {
+        return "runtime-direct";
+      }
+    } catch {
+      // Fall back to external materialization when the runtime probe fails.
+    }
+  }
+
+  return "external-materialize";
+}
+
 export function resolveDefaultStorageTarget(
   preferredBackend?: SqlBackend | null,
 ): DashboardStorageTarget {
@@ -398,6 +440,7 @@ function normalizeChartRow(row: Record<string, unknown>): ChartRecord | null {
     description: toNullableString(row.description),
     sql,
     dbIdentifier: toNullableString(row.db_identifier),
+    catalogContext: toNullableString(row.catalog_context),
     sqlBackend: normalizeSqlBackend(row.sql_backend),
     chartConfigJson,
     semanticQueryJson: toNullableString(row.semantic_query_json),
@@ -407,6 +450,7 @@ function normalizeChartRow(row: Record<string, unknown>): ChartRecord | null {
     updatedAt: toNumber(row.updated_at, Date.now()),
     sourceSql: toNullableString(row.source_sql),
     sourceDbIdentifier: toNullableString(row.source_db_identifier),
+    sourceCatalogContext: toNullableString(row.source_catalog_context),
     sourceSqlBackend: normalizeSqlBackend(row.source_sql_backend),
   };
 }
@@ -430,11 +474,13 @@ function normalizeMeasureRow(
     label,
     sql,
     dbIdentifier: toNullableString(row.db_identifier),
+    catalogContext: toNullableString(row.catalog_context),
     sqlBackend: normalizeSqlBackend(row.sql_backend),
     createdAt: toNumber(row.created_at, Date.now()),
     updatedAt: toNumber(row.updated_at, Date.now()),
     sourceSql: toNullableString(row.source_sql),
     sourceDbIdentifier: toNullableString(row.source_db_identifier),
+    sourceCatalogContext: toNullableString(row.source_catalog_context),
     sourceSqlBackend: normalizeSqlBackend(row.source_sql_backend),
   };
 }
@@ -486,13 +532,44 @@ function normalizeChartSlicerRow(
 async function runStorageSql(
   target: DashboardStorageTarget,
   sql: string,
+  options: {
+    catalogContext?: string | null;
+  } = {},
 ): Promise<Record<string, unknown>[]> {
   const result = await runQuery({
     sql,
     dbIdentifier: target.dbIdentifier ?? undefined,
     backendPreference: target.sqlBackend,
+    catalogContext: options.catalogContext ?? undefined,
   });
   return result.rows;
+}
+
+function buildRuntimeProbeSql(sql: string): string | null {
+  const normalizedSql = sql.trim().replace(/;+\s*$/, "");
+  return normalizedSql.length > 0 ? `EXPLAIN ${normalizedSql};` : null;
+}
+
+async function canExecuteSqlInTargetRuntime(
+  target: DashboardStorageTarget,
+  sql: string,
+  catalogContext?: string | null,
+): Promise<boolean> {
+  if (target.sqlBackend === "duckdb-wasm") {
+    return false;
+  }
+
+  const probeSql = buildRuntimeProbeSql(sql);
+  if (!probeSql) {
+    return false;
+  }
+
+  try {
+    await runStorageSql(target, probeSql, { catalogContext });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function runStorageStatements(
@@ -545,6 +622,7 @@ async function ensureMetadataSchema(
       description TEXT,
       sql TEXT NOT NULL,
       db_identifier TEXT,
+      catalog_context TEXT,
       sql_backend TEXT,
       chart_config_json TEXT NOT NULL,
       semantic_query_json TEXT,
@@ -554,6 +632,7 @@ async function ensureMetadataSchema(
       updated_at BIGINT NOT NULL,
       source_sql TEXT,
       source_db_identifier TEXT,
+      source_catalog_context TEXT,
       source_sql_backend TEXT
     );`,
     `CREATE TABLE IF NOT EXISTS ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_measures (
@@ -563,11 +642,13 @@ async function ensureMetadataSchema(
       label TEXT NOT NULL,
       sql TEXT NOT NULL,
       db_identifier TEXT,
+      catalog_context TEXT,
       sql_backend TEXT,
       created_at BIGINT NOT NULL,
       updated_at BIGINT NOT NULL,
       source_sql TEXT,
       source_db_identifier TEXT,
+      source_catalog_context TEXT,
       source_sql_backend TEXT
     );`,
     `CREATE TABLE IF NOT EXISTS ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_slicers (
@@ -612,6 +693,14 @@ async function ensureMetadataSchema(
       updated_at BIGINT NOT NULL,
       PRIMARY KEY (dashboard_id, source_table_name)
     );`,
+    `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
+     ADD COLUMN IF NOT EXISTS catalog_context TEXT;`,
+    `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
+     ADD COLUMN IF NOT EXISTS source_catalog_context TEXT;`,
+    `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_measures
+     ADD COLUMN IF NOT EXISTS catalog_context TEXT;`,
+    `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_measures
+     ADD COLUMN IF NOT EXISTS source_catalog_context TEXT;`,
   ]);
 }
 
@@ -904,6 +993,7 @@ async function upsertChartRecord(
       description,
       sql,
       db_identifier,
+      catalog_context,
       sql_backend,
       chart_config_json,
       semantic_query_json,
@@ -913,6 +1003,7 @@ async function upsertChartRecord(
       updated_at,
       source_sql,
       source_db_identifier,
+      source_catalog_context,
       source_sql_backend
     ) VALUES (
       ${quoteString(chart.id)},
@@ -921,6 +1012,7 @@ async function upsertChartRecord(
       ${sqlNullableString(chart.description)},
       ${quoteString(chart.sql)},
       ${sqlNullableString(chart.dbIdentifier)},
+      ${sqlNullableString(chart.catalogContext ?? null)},
       ${sqlNullableBackend(chart.sqlBackend)},
       ${quoteString(chart.chartConfigJson)},
       ${sqlNullableString(chart.semanticQueryJson)},
@@ -930,6 +1022,7 @@ async function upsertChartRecord(
       ${chart.updatedAt},
       ${sqlNullableString(chart.sourceSql ?? null)},
       ${sqlNullableString(chart.sourceDbIdentifier ?? null)},
+      ${sqlNullableString(chart.sourceCatalogContext ?? null)},
       ${sqlNullableBackend(chart.sourceSqlBackend ?? null)}
     );`,
   );
@@ -949,11 +1042,13 @@ async function upsertMeasureRecord(
       label,
       sql,
       db_identifier,
+      catalog_context,
       sql_backend,
       created_at,
       updated_at,
       source_sql,
       source_db_identifier,
+      source_catalog_context,
       source_sql_backend
     ) VALUES (
       ${quoteString(measure.id)},
@@ -962,11 +1057,13 @@ async function upsertMeasureRecord(
       ${quoteString(measure.label)},
       ${quoteString(measure.sql)},
       ${sqlNullableString(measure.dbIdentifier)},
+      ${sqlNullableString(measure.catalogContext ?? null)},
       ${sqlNullableBackend(measure.sqlBackend)},
       ${measure.createdAt},
       ${measure.updatedAt},
       ${sqlNullableString(measure.sourceSql ?? null)},
       ${sqlNullableString(measure.sourceDbIdentifier ?? null)},
+      ${sqlNullableString(measure.sourceCatalogContext ?? null)},
       ${sqlNullableBackend(measure.sourceSqlBackend ?? null)}
     );`,
   );
@@ -1091,6 +1188,7 @@ async function buildPreparedSqlPayload(
   input: {
     sql: string;
     dbIdentifier?: string | null;
+    catalogContext?: string | null;
     sqlBackend?: SqlBackend | null;
   },
   joinDefs: JoinDefinition[],
@@ -1098,13 +1196,20 @@ async function buildPreparedSqlPayload(
 ): Promise<PreparedSqlPayload> {
   const sourceSql = input.sql;
   const sourceDbIdentifier = input.dbIdentifier ?? null;
+  const sourceCatalogContext = input.catalogContext ?? null;
   const sourceSqlBackend = input.sqlBackend ?? null;
-  const externalConnection =
-    sourceDbIdentifier != null
-      ? detectExternalConnection(sourceDbIdentifier)
-      : null;
+  const sourceMode = await resolveDashboardSourceMode({
+    sourceDbIdentifier,
+    targetSqlBackend: target.sqlBackend,
+    probeRuntimeExecution: () =>
+      canExecuteSqlInTargetRuntime(target, sourceSql, sourceCatalogContext),
+  });
+  const externalConnection = resolveDashboardExternalConnection({
+    sourceDbIdentifier,
+    targetSqlBackend: target.sqlBackend,
+  });
 
-  if (externalConnection && target.sqlBackend !== "duckdb-wasm") {
+  if (sourceMode === "external-materialize" && externalConnection) {
     const tableRefs = buildMaterializationTableRefs([sourceSql], joinDefs);
     const snapshotSchema = dashboardSnapshotSchema(dashboardId);
 
@@ -1154,9 +1259,11 @@ async function buildPreparedSqlPayload(
     return {
       sql: rewriteSqlToSnapshotTables(sourceSql, tableRefs, snapshotSchema),
       dbIdentifier: storedDbIdentifierForTarget(target),
+      catalogContext: null,
       sqlBackend: target.sqlBackend,
       sourceSql,
       sourceDbIdentifier,
+      sourceCatalogContext,
       sourceSqlBackend,
     };
   }
@@ -1164,9 +1271,11 @@ async function buildPreparedSqlPayload(
   return {
     sql: sourceSql,
     dbIdentifier: storedDbIdentifierForTarget(target),
+    catalogContext: sourceCatalogContext,
     sqlBackend: target.sqlBackend,
     sourceSql,
     sourceDbIdentifier,
+    sourceCatalogContext,
     sourceSqlBackend,
   };
 }
@@ -1365,6 +1474,7 @@ export class DashboardStorageService {
     label: string;
     sql: string;
     dbIdentifier?: string | null;
+    catalogContext?: string | null;
     sqlBackend?: SqlBackend | null;
     now?: number;
   }): Promise<{ id: string }> {
@@ -1401,11 +1511,13 @@ export class DashboardStorageService {
       label: input.label,
       sql: prepared.sql,
       dbIdentifier: prepared.dbIdentifier,
+      catalogContext: prepared.catalogContext,
       sqlBackend: prepared.sqlBackend,
       createdAt: now,
       updatedAt: now,
       sourceSql: prepared.sourceSql,
       sourceDbIdentifier: prepared.sourceDbIdentifier,
+      sourceCatalogContext: prepared.sourceCatalogContext,
       sourceSqlBackend: prepared.sourceSqlBackend,
     });
 
@@ -1426,6 +1538,7 @@ export class DashboardStorageService {
       label?: string;
       sql?: string;
       dbIdentifier?: string | null;
+      catalogContext?: string | null;
       sqlBackend?: SqlBackend | null;
       now?: number;
     },
@@ -1444,6 +1557,7 @@ export class DashboardStorageService {
     const prepared =
       input.sql !== undefined ||
       input.dbIdentifier !== undefined ||
+      input.catalogContext !== undefined ||
       input.sqlBackend !== undefined
         ? await buildPreparedSqlPayload(
             resolved.target,
@@ -1457,6 +1571,12 @@ export class DashboardStorageService {
                     resolved.measure.dbIdentifier ??
                     null)
                   : input.dbIdentifier,
+              catalogContext:
+                input.catalogContext === undefined
+                  ? (resolved.measure.sourceCatalogContext ??
+                    resolved.measure.catalogContext ??
+                    null)
+                  : input.catalogContext,
               sqlBackend:
                 input.sqlBackend === undefined
                   ? (resolved.measure.sourceSqlBackend ??
@@ -1474,10 +1594,15 @@ export class DashboardStorageService {
       label: input.label ?? resolved.measure.label,
       sql: prepared?.sql ?? resolved.measure.sql,
       dbIdentifier: prepared?.dbIdentifier ?? resolved.measure.dbIdentifier,
+      catalogContext:
+        prepared?.catalogContext ?? resolved.measure.catalogContext,
       sqlBackend: prepared?.sqlBackend ?? resolved.measure.sqlBackend,
       sourceSql: prepared?.sourceSql ?? resolved.measure.sourceSql,
       sourceDbIdentifier:
         prepared?.sourceDbIdentifier ?? resolved.measure.sourceDbIdentifier,
+      sourceCatalogContext:
+        prepared?.sourceCatalogContext ??
+        resolved.measure.sourceCatalogContext,
       sourceSqlBackend:
         prepared?.sourceSqlBackend ?? resolved.measure.sourceSqlBackend,
       updatedAt: now,
@@ -1504,10 +1629,13 @@ export class DashboardStorageService {
         ...chart,
         sql: prepared?.sql ?? chart.sql,
         dbIdentifier: prepared?.dbIdentifier ?? chart.dbIdentifier,
+        catalogContext: prepared?.catalogContext ?? chart.catalogContext,
         sqlBackend: prepared?.sqlBackend ?? chart.sqlBackend,
         sourceSql: prepared?.sourceSql ?? chart.sourceSql,
         sourceDbIdentifier:
           prepared?.sourceDbIdentifier ?? chart.sourceDbIdentifier,
+        sourceCatalogContext:
+          prepared?.sourceCatalogContext ?? chart.sourceCatalogContext,
         sourceSqlBackend: prepared?.sourceSqlBackend ?? chart.sourceSqlBackend,
         updatedAt: now,
       });
@@ -1523,6 +1651,7 @@ export class DashboardStorageService {
     description?: string | null;
     sql: string;
     dbIdentifier?: string | null;
+    catalogContext?: string | null;
     sqlBackend?: SqlBackend | null;
     chartConfigJson: string;
     semanticQueryJson?: string | null;
@@ -1564,6 +1693,7 @@ export class DashboardStorageService {
       description: input.description ?? null,
       sql: prepared.sql,
       dbIdentifier: prepared.dbIdentifier,
+      catalogContext: prepared.catalogContext,
       sqlBackend: prepared.sqlBackend,
       chartConfigJson: input.chartConfigJson,
       semanticQueryJson: input.semanticQueryJson ?? null,
@@ -1573,6 +1703,7 @@ export class DashboardStorageService {
       updatedAt: now,
       sourceSql: prepared.sourceSql,
       sourceDbIdentifier: prepared.sourceDbIdentifier,
+      sourceCatalogContext: prepared.sourceCatalogContext,
       sourceSqlBackend: prepared.sourceSqlBackend,
     });
 

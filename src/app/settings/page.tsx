@@ -941,7 +941,7 @@ export default function SettingsPage() {
                     Show raw executeSql output JSON
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    When enabled, the tool card shows raw `tool-executeSql`
+                    When enabled, the tool card shows raw `tool-execute_sql`
                     output in addition to the SQL result block. This only
                     applies when tool calls are visible.
                   </p>

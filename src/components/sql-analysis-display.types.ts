@@ -14,6 +14,7 @@ export type SqlAnalysisData = {
   progress?: number;
   query?: string;
   dbIdentifier?: string;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend;
   executionTime?: number;
   rowCount?: number;

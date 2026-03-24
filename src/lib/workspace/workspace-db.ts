@@ -38,6 +38,7 @@ export interface WorkspaceChart {
   description: string | null;
   sql: string;
   dbIdentifier: string | null;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
   chartConfigJson: string;
   semanticQueryJson: string | null;
@@ -47,6 +48,7 @@ export interface WorkspaceChart {
   updatedAt: number;
   sourceSql?: string | null;
   sourceDbIdentifier?: string | null;
+  sourceCatalogContext?: string | null;
   sourceSqlBackend?: SqlBackend | null;
 }
 
@@ -57,11 +59,13 @@ export interface WorkspaceDashboardMeasure {
   label: string;
   sql: string;
   dbIdentifier: string | null;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
   createdAt: number;
   updatedAt: number;
   sourceSql?: string | null;
   sourceDbIdentifier?: string | null;
+  sourceCatalogContext?: string | null;
   sourceSqlBackend?: SqlBackend | null;
 }
 

@@ -22,6 +22,7 @@ const MATERIALIZED_SCHEMA = "mat";
 export type MaterializedTableRef = {
   tableName: string;
   sourceReference: string;
+  catalogContext?: string | null;
 };
 
 export type MaterializationStrategy = "direct" | "view" | "table-materialize";
@@ -61,6 +62,7 @@ export type BrowserFilterEngineDeps = {
   runRuntimeSql: (
     sql: string,
     backend: SqlBackend,
+    catalogContext?: string | null,
   ) => Promise<Record<string, unknown>[]>;
   runChartSql: (
     chart: DbDashboardChart,
@@ -107,11 +109,14 @@ export function clearDashboardMaterializationCache(): void {
 }
 
 export function buildMaterializationSignature(
-  charts: Array<{ id: string; sql: string }>,
+  charts: Array<{ id: string; sql: string; catalogContext?: string | null }>,
   joinDefs: JoinDefinition[],
 ): string {
   const chartSignature = charts
-    .map((chart) => `${chart.id}:${chart.sql}`)
+    .map(
+      (chart) =>
+        `${chart.id}:${chart.catalogContext ?? "__no_catalog__"}:${chart.sql}`,
+    )
     .sort()
     .join("|");
   const joinSignature = joinDefs
@@ -176,17 +181,21 @@ export function getRelevantTablesForChart(
 }
 
 export function buildMaterializationTableRefs(
-  charts: Array<{ sql: string }>,
+  charts: Array<{ sql: string; catalogContext?: string | null }>,
   joinDefs: JoinDefinition[],
 ): MaterializedTableRef[] {
-  const tableRefByName = new Map<string, string>();
+  const tableRefByName = new Map<string, MaterializedTableRef>();
   for (const chart of charts) {
     const refs = extractTableReferencesFromSql(chart.sql);
     for (const ref of refs) {
       if (!ref.tableName || tableRefByName.has(ref.tableName)) {
         continue;
       }
-      tableRefByName.set(ref.tableName, ref.rawReference);
+      tableRefByName.set(ref.tableName, {
+        tableName: ref.tableName,
+        sourceReference: ref.rawReference,
+        catalogContext: chart.catalogContext ?? null,
+      });
     }
   }
 
@@ -197,18 +206,22 @@ export function buildMaterializationTableRefs(
       continue;
     }
     if (tableRefByName.has(left) && !tableRefByName.has(right)) {
-      tableRefByName.set(right, quoteIdent(right));
+      tableRefByName.set(right, {
+        tableName: right,
+        sourceReference: quoteIdent(right),
+        catalogContext: null,
+      });
     }
     if (tableRefByName.has(right) && !tableRefByName.has(left)) {
-      tableRefByName.set(left, quoteIdent(left));
+      tableRefByName.set(left, {
+        tableName: left,
+        sourceReference: quoteIdent(left),
+        catalogContext: null,
+      });
     }
   }
 
-  return Array.from(tableRefByName.entries())
-    .map(([tableName, sourceReference]) => ({
-      tableName,
-      sourceReference,
-    }))
+  return Array.from(tableRefByName.values())
     .sort((left, right) => left.tableName.localeCompare(right.tableName));
 }
 
@@ -298,7 +311,11 @@ export async function executeDashboardChartsWithFilters(
 
       try {
         const rows = shouldExecuteFilteredSql
-          ? ((await deps.runRuntimeSql(sqlToExecute, backend)) as Result[])
+          ? ((await deps.runRuntimeSql(
+              sqlToExecute,
+              backend,
+              chart.catalogContext ?? null,
+            )) as Result[])
           : await deps.runChartSql(chart, backend);
 
         rowsByChartId[chart.id] = rows;
@@ -392,6 +409,7 @@ export async function loadDashboardDimensions(
       describeCandidates,
       backend,
       deps,
+      tableRef.catalogContext ?? null,
     );
     if (!rows) {
       continue;
@@ -458,6 +476,12 @@ export async function loadDashboardDimensionValues(
       tableRef.sourceReference,
     ]),
   );
+  const sourceCatalogContextByTable = new Map(
+    materialization.tableRefs.map((tableRef) => [
+      tableRef.tableName,
+      tableRef.catalogContext ?? null,
+    ]),
+  );
 
   const effectiveFilters = options.filters.filter(
     (filter) => filter.field !== options.field,
@@ -474,6 +498,8 @@ export async function loadDashboardDimensionValues(
     materialization.resolvedRefByTable.get(parsedField.tableName) ??
     sourceRefByTable.get(parsedField.tableName) ??
     quoteIdent(parsedField.tableName);
+  const preferredCatalogContext =
+    sourceCatalogContextByTable.get(parsedField.tableName) ?? null;
   const filteredBaseSql =
     `SELECT ${quoteIdent(parsedField.columnName)} AS "value"\n` +
     `FROM ${preferredBaseRef}`;
@@ -493,7 +519,11 @@ export async function loadDashboardDimensionValues(
       `WHERE "value" IS NOT NULL AND CAST("value" AS VARCHAR) <> ''\n` +
       `ORDER BY "value" ASC\n` +
       `LIMIT ${limit};`;
-    const rows = await deps.runRuntimeSql(valueSql, backend);
+    const rows = await deps.runRuntimeSql(
+      valueSql,
+      backend,
+      preferredCatalogContext,
+    );
     return toDimensionValues(rows);
   } catch (error) {
     console.warn(
@@ -532,7 +562,11 @@ export async function loadDashboardDimensionValues(
     `ORDER BY "value" ASC\n` +
     `LIMIT ${limit};`;
 
-  const rows = await deps.runRuntimeSql(fallbackSql, backend);
+  const rows = await deps.runRuntimeSql(
+    fallbackSql,
+    backend,
+    preferredCatalogContext,
+  );
   return toDimensionValues(rows);
 }
 
@@ -602,7 +636,11 @@ async function ensureDashboardMaterialization(
         : `CREATE OR REPLACE TABLE ${aliasRef} AS SELECT * FROM ${tableRef.sourceReference};`;
 
     try {
-      await deps.runRuntimeSql(createAliasSql, backend);
+      await deps.runRuntimeSql(
+        createAliasSql,
+        backend,
+        tableRef.catalogContext ?? null,
+      );
       materializedTables.add(tableRef.tableName);
       resolvedRefByTable.set(tableRef.tableName, aliasRef);
       realizedAliasKindByTable.set(
@@ -638,12 +676,17 @@ async function describeTableWithFallbacks(
   references: string[],
   backend: SqlBackend,
   deps: BrowserFilterEngineDeps,
+  catalogContext?: string | null,
 ): Promise<Record<string, unknown>[] | null> {
   let lastError: unknown = null;
 
   for (const reference of references) {
     try {
-      return await deps.runRuntimeSql(`DESCRIBE ${reference};`, backend);
+      return await deps.runRuntimeSql(
+        `DESCRIBE ${reference};`,
+        backend,
+        catalogContext,
+      );
     } catch (error) {
       lastError = error;
     }
@@ -684,10 +727,12 @@ function buildDescribeCandidates(
 async function runDashboardRuntimeSql(
   sql: string,
   backend: SqlBackend,
+  catalogContext?: string | null,
 ): Promise<Record<string, unknown>[]> {
   const result = await runQuery({
     sql,
     backendPreference: backend,
+    catalogContext,
   });
   return result.rows;
 }
@@ -707,6 +752,7 @@ async function runChartSql(
       sql: chart.sql,
       dbIdentifier,
       backendPreference,
+      catalogContext: chart.catalogContext ?? null,
     });
     return result.rows as Result[];
   } catch (error) {
@@ -724,6 +770,7 @@ async function runChartSql(
     const retryResult = await runQuery({
       sql: chart.sql,
       backendPreference: backend,
+      catalogContext: chart.catalogContext ?? null,
     });
     return retryResult.rows as Result[];
   }

@@ -480,6 +480,7 @@ export function DashboardDataCardDialog({
           description: cardConfig.description,
           sql: measureSqlValue,
           dbIdentifier: measure.dbIdentifier ?? null,
+          catalogContext: measure.catalogContext ?? null,
           sqlBackend: measure.sqlBackend ?? null,
           chartConfigJson: JSON.stringify(cardConfig),
         });
@@ -500,8 +501,10 @@ export function DashboardDataCardDialog({
             title: nextConfig.title,
             description: nextConfig.description,
             sql: sql.trim(),
-            dbIdentifier: resolvedDbIdentifier,
-            sqlBackend: resolvedSqlBackend,
+            dbIdentifier: runResult.dbIdentifier ?? resolvedDbIdentifier,
+            catalogContext:
+              runResult.catalogContext ?? selectedCatalogContext ?? null,
+            sqlBackend: runResult.backend ?? resolvedSqlBackend,
             chartConfigJson: JSON.stringify(nextConfig),
           });
         } else if (sqlVisualType === "table") {
@@ -516,8 +519,10 @@ export function DashboardDataCardDialog({
             title: tableConfig.title,
             description: tableConfig.description,
             sql: sql.trim(),
-            dbIdentifier: resolvedDbIdentifier,
-            sqlBackend: resolvedSqlBackend,
+            dbIdentifier: runResult.dbIdentifier ?? resolvedDbIdentifier,
+            catalogContext:
+              runResult.catalogContext ?? selectedCatalogContext ?? null,
+            sqlBackend: runResult.backend ?? resolvedSqlBackend,
             chartConfigJson: JSON.stringify(tableConfig),
           });
         } else {
@@ -535,8 +540,10 @@ export function DashboardDataCardDialog({
             title: cardConfig.title,
             description: cardConfig.description,
             sql: sql.trim(),
-            dbIdentifier: resolvedDbIdentifier,
-            sqlBackend: resolvedSqlBackend,
+            dbIdentifier: runResult.dbIdentifier ?? resolvedDbIdentifier,
+            catalogContext:
+              runResult.catalogContext ?? selectedCatalogContext ?? null,
+            sqlBackend: runResult.backend ?? resolvedSqlBackend,
             chartConfigJson: JSON.stringify(cardConfig),
           });
         }

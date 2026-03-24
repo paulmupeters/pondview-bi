@@ -86,10 +86,11 @@ type JoinColumnState = {
 type JoinSourceInfo = {
   storedDbIdentifier: string | null;
   executionDbIdentifier?: string;
+  catalogContext?: string | null;
   sqlBackend: SqlBackend | null;
 };
 
-function resolveStoredChartDbIdentifier(options: {
+export function resolveStoredChartDbIdentifier(options: {
   sqlBackend: SqlBackend | null;
   payloadDbIdentifier?: string;
   selectedDbIdentifier?: string;
@@ -103,7 +104,11 @@ function resolveStoredChartDbIdentifier(options: {
   }
 
   if (options.sqlBackend === "bridge" || options.sqlBackend === "duckdb-http") {
-    return candidates.find((value) => !isWasmLocalIdentifier(value)) ?? null;
+    return (
+      candidates
+        .filter((value) => value === options.payloadDbIdentifier?.trim())
+        .find((value) => !isWasmLocalIdentifier(value)) ?? null
+    );
   }
 
   return candidates[0] ?? DEFAULT_WASM_DB_IDENTIFIER;
@@ -266,7 +271,10 @@ function buildJoinSourceInfo(
       selectedDbIdentifier,
     }),
     executionDbIdentifier:
-      snapshot.payload.dbIdentifier?.trim() || selectedDbIdentifier?.trim(),
+      sqlBackend === "duckdb-wasm"
+        ? snapshot.payload.dbIdentifier?.trim() || selectedDbIdentifier?.trim()
+        : snapshot.payload.dbIdentifier?.trim(),
+    catalogContext: snapshot.payload.catalogContext ?? null,
     sqlBackend,
   };
 }
@@ -488,16 +496,26 @@ export function DashboardBuilderPanel({
         selectedChartSources.map((source) => source.storedDbIdentifier ?? ""),
       ),
     );
+    const catalogContextValues = Array.from(
+      new Set(
+        selectedChartSources.map((source) => source.catalogContext ?? ""),
+      ),
+    );
 
     return {
       hasMixedSqlBackends: sqlBackendValues.length > 1,
       hasMixedDbIdentifiers: dbIdentifierValues.length > 1,
+      hasMixedCatalogContexts: catalogContextValues.length > 1,
       sharedSqlBackend:
         sqlBackendValues.length === 1 ? sqlBackendValues[0] || null : null,
       sharedExecutionDbIdentifier:
         selectedChartSources.find(
           (source) => (source.executionDbIdentifier ?? "").length > 0,
         )?.executionDbIdentifier ?? selectedDbIdentifier,
+      sharedExecutionCatalogContext:
+        catalogContextValues.length === 1
+          ? catalogContextValues[0] || null
+          : null,
     };
   }, [selectedChartSources, selectedDbIdentifier]);
 
@@ -505,7 +523,8 @@ export function DashboardBuilderPanel({
   const isJoinBuilderEditable =
     shouldShowJoinBuilder &&
     !joinSourceSummary.hasMixedDbIdentifiers &&
-    !joinSourceSummary.hasMixedSqlBackends;
+    !joinSourceSummary.hasMixedSqlBackends &&
+    !joinSourceSummary.hasMixedCatalogContexts;
 
   const flattenedJoinDefs = useMemo(
     () => flattenJoinDraftGroups(joinGroups),
@@ -572,6 +591,7 @@ export function DashboardBuilderPanel({
         sql: `DESCRIBE ${detectedTable.rawReference}`,
         backendPreference: joinSourceSummary.sharedSqlBackend ?? "auto",
         dbIdentifier: joinSourceSummary.sharedExecutionDbIdentifier,
+        catalogContext: joinSourceSummary.sharedExecutionCatalogContext,
       });
       const columns = result.rows
         .map((row) =>
@@ -767,6 +787,7 @@ export function DashboardBuilderPanel({
             payloadDbIdentifier: payload.dbIdentifier,
             selectedDbIdentifier,
           }),
+          catalogContext: payload.catalogContext ?? null,
           sqlBackend,
           chartConfigJson: JSON.stringify(config ?? {}),
         });

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  resolveDashboardExternalConnection,
+  resolveDashboardSourceMode,
   resolveJoinDefsForNewDashboard,
   resolveTargetForSource,
 } from "@/lib/dashboard/dashboard-storage-service";
@@ -73,5 +75,54 @@ describe("resolveJoinDefsForNewDashboard", () => {
         type: "left",
       },
     ]);
+  });
+});
+
+describe("resolveDashboardExternalConnection", () => {
+  test("does not classify runtime-default remote dashboards as external sources", () => {
+    expect(
+      resolveDashboardExternalConnection({
+        sourceDbIdentifier: null,
+        targetSqlBackend: "duckdb-http",
+      }),
+    ).toBeNull();
+  });
+
+  test("keeps true external attachments on the materialization path", () => {
+    expect(
+      resolveDashboardExternalConnection({
+        sourceDbIdentifier: "sqlite:/tmp/warehouse.db",
+        targetSqlBackend: "duckdb-http",
+      }),
+    ).toEqual({
+      type: "sqlite",
+      identifier: "/tmp/warehouse.db",
+      duckdbExtension: "sqlite",
+      readOnly: true,
+    });
+  });
+});
+
+describe("resolveDashboardSourceMode", () => {
+  test("keeps runtime-native remote queries direct when the runtime probe succeeds", async () => {
+    await expect(
+      resolveDashboardSourceMode({
+        sourceDbIdentifier:
+          "host=167.235.227.188 port=5432 user=admin password=secret dbname=main",
+        targetSqlBackend: "duckdb-http",
+        probeRuntimeExecution: async () => true,
+      }),
+    ).resolves.toBe("runtime-direct");
+  });
+
+  test("falls back to external materialization when the runtime probe fails", async () => {
+    await expect(
+      resolveDashboardSourceMode({
+        sourceDbIdentifier:
+          "host=167.235.227.188 port=5432 user=admin password=secret dbname=main",
+        targetSqlBackend: "duckdb-http",
+        probeRuntimeExecution: async () => false,
+      }),
+    ).resolves.toBe("external-materialize");
   });
 });

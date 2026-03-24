@@ -6,6 +6,7 @@ import {
   listMaterializedTablesForBackend,
   loadDashboardDimensionValues,
 } from "@/lib/dashboard/browser-filter-engine";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import type { Filter } from "@/lib/types/filters";
 import type { DbDashboardChart } from "@/lib/workspace/dashboard-repo";
 
@@ -13,6 +14,7 @@ function createChart(input: {
   id: string;
   dashboardId?: string;
   sql: string;
+  catalogContext?: string | null;
   sqlBackend?: DbDashboardChart["sqlBackend"];
 }): DbDashboardChart {
   const now = Date.now();
@@ -23,6 +25,7 @@ function createChart(input: {
     description: null,
     sql: input.sql,
     dbIdentifier: null,
+    catalogContext: input.catalogContext ?? null,
     sqlBackend: input.sqlBackend ?? null,
     chartConfigJson: "{}",
     semanticQueryJson: null,
@@ -56,14 +59,17 @@ describe("browser-filter-engine", () => {
       {
         tableName: "customers",
         sourceReference: '"customers"',
+        catalogContext: null,
       },
       {
         tableName: "items",
         sourceReference: '"analytics"."items"',
+        catalogContext: null,
       },
       {
         tableName: "orders",
         sourceReference: '"main"."orders"',
+        catalogContext: null,
       },
     ]);
   });
@@ -382,5 +388,62 @@ describe("browser-filter-engine", () => {
     expect(backendCalls).toEqual(["duckdb-http"]);
     expect(result.backend).toBe("duckdb-http");
     expect(result.rowsByChartId[chart.id]).toEqual([{ source: "duckdb-http" }]);
+  });
+
+  test("passes chart catalog context into filtered runtime execution", async () => {
+    const runtimeSqlCalls: Array<{
+      sql: string;
+      catalogContext?: string | null;
+    }> = [];
+    const chart = createChart({
+      id: "chart-ctx",
+      sql: "SELECT * FROM analytics.events",
+      catalogContext: "warehouse",
+    });
+
+    await executeDashboardChartsWithFilters(
+      {
+        dashboardId: "dashboard-ctx",
+        charts: [chart],
+        dashboardFilters: [
+          {
+            field: "events.kind",
+            op: "eq",
+            values: ["signup"],
+          },
+        ],
+        chartFiltersById: {},
+      },
+      {
+        resolveBackend: () => "duckdb-http",
+        resolveRuntimeFingerprint: async () => "duckdb-http:test",
+        readJoinDefs: async () => [],
+        listCharts: async () => [chart],
+        getMaterializationCache: () => new Map(),
+        runRuntimeSql: async (
+          sql: string,
+          _backend: SqlBackend,
+          catalogContext?: string | null,
+        ) => {
+          runtimeSqlCalls.push({ sql, catalogContext });
+          return [];
+        },
+      },
+    );
+
+    expect(
+      runtimeSqlCalls.some(
+        (call) =>
+          call.sql.includes('CREATE OR REPLACE VIEW "mat"."events"') &&
+          call.catalogContext === "warehouse",
+      ),
+    ).toBe(true);
+    expect(
+      runtimeSqlCalls.some(
+        (call) =>
+          call.sql.includes('WITH "__filtered_base"') &&
+          call.catalogContext === "warehouse",
+      ),
+    ).toBe(true);
   });
 });
