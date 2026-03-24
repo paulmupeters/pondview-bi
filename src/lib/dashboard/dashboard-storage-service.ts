@@ -17,6 +17,7 @@ import { runQuery } from "@/lib/sql/run-query";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   getSqlBackendPreference,
+  isRuntimeDefaultDbIdentifier,
   isWasmLocalIdentifier,
   resolveSqlBackend,
   type SqlBackend,
@@ -182,7 +183,7 @@ function createRuntimeDefaultTarget(
     kind: "runtime-default",
     dbIdentifier: null,
     sqlBackend,
-    storageStatus: "best-effort",
+    storageStatus: "shared",
   };
 }
 
@@ -271,7 +272,15 @@ function defaultJoinDefs(): JoinDefinition[] {
   return dedupeJoinDefinitions(readJoinDefsFromStorage());
 }
 
-function resolveDefaultStorageTarget(
+export function resolveJoinDefsForNewDashboard(
+  joinDefs?: JoinDefinition[],
+): JoinDefinition[] {
+  return joinDefs === undefined
+    ? defaultJoinDefs()
+    : dedupeJoinDefinitions(joinDefs);
+}
+
+export function resolveDefaultStorageTarget(
   preferredBackend?: SqlBackend | null,
 ): DashboardStorageTarget {
   const backend = resolveSqlBackend({
@@ -285,7 +294,7 @@ function resolveDefaultStorageTarget(
   return createWasmTarget();
 }
 
-function resolveTargetForSource(input: {
+export function resolveTargetForSource(input: {
   dbIdentifier?: string | null;
   sqlBackend?: SqlBackend | null;
 }): DashboardStorageTarget {
@@ -305,15 +314,17 @@ function resolveTargetForSource(input: {
     }
   }
 
-  if (
-    sourceBackend === "duckdb-wasm" ||
-    isWasmLocalIdentifier(dbIdentifier ?? undefined)
-  ) {
-    return createWasmTarget();
-  }
-
   if (sourceBackend === "bridge" || sourceBackend === "duckdb-http") {
     return createRuntimeDefaultTarget(sourceBackend);
+  }
+
+  if (
+    sourceBackend === "duckdb-wasm" ||
+    (dbIdentifier !== null &&
+      (isRuntimeDefaultDbIdentifier(dbIdentifier) ||
+        isWasmLocalIdentifier(dbIdentifier)))
+  ) {
+    return createWasmTarget();
   }
 
   return resolveDefaultStorageTarget();
@@ -1233,6 +1244,7 @@ export class DashboardStorageService {
     title: string,
     input: {
       dbIdentifier?: string | null;
+      joinDefs?: JoinDefinition[];
       sqlBackend?: SqlBackend | null;
       now?: number;
     } = {},
@@ -1253,7 +1265,11 @@ export class DashboardStorageService {
       storageStatus: target.storageStatus,
     });
 
-    await replaceJoinDefsInTarget(target, id, defaultJoinDefs());
+    await replaceJoinDefsInTarget(
+      target,
+      id,
+      resolveJoinDefsForNewDashboard(input.joinDefs),
+    );
     return { id };
   }
 

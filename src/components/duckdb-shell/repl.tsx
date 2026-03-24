@@ -157,6 +157,8 @@ type DuckdbReplProps = {
   onSaveQueryAction?: (sql: string) => void | Promise<void>;
   isSavingQuery?: boolean;
   chartConfig?: Config | null;
+  editorMinHeight?: string;
+  editorMaxHeight?: string;
 };
 
 const HISTORY_KEY = "bi.repl.history";
@@ -175,6 +177,8 @@ export function DuckdbRepl({
   onSaveQueryAction,
   isSavingQuery = false,
   chartConfig: _chartConfig,
+  editorMinHeight = "8rem",
+  editorMaxHeight = inlineResults ? "20rem" : "14rem",
 }: DuckdbReplProps) {
   const [lastResult, setLastResult] = useState<{
     sql: string;
@@ -534,6 +538,8 @@ export function DuckdbRepl({
           <SqlConsole
             className="h-full w-full"
             historyKey={HISTORY_KEY}
+            editorMinHeight={editorMinHeight}
+            editorMaxHeight={editorMaxHeight}
             executeQueryAction={executeQuery}
             onApiChangeAction={setInternalApi}
             onCancelQueryAction={handleCancelQuery}

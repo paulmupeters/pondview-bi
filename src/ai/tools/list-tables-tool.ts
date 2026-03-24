@@ -1,6 +1,10 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { runQuery } from "@/lib/sql/run-query";
+import {
+  resolveDbIdentifierForSqlBackend,
+  resolveSqlBackend,
+} from "@/lib/sql/sql-runtime";
 
 export const listTablesTool = tool({
   description:
@@ -8,8 +12,10 @@ export const listTablesTool = tool({
   inputSchema: z.object({
     databasePath: z
       .string()
-      .describe("Database identifier/path to query (e.g. wasm:local)")
-      .default("wasm:local"),
+      .optional()
+      .describe(
+        "Optional database identifier/path to query. Omit to use the selected Query Runtime.",
+      ),
   }),
   execute: async ({ databasePath }) => {
     const sql = `
@@ -22,7 +28,9 @@ export const listTablesTool = tool({
       ORDER BY table_schema, table_name
     `;
 
-    const result = await runQuery({ sql, dbIdentifier: databasePath });
+    const backend = resolveSqlBackend({ dbIdentifier: databasePath });
+    const dbIdentifier = resolveDbIdentifierForSqlBackend(databasePath, backend);
+    const result = await runQuery({ sql, dbIdentifier });
 
     const tables = result.rows.map((row) => ({
       table_schema: String(row.table_schema ?? ""),

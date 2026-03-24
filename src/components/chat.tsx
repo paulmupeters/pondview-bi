@@ -36,12 +36,10 @@ import {
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
+  resolveDbIdentifierForSqlBackend,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
-import {
-  useResolvedSqlBackend,
-  useResolveSqlBackend,
-} from "@/lib/sql/use-sql-backend";
+import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
@@ -158,7 +156,6 @@ export default function Chat({
   const router = useRouter();
   const searchParams = useSearchParams();
   const connectedTables = useConnectedTables();
-  const resolveCurrentSqlBackend = useResolveSqlBackend();
   const effectiveSqlBackend = useResolvedSqlBackend();
   const [promptMode, setPromptMode] = useState<PromptMode>("ai");
   const [promptError, setPromptError] = useState<string | null>(null);
@@ -718,20 +715,20 @@ export default function Chat({
     const messageId = `manual-visual-${now}`;
     const artifactId = `manual-artifact-${now}`;
     const first = connectedTables[0];
-    const defaultDatabase =
+    const defaultDatabase = resolveDbIdentifierForSqlBackend(
       first?.connectionId ??
-      first?.databasePath ??
-      first?.attachAs ??
-      DEFAULT_WASM_DB_IDENTIFIER;
+        first?.databasePath ??
+        first?.attachAs ??
+        DEFAULT_WASM_DB_IDENTIFIER,
+      effectiveSqlBackend,
+    );
 
     const defaultPayload: SqlAnalysisData = {
       stage: "complete",
       progress: 1,
       query: "",
       dbIdentifier: defaultDatabase,
-      sqlBackend: resolveCurrentSqlBackend({
-        dbIdentifier: defaultDatabase,
-      }),
+      sqlBackend: effectiveSqlBackend,
       isSqlExpandedInitial: true,
       rowCount: 0,
       columns: [],
@@ -772,7 +769,7 @@ export default function Chat({
     } catch (error) {
       console.error("Failed to persist visual placeholder:", error);
     }
-  }, [connectedTables, persistArtifactMessage, resolveCurrentSqlBackend]);
+  }, [connectedTables, effectiveSqlBackend, persistArtifactMessage]);
 
   useChatUrlParams({
     chatId,
@@ -1140,7 +1137,7 @@ export default function Chat({
           open={isDashboardBuilderOpen}
           onOpenChange={setIsDashboardBuilderOpen}
         >
-          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogContent className="flex max-h-[85vh] min-h-0 w-[calc(100vw-2rem)] max-w-4xl flex-col overflow-hidden">
             <DashboardBuilderPanel
               open={isDashboardBuilderOpen}
               onOpenChange={setIsDashboardBuilderOpen}

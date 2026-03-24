@@ -79,6 +79,8 @@ export type SqlConsoleProps = {
   historyKey: string;
   historyLimit?: number;
   placeholder?: string;
+  editorMinHeight?: string;
+  editorMaxHeight?: string;
   runButtonLabel?: string;
   stopButtonLabel?: string;
   executeQueryAction: ExecuteQueryFn;
@@ -105,6 +107,8 @@ export function SqlConsole({
   historyKey,
   historyLimit = DEFAULT_HISTORY_LIMIT,
   placeholder = DEFAULT_PLACEHOLDER,
+  editorMinHeight = "8rem",
+  editorMaxHeight,
   runButtonLabel = DEFAULT_RUN_LABEL,
   stopButtonLabel = DEFAULT_STOP_LABEL,
   executeQueryAction,
@@ -299,15 +303,16 @@ export function SqlConsole({
         className,
       )}
     >
-      <div className="rounded-sm bg-card transition-colors flex-1 min-h-0">
-        <div className="flex flex-col gap-3 p-0 sm:flex-row sm:items-center sm:gap-4">
-          <div className="flex-1 min-w-0 flex flex-col gap-2 mt-12">
+      <div className="flex min-h-0 flex-1 flex-col rounded-sm bg-card transition-colors">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 p-0 sm:flex-row sm:items-center sm:gap-4">
+          <div className="mt-12 flex min-h-0 flex-1 min-w-0 flex-col gap-2">
             <SqlCodeEditor
               ref={editorRef}
               value={sql}
               onChange={setSql}
               placeholder={placeholder}
-              minHeight="8rem"
+              minHeight={editorMinHeight}
+              maxHeight={editorMaxHeight}
               autoFocus
               onRunQuery={() => void handleRunQuery()}
               onCancel={cancelRun}
@@ -315,6 +320,9 @@ export function SqlConsole({
               onHistoryNext={handleHistoryNext}
               className="flex-1"
             />
+            <div className="text-[11px] text-muted-foreground">
+              Shift + Enter to run
+            </div>
           </div>
           {showRunControls && (
             <div className="flex flex-row justify-end gap-2 sm:flex-col sm:items-center sm:px-1 absolute top-2 right-1">

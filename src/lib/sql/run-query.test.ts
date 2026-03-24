@@ -96,6 +96,56 @@ describe("runQuery routing", () => {
     expect(result.columns).toEqual([{ name: "value" }]);
   });
 
+  test("routes placeholder identifiers to bridge when bridge is selected", async () => {
+    let receivedDbIdentifier: string | undefined;
+
+    const runQuery = createRunQuery({
+      resolveBackend: () => "bridge",
+      runBridge: async () => ({
+        rows: [{ ok: true }],
+        columns: [{ name: "ok", type: "BOOLEAN" }],
+        durationMs: 5,
+      }),
+      runWasm: async ({ dbIdentifier }) => {
+        receivedDbIdentifier = dbIdentifier;
+        throw new Error("should not reach wasm");
+      },
+      assertWasmCompatibleIdentifier: () => {},
+    });
+
+    const result = await runQuery({
+      sql: "SELECT 1",
+      dbIdentifier: "wasm:local",
+      backendPreference: "bridge",
+    });
+
+    expect(receivedDbIdentifier).toBeUndefined();
+    expect(result.backend).toBe("bridge");
+  });
+
+  test("routes placeholder identifiers to duckdb-http when http is selected", async () => {
+    const runQuery = createRunQuery({
+      resolveBackend: () => "duckdb-http",
+      runDuckDbHttp: async () => ({
+        rows: [{ ok: true }],
+        columns: [{ name: "ok", type: "BOOLEAN" }],
+        durationMs: 6,
+      }),
+      runWasm: async () => {
+        throw new Error("should not reach wasm");
+      },
+      assertWasmCompatibleIdentifier: () => {},
+    });
+
+    const result = await runQuery({
+      sql: "SELECT 1",
+      dbIdentifier: "wasm:local",
+      backendPreference: "duckdb-http",
+    });
+
+    expect(result.backend).toBe("duckdb-http");
+  });
+
   test("runs MotherDuck queries through duckdb-http attach lifecycle", async () => {
     const receivedSql: string[] = [];
     let receivedSignal: AbortSignal | undefined;
