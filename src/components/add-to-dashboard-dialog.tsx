@@ -68,6 +68,7 @@ export function AddToDashboardDialog({
   trigger,
   sql,
   dbIdentifier,
+  catalogContext,
   sqlBackend,
   defaultTitle,
   tooltip,
@@ -77,6 +78,7 @@ export function AddToDashboardDialog({
   trigger: React.ReactNode;
   sql: string;
   dbIdentifier?: string | null;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend;
   defaultTitle?: string;
   tooltip?: string;
@@ -236,6 +238,7 @@ export function AddToDashboardDialog({
           dbIdentifier,
           sqlBackend ?? null,
         ),
+        catalogContext,
         sqlBackend: sqlBackend ?? null,
         chartConfigJson: JSON.stringify(configJson),
       });

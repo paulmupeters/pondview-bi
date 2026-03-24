@@ -65,6 +65,7 @@ export const createDashboardMeasure = (input: {
   label: string;
   sql: string;
   dbIdentifier?: string | null;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
   now?: number;
 }) => dashboardStorageService.createDashboardMeasure(input);
@@ -75,6 +76,7 @@ export const updateDashboardMeasure = (
     label?: string;
     sql?: string;
     dbIdentifier?: string | null;
+    catalogContext?: string | null;
     sqlBackend?: SqlBackend | null;
     now?: number;
   },
@@ -86,6 +88,7 @@ export const addChartToDashboard = (input: {
   description?: string | null;
   sql: string;
   dbIdentifier?: string | null;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
   chartConfigJson: string;
   semanticQueryJson?: string | null;

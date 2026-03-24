@@ -8,6 +8,7 @@ type DashboardMeasureSourceChart = {
   sql?: string | null;
   title?: string | null;
   dbIdentifier?: string | null;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
 };
 
@@ -36,6 +37,7 @@ export type MeasureOption = {
   measureId?: string;
   sql?: string;
   dbIdentifier?: string | null;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
   sourceChartId?: string;
 };
@@ -238,6 +240,7 @@ export function extractLegacyMeasureOptionsFromMetricCards(
       source: "legacy",
       sql: chart.sql ?? undefined,
       dbIdentifier: chart.dbIdentifier ?? null,
+      catalogContext: chart.catalogContext ?? null,
       sqlBackend: chart.sqlBackend ?? null,
       sourceChartId: chart.id,
     });
@@ -267,6 +270,7 @@ export function buildMeasureOptions(input: {
       measureId: measure.id,
       sql: measure.sql,
       dbIdentifier: measure.dbIdentifier,
+      catalogContext: measure.catalogContext ?? null,
       sqlBackend: measure.sqlBackend,
     });
   }

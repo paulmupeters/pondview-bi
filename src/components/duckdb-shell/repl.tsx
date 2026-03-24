@@ -33,6 +33,7 @@ import {
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
 import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
+import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 import { runQuery } from "@/lib/sql/run-query";
@@ -149,6 +150,8 @@ type DuckdbReplProps = {
       columns: { name: string; type?: string }[];
       durationMs: number;
       backend?: SqlBackend;
+      dbIdentifier?: string;
+      catalogContext?: string | null;
     } | null,
   ) => void;
   showRunControls?: boolean;
@@ -186,6 +189,8 @@ export function DuckdbRepl({
     columns: { name: string; type?: string }[];
     durationMs: number;
     backend?: SqlBackend;
+    dbIdentifier?: string;
+    catalogContext?: string | null;
   } | null>(null);
   const [internalApi, setInternalApi] = useState<SqlConsoleApi | null>(null);
   const [copiedSqlSnippet, setCopiedSqlSnippet] = useState(false);
@@ -282,6 +287,8 @@ export function DuckdbRepl({
         return {
           ...result,
           backend: effectiveSqlBackend,
+          dbIdentifier: effectiveDb,
+          catalogContext: plan.alias,
         };
       } finally {
         try {
@@ -301,12 +308,21 @@ export function DuckdbRepl({
         signal,
       });
     }
-    return runQuery({
+    const result = await runQuery({
       sql,
       dbIdentifier: effectiveDb,
       catalogContext: effectiveCatalogContext,
       signal,
     });
+    return {
+      ...result,
+      dbIdentifier:
+        (effectiveSqlBackend === "bridge" || effectiveSqlBackend === "duckdb-http") &&
+        !isMotherDuckIdentifier(effectiveDb)
+          ? undefined
+          : effectiveDb,
+      catalogContext: effectiveCatalogContext,
+    };
   };
 
   const handleCopySqlSnippet = () => {
@@ -545,8 +561,24 @@ export function DuckdbRepl({
             onCancelQueryAction={handleCancelQuery}
             showInlineResults={inlineResults}
             showRunControls={false}
-            onSuccessAction={({ sql, rows, columns, durationMs, backend }) => {
-              setLastResult({ sql, rows, columns, durationMs, backend });
+            onSuccessAction={({
+              sql,
+              rows,
+              columns,
+              durationMs,
+              backend,
+              dbIdentifier,
+              catalogContext,
+            }) => {
+              setLastResult({
+                sql,
+                rows,
+                columns,
+                durationMs,
+                backend,
+                dbIdentifier,
+                catalogContext,
+              });
               setExplorerRefreshToken((prev) => prev + 1);
             }}
           />

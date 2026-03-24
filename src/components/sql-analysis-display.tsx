@@ -1,21 +1,17 @@
-import {
-  ChatBubbleBottomCenterTextIcon,
-  PlusCircleIcon,
-} from "@heroicons/react/24/outline";
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Squares2X2Icon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
 import { useArtifactMutation } from "@/components/artifact-mutation-context";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ChartView } from "./sql-analysis-display/chart-view";
+import { SqlAnalysisHeader } from "./sql-analysis-display/header";
+import {
+  buildSqlAnalysisVisualState,
+  resolveDefaultDashboardVisualType,
+} from "./sql-analysis-display/shared-visual-options";
 import { StageIndicator } from "./sql-analysis-display/stage-indicator";
 import type {
   ActiveView,
@@ -238,6 +234,31 @@ export function SqlAnalysisDisplay({
   const canShowTable = Boolean(selectedForTable);
   const canShowVisualOptionsToggle =
     activeView === "chart" && columnsForDialog.length > 0 && !selectedForCard;
+  const { effectiveChartConfig, visualOptions } = useMemo(
+    () =>
+      data
+        ? buildSqlAnalysisVisualState({
+            data,
+            chartConfig,
+            cardConfig,
+            columnsForDialog,
+            selectedForChart,
+            selectedForTable,
+          })
+        : null,
+    [
+      cardConfig,
+      chartConfig,
+      columnsForDialog,
+      data,
+      selectedForChart,
+      selectedForTable,
+    ],
+  ) ?? { effectiveChartConfig: null, visualOptions: [] };
+  const defaultDashboardVisualType = resolveDefaultDashboardVisualType({
+    activeView,
+    selectedForCard,
+  });
 
   const payloadForAddToChat = useMemo(() => {
     if (!data) {
@@ -326,6 +347,7 @@ export function SqlAnalysisDisplay({
     Boolean(onAddToChat) &&
     Boolean(payloadForAddToChat) &&
     (canAddToChat ?? true);
+  const showAddToDashboardButton = visualOptions.length > 0;
 
   const handleAddToChatClick = () => {
     if (!onAddToChat || !payloadForAddToChat) {
@@ -357,141 +379,46 @@ export function SqlAnalysisDisplay({
 
       {data && (
         <div className="flex flex-col gap-4 w-full">
-          <div className="px-4 pt-2">
-            <ToggleGroup
-              type="single"
-              value={activeView}
-              onValueChange={(value) => {
-                if (value) {
-                  setActiveView(value as ActiveView);
-                }
-              }}
-              className="gap-2"
-            >
-              <ToggleGroupItem
-                value="table"
-                disabled={!canShowTable}
-                className={cn(
-                  "rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-medium bg-transparent data-[state=on]:text-primary data-[state=on]:bg-transparent",
-                  activeView === "table"
-                    ? "border-primary font-bold"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                Data
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="chart"
-                disabled={false}
-                className={cn(
-                  "rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-mono bg-transparent data-[state=on]:text-primary data-[state=on]:bg-transparent",
-                  activeView === "chart"
-                    ? "border-primary font-bold"
-                    : "text-muted-foreground hover:text-foreground font-medium",
-                )}
-              >
-                Visual
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-
-          <div className="flex justify-end px-4">
-            <div className="flex flex-wrap items-center gap-2">
-              {canShowVisualOptionsToggle && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-2 text-xs font-mono"
-                  onClick={() => setShowVisualOptions((prev) => !prev)}
-                  aria-expanded={showVisualOptions}
-                  aria-controls="chart-visual-options"
-                >
-                  Visual options
-                  <ChevronDown
-                    className={cn(
-                      "h-3.5 w-3.5 transition-transform",
-                      showVisualOptions && "rotate-180",
-                    )}
-                  />
-                </Button>
-              )}
-              {showAddToChatButton && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
+          <SqlAnalysisHeader
+            activeView={activeView}
+            canShowTable={canShowTable}
+            onActiveViewChange={setActiveView}
+            canShowVisualOptionsToggle={canShowVisualOptionsToggle}
+            showVisualOptions={showVisualOptions}
+            onVisualOptionsToggle={() => setShowVisualOptions((prev) => !prev)}
+            addToDashboardTrigger={
+              showAddToDashboardButton ? (
+                <AddToDashboardDialog
+                  trigger={
                     <Button
                       variant="outline"
                       size="sm"
                       className="flex items-center gap-2"
-                      onClick={handleAddToChatClick}
                     >
-                      <PlusCircleIcon className="w-4 h-4" />
-                      Add to chat
+                      <Squares2X2Icon className="h-4 w-4" />
+                      Add to dashboard
                     </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Share this result</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-2"
-                  >
-                    <ChatBubbleBottomCenterTextIcon className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Edit with AI</p>
-                </TooltipContent>
-              </Tooltip>
-              {showClearButton ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2"
-                      onClick={handleClear}
-                    >
-                      Clear
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Clear analysis</p>
-                  </TooltipContent>
-                </Tooltip>
-              ) : null}
-              {history && history.total > 0 && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={history.onPrev}
-                    disabled={history.currentIndex <= 0}
-                    className="flex items-center gap-2"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <span className="text-xs text-muted-foreground min-w-[60px] text-center">
-                    {history.currentIndex + 1} / {history.total}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={history.onNext}
-                    disabled={history.currentIndex >= history.total - 1}
-                    className="flex items-center gap-2"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
+                  }
+                  sql={data.query ?? ""}
+                  dbIdentifier={data.dbIdentifier}
+                  catalogContext={data.catalogContext ?? null}
+                  sqlBackend={data.sqlBackend}
+                  defaultTitle={
+                    defaultDashboardVisualType === "card"
+                      ? (cardConfig?.title ?? data.cardConfig?.title)
+                      : effectiveChartConfig?.title
+                  }
+                  visualOptions={visualOptions}
+                  defaultVisualType={defaultDashboardVisualType}
+                />
+              ) : undefined
+            }
+            showAddToChatButton={showAddToChatButton}
+            onAddToChatClick={handleAddToChatClick}
+            showClearButton={showClearButton}
+            onClear={handleClear}
+            history={history}
+          />
 
           <div className="w-full px-4">
             {(data ||
@@ -517,7 +444,6 @@ export function SqlAnalysisDisplay({
                     }
                     selectedForChart={selectedForChart}
                     selectedForCard={selectedForCard}
-                    selectedForTable={selectedForTable}
                     chartConfig={chartConfig}
                     cardConfig={cardConfig}
                     columnsForDialog={columnsForDialog}

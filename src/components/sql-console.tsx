@@ -26,6 +26,8 @@ export type ExecuteQueryFn = (params: {
   rows: Record<string, unknown>[];
   columns?: { name: string; type?: string }[];
   backend?: SqlBackend;
+  dbIdentifier?: string;
+  catalogContext?: string | null;
 }>;
 
 export function createSqlExecuteQuery(options: {
@@ -40,7 +42,13 @@ export function createSqlExecuteQuery(options: {
       signal,
     });
 
-    return { rows, columns, backend };
+    return {
+      rows,
+      columns,
+      backend,
+      dbIdentifier: options.dbIdentifier,
+      catalogContext: null,
+    };
   };
 }
 
@@ -90,6 +98,8 @@ export type SqlConsoleProps = {
     columns: { name: string; type?: string }[];
     durationMs: number;
     backend?: SqlBackend;
+    dbIdentifier?: string;
+    catalogContext?: string | null;
   }) => void;
   onApiChangeAction?: (api: SqlConsoleApi | null) => void;
   onCancelQueryAction?: () => Promise<void> | void;
@@ -211,6 +221,8 @@ export function SqlConsole({
         rows,
         columns: providedColumns,
         backend,
+        dbIdentifier,
+        catalogContext,
       } = await executeQueryAction({
         sql: currentSql,
         signal: controller.signal,
@@ -234,6 +246,8 @@ export function SqlConsole({
         columns,
         durationMs: duration,
         backend,
+        dbIdentifier,
+        catalogContext,
       });
     } catch (err) {
       if ((err as Error).name === "AbortError") {

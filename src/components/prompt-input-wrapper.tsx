@@ -72,6 +72,8 @@ interface PromptInputWrapperProps {
     columns: { name: string; type?: string }[];
     durationMs: number;
     backend?: SqlBackend;
+    dbIdentifier?: string;
+    catalogContext?: string | null;
   } | null;
   selectedCatalogContext?: string | null;
   onConsoleApiChange?: (api: SqlConsoleApi | null) => void;
@@ -82,6 +84,8 @@ interface PromptInputWrapperProps {
       columns: { name: string; type?: string }[];
       durationMs: number;
       backend?: SqlBackend;
+      dbIdentifier?: string;
+      catalogContext?: string | null;
     } | null,
   ) => void;
   storedSqlQueries?: SavedSqlQuery[];
@@ -384,7 +388,8 @@ export function PromptInputWrapper({
       stage: "complete",
       progress: 1,
       query: sqlResult.sql,
-      dbIdentifier: selectedDb,
+      dbIdentifier: sqlResult.dbIdentifier,
+      catalogContext: sqlResult.catalogContext ?? selectedCatalogContext,
       sqlBackend: sqlResult.backend,
       executionTime: sqlResult.durationMs,
       rowCount: sqlResult.rows.length,

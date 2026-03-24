@@ -237,6 +237,8 @@ export default function Chat({
     columns: { name: string; type?: string }[];
     durationMs: number;
     backend?: SqlBackend;
+    dbIdentifier?: string;
+    catalogContext?: string | null;
   } | null>(null);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
   const [storedSqlQueries, setStoredSqlQueries] = useState<SavedSqlQuery[]>([]);
@@ -303,7 +305,8 @@ export default function Chat({
           stage: "complete",
           progress: 1,
           query: sqlResult.sql,
-          dbIdentifier: selectedDb,
+          dbIdentifier: sqlResult.dbIdentifier,
+          catalogContext: sqlResult.catalogContext ?? selectedCatalogContext,
           sqlBackend: sqlResult.backend,
           executionTime: sqlResult.durationMs,
           rowCount: sqlResult.rows.length,
@@ -808,6 +811,7 @@ export default function Chat({
         progress: payload.progress ?? 1,
         query: payload.query ?? "",
         dbIdentifier: payload.dbIdentifier,
+        catalogContext: payload.catalogContext ?? null,
         sqlBackend: payload.sqlBackend,
         executionTime: payload.executionTime,
         rowCount:
@@ -870,6 +874,9 @@ export default function Chat({
         rows: Record<string, unknown>[];
         columns: { name: string; type?: string }[];
         durationMs: number;
+        backend?: SqlBackend;
+        dbIdentifier?: string;
+        catalogContext?: string | null;
       } | null,
     ) => {
       setSqlResult(result);
