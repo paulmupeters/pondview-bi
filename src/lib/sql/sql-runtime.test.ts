@@ -3,6 +3,7 @@ import {
   assertWasmCompatibleDbIdentifier,
   classifyDbIdentifier,
   DEFAULT_WASM_DB_IDENTIFIER,
+  resolveDbIdentifierForSqlBackend,
   type RuntimeDeps,
   resolveSelectedSqlBackend,
   resolveSqlBackend,
@@ -44,6 +45,20 @@ describe("resolveSqlBackend", () => {
     );
 
     expect(backend).toBe("duckdb-wasm");
+  });
+
+  test("uses duckdb-http when bridge is unavailable and http is configured", () => {
+    const backend = resolveSqlBackend(
+      {
+        backendPreference: "auto",
+      },
+      createRuntimeDeps({
+        hasDuckDbHttpConfig: () => true,
+        getDuckDbHttpHealthStatus: () => "online",
+      }),
+    );
+
+    expect(backend).toBe("duckdb-http");
   });
 
   test("uses bridge only when secret exists and bridge is online", () => {
@@ -115,13 +130,14 @@ describe("resolveSqlBackend", () => {
           getDuckDbHttpHealthStatus: () => "online",
         }),
       ),
-    ).toBe("duckdb-wasm");
+    ).toBe("duckdb-http");
 
     expect(
       resolveSqlBackend(
         { backendPreference: "duckdb-http" },
         createRuntimeDeps({
           hasDuckDbHttpConfig: () => true,
+          getDuckDbHttpHealthStatus: () => "unknown",
         }),
       ),
     ).toBe("duckdb-http");
@@ -132,9 +148,21 @@ describe("resolveSqlBackend", () => {
         createRuntimeDeps(),
       ),
     ).toBe("duckdb-wasm");
+
+    expect(
+      resolveSqlBackend(
+        { backendPreference: "duckdb-http" },
+        createRuntimeDeps({
+          hasBridgeSecret: () => true,
+          getBridgeHealthStatus: () => "online",
+          getBridgeConfig: () => AUTH_REQUIRED_BRIDGE,
+          getDuckDbHttpHealthStatus: () => "offline",
+        }),
+      ),
+    ).toBe("bridge");
   });
 
-  test("forces duckdb-wasm for local wasm identifiers even when remote is preferred", () => {
+  test("treats wasm local identifiers as placeholders when a remote backend is available", () => {
     expect(
       resolveSqlBackend(
         {
@@ -149,17 +177,31 @@ describe("resolveSqlBackend", () => {
           getDuckDbHttpHealthStatus: () => "online",
         }),
       ),
-    ).toBe("duckdb-wasm");
+    ).toBe("bridge");
+
+    expect(
+      resolveSqlBackend(
+        {
+          backendPreference: "duckdb-http",
+          dbIdentifier: DEFAULT_WASM_DB_IDENTIFIER,
+        },
+        createRuntimeDeps({
+          hasDuckDbHttpConfig: () => true,
+          getDuckDbHttpHealthStatus: () => "online",
+        }),
+      ),
+    ).toBe("duckdb-http");
   });
 });
 
 describe("resolveSelectedSqlBackend", () => {
-  test("defaults selection to bridge when the bridge is discoverable", () => {
+  test("defaults selection to bridge when the bridge is query-ready", () => {
     const backend = resolveSelectedSqlBackend(
       {
         backendPreference: "auto",
       },
       createRuntimeDeps({
+        hasBridgeSecret: () => true,
         getBridgeHealthStatus: () => "online",
         getBridgeConfig: () => AUTH_REQUIRED_BRIDGE,
       }),
@@ -180,6 +222,22 @@ describe("resolveSelectedSqlBackend", () => {
     );
 
     expect(backend).toBe("bridge");
+  });
+
+  test("defaults selection to duckdb-http when bridge is not query-ready", () => {
+    const backend = resolveSelectedSqlBackend(
+      {
+        backendPreference: "auto",
+      },
+      createRuntimeDeps({
+        getBridgeHealthStatus: () => "online",
+        getBridgeConfig: () => AUTH_REQUIRED_BRIDGE,
+        hasDuckDbHttpConfig: () => true,
+        getDuckDbHttpHealthStatus: () => "unknown",
+      }),
+    );
+
+    expect(backend).toBe("duckdb-http");
   });
 });
 
@@ -211,5 +269,25 @@ describe("assertWasmCompatibleDbIdentifier", () => {
     expect(() => assertWasmCompatibleDbIdentifier("prod-analytics")).toThrow(
       "cannot resolve database identifier",
     );
+  });
+});
+
+describe("resolveDbIdentifierForSqlBackend", () => {
+  test("uses runtime defaults for placeholder identifiers", () => {
+    expect(
+      resolveDbIdentifierForSqlBackend(undefined, "duckdb-wasm"),
+    ).toBe(DEFAULT_WASM_DB_IDENTIFIER);
+    expect(
+      resolveDbIdentifierForSqlBackend(
+        DEFAULT_WASM_DB_IDENTIFIER,
+        "duckdb-http",
+      ),
+    ).toBeUndefined();
+  });
+
+  test("preserves explicit non-placeholder identifiers", () => {
+    expect(
+      resolveDbIdentifierForSqlBackend("md:analytics", "duckdb-http"),
+    ).toBe("md:analytics");
   });
 });

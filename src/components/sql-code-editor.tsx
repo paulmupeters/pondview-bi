@@ -47,12 +47,75 @@ export type SqlCodeEditorProps = {
   placeholder?: string;
   className?: string;
   minHeight?: string;
+  maxHeight?: string;
   autoFocus?: boolean;
   onRunQuery?: () => void;
   onCancel?: () => void;
   onHistoryPrev?: () => void;
   onHistoryNext?: () => void;
 };
+
+export function createSqlCodeEditorKeyBindings(options: {
+  onRunQuery?: () => void;
+  onCancel?: () => void;
+  onHistoryPrev?: () => void;
+  onHistoryNext?: () => void;
+}): KeyBinding[] {
+  const { onRunQuery, onCancel, onHistoryPrev, onHistoryNext } = options;
+  const bindings: KeyBinding[] = [];
+
+  if (onRunQuery) {
+    bindings.push({
+      key: "Shift-Enter",
+      run: () => {
+        onRunQuery();
+        return true;
+      },
+    });
+  }
+
+  if (onCancel) {
+    bindings.push({
+      key: "Escape",
+      run: () => {
+        onCancel();
+        return true;
+      },
+    });
+  }
+
+  if (onHistoryPrev) {
+    bindings.push({
+      key: "ArrowUp",
+      run: (view) => {
+        const pos = view.state.selection.main.head;
+        const line = view.state.doc.lineAt(pos);
+        if (line.number === 1) {
+          onHistoryPrev();
+          return true;
+        }
+        return false;
+      },
+    });
+  }
+
+  if (onHistoryNext) {
+    bindings.push({
+      key: "ArrowDown",
+      run: (view) => {
+        const pos = view.state.selection.main.head;
+        const line = view.state.doc.lineAt(pos);
+        if (line.number === view.state.doc.lines) {
+          onHistoryNext();
+          return true;
+        }
+        return false;
+      },
+    });
+  }
+
+  return bindings;
+}
 
 export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
   function SqlCodeEditor(
@@ -62,6 +125,7 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
       placeholder,
       className,
       minHeight = "8rem",
+      maxHeight,
       autoFocus = false,
       onRunQuery,
       onCancel,
@@ -132,61 +196,16 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
 
     // Custom keymap for run/cancel/history navigation
     const customKeymap = useCallback((): Extension => {
-      const bindings: KeyBinding[] = [];
-
-      if (onRunQuery) {
-        bindings.push({
-          key: "Enter",
-          run: () => {
-            // Only run query if not holding shift
-            onRunQuery();
-            return true;
-          },
-          shift: () => false, // Allow Shift+Enter to insert newline
-        });
-      }
-
-      if (onCancel) {
-        bindings.push({
-          key: "Escape",
-          run: () => {
-            onCancel();
-            return true;
-          },
-        });
-      }
-
-      if (onHistoryPrev) {
-        bindings.push({
-          key: "ArrowUp",
-          run: (view) => {
-            const pos = view.state.selection.main.head;
-            const line = view.state.doc.lineAt(pos);
-            if (line.number === 1) {
-              onHistoryPrev();
-              return true;
-            }
-            return false; // Let default handler move cursor
-          },
-        });
-      }
-
-      if (onHistoryNext) {
-        bindings.push({
-          key: "ArrowDown",
-          run: (view) => {
-            const pos = view.state.selection.main.head;
-            const line = view.state.doc.lineAt(pos);
-            if (line.number === view.state.doc.lines) {
-              onHistoryNext();
-              return true;
-            }
-            return false; // Let default handler move cursor
-          },
-        });
-      }
-
-      return Prec.highest(keymap.of(bindings));
+      return Prec.highest(
+        keymap.of(
+          createSqlCodeEditorKeyBindings({
+            onRunQuery,
+            onCancel,
+            onHistoryPrev,
+            onHistoryNext,
+          }),
+        ),
+      );
     }, [onRunQuery, onCancel, onHistoryPrev, onHistoryNext]);
 
     const extensions: Extension[] = [
@@ -230,12 +249,12 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
           "[&_.cm-selectionBackground]:!bg-primary/20",
           "[&_.cm-cursor]:!border-l-2 [&_.cm-cursor]:!border-primary",
           "[&_.cm-placeholder]:!text-muted-foreground",
-          "[&_.cm-scroller]:!overflow-y-auto [&_.cm-scroller]:!overflow-x-hidden",
+          "[&_.cm-scroller]:!max-h-full [&_.cm-scroller]:!overflow-y-auto [&_.cm-scroller]:!overflow-x-hidden",
           "[&_.cm-focused]:!outline-none",
           "[&_.cm-editor.cm-focused]:!outline-none",
           className,
         )}
-        style={{ minHeight }}
+        style={{ minHeight, maxHeight }}
         theme="none"
       />
     );

@@ -21,6 +21,7 @@ export function createDashboard(
   title: string,
   input?: {
     dbIdentifier?: string | null;
+    joinDefs?: JoinDefinition[];
     sqlBackend?: SqlBackend | null;
     now?: number;
   },

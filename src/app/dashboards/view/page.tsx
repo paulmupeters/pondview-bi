@@ -410,7 +410,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
           title: textConfig.title ?? "Text Card",
           description: textConfig.title ?? null,
           sql: "SELECT 1",
-          dbIdentifier: DEFAULT_WASM_DB_IDENTIFIER,
+          dbIdentifier: null,
+          sqlBackend: null,
           chartConfigJson: JSON.stringify(textConfig),
         });
         await refreshDashboardData();

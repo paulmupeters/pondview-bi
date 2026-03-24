@@ -456,6 +456,7 @@ export function PromptInputWrapper({
                       catalogContext={selectedCatalogContext}
                       onConsoleApiChangeAction={handleManualConsoleApiChange}
                       inlineResults={false}
+                      editorMaxHeight={compact ? "12rem" : "14rem"}
                       showRunControls={false}
                       showExplorer={false}
                       showSaveQueryButton={Boolean(onSaveQuery)}

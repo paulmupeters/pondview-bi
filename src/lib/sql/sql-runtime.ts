@@ -89,6 +89,13 @@ function normalizeIdentifier(dbIdentifier?: string): string {
   return (dbIdentifier ?? "").trim();
 }
 
+export function isRuntimeDefaultDbIdentifier(dbIdentifier?: string): boolean {
+  const normalized = normalizeIdentifier(dbIdentifier).toLowerCase();
+  return (
+    normalized.length === 0 || normalized === DEFAULT_WASM_DB_IDENTIFIER
+  );
+}
+
 function parseSqlBackendPreference(raw: string | null): SqlBackendPreference {
   if (
     raw === "bridge" ||
@@ -209,12 +216,6 @@ export function subscribeBridgeHealth(listener: () => void): () => void {
   };
 }
 
-function isBridgeDiscoverable(deps: RuntimeDeps): boolean {
-  return (
-    deps.getBridgeHealthStatus() === "online" && deps.getBridgeConfig() !== null
-  );
-}
-
 function isBridgeQueryReady(deps: RuntimeDeps): boolean {
   const config = deps.getBridgeConfig();
   return (
@@ -284,7 +285,9 @@ function isBridgeAvailable(deps: RuntimeDeps): boolean {
 }
 
 function isDuckDbHttpAvailable(deps: RuntimeDeps): boolean {
-  return deps.hasDuckDbHttpConfig();
+  return (
+    deps.hasDuckDbHttpConfig() && deps.getDuckDbHttpHealthStatus() !== "offline"
+  );
 }
 
 function resolvePreference(
@@ -295,49 +298,69 @@ function resolvePreference(
     : backendPreference;
 }
 
+function getBackendFallbackOrder(
+  preference: SqlBackendPreference,
+): SqlBackend[] {
+  if (preference === "bridge") {
+    return ["bridge", "duckdb-http", "duckdb-wasm"];
+  }
+
+  if (preference === "duckdb-http") {
+    return ["duckdb-http", "bridge", "duckdb-wasm"];
+  }
+
+  if (preference === "duckdb-wasm") {
+    return ["duckdb-wasm", "bridge", "duckdb-http"];
+  }
+
+  return ["bridge", "duckdb-http", "duckdb-wasm"];
+}
+
+function isBackendAvailable(backend: SqlBackend, deps: RuntimeDeps): boolean {
+  if (backend === "bridge") {
+    return isBridgeAvailable(deps);
+  }
+
+  if (backend === "duckdb-http") {
+    return isDuckDbHttpAvailable(deps);
+  }
+
+  return true;
+}
+
+export function resolveDbIdentifierForSqlBackend(
+  dbIdentifier: string | null | undefined,
+  backend: SqlBackend,
+): string | undefined {
+  const normalized = normalizeIdentifier(dbIdentifier ?? undefined);
+
+  if (isRuntimeDefaultDbIdentifier(normalized)) {
+    return backend === "duckdb-wasm" ? DEFAULT_WASM_DB_IDENTIFIER : undefined;
+  }
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 export function resolveSelectedSqlBackend(
   options: ResolveSqlBackendOptions,
   deps: RuntimeDeps = defaultDeps,
 ): SqlBackend {
-  if (
-    normalizeIdentifier(options.dbIdentifier).length > 0 &&
-    classifyDbIdentifier(options.dbIdentifier) === "local-wasm"
-  ) {
-    return "duckdb-wasm";
-  }
-
   const preference = resolvePreference(options.backendPreference);
   if (preference !== "auto") {
     return preference;
   }
 
-  return isBridgeDiscoverable(deps) ? "bridge" : "duckdb-wasm";
+  return getBackendFallbackOrder("auto").find((backend) =>
+    isBackendAvailable(backend, deps),
+  )!;
 }
 
 export function resolveSqlBackend(
   options: ResolveSqlBackendOptions,
   deps: RuntimeDeps = defaultDeps,
 ): SqlBackend {
-  if (
-    normalizeIdentifier(options.dbIdentifier).length > 0 &&
-    classifyDbIdentifier(options.dbIdentifier) === "local-wasm"
-  ) {
-    return "duckdb-wasm";
-  }
-
   const preference = resolvePreference(options.backendPreference);
-
-  if (preference !== "auto") {
-    if (preference === "bridge" && !isBridgeAvailable(deps)) {
-      return "duckdb-wasm";
-    }
-
-    if (preference === "duckdb-http" && !isDuckDbHttpAvailable(deps)) {
-      return "duckdb-wasm";
-    }
-
-    return preference;
-  }
-
-  return isBridgeAvailable(deps) ? "bridge" : "duckdb-wasm";
+  return getBackendFallbackOrder(preference).find((backend) =>
+    isBackendAvailable(backend, deps),
+  )!;
 }
