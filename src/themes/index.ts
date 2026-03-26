@@ -1,6 +1,6 @@
 import * as defaultTheme from "./default";
 import * as emberClayTheme from "./ember-clay";
-import * as monoGreenTheme from "./moss-terminal";
+import * as monoGreenTheme from "./playable";
 import * as improvedTheme from "./rosewater";
 
 export type Theme = {

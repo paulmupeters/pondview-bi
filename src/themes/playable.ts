@@ -9,7 +9,7 @@ export const themeCss = `:root {
   --popover-foreground: oklch(0.2686 0 0);
   --primary: oklch(0.7686 0.1647 70.0804);
   --primary-foreground: oklch(0 0 0);
-  --secondary: oklch(0.9670 0.0029 264.5419);
+  --secondary: oklch(0.9070 0.01 264.5419);
   --secondary-foreground: oklch(0.4461 0.0263 256.8018);
   --muted: oklch(0.9846 0.0017 247.8389);
   --muted-foreground: oklch(0.5510 0.0234 264.3637);
