@@ -6,6 +6,7 @@ import {
   PromptInputWrapper,
   type PromptMode,
 } from "@/components/prompt-input-wrapper";
+import { getDefaultPromptModePreference } from "@/lib/default-prompt-mode";
 import { ensureChat } from "@/lib/workspace/chat-repo";
 import { useRouter } from "@/vite/next-navigation";
 
@@ -16,8 +17,26 @@ const EXAMPLE_COMMANDS = [
   "Analyze customer demographics by region",
 ];
 
+function deriveManualQueryTitle(sql: string): string {
+  const firstMeaningfulLine =
+    sql
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.length > 0 && !line.startsWith("--")) ?? "";
+
+  if (!firstMeaningfulLine) {
+    return "SQL Query Results";
+  }
+
+  return firstMeaningfulLine.length > 36
+    ? `${firstMeaningfulLine.slice(0, 36)}...`
+    : firstMeaningfulLine;
+}
+
 export default function Home() {
-  const [mode, setMode] = useState<PromptMode>("ai");
+  const [mode, setMode] = useState<PromptMode>(() =>
+    getDefaultPromptModePreference(),
+  );
   const router = useRouter();
 
   const handleSubmit = useCallback(
@@ -44,19 +63,31 @@ export default function Home() {
     [mode, router],
   );
 
-  const handleModeChange = useCallback(
-    (newMode: PromptMode) => {
-      setMode(newMode);
-      if (newMode !== "manual") {
+  const handleManualRun = useCallback(
+    (sql: string) => {
+      const trimmedSql = sql.trim();
+      if (!trimmedSql) {
         return;
       }
 
       const chatId = nanoid();
-      void ensureChat(chatId, "SQL Query Results");
-      router.push(`/chat?id=${chatId}&mode=manual`);
+      void ensureChat(chatId, deriveManualQueryTitle(trimmedSql));
+
+      const params = new URLSearchParams({
+        id: chatId,
+        mode: "manual",
+        sql: trimmedSql,
+        autorun: "1",
+      });
+
+      router.push(`/chat?${params.toString()}`);
     },
     [router],
   );
+
+  const handleModeChange = useCallback((newMode: PromptMode) => {
+    setMode(newMode);
+  }, []);
 
   const handleExampleClick = useCallback(
     (command: string) => {
@@ -168,6 +199,7 @@ export default function Home() {
                 onHomePage={true}
                 mode={mode}
                 onModeChange={handleModeChange}
+                onManualRunRequest={handleManualRun}
               />
               {mode === "ai" && (
                 <div className="mt-8 animate-in fade-in duration-500 fill-mode-both">

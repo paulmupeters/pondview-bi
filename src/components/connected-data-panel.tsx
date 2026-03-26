@@ -28,6 +28,7 @@ import {
   type ExplorerInsertPayload,
   isDefaultExplorerSchema,
 } from "@/lib/duckdb/table-reference";
+import { isHiddenRuntimeSchema } from "@/lib/sql/runtime-table-schemas";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
@@ -83,6 +84,18 @@ export function getConnectedEntryDisplayName(entry: ConnectedTable): string {
   }
 
   return `${parts.join(".")} (${entry.type})`;
+}
+
+export function shouldShowConnectedEntry(
+  entry: ConnectedTable,
+  visibleRemoteCatalogs: Set<string>,
+): boolean {
+  const catalog = getConnectedEntryCatalog(entry)?.trim().toLowerCase();
+  if (!catalog) {
+    return true;
+  }
+
+  return !visibleRemoteCatalogs.has(catalog);
 }
 
 interface ConnectedDataPanelProps {
@@ -188,12 +201,18 @@ export function ConnectedDataPanel({
   );
 
   const groupedWasmTables = useMemo(
-    () => groupExplorerTables(wasmTables),
+    () =>
+      groupExplorerTables(wasmTables).filter(
+        (group) => !isHiddenRuntimeSchema(group.schema),
+      ),
     [groupExplorerTables, wasmTables],
   );
 
   const groupedRemoteTables = useMemo(
-    () => groupExplorerTables(remoteTables),
+    () =>
+      groupExplorerTables(remoteTables).filter(
+        (group) => !isHiddenRuntimeSchema(group.schema),
+      ),
     [groupExplorerTables, remoteTables],
   );
 
@@ -207,6 +226,25 @@ export function ConnectedDataPanel({
       : remoteConnectionInfo
         ? `DuckDB HTTP (${remoteConnectionInfo.host}:${remoteConnectionInfo.port})`
         : "DuckDB HTTP";
+  const showWasmSection = sqlBackend === "duckdb-wasm";
+  const visibleRemoteCatalogs = useMemo(
+    () =>
+      new Set(
+        groupedRemoteTables
+          .map((group) => group.catalog.trim().toLowerCase())
+          .filter((catalog) => catalog.length > 0),
+      ),
+    [groupedRemoteTables],
+  );
+  const visibleConnectedTables = useMemo(
+    () =>
+      connectedTables.filter((entry) =>
+        isRemoteBackend
+          ? shouldShowConnectedEntry(entry, visibleRemoteCatalogs)
+          : true,
+      ),
+    [connectedTables, isRemoteBackend, visibleRemoteCatalogs],
+  );
 
   const getDbIdentifier = (entry: (typeof connectedTables)[0]): string => {
     // Prefer connectionId (new) over databasePath (legacy) for identification
@@ -382,7 +420,7 @@ export function ConnectedDataPanel({
   };
 
   const renderDatabaseList = () => {
-    const hasConnectedTables = connectedTables.length > 0;
+    const hasConnectedTables = visibleConnectedTables.length > 0;
     const hasWasmTables = groupedWasmTables.length > 0;
     const isWasmSelected = !selectedDb || isWasmLocalIdentifier(selectedDb);
 
@@ -427,56 +465,62 @@ export function ConnectedDataPanel({
           </div>
         )}
 
-        {isRemoteBackend && <Separator />}
+        {isRemoteBackend && (showWasmSection || hasConnectedTables) && (
+          <Separator />
+        )}
 
-        <div className="space-y-1">
-          <div
-            className={cn(
-              "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
-              isWasmSelected &&
-                "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
-              mode === "sidebar" && "hover:bg-sidebar-accent/50",
-            )}
-          >
-            <button
-              type="button"
-              className="flex items-center gap-2 flex-1 text-left cursor-pointer"
-              onClick={handleSelectWasm}
+        {showWasmSection && (
+          <div className="space-y-1">
+            <div
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
+                isWasmSelected &&
+                  "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
+                mode === "sidebar" && "hover:bg-sidebar-accent/50",
+              )}
             >
-              <Database className="h-4 w-4 shrink-0 text-[#A8BCA1]" />
-              <span className="truncate">DuckDB WASM (local)</span>
-            </button>
+              <button
+                type="button"
+                className="flex items-center gap-2 flex-1 text-left cursor-pointer"
+                onClick={handleSelectWasm}
+              >
+                <Database className="h-4 w-4 shrink-0 text-[#A8BCA1]" />
+                <span className="truncate">DuckDB WASM (local)</span>
+              </button>
+            </div>
+            <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
+              {isLoadingWasmTables ? (
+                <p className="text-xs text-muted-foreground">
+                  Loading tables...
+                </p>
+              ) : wasmTablesError ? (
+                <p className="text-xs text-destructive">
+                  Failed to load local tables.
+                </p>
+              ) : hasWasmTables ? (
+                renderExplorerTableGroups(groupedWasmTables, {
+                  currentCatalog: wasmCurrentCatalog,
+                  palette: ["bg-blue-400", "bg-purple-400", "bg-amber-400"],
+                  onTableClick: (_group, payload) => {
+                    onInsertTable?.(payload);
+                    if (mode === "popover") {
+                      setIsOpen(false);
+                    }
+                  },
+                })
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No local tables yet.
+                </p>
+              )}
+            </div>
           </div>
-          <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
-            {isLoadingWasmTables ? (
-              <p className="text-xs text-muted-foreground">Loading tables...</p>
-            ) : wasmTablesError ? (
-              <p className="text-xs text-destructive">
-                Failed to load local tables.
-              </p>
-            ) : hasWasmTables ? (
-              renderExplorerTableGroups(groupedWasmTables, {
-                currentCatalog: wasmCurrentCatalog,
-                palette: ["bg-blue-400", "bg-purple-400", "bg-amber-400"],
-                onTableClick: (_group, payload) => {
-                  onInsertTable?.(payload);
-                  if (mode === "popover") {
-                    setIsOpen(false);
-                  }
-                },
-              })
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                No local tables yet.
-              </p>
-            )}
-          </div>
-        </div>
+        )}
 
         {/* Connected Tables Section */}
         {hasConnectedTables && <Separator />}
         {hasConnectedTables &&
-          connectedTables.map((entry) => {
+          visibleConnectedTables.map((entry) => {
             const dbKey = getDbKey(entry);
             const dbIdentifier = getDbIdentifier(entry);
             const dbDisplayName = getConnectedEntryDisplayName(entry);

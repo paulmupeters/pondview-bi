@@ -156,6 +156,8 @@ type DuckdbReplProps = {
   ) => void;
   showRunControls?: boolean;
   showExplorer?: boolean;
+  showCopySnippetButton?: boolean;
+  showClearButton?: boolean;
   showSaveQueryButton?: boolean;
   onSaveQueryAction?: (sql: string) => void | Promise<void>;
   isSavingQuery?: boolean;
@@ -176,6 +178,8 @@ export function DuckdbRepl({
   onResultChangeAction,
   showRunControls = true,
   showExplorer = true,
+  showCopySnippetButton = true,
+  showClearButton = true,
   showSaveQueryButton = false,
   onSaveQueryAction,
   isSavingQuery = false,
@@ -317,7 +321,8 @@ export function DuckdbRepl({
     return {
       ...result,
       dbIdentifier:
-        (effectiveSqlBackend === "bridge" || effectiveSqlBackend === "duckdb-http") &&
+        (effectiveSqlBackend === "bridge" ||
+          effectiveSqlBackend === "duckdb-http") &&
         !isMotherDuckIdentifier(effectiveDb)
           ? undefined
           : effectiveDb,
@@ -464,7 +469,7 @@ export function DuckdbRepl({
       <div className="relative flex-1 min-w-0 h-full p-4">
         {/* Toolbar Buttons */}
         <div className="absolute top-4 right-4 z-20 flex gap-2 text-xs">
-          {lastResult && (
+          {lastResult && showClearButton && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -487,36 +492,38 @@ export function DuckdbRepl({
               </TooltipContent>
             </Tooltip>
           )}
-          <button
-            type="button"
-            className="flex items-center gap-2 bg-card border border-border text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors shadow-sm h-[26px]"
-            onClick={handleCopySqlSnippet}
-          >
-            {copiedSqlSnippet ? (
-              <>
-                <svg
-                  aria-hidden="true"
-                  className="w-3 h-3 text-green-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Copied
-              </>
-            ) : (
-              <>
-                <ClipboardDocumentIcon className="w-3 h-3" />
-                Copy
-              </>
-            )}
-          </button>
+          {showCopySnippetButton && (
+            <button
+              type="button"
+              className="flex items-center gap-2 bg-card border border-border text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors shadow-sm h-[26px]"
+              onClick={handleCopySqlSnippet}
+            >
+              {copiedSqlSnippet ? (
+                <>
+                  <svg
+                    aria-hidden="true"
+                    className="w-3 h-3 text-green-600"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  Copied
+                </>
+              ) : (
+                <>
+                  <ClipboardDocumentIcon className="w-3 h-3" />
+                  Copy
+                </>
+              )}
+            </button>
+          )}
           {showSaveQueryButton && (
             <button
               type="button"

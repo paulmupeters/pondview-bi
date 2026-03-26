@@ -6,6 +6,10 @@ import {
   getDuckDbHttpConfigFromStorage,
   runDuckDbHttpQuery,
 } from "@/lib/duckdb/duckdb-http-browser";
+import {
+  isHiddenRuntimeSchema,
+  RUNTIME_SCHEMA_EXCLUSION_SQL,
+} from "@/lib/sql/runtime-table-schemas";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { useDuckDbHttpConfig } from "@/lib/sql/use-sql-backend";
 
@@ -17,36 +21,40 @@ export interface DuckdbHttpConnectionInfo {
 const LIST_TABLES_SQL = `
   SELECT table_catalog, table_schema, table_name, table_type
   FROM information_schema.tables
-  WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+  WHERE table_schema NOT IN (${RUNTIME_SCHEMA_EXCLUSION_SQL})
   ORDER BY table_catalog, table_schema, table_name
 `;
 
 export function mapInformationSchemaRows(
   rows: Record<string, unknown>[],
 ): DuckdbTableEntry[] {
-  return rows.map((row) => ({
-    catalog: String(row.table_catalog ?? ""),
-    schema: String(row.table_schema ?? ""),
-    name: String(row.table_name ?? ""),
-    type: String(row.table_type ?? ""),
-  }));
+  return rows
+    .map((row) => ({
+      catalog: String(row.table_catalog ?? ""),
+      schema: String(row.table_schema ?? ""),
+      name: String(row.table_name ?? ""),
+      type: String(row.table_type ?? ""),
+    }))
+    .filter(
+      (row) =>
+        row.schema.length > 0 &&
+        row.name.length > 0 &&
+        !isHiddenRuntimeSchema(row.schema),
+    );
 }
 
 export function mapShowAllTablesRows(
   rows: Record<string, unknown>[],
 ): DuckdbTableEntry[] {
   return rows
-    .filter(
-      (row) =>
-        String(row.schema ?? "") !== "information_schema" &&
-        String(row.schema ?? "") !== "pg_catalog",
-    )
+    .filter((row) => !isHiddenRuntimeSchema(String(row.schema ?? "")))
     .map((row) => ({
       catalog: String(row.database ?? row.catalog ?? row.table_catalog ?? ""),
       schema: String(row.schema ?? ""),
       name: String(row.name ?? ""),
       type: "BASE TABLE",
-    }));
+    }))
+    .filter((row) => row.schema.length > 0 && row.name.length > 0);
 }
 
 export function useDuckdbHttpTables(

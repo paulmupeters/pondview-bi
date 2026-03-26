@@ -27,10 +27,8 @@ import {
   PromptInputTextarea,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
-import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
-import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,7 +37,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
-import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
+import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config, Result } from "@/lib/types";
@@ -51,6 +49,7 @@ export type PromptMode = "ai" | "manual";
 
 interface PromptInputWrapperProps {
   onSubmit: (message: PromptInputMessage) => void;
+  onManualRunRequest?: (sql: string) => void;
   placeholder?: string;
   className?: string;
   status?: ChatStatus;
@@ -64,8 +63,6 @@ interface PromptInputWrapperProps {
   onModeChange?: (mode: PromptMode) => void;
   pendingMode?: PromptMode | null;
   selectedDb?: string;
-  onSelectDb?: (db: string) => void;
-  onInsertTable?: (payload: ExplorerInsertPayload) => void;
   onAddSqlResultToChat?: (payload: SqlAnalysisData) => void;
   sqlResult?: {
     sql: string;
@@ -294,6 +291,7 @@ function PromptInputModeEffects({ mode }: { mode: PromptMode }) {
 
 export function PromptInputWrapper({
   onSubmit,
+  onManualRunRequest,
   placeholder = "Ask a question about your data...",
   className,
   status,
@@ -307,8 +305,6 @@ export function PromptInputWrapper({
   onModeChange,
   pendingMode = null,
   selectedDb,
-  onSelectDb,
-  onInsertTable,
   onAddSqlResultToChat,
   sqlResult = null,
   selectedCatalogContext = null,
@@ -372,8 +368,18 @@ export function PromptInputWrapper({
   );
 
   const handleManualRun = useCallback(() => {
+    const sql = manualConsoleApi?.getQuery()?.trim();
+    if (!sql) {
+      return;
+    }
+
+    if (onHomePage && onManualRunRequest) {
+      onManualRunRequest(sql);
+      return;
+    }
+
     manualConsoleApi?.runQuery();
-  }, [manualConsoleApi]);
+  }, [manualConsoleApi, onHomePage, onManualRunRequest]);
 
   const handleManualSend = useCallback(() => {
     if (!onAddSqlResultToChat || !sqlResult) {
@@ -425,13 +431,15 @@ export function PromptInputWrapper({
     manualChartConfig,
     manualVisualType,
     onAddSqlResultToChat,
-    selectedDb,
+    selectedCatalogContext,
     sqlResult,
   ]);
 
   const content = aiButtonLabel;
   const nextMode: PromptMode = internalMode === "ai" ? "manual" : "ai";
   const modeButtonLabel = nextMode === "ai" ? "Chat" : "Manual";
+  const showHomeManualComposer = onHomePage && internalMode === "manual";
+  const showManualAddToChatButton = !onHomePage;
 
   if (!showHeader && !showAiInput) {
     return null;
@@ -458,24 +466,48 @@ export function PromptInputWrapper({
               )}
             >
               <div className="min-h-0">
-                <div className="flex flex-col w-full">
+                <div
+                  className={cn(
+                    "flex flex-col w-full",
+                    showHomeManualComposer &&
+                      "gap-3 rounded-[28px] bg-card/75 p-3 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-sm",
+                  )}
+                >
                   <div
                     className={cn(
-                      "w-full rounded-lg overflow-hidden",
-                      compact ? "h-85" : "h-105",
+                      "w-full overflow-hidden",
+                      compact
+                        ? "h-85 rounded-lg"
+                        : showHomeManualComposer
+                          ? "h-88 rounded-xl border border-border/60 bg-background/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]"
+                          : "h-105 rounded-lg",
                     )}
                     onFocusCapture={() => onManualReplFocus?.()}
                     onPointerDownCapture={() => onManualReplFocus?.()}
                   >
                     <DuckdbRepl
-                      className="h-full w-full border-r-0 p-0"
+                      className={cn(
+                        "h-full w-full border-r-0 p-0",
+                        showHomeManualComposer && "border-0 bg-transparent",
+                      )}
                       selectedDbIdentifier={selectedDb}
                       catalogContext={selectedCatalogContext}
                       onConsoleApiChangeAction={handleManualConsoleApiChange}
                       inlineResults={false}
-                      editorMaxHeight={compact ? "12rem" : "14rem"}
+                      editorMinHeight={
+                        showHomeManualComposer ? "16rem" : "8rem"
+                      }
+                      editorMaxHeight={
+                        compact
+                          ? "12rem"
+                          : showHomeManualComposer
+                            ? "18rem"
+                            : "14rem"
+                      }
                       showRunControls={false}
                       showExplorer={false}
+                      showCopySnippetButton={!showHomeManualComposer}
+                      showClearButton={!showHomeManualComposer}
                       showSaveQueryButton={Boolean(onSaveQuery)}
                       onSaveQueryAction={onSaveQuery}
                       isSavingQuery={isSavingQuery}
@@ -485,8 +517,13 @@ export function PromptInputWrapper({
                   </div>
                   <div
                     className={cn(
-                      "flex justify-end gap-2 m-2",
-                      compact ? "pt-1 pr-1" : "pt-2 pr-2",
+                      "flex gap-2",
+                      showHomeManualComposer
+                        ? "items-center justify-between px-1 pb-1"
+                        : "m-2 justify-end",
+                      compact
+                        ? "pt-1 pr-1"
+                        : !showHomeManualComposer && "pt-2 pr-2",
                     )}
                   >
                     <Button
@@ -497,18 +534,20 @@ export function PromptInputWrapper({
                       disabled={!manualConsoleApi?.getQuery()?.trim()}
                       onClick={handleManualRun}
                     >
-                      [Run ▷]
+                      {showHomeManualComposer ? "[Run in chat ▷]" : "[Run ▷]"}
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      type="button"
-                      className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-                      disabled={!sqlResult}
-                      onClick={handleManualSend}
-                    >
-                      [Add to chat +]
-                    </Button>
+                    {showManualAddToChatButton && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
+                        disabled={!sqlResult}
+                        onClick={handleManualSend}
+                      >
+                        [Add to chat +]
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -567,14 +606,6 @@ export function PromptInputWrapper({
           <PromptInputHeader className={cn("p-0 overflow-hidden")}>
             <div className="flex items-center gap-1.5 justify-between w-full m-3">
               <div className="flex items-center gap-1.5">
-                {onHomePage && (
-                  <ConnectedDataPanel
-                    selectedDb={selectedDb}
-                    onSelect={(db) => onSelectDb?.(db)}
-                    className="h-full"
-                    onInsertTable={onInsertTable}
-                  />
-                )}
                 {internalMode !== "manual" && <FileAttachmentHoverCard />}
                 {!onHomePage && (
                   <Tooltip>
@@ -595,26 +626,59 @@ export function PromptInputWrapper({
                   </Tooltip>
                 )}
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="default"
-                className={cn(
-                  "gap-1.5",
-                  "bg-primary text-primary-foreground hover:bg-primary/90 border-primary",
-                )}
-                onClick={() => handlePromptModeChange(nextMode)}
-                disabled={Boolean(pendingMode)}
-                aria-pressed
-                title={modeButtonLabel}
-              >
-                {nextMode === "ai" ? (
-                  <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
-                ) : (
-                  <WrenchScrewdriverIcon className="h-4 w-4" />
-                )}
-                <span>{modeButtonLabel}</span>
-              </Button>
+              {onHomePage ? (
+                <div className="inline-flex items-center rounded-full border border-border/70 bg-background/80 p-1 shadow-sm backdrop-blur-sm">
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all",
+                      internalMode === "ai"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => handlePromptModeChange("ai")}
+                    disabled={Boolean(pendingMode)}
+                  >
+                    <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
+                    <span>Chat</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all",
+                      internalMode === "manual"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => handlePromptModeChange("manual")}
+                    disabled={Boolean(pendingMode)}
+                  >
+                    <WrenchScrewdriverIcon className="h-4 w-4" />
+                    <span>Manual</span>
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  className={cn(
+                    "gap-1.5",
+                    "bg-primary text-primary-foreground hover:bg-primary/90 border-primary",
+                  )}
+                  onClick={() => handlePromptModeChange(nextMode)}
+                  disabled={Boolean(pendingMode)}
+                  aria-pressed
+                  title={modeButtonLabel}
+                >
+                  {nextMode === "ai" ? (
+                    <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
+                  ) : (
+                    <WrenchScrewdriverIcon className="h-4 w-4" />
+                  )}
+                  <span>{modeButtonLabel}</span>
+                </Button>
+              )}
             </div>
           </PromptInputHeader>
         )}
