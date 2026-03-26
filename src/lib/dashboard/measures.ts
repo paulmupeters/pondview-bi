@@ -1,3 +1,4 @@
+import type { DashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import type { CardConfig, Result } from "@/lib/types";
 import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
@@ -36,6 +37,7 @@ export type MeasureOption = {
   source: "saved" | "legacy";
   measureId?: string;
   sql?: string;
+  sourceDescriptor?: DashboardSourceDescriptor | null;
   dbIdentifier?: string | null;
   catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
@@ -239,6 +241,7 @@ export function extractLegacyMeasureOptionsFromMetricCards(
       rawValue: extractFirstRowMeasurePrimitive(rows),
       source: "legacy",
       sql: chart.sql ?? undefined,
+      sourceDescriptor: null,
       dbIdentifier: chart.dbIdentifier ?? null,
       catalogContext: chart.catalogContext ?? null,
       sqlBackend: chart.sqlBackend ?? null,
@@ -269,6 +272,7 @@ export function buildMeasureOptions(input: {
       source: "saved",
       measureId: measure.id,
       sql: measure.sql,
+      sourceDescriptor: measure.sourceDescriptor ?? null,
       dbIdentifier: measure.dbIdentifier,
       catalogContext: measure.catalogContext ?? null,
       sqlBackend: measure.sqlBackend,

@@ -45,6 +45,13 @@ import {
 import type { ArtifactData } from "@/hooks/types";
 import { useArtifacts } from "@/hooks/use-artifacts";
 import { readJoinDefsFromStorage } from "@/lib/joins/browser-storage";
+import {
+  buildDashboardSourceDescriptor,
+  getDashboardSourceDescriptorCatalogContext,
+  getDashboardSourceDescriptorDbIdentifier,
+  getDashboardSourceDescriptorRuntimeBackend,
+  type DashboardSourceDescriptor,
+} from "@/lib/dashboard/source-descriptor";
 import type { JoinKind } from "@/lib/joins/graph";
 import { runQuery } from "@/lib/sql/run-query";
 import {
@@ -84,6 +91,7 @@ type JoinColumnState = {
 };
 
 type JoinSourceInfo = {
+  sourceDescriptor: DashboardSourceDescriptor | null;
   storedDbIdentifier: string | null;
   executionDbIdentifier?: string;
   catalogContext?: string | null;
@@ -262,19 +270,45 @@ function buildJoinSourceInfo(
   selectedDbIdentifier?: string,
   selectedSqlBackend?: SqlBackend,
 ): JoinSourceInfo {
-  const sqlBackend = snapshot.payload.sqlBackend ?? selectedSqlBackend ?? null;
+  const sourceDescriptor =
+    snapshot.payload.sourceDescriptor ??
+    (snapshot.payload.sqlBackend || selectedSqlBackend
+      ? buildDashboardSourceDescriptor({
+          runtimeBackend:
+            snapshot.payload.sqlBackend ?? selectedSqlBackend ?? "duckdb-wasm",
+          dbIdentifier:
+            snapshot.payload.dbIdentifier ?? selectedDbIdentifier ?? null,
+          catalogContext: snapshot.payload.catalogContext ?? null,
+        })
+      : null);
+  const sqlBackend =
+    getDashboardSourceDescriptorRuntimeBackend(sourceDescriptor) ??
+    snapshot.payload.sqlBackend ??
+    selectedSqlBackend ??
+    null;
 
   return {
+    sourceDescriptor,
     storedDbIdentifier: resolveStoredChartDbIdentifier({
       sqlBackend,
-      payloadDbIdentifier: snapshot.payload.dbIdentifier,
+      payloadDbIdentifier:
+        getDashboardSourceDescriptorDbIdentifier(sourceDescriptor) ??
+        snapshot.payload.dbIdentifier,
       selectedDbIdentifier,
     }),
     executionDbIdentifier:
       sqlBackend === "duckdb-wasm"
-        ? snapshot.payload.dbIdentifier?.trim() || selectedDbIdentifier?.trim()
-        : snapshot.payload.dbIdentifier?.trim(),
-    catalogContext: snapshot.payload.catalogContext ?? null,
+        ? (getDashboardSourceDescriptorDbIdentifier(sourceDescriptor) ??
+            snapshot.payload.dbIdentifier)?.trim() ||
+          selectedDbIdentifier?.trim()
+        : (
+            getDashboardSourceDescriptorDbIdentifier(sourceDescriptor) ??
+            snapshot.payload.dbIdentifier
+          )?.trim(),
+    catalogContext:
+      getDashboardSourceDescriptorCatalogContext(sourceDescriptor) ??
+      snapshot.payload.catalogContext ??
+      null,
     sqlBackend,
   };
 }
@@ -744,12 +778,34 @@ export function DashboardBuilderPanel({
 
     try {
       const firstSelectedChart = selectedCharts[0];
+      const firstSourceDescriptor =
+        firstSelectedChart?.payload.sourceDescriptor ??
+        (firstSelectedChart?.payload.sqlBackend || selectedSqlBackend
+          ? buildDashboardSourceDescriptor({
+              runtimeBackend:
+                firstSelectedChart?.payload.sqlBackend ??
+                selectedSqlBackend ??
+                "duckdb-wasm",
+              dbIdentifier:
+                firstSelectedChart?.payload.dbIdentifier ??
+                selectedDbIdentifier ??
+                null,
+              catalogContext:
+                firstSelectedChart?.payload.catalogContext ?? null,
+            })
+          : null);
       const firstChartBackend =
-        firstSelectedChart?.payload.sqlBackend ?? selectedSqlBackend ?? null;
+        getDashboardSourceDescriptorRuntimeBackend(firstSourceDescriptor) ??
+        firstSelectedChart?.payload.sqlBackend ??
+        selectedSqlBackend ??
+        null;
       const { id: dashboardId } = await createDashboard(trimmedTitle, {
+        sourceDescriptor: firstSourceDescriptor,
         dbIdentifier: resolveStoredChartDbIdentifier({
           sqlBackend: firstChartBackend,
-          payloadDbIdentifier: firstSelectedChart?.payload.dbIdentifier,
+          payloadDbIdentifier:
+            getDashboardSourceDescriptorDbIdentifier(firstSourceDescriptor) ??
+            firstSelectedChart?.payload.dbIdentifier,
           selectedDbIdentifier,
         }),
         joinDefs: shouldShowJoinBuilder ? flattenedJoinDefs : undefined,
@@ -775,19 +831,39 @@ export function DashboardBuilderPanel({
         }
 
         const description = config?.description ?? null;
-        const sqlBackend = payload.sqlBackend ?? selectedSqlBackend ?? null;
+        const sourceDescriptor =
+          payload.sourceDescriptor ??
+          (payload.sqlBackend || selectedSqlBackend
+            ? buildDashboardSourceDescriptor({
+                runtimeBackend:
+                  payload.sqlBackend ?? selectedSqlBackend ?? "duckdb-wasm",
+                dbIdentifier: payload.dbIdentifier ?? selectedDbIdentifier ?? null,
+                catalogContext: payload.catalogContext ?? null,
+              })
+            : null);
+        const sqlBackend =
+          getDashboardSourceDescriptorRuntimeBackend(sourceDescriptor) ??
+          payload.sqlBackend ??
+          selectedSqlBackend ??
+          null;
 
         await addChartToDashboard({
           dashboardId,
           title,
           description,
           sql: payload.query ?? "",
+          sourceDescriptor,
           dbIdentifier: resolveStoredChartDbIdentifier({
             sqlBackend,
-            payloadDbIdentifier: payload.dbIdentifier,
+            payloadDbIdentifier:
+              getDashboardSourceDescriptorDbIdentifier(sourceDescriptor) ??
+              payload.dbIdentifier,
             selectedDbIdentifier,
           }),
-          catalogContext: payload.catalogContext ?? null,
+          catalogContext:
+            getDashboardSourceDescriptorCatalogContext(sourceDescriptor) ??
+            payload.catalogContext ??
+            null,
           sqlBackend,
           chartConfigJson: JSON.stringify(config ?? {}),
         });

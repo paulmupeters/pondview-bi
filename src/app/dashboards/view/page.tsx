@@ -32,7 +32,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { executeDashboardChartsWithFilters } from "@/lib/dashboard/browser-filter-engine";
+import {
+  executeDashboardChartsWithFilters,
+  executeDashboardScopedQuery,
+} from "@/lib/dashboard/browser-filter-engine";
 import {
   buildMeasureOptions,
   buildMeasureRenderContextByName,
@@ -41,7 +44,6 @@ import {
   formatFirstRowMeasureValue,
   type MeasurePrimitive,
 } from "@/lib/dashboard/measures";
-import { runQuery } from "@/lib/sql/run-query";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import type {
   CardConfig,
@@ -210,21 +212,18 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       const valueEntries = await Promise.all(
         measures.map(async (measure) => {
           try {
-            const result = await runQuery({
+            const result = await executeDashboardScopedQuery({
+              dashboardId,
               sql: measure.sql,
-              dbIdentifier: measure.dbIdentifier ?? undefined,
-              backendPreference: measure.sqlBackend ?? undefined,
+              sourceDescriptor: measure.sourceDescriptor ?? null,
+              snapshotId: measure.snapshotId ?? null,
             });
 
             return [
               measure.id,
               {
-                formattedValue: formatFirstRowMeasureValue(
-                  result.rows as Result[],
-                ),
-                rawValue: extractFirstRowMeasurePrimitive(
-                  result.rows as Result[],
-                ),
+                formattedValue: formatFirstRowMeasureValue(result.rows),
+                rawValue: extractFirstRowMeasurePrimitive(result.rows),
               },
             ] as const;
           } catch (error) {

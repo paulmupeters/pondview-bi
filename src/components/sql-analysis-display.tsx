@@ -400,6 +400,7 @@ export function SqlAnalysisDisplay({
                     </Button>
                   }
                   sql={data.query ?? ""}
+                  sourceDescriptor={data.sourceDescriptor ?? null}
                   dbIdentifier={data.dbIdentifier}
                   catalogContext={data.catalogContext ?? null}
                   sqlBackend={data.sqlBackend}

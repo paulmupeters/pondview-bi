@@ -1,11 +1,30 @@
 import { applyFiltersToSql } from "@/lib/filters/apply-filters";
+import {
+  buildAttachmentPlan,
+  buildDetachStatement,
+} from "@/lib/duckdb/duckdb-attachments";
 import { extractTableReferencesFromSql } from "@/lib/filters/parse-tables";
+import {
+  buildDashboardExecutionTableRefs,
+  EXECUTION_ALIAS_SCHEMA,
+  getExecutionAliasRef,
+  planDashboardExecutionTableRefs,
+  quoteExecutionIdentifier,
+  resolveChartSourceDescriptor,
+  type DashboardExecutionTableRef,
+  type PlannedDashboardExecutionTableRef,
+  type RealizedExecutionAliasKind,
+} from "@/lib/dashboard/execution-plan";
+import {
+  buildDashboardSourceDescriptor,
+  type DashboardSourceDescriptor,
+} from "@/lib/dashboard/source-descriptor";
+import { detectExternalConnection } from "@/lib/duckdb/path";
 import { canonicalTable, type JoinDefinition } from "@/lib/joins/graph";
 import { runQuery } from "@/lib/sql/run-query";
 import { resolveSqlRuntimeFingerprint } from "@/lib/sql/runtime-fingerprint";
 import {
   getSqlBackendPreference,
-  isWasmLocalIdentifier,
   resolveSqlBackend,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
@@ -17,20 +36,10 @@ import {
   listJoinDefsByDashboard,
 } from "@/lib/workspace/dashboard-repo";
 
-const MATERIALIZED_SCHEMA = "mat";
-
-export type MaterializedTableRef = {
-  tableName: string;
-  sourceReference: string;
-  catalogContext?: string | null;
-};
-
-export type MaterializationStrategy = "direct" | "view" | "table-materialize";
-export type MaterializedAliasKind = "direct" | "view" | "table";
-
-export type PlannedMaterializedTableRef = MaterializedTableRef & {
-  strategy: MaterializationStrategy;
-};
+export type MaterializedTableRef = DashboardExecutionTableRef;
+export type MaterializationStrategy = PlannedDashboardExecutionTableRef["strategy"];
+export type MaterializedAliasKind = RealizedExecutionAliasKind;
+export type PlannedMaterializedTableRef = PlannedDashboardExecutionTableRef;
 
 type MaterializationCacheEntry = {
   signature: string;
@@ -44,6 +53,13 @@ type MaterializationCacheEntry = {
 };
 
 const materializationCache = new Map<string, MaterializationCacheEntry>();
+const inflightMaterializationCache = new Map<
+  string,
+  {
+    signature: string;
+    promise: Promise<MaterializationCacheEntry>;
+  }
+>();
 
 export type DashboardFilterExecutionMetadata = {
   filtersApplied: boolean;
@@ -74,6 +90,34 @@ export type BrowserFilterEngineDeps = {
   listCharts: (dashboardId: string) => Promise<DbDashboardChart[]>;
   getMaterializationCache: () => Map<string, MaterializationCacheEntry>;
 };
+
+function referencesExecutionAliasSchema(value: string): boolean {
+  return (
+    value.includes(`${EXECUTION_ALIAS_SCHEMA}.`) ||
+    value.includes(`"${EXECUTION_ALIAS_SCHEMA}".`)
+  );
+}
+
+function resolveCatalogContextForReference(
+  reference: string,
+  catalogContext?: string | null,
+): string | null {
+  return referencesExecutionAliasSchema(reference) ? null : (catalogContext ?? null);
+}
+
+function isMissingCatalogContextError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return (
+    message.includes("SET schema: No catalog + schema named") ||
+    message.includes("No catalog + schema named")
+  );
+}
+
+function buildExecutionAttachmentAlias(tableName: string): string {
+  const sanitized = tableName.replace(/[^A-Za-z0-9_]/g, "_") || "source";
+  const nonce = Math.random().toString(36).slice(2, 10);
+  return `${EXECUTION_ALIAS_SCHEMA}_source_${sanitized}_${nonce}`;
+}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -106,16 +150,22 @@ function resolveDeps(
 
 export function clearDashboardMaterializationCache(): void {
   materializationCache.clear();
+  inflightMaterializationCache.clear();
 }
 
 export function buildMaterializationSignature(
-  charts: Array<{ id: string; sql: string; catalogContext?: string | null }>,
+  charts: Array<{
+    id: string;
+    sql: string;
+    catalogContext?: string | null;
+    sourceDescriptor?: DbDashboardChart["sourceDescriptor"];
+  }>,
   joinDefs: JoinDefinition[],
 ): string {
   const chartSignature = charts
     .map(
       (chart) =>
-        `${chart.id}:${chart.catalogContext ?? "__no_catalog__"}:${chart.sql}`,
+        `${chart.id}:${chart.catalogContext ?? "__no_catalog__"}:${chart.sql}:${JSON.stringify(chart.sourceDescriptor ?? null)}`,
     )
     .sort()
     .join("|");
@@ -181,57 +231,47 @@ export function getRelevantTablesForChart(
 }
 
 export function buildMaterializationTableRefs(
-  charts: Array<{ sql: string; catalogContext?: string | null }>,
+  charts: Array<{
+    sql: string;
+    catalogContext?: string | null;
+    dbIdentifier?: string | null;
+    sqlBackend?: SqlBackend | null;
+    sourceDescriptor?: DbDashboardChart["sourceDescriptor"];
+    snapshotId?: string | null;
+  }>,
   joinDefs: JoinDefinition[],
 ): MaterializedTableRef[] {
-  const tableRefByName = new Map<string, MaterializedTableRef>();
-  for (const chart of charts) {
-    const refs = extractTableReferencesFromSql(chart.sql);
-    for (const ref of refs) {
-      if (!ref.tableName || tableRefByName.has(ref.tableName)) {
-        continue;
-      }
-      tableRefByName.set(ref.tableName, {
-        tableName: ref.tableName,
-        sourceReference: ref.rawReference,
-        catalogContext: chart.catalogContext ?? null,
-      });
-    }
-  }
-
-  for (const joinDef of joinDefs) {
-    const left = canonicalTable(joinDef.leftTable);
-    const right = canonicalTable(joinDef.rightTable);
-    if (!left || !right) {
-      continue;
-    }
-    if (tableRefByName.has(left) && !tableRefByName.has(right)) {
-      tableRefByName.set(right, {
-        tableName: right,
-        sourceReference: quoteIdent(right),
-        catalogContext: null,
-      });
-    }
-    if (tableRefByName.has(right) && !tableRefByName.has(left)) {
-      tableRefByName.set(left, {
-        tableName: left,
-        sourceReference: quoteIdent(left),
-        catalogContext: null,
-      });
-    }
-  }
-
-  return Array.from(tableRefByName.values())
-    .sort((left, right) => left.tableName.localeCompare(right.tableName));
+  return buildDashboardExecutionTableRefs(
+    charts.map(
+      (chart, index) =>
+        ({
+          id: `chart-${index}`,
+          dashboardId: "dashboard",
+          title: null,
+          description: null,
+          sql: chart.sql,
+          sourceDescriptor: chart.sourceDescriptor ?? null,
+          snapshotId: chart.snapshotId ?? null,
+          dbIdentifier: chart.dbIdentifier ?? null,
+          catalogContext: chart.catalogContext ?? null,
+          sqlBackend: chart.sqlBackend ?? null,
+          chartConfigJson: "{}",
+          semanticQueryJson: null,
+          exploreName: null,
+          position: index,
+          createdAt: 0,
+          updatedAt: 0,
+        }) satisfies DbDashboardChart,
+    ),
+    joinDefs,
+    charts.find((chart) => chart.sqlBackend)?.sqlBackend ?? "duckdb-wasm",
+  );
 }
 
 function planMaterializedTables(
   tableRefs: MaterializedTableRef[],
 ): PlannedMaterializedTableRef[] {
-  return tableRefs.map((tableRef) => ({
-    ...tableRef,
-    strategy: classifyMaterializationStrategy(tableRef.sourceReference),
-  }));
+  return planDashboardExecutionTableRefs(tableRefs);
 }
 
 export async function executeDashboardChartsWithFilters(
@@ -251,10 +291,14 @@ export async function executeDashboardChartsWithFilters(
     Object.values(options.chartFiltersById).some(
       (filters) => filters.length > 0,
     );
+  const hasExecutionBindings = options.charts.some((chart) => {
+    const sourceDescriptor = resolveChartSourceDescriptor(chart, backend);
+    return sourceDescriptor.kind === "external" || Boolean(chart.snapshotId);
+  });
 
   let filterPlanningReady = false;
   let materialization: MaterializationCacheEntry | null = null;
-  if (hasAnyFilters) {
+  if (hasAnyFilters || hasExecutionBindings) {
     materialization = await ensureDashboardMaterialization(
       options.dashboardId,
       options.charts,
@@ -278,6 +322,7 @@ export async function executeDashboardChartsWithFilters(
 
       let sqlToExecute = chart.sql;
       let shouldExecuteFilteredSql = false;
+      let shouldExecutePlannedSql = false;
       let appliedFiltersCount = 0;
       let skippedFilters: Array<{ field: string; reason: string }> = [];
 
@@ -309,12 +354,32 @@ export async function executeDashboardChartsWithFilters(
         }
       }
 
+      if (!shouldExecuteFilteredSql && materialization) {
+        const plannedSql = rewriteSqlToResolvedReferences(
+          chart.sql,
+          materialization.tableRefs,
+          materialization.resolvedRefByTable,
+        );
+        if (plannedSql !== chart.sql) {
+          sqlToExecute = plannedSql;
+          shouldExecutePlannedSql = true;
+        }
+      }
+
       try {
-        const rows = shouldExecuteFilteredSql
+        const sourceDescriptor = resolveChartSourceDescriptor(chart, backend);
+        const executionCatalogContext =
+          shouldExecuteFilteredSql || shouldExecutePlannedSql
+            ? resolveCatalogContextForReference(
+                sqlToExecute,
+                sourceDescriptor.catalogContext ?? null,
+              )
+            : (sourceDescriptor.catalogContext ?? null);
+        const rows = shouldExecuteFilteredSql || shouldExecutePlannedSql
           ? ((await deps.runRuntimeSql(
               sqlToExecute,
               backend,
-              chart.catalogContext ?? null,
+              executionCatalogContext,
             )) as Result[])
           : await deps.runChartSql(chart, backend);
 
@@ -376,6 +441,70 @@ export async function executeDashboardChartsWithFilters(
   return {
     rowsByChartId,
     metadataByChartId,
+    backend,
+  };
+}
+
+export async function executeDashboardScopedQuery(
+  options: {
+    dashboardId: string;
+    sql: string;
+    sourceDescriptor?: DashboardSourceDescriptor | null;
+    snapshotId?: string | null;
+  },
+  depsOverride: Partial<BrowserFilterEngineDeps> = {},
+): Promise<{ rows: Result[]; backend: SqlBackend }> {
+  const deps = resolveDeps(depsOverride);
+  const fallbackBackend = deps.resolveBackend();
+  const sourceDescriptor =
+    options.sourceDescriptor ??
+    buildDashboardSourceDescriptor({
+      runtimeBackend: fallbackBackend,
+    });
+  const backend = sourceDescriptor.runtimeBackend;
+  const joinDefs = await deps.readJoinDefs(options.dashboardId);
+  const chart: DbDashboardChart = {
+    id: "__scoped_query__",
+    dashboardId: options.dashboardId,
+    title: null,
+    description: null,
+    sql: options.sql,
+    sourceDescriptor,
+    snapshotId: options.snapshotId ?? null,
+    dbIdentifier: sourceDescriptor.dbIdentifier,
+    catalogContext: sourceDescriptor.catalogContext,
+    sqlBackend: sourceDescriptor.runtimeBackend,
+    chartConfigJson: "{}",
+    semanticQueryJson: null,
+    exploreName: null,
+    position: 0,
+    createdAt: 0,
+    updatedAt: 0,
+  };
+
+  const materialization = await ensureDashboardMaterialization(
+    options.dashboardId,
+    [chart],
+    joinDefs,
+    backend,
+    deps,
+  );
+  const sql = rewriteSqlToResolvedReferences(
+    options.sql,
+    materialization.tableRefs,
+    materialization.resolvedRefByTable,
+  );
+  const rows = await deps.runRuntimeSql(
+    sql,
+    backend,
+    resolveCatalogContextForReference(
+      sql,
+      sourceDescriptor.catalogContext ?? null,
+    ),
+  );
+
+  return {
+    rows: rows as Result[],
     backend,
   };
 }
@@ -497,9 +626,12 @@ export async function loadDashboardDimensionValues(
   const preferredBaseRef =
     materialization.resolvedRefByTable.get(parsedField.tableName) ??
     sourceRefByTable.get(parsedField.tableName) ??
-    quoteIdent(parsedField.tableName);
+    quoteExecutionIdentifier(parsedField.tableName);
   const preferredCatalogContext =
-    sourceCatalogContextByTable.get(parsedField.tableName) ?? null;
+    resolveCatalogContextForReference(
+      preferredBaseRef,
+      sourceCatalogContextByTable.get(parsedField.tableName) ?? null,
+    );
   const filteredBaseSql =
     `SELECT ${quoteIdent(parsedField.columnName)} AS "value"\n` +
     `FROM ${preferredBaseRef}`;
@@ -534,7 +666,11 @@ export async function loadDashboardDimensionValues(
 
   const sourceRef =
     sourceRefByTable.get(parsedField.tableName) ??
-    quoteIdent(parsedField.tableName);
+    quoteExecutionIdentifier(parsedField.tableName);
+  const sourceCatalogContext = resolveCatalogContextForReference(
+    sourceRef,
+    sourceCatalogContextByTable.get(parsedField.tableName) ?? null,
+  );
   const sameTableFilters = effectiveFilters.filter((filter) => {
     const parsed = parseField(filter.field);
     return parsed?.tableName === parsedField.tableName;
@@ -565,7 +701,7 @@ export async function loadDashboardDimensionValues(
   const rows = await deps.runRuntimeSql(
     fallbackSql,
     backend,
-    preferredCatalogContext,
+    sourceCatalogContext,
   );
   return toDimensionValues(rows);
 }
@@ -578,7 +714,7 @@ export async function listMaterializedTablesForBackend(
   const sql =
     `SELECT DISTINCT table_name\n` +
     `FROM information_schema.tables\n` +
-    `WHERE table_schema = '${MATERIALIZED_SCHEMA}'\n` +
+    `WHERE table_schema = '${EXECUTION_ALIAS_SCHEMA}'\n` +
     `ORDER BY table_name`;
   const rows = await deps.runRuntimeSql(sql, backend);
   return rows.map((row) => String(row.table_name ?? "").trim()).filter(Boolean);
@@ -609,66 +745,123 @@ async function ensureDashboardMaterialization(
   if (cached && cached.signature === signature) {
     return cached;
   }
-
-  const materializedTables = new Set<string>();
-  const resolvedRefByTable = new Map<string, string>();
-  const realizedAliasKindByTable = new Map<string, MaterializedAliasKind>();
-
-  if (plannedTables.length > 0) {
-    await deps.runRuntimeSql(
-      `CREATE SCHEMA IF NOT EXISTS ${quoteIdent(MATERIALIZED_SCHEMA)};`,
-      backend,
-    );
+  const inflight = inflightMaterializationCache.get(cacheKey);
+  if (inflight && inflight.signature === signature) {
+    return inflight.promise;
   }
 
-  for (const tableRef of plannedTables) {
-    const aliasRef = getMaterializedAliasRef(tableRef.tableName);
+  const promise = (async () => {
+    const materializedTables = new Set<string>();
+    const resolvedRefByTable = new Map<string, string>();
+    const realizedAliasKindByTable = new Map<string, MaterializedAliasKind>();
 
-    if (tableRef.strategy === "direct") {
-      resolvedRefByTable.set(tableRef.tableName, tableRef.sourceReference);
-      realizedAliasKindByTable.set(tableRef.tableName, "direct");
-      continue;
-    }
-
-    const createAliasSql =
-      tableRef.strategy === "view"
-        ? `CREATE OR REPLACE VIEW ${aliasRef} AS SELECT * FROM ${tableRef.sourceReference};`
-        : `CREATE OR REPLACE TABLE ${aliasRef} AS SELECT * FROM ${tableRef.sourceReference};`;
-
-    try {
+    if (plannedTables.length > 0) {
       await deps.runRuntimeSql(
-        createAliasSql,
+        `CREATE SCHEMA IF NOT EXISTS ${quoteExecutionIdentifier(EXECUTION_ALIAS_SCHEMA)};`,
         backend,
-        tableRef.catalogContext ?? null,
       );
-      materializedTables.add(tableRef.tableName);
-      resolvedRefByTable.set(tableRef.tableName, aliasRef);
-      realizedAliasKindByTable.set(
-        tableRef.tableName,
-        tableRef.strategy === "view" ? "view" : "table",
-      );
-    } catch (error) {
-      console.warn(
-        `[dashboard-filters] Failed to realize ${tableRef.strategy} alias for ${tableRef.tableName} from ${tableRef.sourceReference}:`,
-        error,
-      );
-      resolvedRefByTable.set(tableRef.tableName, tableRef.sourceReference);
-      realizedAliasKindByTable.set(tableRef.tableName, "direct");
+    }
+
+    for (const tableRef of plannedTables) {
+      const aliasRef = getExecutionAliasRef(tableRef.tableName);
+
+      if (tableRef.strategy === "direct") {
+        resolvedRefByTable.set(tableRef.tableName, tableRef.sourceReference);
+        realizedAliasKindByTable.set(tableRef.tableName, "direct");
+        continue;
+      }
+
+      try {
+        if (tableRef.mode === "external-cache") {
+          const dbIdentifier = tableRef.sourceDescriptor.dbIdentifier;
+          const externalConnection = dbIdentifier
+            ? detectExternalConnection(dbIdentifier)
+            : null;
+          if (!externalConnection) {
+            throw new Error(
+              `External cache source ${tableRef.tableName} is missing a resolvable connection.`,
+            );
+          }
+
+          const attachmentPlan = buildAttachmentPlan({
+            ...externalConnection,
+            alias: buildExecutionAttachmentAlias(tableRef.tableName),
+          });
+
+          try {
+            await deps.runRuntimeSql(
+              buildDetachStatement(attachmentPlan.alias, { ifExists: true }),
+              backend,
+            );
+            for (const statement of attachmentPlan.statements) {
+              await deps.runRuntimeSql(statement, backend);
+            }
+
+            await deps.runRuntimeSql(
+              `CREATE OR REPLACE TABLE ${aliasRef} AS SELECT * FROM ${quoteExecutionIdentifier(attachmentPlan.alias)}.${tableRef.sourceReference};`,
+              backend,
+            );
+          } finally {
+            try {
+              await deps.runRuntimeSql(
+                buildDetachStatement(attachmentPlan.alias, { ifExists: true }),
+                backend,
+              );
+            } catch {
+              // Best-effort detach only.
+            }
+          }
+        } else {
+          const createAliasSql =
+            tableRef.strategy === "view"
+              ? `CREATE OR REPLACE VIEW ${aliasRef} AS SELECT * FROM ${tableRef.sourceReference};`
+              : `CREATE OR REPLACE TABLE ${aliasRef} AS SELECT * FROM ${tableRef.sourceReference};`;
+
+          await deps.runRuntimeSql(
+            createAliasSql,
+            backend,
+            tableRef.catalogContext ?? null,
+          );
+        }
+        materializedTables.add(tableRef.tableName);
+        resolvedRefByTable.set(tableRef.tableName, aliasRef);
+        realizedAliasKindByTable.set(
+          tableRef.tableName,
+          tableRef.strategy === "view" ? "view" : "table",
+        );
+      } catch (error) {
+        console.warn(
+          `[dashboard-filters] Failed to realize ${tableRef.strategy} alias for ${tableRef.tableName} from ${tableRef.sourceReference}:`,
+          error,
+        );
+        resolvedRefByTable.set(tableRef.tableName, tableRef.sourceReference);
+        realizedAliasKindByTable.set(tableRef.tableName, "direct");
+      }
+    }
+
+    const entry: MaterializationCacheEntry = {
+      signature,
+      runtimeFingerprint,
+      tableRefs,
+      plannedTables,
+      resolvedRefByTable,
+      realizedAliasKindByTable,
+      materializedTables,
+      backend,
+    };
+    cache.set(cacheKey, entry);
+    return entry;
+  })();
+
+  inflightMaterializationCache.set(cacheKey, { signature, promise });
+  try {
+    return await promise;
+  } finally {
+    const current = inflightMaterializationCache.get(cacheKey);
+    if (current?.promise === promise) {
+      inflightMaterializationCache.delete(cacheKey);
     }
   }
-
-  const entry: MaterializationCacheEntry = {
-    signature,
-    runtimeFingerprint,
-    tableRefs,
-    plannedTables,
-    resolvedRefByTable,
-    realizedAliasKindByTable,
-    materializedTables,
-    backend,
-  };
-  cache.set(cacheKey, entry);
-  return entry;
 }
 
 async function describeTableWithFallbacks(
@@ -685,7 +878,7 @@ async function describeTableWithFallbacks(
       return await deps.runRuntimeSql(
         `DESCRIBE ${reference};`,
         backend,
-        catalogContext,
+        resolveCatalogContextForReference(reference, catalogContext),
       );
     } catch (error) {
       lastError = error;
@@ -708,7 +901,7 @@ function buildDescribeCandidates(
   );
   const candidates = [
     aliasKind === "view" || aliasKind === "table"
-      ? getMaterializedAliasRef(tableRef.tableName)
+      ? getExecutionAliasRef(tableRef.tableName)
       : null,
     materialization.resolvedRefByTable.get(tableRef.tableName),
     tableRef.sourceReference,
@@ -729,12 +922,24 @@ async function runDashboardRuntimeSql(
   backend: SqlBackend,
   catalogContext?: string | null,
 ): Promise<Record<string, unknown>[]> {
-  const result = await runQuery({
-    sql,
-    backendPreference: backend,
-    catalogContext,
-  });
-  return result.rows;
+  try {
+    const result = await runQuery({
+      sql,
+      backendPreference: backend,
+      catalogContext,
+    });
+    return result.rows;
+  } catch (error) {
+    if (catalogContext && isMissingCatalogContextError(error)) {
+      const retried = await runQuery({
+        sql,
+        backendPreference: backend,
+        catalogContext: null,
+      });
+      return retried.rows;
+    }
+    throw error;
+  }
 }
 
 async function runChartSql(
@@ -742,37 +947,35 @@ async function runChartSql(
   backend: SqlBackend,
 ): Promise<Result[]> {
   const backendPreference = chart.sqlBackend ?? backend;
-  const dbIdentifier = resolveChartDbIdentifierForExecution(
-    chart.dbIdentifier,
-    backendPreference,
-  );
+  const sourceDescriptor = resolveChartSourceDescriptor(chart, backendPreference);
+  const dbIdentifier = sourceDescriptor.dbIdentifier ?? undefined;
 
   try {
     const result = await runQuery({
       sql: chart.sql,
       dbIdentifier,
       backendPreference,
-      catalogContext: chart.catalogContext ?? null,
+      catalogContext:
+        sourceDescriptor.kind === "external"
+          ? null
+          : (sourceDescriptor.catalogContext ?? null),
     });
     return result.rows as Result[];
   } catch (error) {
     if (
-      !shouldRetryChartSqlOnDashboardBackend(chart, backend, backendPreference)
+      sourceDescriptor.catalogContext &&
+      sourceDescriptor.kind !== "external" &&
+      isMissingCatalogContextError(error)
     ) {
-      throw error;
+      const result = await runQuery({
+        sql: chart.sql,
+        dbIdentifier,
+        backendPreference,
+        catalogContext: null,
+      });
+      return result.rows as Result[];
     }
-
-    console.warn(
-      `[dashboard-filters] Retrying chart ${chart.id} on ${backend} after local WASM resolution failed.`,
-      error,
-    );
-
-    const retryResult = await runQuery({
-      sql: chart.sql,
-      backendPreference: backend,
-      catalogContext: chart.catalogContext ?? null,
-    });
-    return retryResult.rows as Result[];
+    throw error;
   }
 }
 
@@ -783,7 +986,9 @@ function resolveDashboardBackend(
   const explicitBackends = Array.from(
     new Set(
       charts
-        .map((chart) => chart.sqlBackend)
+        .map((chart) =>
+          resolveChartSourceDescriptor(chart, deps.resolveBackend()).runtimeBackend,
+        )
         .filter((backend): backend is SqlBackend => Boolean(backend)),
     ),
   );
@@ -793,33 +998,6 @@ function resolveDashboardBackend(
   }
 
   return deps.resolveBackend();
-}
-
-function resolveChartDbIdentifierForExecution(
-  dbIdentifier: string | null | undefined,
-  backend: SqlBackend,
-): string | undefined {
-  if (
-    (backend === "bridge" || backend === "duckdb-http") &&
-    isWasmLocalIdentifier(dbIdentifier ?? undefined)
-  ) {
-    return undefined;
-  }
-
-  return dbIdentifier ?? undefined;
-}
-
-function shouldRetryChartSqlOnDashboardBackend(
-  chart: DbDashboardChart,
-  dashboardBackend: SqlBackend,
-  attemptedBackend: SqlBackend,
-): boolean {
-  return (
-    !chart.sqlBackend &&
-    attemptedBackend === "duckdb-wasm" &&
-    dashboardBackend !== "duckdb-wasm" &&
-    isWasmLocalIdentifier(chart.dbIdentifier ?? undefined)
-  );
 }
 
 function resolveActiveBackend(): SqlBackend {
@@ -951,39 +1129,23 @@ function indentSql(sql: string, spaces: number): string {
     .join("\n");
 }
 
+function rewriteSqlToResolvedReferences(
+  sql: string,
+  tableRefs: MaterializedTableRef[],
+  resolvedRefByTable: Map<string, string>,
+): string {
+  return tableRefs.reduce((currentSql, tableRef) => {
+    const resolvedRef = resolvedRefByTable.get(tableRef.tableName);
+    if (!resolvedRef || resolvedRef === tableRef.sourceReference) {
+      return currentSql;
+    }
+
+    return currentSql.split(tableRef.sourceReference).join(resolvedRef);
+  }, sql);
+}
+
 function quoteIdent(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
-}
-
-function getMaterializedAliasRef(tableName: string): string {
-  return `${quoteIdent(MATERIALIZED_SCHEMA)}.${quoteIdent(tableName)}`;
-}
-
-function classifyMaterializationStrategy(
-  sourceReference: string,
-): MaterializationStrategy {
-  if (isSimpleReusableReference(sourceReference)) {
-    return "view";
-  }
-  if (looksLikeDirectReference(sourceReference)) {
-    return "direct";
-  }
-  return "table-materialize";
-}
-
-function isSimpleReusableReference(sourceReference: string): boolean {
-  const trimmed = sourceReference.trim();
-  if (!trimmed) {
-    return false;
-  }
-
-  const ident = '(?:"[^"]+"|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)';
-  const pattern = new RegExp(`^${ident}(?:\\.${ident}){0,2}$`);
-  return pattern.test(trimmed);
-}
-
-function looksLikeDirectReference(sourceReference: string): boolean {
-  return /[\s()]/.test(sourceReference);
 }
 
 function sqlLiteral(value: unknown): string {

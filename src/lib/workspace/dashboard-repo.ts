@@ -1,4 +1,5 @@
 import { dashboardStorageService } from "@/lib/dashboard/dashboard-storage-service";
+import type { DashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { JoinDefinition } from "@/lib/joins/graph";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import type {
@@ -20,6 +21,7 @@ export const listDashboards = () => dashboardStorageService.listDashboards();
 export function createDashboard(
   title: string,
   input?: {
+    sourceDescriptor?: DashboardSourceDescriptor | null;
     dbIdentifier?: string | null;
     joinDefs?: JoinDefinition[];
     sqlBackend?: SqlBackend | null;
@@ -64,6 +66,7 @@ export const createDashboardMeasure = (input: {
   key: string;
   label: string;
   sql: string;
+  sourceDescriptor?: DashboardSourceDescriptor | null;
   dbIdentifier?: string | null;
   catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
@@ -75,6 +78,7 @@ export const updateDashboardMeasure = (
   input: {
     label?: string;
     sql?: string;
+    sourceDescriptor?: DashboardSourceDescriptor | null;
     dbIdentifier?: string | null;
     catalogContext?: string | null;
     sqlBackend?: SqlBackend | null;
@@ -87,6 +91,7 @@ export const addChartToDashboard = (input: {
   title?: string | null;
   description?: string | null;
   sql: string;
+  sourceDescriptor?: DashboardSourceDescriptor | null;
   dbIdentifier?: string | null;
   catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
