@@ -1,46 +1,66 @@
 # Pondview
 
-Pondview is a browser-first analysis and BI app built on top of duckdb. It combines AI-assisted analysis, direct/manual SQL workflows, charting, and dashboard persistence in one duckdb instance.
+Browser-first, DuckDB-powered BI app for chatting with data, writing SQL, and building persistent dashboards.
+
+Pondview combines AI-assisted analysis, manual SQL workflows, charting, and dashboard persistence in a single DuckDB-backed workspace.
+
+## Features
+
+- Browser-first UI with DuckDB-WASM always available as a local fallback
+- AI-assisted analysis and direct SQL editing in the same workspace
+- Configurable SQL execution across local and remote DuckDB runtimes
+- Connected sources including Postgres, MySQL, SQLite, and MotherDuck
+- Persistent charts and dashboards stored in DuckDB
 
 ## How it works
 
-### 1. The app is browser-first
+### Browser-first workspace
 
-- The UI is a SPA that interacts with a duckdb instance.
+- The UI is a SPA that interacts with a DuckDB instance.
 - AI settings, runtime preferences, connected source metadata, and much of the workspace state live in browser storage.
-- Dashboard metadata is stored in the connected duckdb instance.
+- Dashboard metadata is stored in the connected DuckDB instance.
 - DuckDB-WASM is always available as the local fallback runtime.
 
-### 2. SQL can run on three backends
+### SQL runtime backends
+
+Queries can run on three backends:
 
 - `duckdb-wasm`: browser-local execution
-- `bridge`: remote Pondview bridge runtime trough duckdb extension (coming soon)
-- `duckdb-http`: remote DuckDB `httpserver` using the community extension.
+- `bridge`: remote Pondview bridge runtime through a DuckDB extension (coming soon)
+- `duckdb-http`: remote DuckDB `httpserver` using the community extension
 
-Backend selection is user-configurable in Settings and is resolved at query time. The main reference is [docs-site/introduction/sql-runtime-backends.md](./docs-site/introduction/sql-runtime-backends.md).
+Backend selection is user-configurable in Settings and resolved at query time.
 
-### 3. Connected sources are runtime-aware
+See [docs-site/introduction/sql-runtime-backends.md](./docs-site/introduction/sql-runtime-backends.md).
 
-- The connect flow currently exposes `Postgres`, `MySQL`, `SQLite`, and `MotherDuck`.
-- External source attachment and schema introspection require a remote runtime (`bridge` or `duckdb-http`).
-- Source metadata is stored locally in the browser and reused by chat/manual SQL flows.
+### Connected data sources
+
+The connect flow currently supports:
+
+- `Postgres`
+- `MySQL`
+- `SQLite`
+- `MotherDuck`
+
+External source attachment and schema introspection require a remote runtime (`bridge` or `duckdb-http`).
+
+Source metadata is stored locally in the browser and reused across chat and manual SQL workflows.
 
 See [docs-site/introduction/connected-data-sources.md](./docs-site/introduction/connected-data-sources.md).
 
-### 4. AI configuration is browser-first
+### AI provider configuration
+
+AI configuration is browser-first.
 
 - The main chat flow reads provider, model, and API key from browser storage.
-- Most local development starts by opening Settings and configuring an AI provider rather than setting server env vars.
+- In most local setups, you configure an AI provider in the app’s Settings instead of through server environment variables.
 - Supported providers include Gateway, OpenAI, Anthropic, xAI, and Open Responses.
 
 See [docs-site/introduction/ai-provider-configuration.md](./docs-site/introduction/ai-provider-configuration.md).
 
-### 5. Dashboards persist canonical SQL, not rewritten runtime SQL
+### Dashboard persistence
 
-- Saved charts and measures keep canonical SQL plus a `DashboardSourceDescriptor`.
-- At execution time, the browser-side dashboard runtime plans bindings for the active backend.
-- When needed, referenced tables are exposed through runtime-local `pondview_exec.*` aliases.
-- External sources may be refreshed into execution tables so joins and filters can run in one runtime.
+Saved charts and measures store canonical SQL plus source metadata. At execution time, the dashboard runtime adapts queries for the active backend and can materialize external data when needed for joins, filters, and dashboard execution.
 
 See:
 
@@ -61,7 +81,7 @@ See:
 - AI SDK v6
 - DuckDB WASM + DuckDB Node/API integrations
 
-## Quick Start
+## Quick start
 
 ### Prerequisites
 
@@ -78,11 +98,14 @@ cp env.local.example .env.local
 bun dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173), then configure AI provider settings in the app.
+Open http://localhost:5173
+, then configure an AI provider in the app.
 
-## Important Runtime Configuration
+DuckDB-WASM works as the default local runtime. Remote runtime settings are only needed for remote DuckDB execution or external source attachment.
 
-Use `.env.local` only for the integrations you need:
+### Runtime configuration
+
+Use .env.local only for the integrations you need:
 
 ```bash
 # Persist a local DuckDB runtime database
@@ -97,13 +120,14 @@ DUCKDB_HTTP_AUTH=secret
 OPENAI_API_KEY=
 ```
 
-The template lives at [env.local.example](./env.local.example).
+The template lives at env.local.example
+.
 
-### MotherDuck note
+### MotherDuck
 
-MotherDuck auth is completed by the remote DuckDB runtime. If you want auth to persist across restarts, set `motherduck_token` in the environment used to launch DuckDB.
+MotherDuck authentication is completed by the remote DuckDB runtime. To persist auth across restarts, set motherduck_token in the environment used to launch DuckDB.
 
-## Repository Map
+### Repository structure
 
 ```text
 bi-chat/
