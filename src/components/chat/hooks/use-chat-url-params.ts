@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { resolvePromptModePreference } from "@/lib/default-prompt-mode";
 import type { ReadonlyURLSearchParams } from "@/vite/next-navigation";
 
 const AUTO_SENT_FLAG_PREFIX = "autoSent:";
@@ -14,6 +15,7 @@ type UseChatUrlParamsArgs = {
   router: { replace: (href: string) => void };
   handleAddVisual: () => void | Promise<void>;
   setPromptMode: (mode: PromptMode) => void;
+  loadManualSql?: (payload: { sql: string; autorun: boolean }) => void;
 };
 
 export function useChatUrlParams({
@@ -23,6 +25,7 @@ export function useChatUrlParams({
   router,
   handleAddVisual,
   setPromptMode,
+  loadManualSql,
 }: UseChatUrlParamsArgs) {
   const [autoSentFromQuery, setAutoSentFromQuery] = useState(false);
   const [manualVisualHandled, setManualVisualHandled] = useState(false);
@@ -123,17 +126,27 @@ export function useChatUrlParams({
 
   useEffect(() => {
     const modeParam = searchParams?.get("mode");
-    if (modeParam === "manual") {
+    const sqlParam = searchParams?.get("sql");
+    const shouldAutorun = searchParams?.get("autorun") === "1";
+    const hasExplicitMode = modeParam === "manual" || modeParam === "ai";
+
+    if (!hasExplicitMode && !sqlParam?.trim()) {
+      return;
+    }
+
+    if (sqlParam?.trim()) {
       setPromptMode("manual");
+      loadManualSql?.({ sql: sqlParam, autorun: shouldAutorun });
       router.replace(`/chat?id=${encodeURIComponent(chatId)}`);
       return;
     }
 
-    if (modeParam === "ai") {
-      setPromptMode("ai");
+    const resolvedMode = resolvePromptModePreference(modeParam);
+    if (hasExplicitMode) {
+      setPromptMode(resolvedMode);
       router.replace(`/chat?id=${encodeURIComponent(chatId)}`);
     }
-  }, [searchParams, router, chatId, setPromptMode]);
+  }, [chatId, loadManualSql, router, searchParams, setPromptMode]);
 
   // Remove the auto-send marker after it served its purpose to avoid storage build-up.
   useEffect(() => {

@@ -21,7 +21,6 @@ import {
   type PromptMode,
 } from "@/components/prompt-input-wrapper";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
-import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { SqlConsoleApi } from "@/components/sql-console";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { VisualizationPanel } from "@/components/visualization-panel";
@@ -34,6 +33,8 @@ import {
   useExecuteSqlRawOutputPreference,
   useShowToolCallsPreference,
 } from "@/lib/chat-display-preferences";
+import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
+import { getDefaultPromptModePreference } from "@/lib/default-prompt-mode";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
@@ -158,7 +159,9 @@ export default function Chat({
   const searchParams = useSearchParams();
   const connectedTables = useConnectedTables();
   const effectiveSqlBackend = useResolvedSqlBackend();
-  const [promptMode, setPromptMode] = useState<PromptMode>("ai");
+  const [promptMode, setPromptMode] = useState<PromptMode>(() =>
+    getDefaultPromptModePreference(),
+  );
   const [promptError, setPromptError] = useState<string | null>(null);
   const [chatTitle, setChatTitle] = useState<string | null>(null);
   const [isEditingChatTitle, setIsEditingChatTitle] = useState(false);
@@ -246,6 +249,7 @@ export default function Chat({
   const [storedSqlQueries, setStoredSqlQueries] = useState<SavedSqlQuery[]>([]);
   const [isSavingStoredSqlQuery, setIsSavingStoredSqlQuery] = useState(false);
   const [pendingSqlToLoad, setPendingSqlToLoad] = useState<string | null>(null);
+  const [pendingSqlShouldAutoRun, setPendingSqlShouldAutoRun] = useState(false);
   const [manualChartConfig, setManualChartConfig] = useState<Config | null>(
     null,
   );
@@ -347,7 +351,7 @@ export default function Chat({
     manualCardConfig,
     manualChartConfig,
     manualVisualType,
-    selectedDb,
+    selectedCatalogContext,
     sqlResult,
   ]);
 
@@ -563,10 +567,23 @@ export default function Chat({
     if (!pendingSqlToLoad || !sqlConsoleApi) {
       return;
     }
-    sqlConsoleApi.setQuery(pendingSqlToLoad);
-    sqlConsoleApi.focus();
+
+    const sqlToLoad = pendingSqlToLoad;
+    const shouldAutoRun = pendingSqlShouldAutoRun;
+
     setPendingSqlToLoad(null);
-  }, [pendingSqlToLoad, sqlConsoleApi]);
+    setPendingSqlShouldAutoRun(false);
+
+    sqlConsoleApi.clearResults();
+    sqlConsoleApi.setQuery(sqlToLoad);
+    sqlConsoleApi.focus();
+
+    if (shouldAutoRun && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        sqlConsoleApi.runQuery();
+      });
+    }
+  }, [pendingSqlShouldAutoRun, pendingSqlToLoad, sqlConsoleApi]);
 
   const handleSaveStoredSqlQuery = useCallback(
     async (sqlOverride?: string) => {
@@ -800,6 +817,11 @@ export default function Chat({
     router,
     handleAddVisual,
     setPromptMode,
+    loadManualSql: ({ sql, autorun }) => {
+      setPromptMode("manual");
+      setPendingSqlToLoad(sql);
+      setPendingSqlShouldAutoRun(autorun);
+    },
   });
   useEffect(() => {
     if (status === "streaming" || status === "submitted") {
@@ -1136,7 +1158,6 @@ export default function Chat({
                           manualCardConfig={manualCardConfig}
                           manualVisualType={manualVisualType}
                           onManualReplFocus={handleManualReplFocus}
-                          onInsertTable={handleInsertTableIntoSql}
                         />
                       </div>
                     </div>

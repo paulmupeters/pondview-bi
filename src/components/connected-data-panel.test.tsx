@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   getConnectedEntryCatalog,
   getConnectedEntryDisplayName,
+  shouldShowConnectedEntry,
 } from "@/components/connected-data-panel";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { buildExplorerInsertPayload } from "@/lib/duckdb/table-reference";
@@ -52,5 +53,20 @@ describe("connected source explorer helpers", () => {
       }).reference,
     ).toBe("motherduck.unicorns");
     expect(getConnectedEntryDisplayName(entry)).toBe("motherduck (motherduck)");
+  });
+
+  test("hides connected entries already visible in remote runtime catalogs", () => {
+    const entry: ConnectedTable = {
+      type: "motherduck",
+      databasePath: "md:my_db",
+      attachAs: "motherduck",
+      schema: "main",
+      tables: ["unicorns"],
+    };
+
+    expect(shouldShowConnectedEntry(entry, new Set(["motherduck"]))).toBe(
+      false,
+    );
+    expect(shouldShowConnectedEntry(entry, new Set(["main_db"]))).toBe(true);
   });
 });
