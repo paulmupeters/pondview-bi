@@ -19,6 +19,7 @@ import {
   readJoinDefsRawFromStorage,
   saveJoinDefsRawToStorage,
 } from "@/lib/joins/browser-storage";
+import { isHiddenRuntimeSchema } from "@/lib/sql/runtime-table-schemas";
 import {
   useBridgeRuntimeState,
   useDuckDbHttpConfig,
@@ -29,6 +30,34 @@ import {
 import { useTheme } from "@/lib/theme-provider";
 
 import Image from "@/vite/next-image";
+
+function isHiddenMetadataTableReference(value: string | undefined): boolean {
+  const trimmedValue = value?.trim();
+  if (!trimmedValue) {
+    return false;
+  }
+
+  const [schemaCandidate] = trimmedValue.split(".");
+  return isHiddenRuntimeSchema(schemaCandidate ?? "");
+}
+
+function isVisibleConnectedEntry(entry: ConnectedTable): boolean {
+  if (entry.schema && isHiddenRuntimeSchema(entry.schema)) {
+    return false;
+  }
+
+  if (entry.table && isHiddenMetadataTableReference(entry.table)) {
+    return false;
+  }
+
+  if (
+    entry.tables?.some((tableName) => isHiddenMetadataTableReference(tableName))
+  ) {
+    return false;
+  }
+
+  return true;
+}
 
 export default function ViewDataPage() {
   const tables = useConnectedTables();
@@ -101,11 +130,20 @@ export default function ViewDataPage() {
   const tablesBySchema = useMemo(() => {
     const grouped = new Map<string, { name: string; type: string }[]>();
     for (const table of duckdbTables) {
-      const existing = grouped.get(table.schema);
+      const schema = table.schema.trim();
+      const catalog = table.catalog?.trim();
+      if (isHiddenRuntimeSchema(schema)) {
+        continue;
+      }
+      if (catalog && isHiddenRuntimeSchema(catalog)) {
+        continue;
+      }
+
+      const existing = grouped.get(schema);
       if (existing) {
         existing.push({ name: table.name, type: table.type });
       } else {
-        grouped.set(table.schema, [{ name: table.name, type: table.type }]);
+        grouped.set(schema, [{ name: table.name, type: table.type }]);
       }
     }
 
@@ -119,7 +157,7 @@ export default function ViewDataPage() {
 
   const groupedConnectedSources = useMemo(() => {
     const grouped = new Map<string, ConnectedTable[]>();
-    for (const table of tables) {
+    for (const table of tables.filter(isVisibleConnectedEntry)) {
       const key =
         table.connectionId ?? table.databasePath ?? table.attachAs ?? "source";
       const existing = grouped.get(key);

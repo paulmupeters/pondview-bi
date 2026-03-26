@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 
 export type PromptMode = "ai" | "manual";
+export type ManualShellVariant = "default" | "minimal";
 
 interface PromptInputWrapperProps {
   onSubmit: (message: PromptInputMessage) => void;
@@ -57,6 +58,7 @@ interface PromptInputWrapperProps {
   showAiInput?: boolean;
   onHomePage?: boolean;
   compact?: boolean;
+  manualShellVariant?: ManualShellVariant;
   onCreateDashboard?: () => void;
   onAddVisual?: () => void;
   mode?: PromptMode;
@@ -299,6 +301,7 @@ export function PromptInputWrapper({
   showAiInput = true,
   onHomePage = false,
   compact = false,
+  manualShellVariant = "default",
   onCreateDashboard,
   onAddVisual: _onAddVisual,
   mode,
@@ -438,8 +441,11 @@ export function PromptInputWrapper({
   const content = aiButtonLabel;
   const nextMode: PromptMode = internalMode === "ai" ? "manual" : "ai";
   const modeButtonLabel = nextMode === "ai" ? "Chat" : "Manual";
-  const showHomeManualComposer = onHomePage && internalMode === "manual";
+  const showMinimalManualShell =
+    manualShellVariant === "minimal" && internalMode === "manual";
+  const showHomeManualComposer = onHomePage && showMinimalManualShell;
   const showManualAddToChatButton = !onHomePage;
+  const useSegmentedModeToggle = manualShellVariant === "minimal";
 
   if (!showHeader && !showAiInput) {
     return null;
@@ -449,7 +455,7 @@ export function PromptInputWrapper({
     <div className="flex w-full mx-auto">
       <PromptInput
         onSubmit={handlePromptSubmit}
-        className={cn("flex-1 w-full flex flex-row", className)}
+        className={cn("flex-1 w-full flex flex-row border-none", className)}
         globalDrop={internalMode !== "manual"}
         multiple
       >
@@ -468,18 +474,19 @@ export function PromptInputWrapper({
               <div className="min-h-0">
                 <div
                   className={cn(
-                    "flex flex-col w-full",
-                    showHomeManualComposer &&
-                      "gap-3 rounded-[28px] bg-card/75 p-3 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-sm",
+                    "flex w-full flex-col",
+                    showMinimalManualShell ? "gap-2 p-2.5" : "gap-3 p-3",
                   )}
                 >
                   <div
                     className={cn(
                       "w-full overflow-hidden",
-                      compact
-                        ? "h-85 rounded-lg"
-                        : showHomeManualComposer
-                          ? "h-88 rounded-xl border border-border/60 bg-background/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]"
+                      showMinimalManualShell
+                        ? compact
+                          ? "h-[18rem] rounded-xl border border-border/70 bg-background/95 shadow-[0_10px_30px_-22px_rgba(15,23,42,0.45)]"
+                          : "h-[22rem] rounded-xl border border-border/70 bg-background/95 shadow-[0_16px_36px_-28px_rgba(15,23,42,0.42)]"
+                        : compact
+                          ? "h-85 rounded-lg"
                           : "h-105 rounded-lg",
                     )}
                     onFocusCapture={() => onManualReplFocus?.()}
@@ -488,20 +495,22 @@ export function PromptInputWrapper({
                     <DuckdbRepl
                       className={cn(
                         "h-full w-full border-r-0 p-0",
-                        showHomeManualComposer && "border-0 bg-transparent",
+                        showMinimalManualShell && "border-0 bg-transparent",
                       )}
                       selectedDbIdentifier={selectedDb}
                       catalogContext={selectedCatalogContext}
                       onConsoleApiChangeAction={handleManualConsoleApiChange}
                       inlineResults={false}
                       editorMinHeight={
-                        showHomeManualComposer ? "16rem" : "8rem"
+                        showMinimalManualShell ? "11rem" : "8rem"
                       }
                       editorMaxHeight={
-                        compact
-                          ? "12rem"
-                          : showHomeManualComposer
-                            ? "18rem"
+                        showMinimalManualShell
+                          ? compact
+                            ? "10rem"
+                            : "12rem"
+                          : compact
+                            ? "12rem"
                             : "14rem"
                       }
                       showRunControls={false}
@@ -518,12 +527,14 @@ export function PromptInputWrapper({
                   <div
                     className={cn(
                       "flex gap-2",
-                      showHomeManualComposer
+                      showMinimalManualShell
                         ? "items-center justify-between px-1 pb-1"
                         : "m-2 justify-end",
-                      compact
-                        ? "pt-1 pr-1"
-                        : !showHomeManualComposer && "pt-2 pr-2",
+                      showMinimalManualShell
+                        ? "pt-0"
+                        : compact
+                          ? "pt-1 pr-1"
+                          : "pt-2 pr-2",
                     )}
                   >
                     <Button
@@ -626,7 +637,7 @@ export function PromptInputWrapper({
                   </Tooltip>
                 )}
               </div>
-              {onHomePage ? (
+              {useSegmentedModeToggle ? (
                 <div className="inline-flex items-center rounded-full border border-border/70 bg-background/80 p-1 shadow-sm backdrop-blur-sm">
                   <button
                     type="button"

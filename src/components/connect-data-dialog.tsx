@@ -22,6 +22,7 @@ import {
   buildPostgresConnectionString,
   type PostgresUrlComponents,
 } from "@/lib/duckdb/path";
+import { isHiddenRuntimeSchema } from "@/lib/sql/runtime-table-schemas";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 
@@ -496,6 +497,7 @@ export function ConnectDataDialog({
       );
       const fetchedSchemas = schemaRows
         .map((r) => String(r.table_schema ?? ""))
+        .filter((schema) => !isHiddenRuntimeSchema(schema))
         .filter(Boolean);
       setSchemas(fetchedSchemas);
       setHasConnected(true);

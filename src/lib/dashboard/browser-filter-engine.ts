@@ -798,8 +798,9 @@ async function ensureDashboardMaterialization(
             }
 
             await deps.runRuntimeSql(
-              `CREATE OR REPLACE TABLE ${aliasRef} AS SELECT * FROM ${quoteExecutionIdentifier(attachmentPlan.alias)}.${tableRef.sourceReference};`,
+              `CREATE OR REPLACE TABLE ${aliasRef} AS SELECT * FROM ${tableRef.sourceReference};`,
               backend,
+              attachmentPlan.alias,
             );
           } finally {
             try {

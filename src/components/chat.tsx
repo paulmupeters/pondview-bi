@@ -17,6 +17,7 @@ import {
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
 import {
+  type ManualShellVariant,
   PromptInputWrapper,
   type PromptMode,
 } from "@/components/prompt-input-wrapper";
@@ -146,6 +147,7 @@ function toPromptErrorMessage(error: Error): string {
 
 const EMPTY_INITIAL_MESSAGES: UIMessage[] = [];
 const MANUAL_REPL_VISUALIZATION_ID = "manual-repl";
+const CHAT_MANUAL_SHELL_VARIANT: ManualShellVariant = "minimal";
 
 export default function Chat({
   chatId,
@@ -1106,13 +1108,13 @@ export default function Chat({
                       onSelectVisualization={handleSelectVisualization}
                       onRemoveMessage={handleRemoveMessage}
                       conversationClassName="flex-1 min-h-0"
-                      contentSpacingClassName="space-y-2 pb-36 lg:pb-40"
+                      contentSpacingClassName="space-y-2 pb-32 lg:pb-36"
                       messagePaddingClassName="p-3"
                       userResponsePaddingClassName="p-1"
                       showToolCalls={showToolCalls}
                       showExecuteSqlRawOutput={showExecuteSqlRawOutput}
                     />
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 px-4 pb-4">
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 px-4 pb-3">
                       <div className="pointer-events-auto w-full">
                         {promptError ? (
                           <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -1154,6 +1156,7 @@ export default function Chat({
                           storedSqlQueries={storedSqlQueries}
                           onSaveQuery={handleSaveStoredSqlQuery}
                           isSavingQuery={isSavingStoredSqlQuery}
+                          manualShellVariant={CHAT_MANUAL_SHELL_VARIANT}
                           manualChartConfig={manualChartConfig}
                           manualCardConfig={manualCardConfig}
                           manualVisualType={manualVisualType}

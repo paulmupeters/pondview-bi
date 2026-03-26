@@ -69,4 +69,27 @@ describe("connected source explorer helpers", () => {
     );
     expect(shouldShowConnectedEntry(entry, new Set(["main_db"]))).toBe(true);
   });
+
+  test("hides connected entries that point at metadata schemas", () => {
+    const entry: ConnectedTable = {
+      type: "motherduck",
+      databasePath: "md:my_db",
+      attachAs: "motherduck",
+      schema: "md_information_schema",
+      tables: ["recent_queries"],
+    };
+
+    expect(shouldShowConnectedEntry(entry, new Set())).toBe(false);
+  });
+
+  test("hides connected entries with fully qualified metadata table names", () => {
+    const entry: ConnectedTable = {
+      type: "motherduck",
+      databasePath: "md:my_db",
+      attachAs: "motherduck",
+      tables: ["md_information_schema.database_snapshots"],
+    };
+
+    expect(shouldShowConnectedEntry(entry, new Set())).toBe(false);
+  });
 });

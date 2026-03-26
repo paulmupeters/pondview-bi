@@ -86,10 +86,34 @@ export function getConnectedEntryDisplayName(entry: ConnectedTable): string {
   return `${parts.join(".")} (${entry.type})`;
 }
 
+function isHiddenMetadataTableReference(value: string): boolean {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return false;
+  }
+
+  const [schemaCandidate] = trimmedValue.split(".");
+  return isHiddenRuntimeSchema(schemaCandidate ?? "");
+}
+
 export function shouldShowConnectedEntry(
   entry: ConnectedTable,
   visibleRemoteCatalogs: Set<string>,
 ): boolean {
+  if (entry.schema && isHiddenRuntimeSchema(entry.schema)) {
+    return false;
+  }
+
+  if (entry.table && isHiddenMetadataTableReference(entry.table)) {
+    return false;
+  }
+
+  if (
+    entry.tables?.some((tableName) => isHiddenMetadataTableReference(tableName))
+  ) {
+    return false;
+  }
+
   const catalog = getConnectedEntryCatalog(entry)?.trim().toLowerCase();
   if (!catalog) {
     return true;
@@ -107,6 +131,7 @@ interface ConnectedDataPanelProps {
   collapsed?: boolean;
   collapsedBehavior?: "inline" | "overlay";
   onToggleCollapse?: () => void;
+  showCollapseToggle?: boolean;
   refreshToken?: number;
   sqlBackend?: SqlBackend;
   storedSqlQueries?: SavedSqlQuery[];
@@ -125,6 +150,7 @@ export function ConnectedDataPanel({
   collapsed = false,
   collapsedBehavior = "inline",
   onToggleCollapse,
+  showCollapseToggle = true,
   refreshToken,
   sqlBackend = "duckdb-wasm",
   storedSqlQueries = [],
@@ -303,58 +329,65 @@ export function ConnectedDataPanel({
       ) => void;
     },
   ) =>
-    groups.map((group, groupIdx) => (
-      <div
-        key={`${group.catalog || "default"}.${group.schema}`}
-        className="space-y-1"
-      >
-        {group.catalog && (
-          <p className="text-[10px] uppercase tracking-wide text-foreground/70">
-            {group.catalog}
-            {options.currentCatalog &&
-            group.catalog.toLowerCase() === options.currentCatalog.toLowerCase()
-              ? " · current"
-              : ""}
-          </p>
-        )}
-        {!isDefaultExplorerSchema(group.schema) && (
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            {group.schema}
-          </p>
-        )}
-        {group.tables.map((tableName, tableIdx) => {
-          const color =
-            options.palette[(groupIdx + tableIdx) % options.palette.length];
-          const payload = buildExplorerInsertPayload({
-            catalog: group.catalog,
-            currentCatalog: options.currentCatalog,
-            schema: group.schema,
-            table: tableName,
-            source: "runtime",
-          });
-          const displayReference = buildExplorerTableReference({
-            catalog: group.catalog,
-            schema: group.schema,
-            table: tableName,
-            includeCatalog: Boolean(group.catalog),
-            includeDefaultSchema: true,
-          });
+    groups
+      .filter(
+        (group) =>
+          !isHiddenRuntimeSchema(group.schema) &&
+          !isHiddenRuntimeSchema(group.catalog),
+      )
+      .map((group, groupIdx) => (
+        <div
+          key={`${group.catalog || "default"}.${group.schema}`}
+          className="space-y-0"
+        >
+          {group.catalog && (
+            <p className="text-[10px] uppercase tracking-wide text-foreground/70">
+              {group.catalog}
+              {options.currentCatalog &&
+              group.catalog.toLowerCase() ===
+                options.currentCatalog.toLowerCase()
+                ? " · current"
+                : "oo"}
+            </p>
+          )}
+          {!isDefaultExplorerSchema(group.schema) && (
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {group.schema}
+            </p>
+          )}
+          {group.tables.map((tableName, tableIdx) => {
+            const color =
+              options.palette[(groupIdx + tableIdx) % options.palette.length];
+            const payload = buildExplorerInsertPayload({
+              catalog: group.catalog,
+              currentCatalog: options.currentCatalog,
+              schema: group.schema,
+              table: tableName,
+              source: "runtime",
+            });
+            const displayReference = buildExplorerTableReference({
+              catalog: group.catalog,
+              schema: group.schema,
+              table: tableName,
+              includeCatalog: Boolean(group.catalog),
+              includeDefaultSchema: true,
+            });
 
-          return (
-            <button
-              key={`${group.catalog}.${group.schema}.${tableName}`}
-              type="button"
-              className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-              onClick={() => options.onTableClick(group, payload)}
-              title={displayReference}
-            >
-              <span className={cn("w-1.5 h-1.5 rounded-full", color)} />
-              <span className="truncate">{tableName}</span>
-            </button>
-          );
-        })}
-      </div>
-    ));
+            return (
+              <button
+                key={`${group.catalog}.${group.schema}.${tableName}`}
+                type="button"
+                className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
+                onClick={() => options.onTableClick(group, payload)}
+                title={displayReference}
+              >
+                <span className={cn("w-1.5 h-1.5 rounded-full", color)} />
+                <span className="truncate">{tableName}</span>
+              </button>
+            );
+          })}
+        </div>
+      ));
 
   const renderStoredSqlQueries = () => {
     if (!showStoredSqlQueries) {
@@ -674,16 +707,18 @@ export function ConnectedDataPanel({
           <span className="text-xs font-bold tracking-widest text-[#5C6658] uppercase">
             Explorer
           </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={onToggleCollapse}
-            aria-label="Collapse explorer"
-          >
-            <ChevronLeftIcon className="h-4 w-4" />
-          </Button>
+          {showCollapseToggle ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onToggleCollapse}
+              aria-label="Collapse explorer"
+            >
+              <ChevronLeftIcon className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto p-2">

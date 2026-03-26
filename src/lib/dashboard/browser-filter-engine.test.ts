@@ -16,6 +16,8 @@ function createChart(input: {
   sql: string;
   catalogContext?: string | null;
   sqlBackend?: DbDashboardChart["sqlBackend"];
+  dbIdentifier?: string | null;
+  sourceDescriptor?: DbDashboardChart["sourceDescriptor"];
 }): DbDashboardChart {
   const now = Date.now();
   return {
@@ -24,7 +26,7 @@ function createChart(input: {
     title: null,
     description: null,
     sql: input.sql,
-    dbIdentifier: null,
+    dbIdentifier: input.dbIdentifier ?? null,
     catalogContext: input.catalogContext ?? null,
     sqlBackend: input.sqlBackend ?? null,
     chartConfigJson: "{}",
@@ -33,6 +35,13 @@ function createChart(input: {
     position: 0,
     createdAt: now,
     updatedAt: now,
+    sourceDescriptor: input.sourceDescriptor ?? null,
+    sourceDescriptorJson: null,
+    snapshotId: null,
+    sourceSql: input.sql,
+    sourceDbIdentifier: input.dbIdentifier ?? null,
+    sourceCatalogContext: input.catalogContext ?? null,
+    sourceSqlBackend: input.sqlBackend ?? null,
   };
 }
 
@@ -537,5 +546,62 @@ describe("browser-filter-engine", () => {
           call.catalogContext == null,
       ),
     ).toBe(true);
+  });
+
+  test("materializes external tables through the temporary attachment catalog", async () => {
+    const runtimeSqlCalls: Array<{
+      sql: string;
+      catalogContext?: string | null;
+    }> = [];
+    const chart = createChart({
+      id: "chart-external",
+      sql: "SELECT * FROM duck.astronomy",
+      sqlBackend: "duckdb-http",
+      dbIdentifier: "postgres://user:pass@localhost:5432/astronomy",
+      sourceDescriptor: {
+        kind: "external",
+        runtimeBackend: "duckdb-http",
+        dbIdentifier: "postgres://user:pass@localhost:5432/astronomy",
+        catalogContext: null,
+        externalType: "postgres",
+      },
+    });
+
+    await executeDashboardChartsWithFilters(
+      {
+        dashboardId: "dashboard-external",
+        charts: [chart],
+        dashboardFilters: [],
+        chartFiltersById: {},
+      },
+      {
+        resolveBackend: () => "duckdb-http",
+        resolveRuntimeFingerprint: async () => "duckdb-http:test",
+        readJoinDefs: async () => [],
+        listCharts: async () => [chart],
+        getMaterializationCache: () => new Map(),
+        runRuntimeSql: async (
+          sql: string,
+          _backend: SqlBackend,
+          catalogContext?: string | null,
+        ) => {
+          runtimeSqlCalls.push({ sql, catalogContext });
+          return [];
+        },
+      },
+    );
+
+    const materializationCall = runtimeSqlCalls.find((call) =>
+      call.sql.includes('CREATE OR REPLACE TABLE "pondview_exec"."astronomy"'),
+    );
+
+    expect(materializationCall).toBeDefined();
+    expect(materializationCall?.sql).toContain("SELECT * FROM duck.astronomy");
+    expect(materializationCall?.sql).not.toContain(
+      '".duck.astronomy',
+    );
+    expect(materializationCall?.catalogContext).toMatch(
+      /^pondview_exec_source_astronomy_/,
+    );
   });
 });

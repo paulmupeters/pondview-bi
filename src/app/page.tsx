@@ -1,12 +1,20 @@
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import { nanoid } from "nanoid";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
+import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import {
+  type ManualShellVariant,
   PromptInputWrapper,
   type PromptMode,
 } from "@/components/prompt-input-wrapper";
+import type { SqlConsoleApi } from "@/components/sql-console";
+import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { getDefaultPromptModePreference } from "@/lib/default-prompt-mode";
+import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
+import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
+import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
+import { cn } from "@/lib/utils";
 import { ensureChat } from "@/lib/workspace/chat-repo";
 import { useRouter } from "@/vite/next-navigation";
 
@@ -37,7 +45,69 @@ export default function Home() {
   const [mode, setMode] = useState<PromptMode>(() =>
     getDefaultPromptModePreference(),
   );
+  const [selectedDb, setSelectedDb] = useState<string | undefined>(
+    DEFAULT_WASM_DB_IDENTIFIER,
+  );
+  const [selectedCatalogContext, setSelectedCatalogContext] = useState<
+    string | null
+  >(null);
+  const [manualConsoleApi, setManualConsoleApi] =
+    useState<SqlConsoleApi | null>(null);
+  const [pendingSqlToInsert, setPendingSqlToInsert] = useState<string | null>(
+    null,
+  );
+  const connectedTables = useConnectedTables();
+  const effectiveSqlBackend = useResolvedSqlBackend();
   const router = useRouter();
+  const manualShellVariant: ManualShellVariant = "minimal";
+  const isManualMode = mode === "manual";
+
+  useEffect(() => {
+    if (effectiveSqlBackend === "duckdb-wasm") {
+      if (!selectedDb) {
+        setSelectedDb(DEFAULT_WASM_DB_IDENTIFIER);
+      }
+      return;
+    }
+
+    if (selectedDb === DEFAULT_WASM_DB_IDENTIFIER) {
+      setSelectedDb(undefined);
+    }
+  }, [effectiveSqlBackend, selectedDb]);
+
+  useEffect(() => {
+    if (
+      selectedDb ||
+      connectedTables.length === 0 ||
+      effectiveSqlBackend !== "duckdb-wasm"
+    ) {
+      return;
+    }
+
+    const first = connectedTables[0];
+    const firstIdentifier =
+      first?.connectionId ??
+      first?.databasePath ??
+      first?.attachAs ??
+      DEFAULT_WASM_DB_IDENTIFIER;
+
+    setSelectedDb(firstIdentifier);
+  }, [connectedTables, effectiveSqlBackend, selectedDb]);
+
+  useEffect(() => {
+    if (!pendingSqlToInsert || !manualConsoleApi) {
+      return;
+    }
+
+    const current = manualConsoleApi.getQuery() ?? "";
+    const lastChar = current.length > 0 ? current[current.length - 1] : "";
+    const needsSpace = current.length > 0 && !/\s/.test(lastChar);
+    manualConsoleApi.insertText(
+      `${needsSpace ? " " : ""}${pendingSqlToInsert}`,
+    );
+    manualConsoleApi.focus();
+    setPendingSqlToInsert(null);
+  }, [manualConsoleApi, pendingSqlToInsert]);
 
   const handleSubmit = useCallback(
     (message: PromptInputMessage) => {
@@ -88,6 +158,30 @@ export default function Home() {
   const handleModeChange = useCallback((newMode: PromptMode) => {
     setMode(newMode);
   }, []);
+
+  const handleInsertTableIntoSql = useCallback(
+    (payload: ExplorerInsertPayload) => {
+      if (payload.dbIdentifier) {
+        setSelectedDb(payload.dbIdentifier);
+      }
+
+      setSelectedCatalogContext(payload.catalogContext ?? null);
+
+      if (!manualConsoleApi) {
+        setPendingSqlToInsert(payload.reference);
+        return;
+      }
+
+      const current = manualConsoleApi.getQuery() ?? "";
+      const lastChar = current.length > 0 ? current[current.length - 1] : "";
+      const needsSpace = current.length > 0 && !/\s/.test(lastChar);
+      manualConsoleApi.insertText(
+        `${needsSpace ? " " : ""}${payload.reference}`,
+      );
+      manualConsoleApi.focus();
+    },
+    [manualConsoleApi],
+  );
 
   const handleExampleClick = useCallback(
     (command: string) => {
@@ -192,41 +286,82 @@ export default function Home() {
         {/* Content Area */}
         <div className="overflow-hidden px-4 py-4 h-full z-30">
           <div className="overflow-hidden flex flex-col items-center justify-start h-full">
-            <div className="w-full max-w-5xl">
-              <PromptInputWrapper
-                onSubmit={handleSubmit}
-                className="transition delay-150 duration-300 ease-in-out"
-                onHomePage={true}
-                mode={mode}
-                onModeChange={handleModeChange}
-                onManualRunRequest={handleManualRun}
-              />
-              {mode === "ai" && (
-                <div className="mt-8 animate-in fade-in duration-500 fill-mode-both">
-                  <p className="text-xs text-muted-foreground mb-3 text-center">
-                    Try asking...
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {EXAMPLE_COMMANDS.map((command, i) => (
-                      <button
-                        key={command}
-                        type="button"
-                        onClick={() => handleExampleClick(command)}
-                        className="group text-left px-4 py-3 rounded-md border border-border/30 bg-card/40 text-sm text-foreground/80 transition-all duration-200 hover:border-primary/50 hover:bg-primary/5 hover:text-foreground cursor-pointer animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
-                        style={{
-                          animationDelay: `${150 + i * 75}ms`,
-                          animationDuration: "400ms",
-                        }}
-                      >
-                        <span className="flex items-center justify-between gap-3">
-                          <span>{command}</span>
-                          <ArrowRightIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-primary" />
-                        </span>
-                      </button>
-                    ))}
+            <div className="flex w-full max-w-7xl items-stretch gap-4 overflow-hidden transition-all duration-300 ease-out">
+              <div
+                className={cn(
+                  "flex min-h-0 overflow-hidden transition-all duration-300 ease-out",
+                  isManualMode
+                    ? "w-80 min-w-80 translate-x-0 opacity-100"
+                    : "pointer-events-none w-0 min-w-0 -translate-x-4 opacity-0",
+                )}
+              >
+                <ConnectedDataPanel
+                  selectedDb={selectedDb}
+                  onSelect={(db) => {
+                    setSelectedDb(db);
+                    setSelectedCatalogContext(null);
+                  }}
+                  mode="sidebar"
+                  onInsertTable={handleInsertTableIntoSql}
+                  sqlBackend={effectiveSqlBackend}
+                  showCollapseToggle={false}
+                  className="h-full w-full rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm"
+                />
+              </div>
+              <div
+                className={cn(
+                  "flex min-w-0 flex-1 flex-col transition-all duration-300 ease-out",
+                  isManualMode ? "max-w-none" : "mx-auto max-w-5xl",
+                )}
+              >
+                <PromptInputWrapper
+                  onSubmit={handleSubmit}
+                  className="transition delay-150 duration-300 ease-in-out"
+                  onHomePage={true}
+                  mode={mode}
+                  onModeChange={handleModeChange}
+                  onManualRunRequest={handleManualRun}
+                  manualShellVariant={manualShellVariant}
+                  selectedDb={selectedDb}
+                  selectedCatalogContext={selectedCatalogContext}
+                  onConsoleApiChange={setManualConsoleApi}
+                />
+                <div
+                  className={cn(
+                    "grid transition-[grid-template-rows,opacity,transform,margin] duration-300 ease-out",
+                    isManualMode
+                      ? "pointer-events-none mt-0 grid-rows-[0fr] opacity-0 -translate-y-2"
+                      : "mt-8 grid-rows-[1fr] opacity-100 translate-y-0",
+                  )}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                    <div className="animate-in fade-in duration-500 fill-mode-both">
+                      <p className="mb-3 text-center text-xs text-muted-foreground">
+                        Try asking...
+                      </p>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {EXAMPLE_COMMANDS.map((command, i) => (
+                          <button
+                            key={command}
+                            type="button"
+                            onClick={() => handleExampleClick(command)}
+                            className="group cursor-pointer rounded-md border border-border/30 bg-card/40 px-4 py-3 text-left text-sm text-foreground/80 transition-all duration-200 hover:border-primary/50 hover:bg-primary/5 hover:text-foreground animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
+                            style={{
+                              animationDelay: `${150 + i * 75}ms`,
+                              animationDuration: "400ms",
+                            }}
+                          >
+                            <span className="flex items-center justify-between gap-3">
+                              <span>{command}</span>
+                              <ArrowRightIcon className="h-3.5 w-3.5 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-primary group-hover:opacity-100" />
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
         </div>
