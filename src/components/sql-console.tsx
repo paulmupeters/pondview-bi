@@ -2,10 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
+import { quoteString } from "@/lib/duckdb/duckdb-attachments";
 import { runQuery } from "@/lib/sql/run-query";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
-import { SqlCodeEditor, type SqlCodeEditorApi } from "./sql-code-editor";
+import {
+  type AutocompleteQueryFn,
+  type SqlAutocompleteSuggestion,
+  SqlCodeEditor,
+  type SqlCodeEditorApi,
+} from "./sql-code-editor";
+
+export type { AutocompleteQueryFn } from "./sql-code-editor";
 
 type ResultsPayload = {
   stage: "complete";
@@ -29,6 +37,43 @@ export type ExecuteQueryFn = (params: {
   dbIdentifier?: string;
   catalogContext?: string | null;
 }>;
+
+export function buildSqlAutocompleteQuery(sql: string): string {
+  return `SELECT suggestion, suggestion_start FROM sql_auto_complete(${quoteString(sql)}) LIMIT 1;`;
+}
+
+export function parseSqlAutocompleteSuggestion(
+  row: Record<string, unknown> | undefined,
+): SqlAutocompleteSuggestion | null {
+  if (!row) {
+    return null;
+  }
+
+  const suggestion =
+    typeof row.suggestion === "string" ? row.suggestion : undefined;
+  const rawSuggestionStart = row.suggestion_start;
+  const suggestionStart =
+    typeof rawSuggestionStart === "number"
+      ? rawSuggestionStart
+      : typeof rawSuggestionStart === "bigint"
+        ? Number(rawSuggestionStart)
+        : typeof rawSuggestionStart === "string"
+          ? Number.parseInt(rawSuggestionStart, 10)
+          : Number.NaN;
+
+  if (
+    !suggestion ||
+    !Number.isInteger(suggestionStart) ||
+    suggestionStart < 0
+  ) {
+    return null;
+  }
+
+  return {
+    suggestion,
+    suggestionStart,
+  };
+}
 
 export function createSqlExecuteQuery(options: {
   dbIdentifier?: string;
@@ -54,6 +99,49 @@ export function createSqlExecuteQuery(options: {
 
 // Backward-compatible alias for existing callers.
 export const createDuckDbExecuteQuery = createSqlExecuteQuery;
+
+export function createSqlAutocompleteAction(
+  options: {
+    dbIdentifier?: string;
+    config?: HttpDuckDbConfig;
+    catalogContext?: string | null;
+  },
+  deps: {
+    runSqlQuery?: typeof runQuery;
+  } = {},
+): AutocompleteQueryFn {
+  let isDisabled = false;
+  const runSqlQuery = deps.runSqlQuery ?? runQuery;
+
+  return async ({ sql, signal }) => {
+    if (isDisabled) {
+      return null;
+    }
+
+    try {
+      await runSqlQuery({
+        sql: "LOAD autocomplete;",
+        config: options.config,
+        dbIdentifier: options.dbIdentifier,
+        catalogContext: options.catalogContext,
+        signal,
+      });
+
+      const result = await runSqlQuery({
+        sql: buildSqlAutocompleteQuery(sql),
+        config: options.config,
+        dbIdentifier: options.dbIdentifier,
+        catalogContext: options.catalogContext,
+        signal,
+      });
+
+      return parseSqlAutocompleteSuggestion(result.rows[0]);
+    } catch {
+      isDisabled = true;
+      return null;
+    }
+  };
+}
 
 export type SqlConsoleApi = {
   /**
@@ -92,6 +180,7 @@ export type SqlConsoleProps = {
   runButtonLabel?: string;
   stopButtonLabel?: string;
   executeQueryAction: ExecuteQueryFn;
+  autocompleteAction?: AutocompleteQueryFn;
   onSuccessAction?: (payload: {
     sql: string;
     rows: Record<string, unknown>[];
@@ -122,6 +211,7 @@ export function SqlConsole({
   runButtonLabel = DEFAULT_RUN_LABEL,
   stopButtonLabel = DEFAULT_STOP_LABEL,
   executeQueryAction,
+  autocompleteAction,
   onSuccessAction,
   onApiChangeAction,
   onCancelQueryAction,
@@ -324,6 +414,7 @@ export function SqlConsole({
               ref={editorRef}
               value={sql}
               onChange={setSql}
+              autocompleteAction={autocompleteAction}
               placeholder={placeholder}
               minHeight={editorMinHeight}
               maxHeight={editorMaxHeight}

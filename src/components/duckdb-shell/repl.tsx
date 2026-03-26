@@ -10,7 +10,11 @@ import {
 } from "react";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import {
+  type AutocompleteQueryFn,
+  buildSqlAutocompleteQuery,
+  createSqlAutocompleteAction,
   type ExecuteQueryFn,
+  parseSqlAutocompleteSuggestion,
   SqlConsole,
   type SqlConsoleApi,
 } from "@/components/sql-console";
@@ -168,6 +172,97 @@ type DuckdbReplProps = {
 
 const HISTORY_KEY = "bi.repl.history";
 
+export function createDuckdbReplAutocompleteAction(
+  options: {
+    connectedEntry?: ConnectedTable;
+    effectiveSqlBackend: SqlBackend;
+    selectedDb?: string;
+    selectedDbIdentifier?: string;
+    catalogContext?: string | null;
+  },
+  deps: {
+    createSharedAutocompleteAction?: typeof createSqlAutocompleteAction;
+    runBridgeSql?: typeof runBridgeQuery;
+    runDuckDbHttpSql?: typeof runDuckDbHttpQuery;
+    runWasmSql?: typeof runQuery;
+  } = {},
+): AutocompleteQueryFn {
+  const effectiveDb = options.selectedDb ?? options.selectedDbIdentifier;
+  const connectedEntry = options.connectedEntry;
+  const createSharedAutocompleteAction =
+    deps.createSharedAutocompleteAction ?? createSqlAutocompleteAction;
+  const runBridgeSql = deps.runBridgeSql ?? runBridgeQuery;
+  const runDuckDbHttpSql = deps.runDuckDbHttpSql ?? runDuckDbHttpQuery;
+  const runWasmSql = deps.runWasmSql ?? runQuery;
+
+  if (!connectedEntry?.databasePath || connectedEntry.type === "duckdb") {
+    return createSharedAutocompleteAction({
+      dbIdentifier: effectiveDb,
+      catalogContext: options.catalogContext,
+    });
+  }
+
+  let isDisabled = false;
+
+  return async ({ sql, signal }) => {
+    if (isDisabled) {
+      return null;
+    }
+
+    if (
+      connectedEntry.type === "motherduck" &&
+      options.effectiveSqlBackend === "duckdb-wasm"
+    ) {
+      isDisabled = true;
+      return null;
+    }
+
+    const connectionConfig: SourceConnectionConfig = {
+      type: connectedEntry.type,
+      identifier: connectedEntry.databasePath,
+      alias: connectedEntry.attachAs || "source",
+      readOnly: connectedEntry.readOnly,
+      duckdbExtension: connectedEntry.duckdbExtension,
+    };
+    const plan = buildAttachmentPlan(connectionConfig);
+
+    const runAttached = async (statement: string) => {
+      if (options.effectiveSqlBackend === "bridge") {
+        return runBridgeSql(statement, signal);
+      }
+      if (options.effectiveSqlBackend === "duckdb-http") {
+        return runDuckDbHttpSql(statement, signal);
+      }
+      return runWasmSql({ sql: statement, signal });
+    };
+
+    try {
+      for (const statement of plan.statements) {
+        await runAttached(statement);
+      }
+
+      await runAttached("LOAD autocomplete;");
+
+      const result = await runWithCatalogContext({
+        sql: buildSqlAutocompleteQuery(sql),
+        selectedCatalog: plan.alias,
+        runQuery: runAttached,
+      });
+
+      return parseSqlAutocompleteSuggestion(result.rows[0]);
+    } catch {
+      isDisabled = true;
+      return null;
+    } finally {
+      try {
+        await runAttached(buildDetachStatement(plan.alias, { ifExists: true }));
+      } catch {
+        // Best-effort detach only.
+      }
+    }
+  };
+}
+
 export function DuckdbRepl({
   className,
   selectedDbIdentifier,
@@ -223,6 +318,23 @@ export function DuckdbRepl({
 
   const effectiveCatalogContext =
     catalogContext !== undefined ? catalogContext : internalCatalogContext;
+  const autocompleteAction = useMemo(
+    () =>
+      createDuckdbReplAutocompleteAction({
+        connectedEntry,
+        effectiveSqlBackend,
+        selectedDb,
+        selectedDbIdentifier,
+        catalogContext: effectiveCatalogContext,
+      }),
+    [
+      connectedEntry,
+      effectiveCatalogContext,
+      effectiveSqlBackend,
+      selectedDb,
+      selectedDbIdentifier,
+    ],
+  );
 
   const executeQuery: ExecuteQueryFn = async ({ sql, signal }) => {
     const effectiveDb = selectedDb ?? selectedDbIdentifier;
@@ -564,6 +676,7 @@ export function DuckdbRepl({
             editorMinHeight={editorMinHeight}
             editorMaxHeight={editorMaxHeight}
             executeQueryAction={executeQuery}
+            autocompleteAction={autocompleteAction}
             onApiChangeAction={setInternalApi}
             onCancelQueryAction={handleCancelQuery}
             showInlineResults={inlineResults}

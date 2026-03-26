@@ -1,0 +1,63 @@
+# Troubleshooting
+
+If something is not working, start with the issue that is closest to what you are seeing.
+
+## Chat is not working
+
+Check these first:
+
+- Your AI provider is configured in **Settings**
+- Your API key is present and valid
+- The model name is correct for that provider
+
+If Pondview says AI configuration is missing, open **Settings** and save the provider, model, and key again.
+
+## I connected data, but I cannot query it
+
+Possible causes:
+
+- The source was added, but the active runtime cannot use it
+- You are using a remote source while the app is running in DuckDB/WASM mode
+- The remote runtime is unavailable
+
+If you are connecting Postgres, MySQL, SQLite, or MotherDuck, check the runtime in **Settings** and review [SQL Runtime Backends](/introduction/sql-runtime-backends).
+
+## My uploaded file is missing or not showing up
+
+Try:
+
+- Re-importing the file
+- Confirming the file type is supported
+- Refreshing the workspace if the browser state looks stale
+
+If you are relying on browser-local state, also review [Uploads and Browser Storage](/introduction/uploads-and-browser-storage).
+
+## Results do not look right
+
+Try this workflow:
+
+1. Ask a simpler question
+2. Review the first result
+3. Switch to manual mode
+4. Refine the result before saving it
+
+This is usually the fastest way to separate "bad question" from "bad output formatting."
+
+## Dashboards are not updating the way I expect
+
+Check:
+
+- Whether the underlying data source is still available
+- Whether the selected runtime is the one you expect
+- Whether you are looking at a saved dashboard result rather than an exploratory chat result
+
+If you need the technical execution model, see [Dashboards](/guide/dashboards) and [DuckDB Usage Overview](/introduction/duckdb-usage-overview).
+
+## Still stuck?
+
+Use these deeper references:
+
+- [AI Provider Configuration](/introduction/ai-provider-configuration)
+- [Connected Data Sources](/introduction/connected-data-sources)
+- [SQL Runtime Backends](/introduction/sql-runtime-backends)
+- [Workspace Persistence](/introduction/workspace-persistence)

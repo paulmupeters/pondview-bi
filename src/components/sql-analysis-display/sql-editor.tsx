@@ -1,4 +1,9 @@
-import { createSqlExecuteQuery, SqlConsole } from "@/components/sql-console";
+import { useMemo } from "react";
+import {
+  createSqlAutocompleteAction,
+  createSqlExecuteQuery,
+  SqlConsole,
+} from "@/components/sql-console";
 import type { Result } from "@/lib/types";
 
 interface SqlEditorProps {
@@ -19,7 +24,14 @@ export function SqlEditor({
   onQuerySuccess,
   className,
 }: SqlEditorProps) {
-  const executeQuery = createSqlExecuteQuery({ dbIdentifier });
+  const executeQuery = useMemo(
+    () => createSqlExecuteQuery({ dbIdentifier }),
+    [dbIdentifier],
+  );
+  const autocompleteAction = useMemo(
+    () => createSqlAutocompleteAction({ dbIdentifier }),
+    [dbIdentifier],
+  );
 
   return (
     <SqlConsole
@@ -27,6 +39,7 @@ export function SqlEditor({
       historyKey={HISTORY_KEY}
       historyLimit={HISTORY_LIMIT}
       executeQueryAction={executeQuery}
+      autocompleteAction={autocompleteAction}
       onSuccessAction={({ sql, rows, columns }) =>
         onQuerySuccess(sql, rows as Result[], columns)
       }
