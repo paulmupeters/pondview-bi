@@ -30,6 +30,7 @@ import {
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
+import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,6 +75,7 @@ interface PromptInputWrapperProps {
     backend?: SqlBackend;
     dbIdentifier?: string;
     catalogContext?: string | null;
+    sourceDescriptor?: SqlAnalysisData["sourceDescriptor"];
   } | null;
   selectedCatalogContext?: string | null;
   onConsoleApiChange?: (api: SqlConsoleApi | null) => void;
@@ -391,6 +393,16 @@ export function PromptInputWrapper({
       dbIdentifier: sqlResult.dbIdentifier,
       catalogContext: sqlResult.catalogContext ?? selectedCatalogContext,
       sqlBackend: sqlResult.backend,
+      sourceDescriptor:
+        sqlResult.sourceDescriptor ??
+        (sqlResult.backend
+          ? buildDashboardSourceDescriptor({
+              runtimeBackend: sqlResult.backend,
+              dbIdentifier: sqlResult.dbIdentifier,
+              catalogContext:
+                sqlResult.catalogContext ?? selectedCatalogContext ?? null,
+            })
+          : null),
       executionTime: sqlResult.durationMs,
       rowCount: sqlResult.rows.length,
       columns: sqlResult.columns,

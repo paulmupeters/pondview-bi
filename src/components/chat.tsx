@@ -21,6 +21,7 @@ import {
   type PromptMode,
 } from "@/components/prompt-input-wrapper";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
+import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { SqlConsoleApi } from "@/components/sql-console";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { VisualizationPanel } from "@/components/visualization-panel";
@@ -239,6 +240,7 @@ export default function Chat({
     backend?: SqlBackend;
     dbIdentifier?: string;
     catalogContext?: string | null;
+    sourceDescriptor?: SqlAnalysisData["sourceDescriptor"];
   } | null>(null);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
   const [storedSqlQueries, setStoredSqlQueries] = useState<SavedSqlQuery[]>([]);
@@ -308,6 +310,16 @@ export default function Chat({
           dbIdentifier: sqlResult.dbIdentifier,
           catalogContext: sqlResult.catalogContext ?? selectedCatalogContext,
           sqlBackend: sqlResult.backend,
+          sourceDescriptor:
+            sqlResult.sourceDescriptor ??
+            (sqlResult.backend
+              ? buildDashboardSourceDescriptor({
+                  runtimeBackend: sqlResult.backend,
+                  dbIdentifier: sqlResult.dbIdentifier,
+                  catalogContext:
+                    sqlResult.catalogContext ?? selectedCatalogContext ?? null,
+                })
+              : null),
           executionTime: sqlResult.durationMs,
           rowCount: sqlResult.rows.length,
           columns: sqlResult.columns,
@@ -732,6 +744,10 @@ export default function Chat({
       query: "",
       dbIdentifier: defaultDatabase,
       sqlBackend: effectiveSqlBackend,
+      sourceDescriptor: buildDashboardSourceDescriptor({
+        runtimeBackend: effectiveSqlBackend,
+        dbIdentifier: defaultDatabase,
+      }),
       isSqlExpandedInitial: true,
       rowCount: 0,
       columns: [],
@@ -813,6 +829,15 @@ export default function Chat({
         dbIdentifier: payload.dbIdentifier,
         catalogContext: payload.catalogContext ?? null,
         sqlBackend: payload.sqlBackend,
+        sourceDescriptor:
+          payload.sourceDescriptor ??
+          (payload.sqlBackend
+            ? buildDashboardSourceDescriptor({
+                runtimeBackend: payload.sqlBackend,
+                dbIdentifier: payload.dbIdentifier,
+                catalogContext: payload.catalogContext ?? null,
+              })
+            : null),
         executionTime: payload.executionTime,
         rowCount:
           payload.rowCount ??
@@ -877,6 +902,7 @@ export default function Chat({
         backend?: SqlBackend;
         dbIdentifier?: string;
         catalogContext?: string | null;
+        sourceDescriptor?: SqlAnalysisData["sourceDescriptor"];
       } | null,
     ) => {
       setSqlResult(result);

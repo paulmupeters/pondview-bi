@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -27,6 +28,7 @@ export type SqlPreviewRunResult = {
   backend?: SqlBackend;
   dbIdentifier?: string;
   catalogContext?: string | null;
+  sourceDescriptor?: ReturnType<typeof buildDashboardSourceDescriptor>;
 };
 
 export type SqlPreviewPanelHandle = {
@@ -190,6 +192,11 @@ export const SqlPreviewPanel = forwardRef<
         backend: result.backend,
         dbIdentifier,
         catalogContext,
+        sourceDescriptor: buildDashboardSourceDescriptor({
+          runtimeBackend: result.backend,
+          dbIdentifier,
+          catalogContext,
+        }),
       });
     } catch (err) {
       const message =

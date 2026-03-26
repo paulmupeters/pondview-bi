@@ -1,107 +1,109 @@
 # DuckDB Usage Overview
 
-This note summarizes every place the app touches DuckDB today, how each surface is wired, and where the boundaries are starting to blur (dashboards, cached tables, AI tools). Use it as the source of truth until we consolidate the runners the way we want (either WASM/HTTP for local materializations and Node API for connected tables).
+This note summarizes the current DuckDB execution surfaces and how dashboards fit into them after the dashboard source-descriptor refactor.
 
 ## Execution Surfaces at a Glance
 
 | Runner | Where it lives | Primary entry points | Typical identifiers |
 | --- | --- | --- | --- |
-| Node adapter (`@duckdb/node-api`) | `src/lib/duckdb/duckdb-node.ts` via `runSqlNormalized` | AI tools, SQL console/REPL, `/api/tables`, schema introspection | `md:analytics`, `duckdb:data/server.duckdb`, any filesystem path |
-| HTTP adapter (`duckdb-http`) | `src/lib/duckdb/duckdb-http.ts` + `/api/duckdb/query` when `config` is provided | Manual `/api/duckdb/query` calls, dashboard runtime when `duckdb-http` is the active backend, future remote DuckDBs | URL, host/port (+ auth) |
-| DuckDB-Wasm (OPFS) | `src/lib/duckdb/duckdb-wasm.ts` + `duckdb-wasm-client.ts` | Connect Data dialog "cache in DuckDB" path, local cleanup | Implicit `opfs://local.duckdb` |
+| Bridge runtime | `src/lib/bridge/pondview-bridge.ts` via `runQuery(...)` | SQL console, chat/manual SQL runs, dashboard execution when backend is `bridge` | runtime-default, `md:analytics`, external connector identifiers |
+| DuckDB HTTP runtime | `src/lib/duckdb/duckdb-http-browser.ts` via `runQuery(...)` | SQL console, chat/manual SQL runs, dashboard execution when backend is `duckdb-http` | runtime-default, `md:analytics`, external connector identifiers |
+| DuckDB-Wasm | `src/lib/sql/run-query-wasm.ts` via `runQuery(...)` | local browser SQL execution, dashboard execution when backend is `duckdb-wasm` | `wasm:local` |
 
-## Node Adapter (`runSqlNormalized`)
+The old write-up around a single node-centric path is no longer the right mental model for dashboard execution. Dashboard execution now follows the stored `DashboardSourceDescriptor` plus the selected runtime backend.
 
-`runSqlNormalized` is the only path the server uses when a `dbIdentifier` does **not** look like Postgres. It resolves the identifier, runs the SQL through `@duckdb/node-api`, and normalizes the rows before they ever touch React components.
+## Shared Query Entry Point
 
-```ts
-export const runSqlNormalized = (id: string, sql: string) =>
-  selectAdapter(id).runSqlNormalized(id, sql);
-```
+`runQuery(...)` in `src/lib/sql/run-query.ts` is the common low-level query runner for interactive SQL.
 
-```ts
-export async function runSqlNormalized(
-  dbIdentifier: string,
-  sql: string,
-): Promise<Result[]> {
-  const dbPath = resolveDbPath(dbIdentifier);
-  const rawRows = await runRaw(dbPath, sql);
-  // ...
-}
-```
+It accepts:
 
-```ts
-export async function runSqlAndGetRowObjectsJson(
-  dbPath: string,
-  sql: string
-): Promise<Record<string, unknown>[]> {
-  const instance = await getDuckDbInstance(dbPath);
-  const connection = await instance.connect();
-  const reader = await connection.runAndReadAll(sql);
-  return reader.getRowObjectsJson();
-}
-```
+- SQL text
+- optional `dbIdentifier`
+- optional `catalogContext`
+- a runtime backend preference
 
-### Features that currently hard-depend on `runSqlNormalized`
+It then routes to:
 
-- **AI tools** - `executeSqlTool` and `getTableSchemaTool` both call `runSqlNormalized` directly, so the LLM is always talking to the node adapter no matter what database identifier it sees.
-- **Prompt input SQL/chart mode** - `SqlAnalysisDisplay`, `DuckdbRepl`, and `createDuckDbExecuteQuery` all funnel through the `runSqlAndGetRowObjectsJson` server action (`src/actions/queries.ts`), which again calls `runSqlNormalized`.
-- **Schema browsing** - Server actions `getSchemas`, `getTables`, and `/api/tables` run through the same adapter.
+- Bridge
+- DuckDB HTTP
+- DuckDB-Wasm
+- MotherDuck attachment flow when the identifier is `md:...`
 
-### What `dbIdentifier` actually is today
+## Dashboard Source Model
 
-- `resolveDbPath` accepts bare file paths, `duckdb:` URIs, or `md:` MotherDuck identifiers (injecting the token automatically).
-- The identifier that ends up on a chart (and therefore on a dashboard) ultimately flows from `selectedDb` in `PromptInputWrapper`, which comes from the `ConnectedDataPanel`. That panel currently prefers `attachAs` over the true connection string:
+Dashboards no longer infer execution only from loose `dbIdentifier` fields.
 
-```ts
-const getDbIdentifier = (entry: (typeof connectedTables)[0]): string => {
-  return entry.attachAs || `${entry.type}:${entry.databasePath}`;
-};
-```
+Saved charts and measures carry a `DashboardSourceDescriptor` with:
 
-> **Implication:** when `attachAs` exists (it always does in `appendConnectedTable`), dashboards persist e.g. `finance_source` instead of `md:production`. `resolveDbPath` treats that as a local DuckDB file. That mismatch is what causes most "dashboard can't find table" reports whenever the wrong method is picked.
+- `kind`: `runtime`, `motherduck`, or `external`
+- `runtimeBackend`
+- `dbIdentifier`
+- `catalogContext`
+- optional `externalType`
 
-## HTTP Adapter (`duckdb-http`)
+That descriptor is persisted with canonical SQL and reused during dashboard execution.
 
-The HTTP path lets us talk to DuckDB instances exposed through the `httpserver` extension. Two places use it today:
+## Dashboard Execution
 
-1. **On-demand queries** - `runQuery` (client) posts to `/api/duckdb/query`. If the request body contains `config`, that route calls `runSqlAndGetRowObjectsJsonHttp` instead of the node adapter.
-2. **Dashboard execution** - the browser dashboard filter engine can resolve its active backend to `duckdb-http`, in which case chart execution and `mat.*` alias creation happen against that runtime.
+Dashboard execution is browser-first and runs through:
 
-```ts
-if (body.dbIdentifier) {
-  const dbPath = resolveDbPath(body.dbIdentifier);
-  const rows = await runSqlAndGetRowObjectsJson(dbPath, body.sql);
-  return Response.json({ rows });
-}
-const rows = await runSqlAndGetRowObjectsJsonHttp(body.config, body.sql, req.signal);
-return Response.json({ rows });
-```
+- `src/lib/dashboard/browser-filter-engine.ts`
+- `src/lib/dashboard/execution-plan.ts`
+- `src/lib/dashboard/source-descriptor.ts`
 
-## DuckDB-Wasm (OPFS)
+The execution planner resolves each source into one of three modes:
 
-`DuckdbWasmProvider` owns a singleton `AsyncDuckDB` that reads/writes `opfs://local.duckdb`. The only consumer right now is `ConnectDataDialog` (plus the cleanup path when a connected table is removed):
+1. `live`
+   Runtime-native DuckDB or MotherDuck sources execute directly.
+2. `external-cache`
+   Postgres, MySQL, and SQLite sources are copied into runtime-managed execution tables before joins and filters run.
+3. `snapshot`
+   Explicit frozen dashboard snapshots execute against immutable bindings.
 
-- When "Cache in DuckDB-Wasm" is toggled, `connect-data-dialog.tsx` fetches rows from `/api/tables` and calls `DuckdbWasmClient.insertJSONRows(schema, table, rows)`, which writes JSON into OPFS and creates the table in the browser.
-- Removing a connected table drops the cached tables by calling `DuckdbWasmClient.dropTable`.
+When aliases are needed, the runtime creates them in `pondview_exec`.
 
-No query surface actually reads those cached OPFS tables yet; the WASM database never feeds dashboards or the SQL console.
+## Dashboard Persistence
+
+Dashboard metadata is stored in the DuckDB schema `pondview`, not in IndexedDB object stores.
+
+Saved dashboard entities store canonical source information only:
+
+- `source_sql`
+- `source_descriptor_json`
+- optional `snapshot_id`
+
+They do not store:
+
+- runtime-rewritten SQL
+- `pondview_source` aliases
+- save-time materialization SQL
+
+## External Connectors
+
+External connectors still rely on DuckDB extensions and attachment plans, but the role has narrowed:
+
+- interactive SQL can attach the source directly for execution
+- dashboard execution can attach temporarily when refreshing execution-time external caches
+
+The important distinction is that external caching is now operational, not semantic. The cache exists to make dashboard joins and filters work in a single runtime, not to replace the saved source SQL.
 
 ## Connected Tables Data Flow
 
-1. **Capture** - `appendConnectedTable` stores entries (type, `databasePath`, optional schema/tables, `attachAs`, etc.) in `localStorage`. Browser mode does not sync these entries into YAML.
-2. **Client selection** - `useConnectedTables` hydrates those entries so components such as `ConnectedDataPanel` can present them. Selecting one sets `selectedDb` to either `attachAs` or `type:databasePath`.
-3. **Authoring** - `PromptInputWrapper` passes `selectedDb` into:
-   - `DuckdbRepl` -> `createDuckDbExecuteQuery` -> `/api/duckdb/query` -> `runSqlNormalized`.
-   - `SqlAnalysisDisplay` when charting, which ends up in the same server action.
-   - `DashboardBuilderPanel`, which persists `payload.dbIdentifier` so future dashboard loads will again run `runSqlNormalized` with the same string.
-4. **AI context** - `connectedTables` is serialized into the chat system prompt, but all tool invocations still route through `runSqlNormalized`.
+At a high level:
 
-## Pain Points & Aligning to the Desired Split
+1. Connected source metadata is stored in browser state.
+2. Interactive SQL surfaces run through `runQuery(...)`.
+3. Saved dashboard content preserves canonical SQL plus a source descriptor.
+4. Dashboard execution plans runtime bindings from that saved descriptor rather than reconstructing source identity from transient UI state.
 
-- **Cached WASM tables are effectively write-only.** We ingest rows into OPFS but no code ever uses the WASM connection to satisfy a query. If local materialized tables should prefer WASM or HTTP, we either need to run queries through `DuckdbWasmClient` (for purely local work) or make the dashboard/browser filter path execute against that same runtime.
-- **Dashboards/SQL console can't tell which runner to use.** Every `dbIdentifier` currently flows into the node adapter. When an identifier is actually an alias (`attachAs`) or some other runtime-local name, `resolveDbPath` opens/creates a local DuckDB file with that alias instead of attaching to the intended source. We need an explicit discriminator (e.g., `duckdb+wasm://`, `duckdb+http://`, `duckdb+node://`) or at minimum stop swapping the identifier for `attachAs` in `ConnectedDataPanel`.
-- **Runtime selection is still split.** The browser dashboard filter engine can target different backends, while connected-source metadata still flows through separate local/browser state. If we want one consistent materialization runtime, we should make that routing explicit instead of relying on aliases or implicit backend assumptions.
-- **Connected tables should stay on the node adapter.** To reach the target architecture ("connected_tables using runSqlNormalized via node API"), we simply need to propagate the original `databasePath` (`md:...`, `duckdb:...`, filesystem path) into `selectedDb`/`dbIdentifier` everywhere instead of the alias, and make sure dashboards persist that identifier. Once that is in place, the node adapter remains the single source of truth for connected sources, while local materializations can move to the WASM or HTTP runner.
+## Current Boundaries
 
-> **Next actions:** Decide on an explicit `dbIdentifier` scheme (or metadata field) that lets us route queries to the right runner, update `ConnectedDataPanel` to emit real connection strings, and add a consumer that can query the WASM/HTTP materialized tables before we rely on them in dashboards.
+The current separation of concerns is:
+
+- `runQuery(...)` is the low-level SQL runner
+- dashboard persistence is handled by `dashboard-storage-service.ts`
+- dashboard execution planning is handled above the runner
+- filter rewriting happens only at execution time
+
+That is the boundary to preserve as new dashboard snapshot and cache-management UI is added.

@@ -31,7 +31,7 @@ BI Chat is an AI-assisted analytics app for exploring connected data sources wit
 - Run locally with DuckDB WASM in the browser
 - Switch to Bridge or DuckDB over HTTP from Settings
 - Persist browser workspace state and export/import it
-- Optionally persist materialized DuckDB tables across restarts
+- Execute dashboards through planned runtime bindings and `pondview_exec` aliases
 
 ## Tech Stack
 
@@ -99,7 +99,7 @@ npm run dev
 Use `.env.local` only for the integrations you need:
 
 ```bash
-# Optional: persist local DuckDB materializations
+# Optional: persist local DuckDB runtime data
 DUCKDB_PERSIST_PATH=./data/materialized.duckdb
 
 # Optional: DuckDB over HTTP runtime
@@ -216,9 +216,10 @@ Current built-in provider options include Gateway, OpenAI, Anthropic, xAI, and O
 Dashboard filtering is browser-first:
 
 - join definitions are edited in Settings and stored in `localStorage` under `bi.dashboard.joinDefs.v1`
-- chart SQL is rewritten in the browser when slicers are active
-- referenced tables are exposed through runtime-local `mat.*` aliases
-- simple references become views when possible; harder cases can fall back to copied tables
+- saved charts and measures keep canonical SQL plus a source descriptor
+- chart SQL is only rewritten at execution time when slicers or planned source bindings require it
+- referenced tables are exposed through runtime-local `pondview_exec.*` aliases
+  - runtime-native sources can execute live; external sources can be refreshed into execution tables when needed
 
 ### Datasource context
 

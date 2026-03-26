@@ -1,3 +1,4 @@
+import type { DashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 
 export type DashboardStorageStatus = "shared" | "best-effort";
@@ -26,6 +27,8 @@ export interface WorkspaceDashboard {
   updatedAt: number;
   columns?: number;
   autoFitRows?: boolean;
+  runtimeBackend?: SqlBackend | null;
+  activeSnapshotId?: string | null;
   homeDbIdentifier?: string | null;
   homeSqlBackend?: SqlBackend | null;
   storageStatus?: DashboardStorageStatus | null;
@@ -37,6 +40,9 @@ export interface WorkspaceChart {
   title: string | null;
   description: string | null;
   sql: string;
+  sourceDescriptor?: DashboardSourceDescriptor | null;
+  sourceDescriptorJson?: string | null;
+  snapshotId?: string | null;
   dbIdentifier: string | null;
   catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
@@ -58,6 +64,9 @@ export interface WorkspaceDashboardMeasure {
   key: string;
   label: string;
   sql: string;
+  sourceDescriptor?: DashboardSourceDescriptor | null;
+  sourceDescriptorJson?: string | null;
+  snapshotId?: string | null;
   dbIdentifier: string | null;
   catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;

@@ -60,16 +60,37 @@ describe("browser-filter-engine", () => {
         tableName: "customers",
         sourceReference: '"customers"',
         catalogContext: null,
+        mode: "live",
+        sourceDescriptor: {
+          kind: "runtime",
+          runtimeBackend: "duckdb-wasm",
+          dbIdentifier: "wasm:local",
+          catalogContext: null,
+        },
       },
       {
         tableName: "items",
         sourceReference: '"analytics"."items"',
         catalogContext: null,
+        mode: "live",
+        sourceDescriptor: {
+          kind: "runtime",
+          runtimeBackend: "duckdb-wasm",
+          dbIdentifier: "wasm:local",
+          catalogContext: null,
+        },
       },
       {
         tableName: "orders",
         sourceReference: '"main"."orders"',
         catalogContext: null,
+        mode: "live",
+        sourceDescriptor: {
+          kind: "runtime",
+          runtimeBackend: "duckdb-wasm",
+          dbIdentifier: "wasm:local",
+          catalogContext: null,
+        },
       },
     ]);
   });
@@ -138,19 +159,19 @@ describe("browser-filter-engine", () => {
       },
     );
 
-    expect(runtimeSqlCalls.some((sql) => sql.includes('"mat"."orders"'))).toBe(
-      true,
-    );
+    expect(
+      runtimeSqlCalls.some((sql) => sql.includes('"pondview_exec"."orders"')),
+    ).toBe(true);
     expect(
       runtimeSqlCalls.some((sql) =>
         sql.includes(
-          'CREATE OR REPLACE VIEW "mat"."orders" AS SELECT * FROM orders',
+          'CREATE OR REPLACE VIEW "pondview_exec"."orders" AS SELECT * FROM orders',
         ),
       ),
     ).toBe(true);
     expect(
       runtimeSqlCalls.some((sql) =>
-        sql.includes('CREATE OR REPLACE TABLE "mat"."orders"'),
+        sql.includes('CREATE OR REPLACE TABLE "pondview_exec"."orders"'),
       ),
     ).toBe(false);
     expect(
@@ -217,7 +238,7 @@ describe("browser-filter-engine", () => {
 
     expect(
       runtimeSqlCalls.some((sql) =>
-        sql.includes('CREATE OR REPLACE VIEW "mat"."customers"'),
+        sql.includes('CREATE OR REPLACE VIEW "pondview_exec"."customers"'),
       ),
     ).toBe(true);
     expect(result.rowsByChartId[chart.id]).toEqual([{ source: "raw" }]);
@@ -339,9 +360,78 @@ describe("browser-filter-engine", () => {
 
     expect(
       runtimeSqlCalls.filter((sql) =>
-        sql.includes('CREATE OR REPLACE VIEW "mat"."orders"'),
+        sql.includes(
+          'CREATE OR REPLACE VIEW "pondview_exec"."orders"',
+        ),
       ).length,
     ).toBe(2);
+  });
+
+  test("dedupes concurrent materialization for the same dashboard signature", async () => {
+    const cache = new Map();
+    const runtimeSqlCalls: string[] = [];
+    const chart = createChart({
+      id: "chart-1",
+      sql: "SELECT * FROM orders",
+    });
+    const filters: Filter[] = [
+      {
+        field: "orders.region",
+        op: "eq",
+        values: ["EMEA"],
+      },
+    ];
+
+    await Promise.all([
+      executeDashboardChartsWithFilters(
+        {
+          dashboardId: "dashboard-1",
+          charts: [chart],
+          dashboardFilters: filters,
+          chartFiltersById: {},
+        },
+        {
+          resolveBackend: () => "duckdb-http",
+          resolveRuntimeFingerprint: async () => "duckdb-http:shared:8080",
+          readJoinDefs: async () => [],
+          listCharts: async () => [chart],
+          getMaterializationCache: () => cache,
+          runRuntimeSql: async (sql: string) => {
+            runtimeSqlCalls.push(sql);
+            return [];
+          },
+          runChartSql: async () => [],
+        },
+      ),
+      executeDashboardChartsWithFilters(
+        {
+          dashboardId: "dashboard-1",
+          charts: [chart],
+          dashboardFilters: filters,
+          chartFiltersById: {},
+        },
+        {
+          resolveBackend: () => "duckdb-http",
+          resolveRuntimeFingerprint: async () => "duckdb-http:shared:8080",
+          readJoinDefs: async () => [],
+          listCharts: async () => [chart],
+          getMaterializationCache: () => cache,
+          runRuntimeSql: async (sql: string) => {
+            runtimeSqlCalls.push(sql);
+            return [];
+          },
+          runChartSql: async () => [],
+        },
+      ),
+    ]);
+
+    expect(
+      runtimeSqlCalls.filter((sql) =>
+        sql.includes(
+          'CREATE OR REPLACE VIEW "pondview_exec"."orders"',
+        ),
+      ).length,
+    ).toBe(1);
   });
 
   test("lists view aliases as materialized tables", async () => {
@@ -390,7 +480,7 @@ describe("browser-filter-engine", () => {
     expect(result.rowsByChartId[chart.id]).toEqual([{ source: "duckdb-http" }]);
   });
 
-  test("passes chart catalog context into filtered runtime execution", async () => {
+  test("uses chart catalog context for alias creation but not alias-backed execution", async () => {
     const runtimeSqlCalls: Array<{
       sql: string;
       catalogContext?: string | null;
@@ -434,7 +524,9 @@ describe("browser-filter-engine", () => {
     expect(
       runtimeSqlCalls.some(
         (call) =>
-          call.sql.includes('CREATE OR REPLACE VIEW "mat"."events"') &&
+          call.sql.includes(
+            'CREATE OR REPLACE VIEW "pondview_exec"."events"',
+          ) &&
           call.catalogContext === "warehouse",
       ),
     ).toBe(true);
@@ -442,7 +534,7 @@ describe("browser-filter-engine", () => {
       runtimeSqlCalls.some(
         (call) =>
           call.sql.includes('WITH "__filtered_base"') &&
-          call.catalogContext === "warehouse",
+          call.catalogContext == null,
       ),
     ).toBe(true);
   });

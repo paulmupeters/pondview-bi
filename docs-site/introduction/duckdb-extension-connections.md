@@ -1,75 +1,84 @@
 # DuckDB Extension Connections
 
-This project now routes all SQL traffic through DuckDB, even when the identifier points to an external data source. DuckDB installs the proper extension (postgres, mysql, Google Sheets, etc.), attaches the database, rewrites the SQL to reference the attached alias, executes the query, and finally detaches. This keeps the runtime in one place while still allowing the rich extension ecosystem.
+This project routes external SQL sources through DuckDB extensions when needed, but dashboards now treat those connections differently from interactive SQL.
 
-## How the flow works
+## Two Main Uses
 
-1. **Identifier resolution**  
-   - `@/lib/duckdb/path.ts` exports `detectPostgresConnection` (generalize this into `detectExternalConnection` if you add more connectors).  
-   - When it sees `postgres://`, `postgresql://`, or `pg:alias` it builds a `SourceConnectionConfig` that contains the extension name, the identifier (URI), `readOnly`, and the expected DuckDB attach type.
+DuckDB extension-backed sources show up in two distinct paths:
 
-2. **Attachment plan**  
-   - `buildAttachmentPlan()` in `@/lib/duckdb/duckdb-attachments.ts` uses the connection config to install/load the extension (if necessary) and emit an `ATTACH` statement with a sanitized alias.  
-   - The alias is reused for rewriting queries and detaching later.
+1. **Interactive SQL**
+   - `runQuery(...)` can attach an external source and execute directly against it.
+   - This is the normal path for manual queries, chat-generated SQL, and ad hoc inspection.
 
-3. **Query execution**  
-   - `runSqlNormalized()` (duckdb query runner) now checks for an external connection.  
-   - If one exists it:
-     - Executes the `INSTALL/LOAD/ATTACH` statements on the DuckDB connection.
-     - Runs `rewriteSqlForAttachedDatabase(sql, alias)` to ensure tables reference `alias.schema.table`.
-     - Executes the rewritten SQL and normalizes the returned rows.
-     - Always detaches the database afterward (`DETACH DATABASE IF EXISTS <alias>`).
-   - Non-extension identifiers continue to hit DuckDB as before.
+2. **Dashboard execution**
+   - Saved dashboard charts and measures preserve canonical SQL plus a `DashboardSourceDescriptor`.
+   - At execution time, external Postgres, MySQL, and SQLite sources are typically refreshed into dashboard-managed execution tables before joins and filters run.
+   - The execution aliases used by the dashboard runtime live in `pondview_exec`.
 
-4. **Metadata helpers**  
-   - `getSchemas()`, `getTablesForSchema()`, and `getTables()` detect external connections and run analogous `information_schema` queries through the attached alias.  
-   - These functions also install/load and detach the extension for metadata queries so the UI can inspect attached tables transparently.
+## How External Detection Works
 
-5. **Router routing**  
-   - `src/lib/db/router.ts` now delegates everything to the DuckDB adapter. The old Postgres adapter (`src/lib/postgres/`) is unused but kept for reference.
+`@/lib/duckdb/path.ts` exports `detectExternalConnection(...)`, which recognizes supported external identifiers and returns a `SourceConnectionConfig`.
 
-## Adding new connectors
+Examples include:
 
-To support an additional backend (MySQL, Google Sheets, etc.), follow these steps:
+- Postgres: `postgres://...`, `postgresql://...`, `pg:alias`
+- MySQL: `mysql://...`, `mysql:alias`
+- SQLite: `sqlite:/path/to/file.db`
 
-1. **Detect the identifier**  
-   - Extend `detectPostgresConnection()` in `@/lib/duckdb/path.ts` (or rename it to `detectExternalConnection`) to recognize the new URI scheme/classic identifier (e.g. `mysql://`, `my:`, `sheets://`).
-   - Return a `SourceConnectionConfig` with:
-     - `type` matching a key in `ATTACH_TYPE_BY_SOURCE`.
-     - `identifier` pointing to the URI or DSN.
-     - `duckdbExtension` set to the DuckDB extension name (`mysql`, `google_sheets`, etc.).
-     - Optional `readOnly` if the source should be protected.
+The returned config includes:
 
-2. **Register the extension**  
-   - Update `ATTACH_TYPE_BY_SOURCE` and `DEFAULT_EXTENSION_BY_SOURCE` in `@/lib/duckdb/duckdb-attachments.ts` to describe the new backend.
-   - The materializer and metadata helpers already rely on those maps to issue `ATTACH` statements.
+- source `type`
+- normalized `identifier`
+- `duckdbExtension`
+- `readOnly`
 
-3. **Descriptions & metadata**  
-   - When storing connected tables, ensure the connection entry includes `type`, `identifier`, and `duckdbExtension`.  
-   - Browser mode currently persists connected-source metadata in local storage rather than syncing it into YAML.
+## Attachment Planning
 
-4. **Query rewriting**  
-   - The current `rewriteSqlForAttachedDatabase()` will prepend `alias.schema.table` heuristically. This works for most cases; adjust the regex if your source uses different naming conventions.
+`buildAttachmentPlan()` in `@/lib/duckdb/duckdb-attachments.ts` turns a `SourceConnectionConfig` into the DuckDB statements needed to:
 
-5. **Tests & documentation**  
-   - Update the relevant docs under `docs-site/guide/` to mention the new extension and any required env vars.  
-   - Add integration tests or manual runs using a PostgreSQL/MySQL/Google Sheets source to verify the attach/query/detach lifecycle completes cleanly.
+- install/load the extension if necessary
+- attach the source with a runtime alias
+- detach it afterward
 
-## Example: PostgreSQL
+These aliases are temporary runtime details. They are not persisted in dashboard SQL or dashboard metadata.
 
-1. User selects or provides `postgres://...` or `pg:analytics`.
-2. The router calls `runSqlNormalized()`.
-3. DuckDB:
-   - Installs & loads the `postgres` extension.
-   - Runs `ATTACH '...' AS postgres_alias (TYPE postgres, READ_ONLY);`.
-   - Rewrites `SELECT * FROM users` -> `SELECT * FROM postgres_alias.public.users`.
-   - Executes the query and returns normalized rows.
-   - Detaches the alias after completion.
+## Interactive Query Flow
+
+For interactive SQL, `runQuery(...)` can:
+
+1. detect the external connection
+2. install/load the extension
+3. attach the source
+4. run the SQL through the selected backend
+5. detach the source
+
+This keeps the low-level query path flexible without baking the attached alias into saved artifacts.
+
+## Dashboard Flow
+
+For dashboards, the important behavior is different:
+
+- saved charts and measures keep their original source SQL
+- the saved source descriptor identifies the real source
+- external sources are copied into dashboard-managed execution tables only when the runtime planner needs them
+- filters and joins run against planned execution bindings, not against rewritten saved SQL
+
+That means external caching is an execution concern, not a persistence concern.
+
+## Adding New Connectors
+
+To support another external backend:
+
+1. Extend `detectExternalConnection(...)` in `@/lib/duckdb/path.ts`.
+2. Return a `SourceConnectionConfig` with the correct source type and DuckDB extension.
+3. Register any needed attachment behavior in `@/lib/duckdb/duckdb-attachments.ts`.
+4. Verify both paths:
+   - direct interactive SQL attachment
+   - dashboard execution-time caching or binding
+5. Update the docs for supported identifiers and any required env vars.
 
 ## Notes
 
-- DuckDB handles caching of extensions, so repeated queries reuse the loaded module.
-- To prevent credential leakage, avoid embedding passwords in the identifier; use `pg:` aliases backed by env vars (`PG_DEFAULT_URL`, etc.).
-- If you need write access, remove `readOnly: true` from the `SourceConnectionConfig` and drop the `READ_ONLY` flag from the `ATTACH` clause.
-
-With this approach you can eventually support any DuckDB extension by teaching the detection logic about the identifier format and registering the extension once.
+- Avoid persisting temporary attach aliases in saved metadata.
+- Prefer alias-based environment lookups such as `pg:analytics` or `mysql:warehouse` when you do not want raw credentials in browser-facing state.
+- If a connector needs write access, review the `readOnly` defaults before enabling it.
