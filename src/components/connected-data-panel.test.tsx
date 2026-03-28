@@ -12,7 +12,7 @@ describe("connected source explorer helpers", () => {
     const entry: ConnectedTable = {
       type: "postgres",
       databasePath:
-        "host=167.235.227.188 port=5432 user=admin password=secret dbname=main",
+        "host=db.example.test port=5432 user=admin password=secret dbname=main",
       attachAs: "main",
       schema: "public",
       tables: ["keywords"],

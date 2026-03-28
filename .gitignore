@@ -75,3 +75,6 @@ semantic-layer/models/sources.yml
 # analyzer
 stats.html
 notes.md
+
+# local app state
+/state/

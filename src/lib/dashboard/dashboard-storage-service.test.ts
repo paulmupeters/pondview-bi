@@ -108,7 +108,7 @@ describe("resolveDashboardSourceMode", () => {
     await expect(
       resolveDashboardSourceMode({
         sourceDbIdentifier:
-          "host=167.235.227.188 port=5432 user=admin password=secret dbname=main",
+          "host=db.example.test port=5432 user=admin password=secret dbname=main",
         targetSqlBackend: "duckdb-http",
         probeRuntimeExecution: async () => true,
       }),
@@ -119,7 +119,7 @@ describe("resolveDashboardSourceMode", () => {
     await expect(
       resolveDashboardSourceMode({
         sourceDbIdentifier:
-          "host=167.235.227.188 port=5432 user=admin password=secret dbname=main",
+          "host=db.example.test port=5432 user=admin password=secret dbname=main",
         targetSqlBackend: "duckdb-http",
         probeRuntimeExecution: async () => false,
       }),
