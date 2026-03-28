@@ -198,7 +198,7 @@ describe("runQuery routing", () => {
       `ATTACH 'md:my_db' AS "motherduck";`,
       "SELECT current_catalog() AS current_catalog;",
       'USE "motherduck";',
-      "SELECT * FROM unicorns",
+      "SELECT * FROM motherduck.unicorns",
       'USE "duckdb";',
       'DETACH DATABASE IF EXISTS "motherduck";',
     ]);
@@ -259,6 +259,49 @@ describe("runQuery routing", () => {
       'DETACH DATABASE IF EXISTS "motherduck";',
     ]);
     expect(result.rows).toEqual([{ company: "Stripe" }]);
+  });
+
+  test("rewrites default-schema MotherDuck queries to catalog-qualified refs", async () => {
+    const receivedSql: string[] = [];
+    const runQuery = createRunQuery({
+      resolveBackend: () => "duckdb-http",
+      runDuckDbHttp: async (sql) => {
+        receivedSql.push(sql);
+        if (sql.includes("current_catalog()")) {
+          return {
+            rows: [{ current_catalog: "duckdb" }],
+            columns: [{ name: "current_catalog", type: "VARCHAR" }],
+            durationMs: 0,
+          };
+        }
+        return {
+          rows: [],
+          columns: [],
+          durationMs: 0,
+        };
+      },
+      runWasm: async () => {
+        throw new Error("should not reach wasm");
+      },
+      assertWasmCompatibleIdentifier: () => {},
+    });
+
+    await runQuery({
+      sql: "SELECT * FROM main.unicorns",
+      dbIdentifier: "md:my_db",
+      backendPreference: "duckdb-http",
+    });
+
+    expect(receivedSql).toEqual([
+      "INSTALL motherduck;",
+      "LOAD motherduck;",
+      `ATTACH 'md:my_db' AS "motherduck";`,
+      "SELECT current_catalog() AS current_catalog;",
+      'USE "motherduck";',
+      "SELECT * FROM motherduck.unicorns",
+      'USE "duckdb";',
+      'DETACH DATABASE IF EXISTS "motherduck";',
+    ]);
   });
 
   test("wraps bridge queries with a selected catalog context", async () => {

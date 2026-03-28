@@ -119,6 +119,117 @@ function buildExecutionAttachmentAlias(tableName: string): string {
   return `${EXECUTION_ALIAS_SCHEMA}_source_${sanitized}_${nonce}`;
 }
 
+function splitSimpleIdentifierReference(reference: string): string[] | null {
+  const trimmed = reference.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parts: string[] = [];
+  let current = "";
+  let quote: '"' | "`" | null = null;
+
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const character = trimmed[index];
+
+    if (quote) {
+      current += character;
+      if (character === quote) {
+        const next = trimmed[index + 1];
+        if (next === quote) {
+          current += next;
+          index += 1;
+          continue;
+        }
+        quote = null;
+      }
+      continue;
+    }
+
+    if (character === '"' || character === "`") {
+      current += character;
+      quote = character;
+      continue;
+    }
+
+    if (character === ".") {
+      const part = current.trim();
+      if (!part) {
+        return null;
+      }
+      parts.push(part);
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  if (quote) {
+    return null;
+  }
+
+  const finalPart = current.trim();
+  if (!finalPart) {
+    return null;
+  }
+
+  parts.push(finalPart);
+  return parts;
+}
+
+function normalizeReferencePart(part: string): string {
+  const trimmed = part.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
+    return trimmed.slice(1, -1).replace(/""/g, '"').toLowerCase();
+  }
+
+  if (trimmed.startsWith("`") && trimmed.endsWith("`") && trimmed.length >= 2) {
+    return trimmed.slice(1, -1).replace(/``/g, "`").toLowerCase();
+  }
+
+  return trimmed.toLowerCase();
+}
+
+function buildMaterializationSourceReference(
+  tableRef: PlannedMaterializedTableRef,
+  attachedCatalogAlias?: string,
+): string {
+  const trimmed = tableRef.sourceReference.trim();
+  const parts = splitSimpleIdentifierReference(trimmed);
+  if (!parts || parts.length === 0) {
+    return trimmed;
+  }
+
+  if (attachedCatalogAlias) {
+    const attachedCatalogRef = quoteExecutionIdentifier(attachedCatalogAlias);
+    const first = normalizeReferencePart(parts[0]);
+
+    if (parts.length === 1) {
+      return `${attachedCatalogRef}.${parts[0]}`;
+    }
+
+    if (first === "motherduck") {
+      return `${attachedCatalogRef}.${parts.slice(1).join(".")}`;
+    }
+
+    if (
+      parts.length === 2 &&
+      (first === "main" || first === "public")
+    ) {
+      return `${attachedCatalogRef}.${parts[1]}`;
+    }
+
+    return `${attachedCatalogRef}.${parts.join(".")}`;
+  }
+
+  if (parts.length === 1) {
+    return `${quoteExecutionIdentifier("main")}.${parts[0]}`;
+  }
+
+  return trimmed;
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
@@ -772,7 +883,52 @@ async function ensureDashboardMaterialization(
       }
 
       try {
-        if (tableRef.mode === "external-cache") {
+        if (tableRef.sourceDescriptor.kind === "motherduck") {
+          const dbIdentifier = tableRef.sourceDescriptor.dbIdentifier;
+          if (!dbIdentifier) {
+            throw new Error(
+              `MotherDuck source ${tableRef.tableName} is missing a database identifier.`,
+            );
+          }
+
+          const attachmentPlan = buildAttachmentPlan({
+            type: "motherduck",
+            identifier: dbIdentifier.startsWith("duckdb:")
+              ? dbIdentifier.slice("duckdb:".length)
+              : dbIdentifier,
+            alias: buildExecutionAttachmentAlias(tableRef.tableName),
+            readOnly: false,
+            duckdbExtension: "motherduck",
+          });
+          const attachedSourceReference = buildMaterializationSourceReference(
+            tableRef,
+            attachmentPlan.alias,
+          );
+
+          try {
+            await deps.runRuntimeSql(
+              buildDetachStatement(attachmentPlan.alias, { ifExists: true }),
+              backend,
+            );
+            for (const statement of attachmentPlan.statements) {
+              await deps.runRuntimeSql(statement, backend);
+            }
+
+            await deps.runRuntimeSql(
+              `CREATE OR REPLACE TABLE ${aliasRef} AS SELECT * FROM ${attachedSourceReference};`,
+              backend,
+            );
+          } finally {
+            try {
+              await deps.runRuntimeSql(
+                buildDetachStatement(attachmentPlan.alias, { ifExists: true }),
+                backend,
+              );
+            } catch {
+              // Best-effort detach only.
+            }
+          }
+        } else if (tableRef.mode === "external-cache") {
           const dbIdentifier = tableRef.sourceDescriptor.dbIdentifier;
           const externalConnection = dbIdentifier
             ? detectExternalConnection(dbIdentifier)
@@ -813,10 +969,11 @@ async function ensureDashboardMaterialization(
             }
           }
         } else {
+          const sourceReference = buildMaterializationSourceReference(tableRef);
           const createAliasSql =
             tableRef.strategy === "view"
-              ? `CREATE OR REPLACE VIEW ${aliasRef} AS SELECT * FROM ${tableRef.sourceReference};`
-              : `CREATE OR REPLACE TABLE ${aliasRef} AS SELECT * FROM ${tableRef.sourceReference};`;
+              ? `CREATE OR REPLACE VIEW ${aliasRef} AS SELECT * FROM ${sourceReference};`
+              : `CREATE OR REPLACE TABLE ${aliasRef} AS SELECT * FROM ${sourceReference};`;
 
           await deps.runRuntimeSql(
             createAliasSql,

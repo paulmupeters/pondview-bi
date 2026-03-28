@@ -4,6 +4,7 @@ import {
   executeDashboardChartsWithFilters,
   getRelevantTablesForChart,
   listMaterializedTablesForBackend,
+  loadDashboardDimensions,
   loadDashboardDimensionValues,
 } from "@/lib/dashboard/browser-filter-engine";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
@@ -173,8 +174,8 @@ describe("browser-filter-engine", () => {
     ).toBe(true);
     expect(
       runtimeSqlCalls.some((sql) =>
-        sql.includes(
-          'CREATE OR REPLACE VIEW "pondview_exec"."orders" AS SELECT * FROM orders',
+        /CREATE OR REPLACE VIEW "pondview_exec"\."orders" AS SELECT \* FROM "main"\.orders;?/.test(
+          sql,
         ),
       ),
     ).toBe(true);
@@ -602,6 +603,58 @@ describe("browser-filter-engine", () => {
     );
     expect(materializationCall?.catalogContext).toMatch(
       /^pondview_exec_source_astronomy_/,
+    );
+  });
+
+  test("materializes MotherDuck tables through a temporary attachment", async () => {
+    const runtimeSqlCalls: Array<{
+      sql: string;
+      catalogContext?: string | null;
+    }> = [];
+    const chart = createChart({
+      id: "chart-motherduck",
+      sql: "SELECT * FROM unicorns",
+      sqlBackend: "duckdb-http",
+      dbIdentifier: "md:analytics",
+      sourceDescriptor: {
+        kind: "motherduck",
+        runtimeBackend: "duckdb-http",
+        dbIdentifier: "md:analytics",
+        catalogContext: null,
+      },
+    });
+
+    await loadDashboardDimensions("dashboard-motherduck", {
+      resolveBackend: () => "duckdb-http",
+      resolveRuntimeFingerprint: async () => "duckdb-http:test",
+      readJoinDefs: async () => [],
+      listCharts: async () => [chart],
+      getMaterializationCache: () => new Map(),
+      runRuntimeSql: async (
+        sql: string,
+        _backend: SqlBackend,
+        catalogContext?: string | null,
+      ) => {
+        runtimeSqlCalls.push({ sql, catalogContext });
+        if (sql.startsWith("DESCRIBE ")) {
+          return [{ column_name: "name", column_type: "VARCHAR" }];
+        }
+        return [];
+      },
+    });
+
+    const attachCall = runtimeSqlCalls.find((call) =>
+      call.sql.includes("ATTACH 'md:analytics' AS"),
+    );
+    expect(attachCall).toBeDefined();
+
+    const materializationCall = runtimeSqlCalls.find((call) =>
+      call.sql.includes('CREATE OR REPLACE TABLE "pondview_exec"."unicorns"'),
+    );
+    expect(materializationCall).toBeDefined();
+    expect(materializationCall?.catalogContext ?? null).toBeNull();
+    expect(materializationCall?.sql).toMatch(
+      /^CREATE OR REPLACE TABLE "pondview_exec"\."unicorns" AS SELECT \* FROM "pondview_exec_source_unicorns_[^"]+"\.unicorns;$/,
     );
   });
 });
