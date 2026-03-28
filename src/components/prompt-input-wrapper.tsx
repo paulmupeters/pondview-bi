@@ -483,8 +483,8 @@ export function PromptInputWrapper({
                       "w-full overflow-hidden",
                       showMinimalManualShell
                         ? compact
-                          ? "h-[18rem] rounded-xl border border-border/70 bg-background/95 shadow-[0_10px_30px_-22px_rgba(15,23,42,0.45)]"
-                          : "h-[22rem] rounded-xl border border-border/70 bg-background/95 shadow-[0_16px_36px_-28px_rgba(15,23,42,0.42)]"
+                          ? "h-[18rem] rounded-xl border border-border"
+                          : "h-[22rem] rounded-xl border border-border"
                         : compact
                           ? "h-85 rounded-lg"
                           : "h-105 rounded-lg",

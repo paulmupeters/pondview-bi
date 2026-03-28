@@ -991,9 +991,9 @@ export default function Chat({
   }, [chatId, chatTitle, chatTitleDraft]);
 
   const rightPanelContent = (
-    <div className="relative h-full w-full overflow-hidden">
-      <div className="group/title border-border/70 px-3 py-4">
-        <div className="flex items-center gap-1">
+    <div className="relative h-full w-full overflow-hidden bg-card">
+      <div className="group/title border-b border-border/50 px-4 py-3">
+        <div className="flex items-center gap-2">
           {isEditingChatTitle ? (
             <input
               ref={chatTitleInputRef}
@@ -1016,14 +1016,15 @@ export default function Chat({
                   cancelChatTitleEdit();
                 }
               }}
-              className="h-6 w-full rounded border border-border bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-7 w-full rounded-md border border-primary/30 bg-background px-2.5 font-mono text-xs font-medium text-foreground shadow-sm transition-shadow focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
               placeholder="Untitled chat"
               aria-label="Edit chat title"
             />
           ) : (
             <>
+              <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60" />
               <p
-                className="truncate text-xs font-medium text-muted-foreground"
+                className="truncate font-mono text-xs font-medium tracking-wide text-muted-foreground transition-colors group-hover/title:text-foreground"
                 title={chatTitle || "Untitled chat"}
               >
                 {chatTitle || "Untitled chat"}
@@ -1031,16 +1032,16 @@ export default function Chat({
               <button
                 type="button"
                 onClick={beginChatTitleEdit}
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring group-hover/title:opacity-100"
+                className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 opacity-0 transition-all hover:bg-accent/50 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring group-hover/title:opacity-100"
                 aria-label="Edit chat title"
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <Pencil className="h-3 w-3" />
               </button>
             </>
           )}
         </div>
       </div>
-      <div className="absolute inset-x-0 bottom-0 top-9 flex flex-col">
+      <div className="absolute inset-x-0 bottom-0 top-[45px] flex flex-col">
         <VisualizationPanel
           visualizations={visualizations}
           selectedVisualizationId={activeVisualizationId}
@@ -1114,18 +1115,19 @@ export default function Chat({
                       showToolCalls={showToolCalls}
                       showExecuteSqlRawOutput={showExecuteSqlRawOutput}
                     />
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 px-4 pb-3">
-                      <div className="pointer-events-auto w-full">
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50">
+                      <div className="h-12 bg-gradient-to-t from-card via-card/80 to-transparent" />
+                      <div className="pointer-events-auto w-full bg-card px-4 pb-4">
                         {promptError ? (
-                          <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                            <div className="flex items-start gap-2">
-                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                          <div className="mb-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3.5 py-2.5 font-mono text-xs text-destructive backdrop-blur-sm dark:border-destructive/30 dark:bg-destructive/10">
+                            <div className="flex items-start gap-2.5">
+                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 opacity-80" />
                               <div className="min-w-0 flex-1">
-                                <p>{promptError}</p>
+                                <p className="leading-relaxed">{promptError}</p>
                                 <div className="mt-2">
                                   <Link
                                     href="/settings"
-                                    className="inline-flex items-center font-medium underline underline-offset-2"
+                                    className="inline-flex items-center font-medium text-destructive/90 underline decoration-destructive/30 underline-offset-4 transition-colors hover:text-destructive hover:decoration-destructive/60"
                                   >
                                     Open Settings
                                   </Link>
@@ -1172,10 +1174,17 @@ export default function Chat({
                 ref={resizeHandleRef}
                 onPointerDown={handleResizeStart}
                 className={cn(
-                  "hidden lg:block w-1 shrink-0 cursor-col-resize transition-colors hover:bg-border",
-                  isResizing && "bg-border",
+                  "group/resize hidden lg:flex w-2 shrink-0 cursor-col-resize items-center justify-center transition-colors hover:bg-border/40",
+                  isResizing && "bg-border/60",
                 )}
-              />
+              >
+                <div
+                  className={cn(
+                    "h-8 w-0.5 rounded-full bg-border/60 transition-all group-hover/resize:h-12 group-hover/resize:bg-primary/40",
+                    isResizing && "h-12 bg-primary/50",
+                  )}
+                />
+              </div>
               <div
                 className="hidden lg:flex flex-col min-w-0 h-full border-l border-border"
                 style={{ width: `${rightPanelWidth}%` }}
@@ -1185,8 +1194,8 @@ export default function Chat({
             </div>
           </div>
 
-          <div className="lg:hidden border-t border-border bg-background">
-            <div className="h-[400px] p-6">{rightPanelContent}</div>
+          <div className="lg:hidden border-t border-border/50 bg-card">
+            <div className="h-[400px]">{rightPanelContent}</div>
           </div>
         </div>
 
