@@ -391,6 +391,7 @@ export default function SqlEditorPage() {
                 <div className="relative flex-1 min-h-0 min-w-0 flex flex-col">
                   <DuckdbRepl
                     className="h-full w-full border-0"
+                    layoutVariant="page"
                     selectedDbIdentifier={selectedDb}
                     catalogContext={selectedCatalogContext}
                     onConsoleApiChangeAction={setSqlConsoleApi}

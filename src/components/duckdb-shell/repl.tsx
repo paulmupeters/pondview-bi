@@ -137,6 +137,7 @@ const _SQL_SAMPLE_LINES: {
 
 type DuckdbReplProps = {
   className?: string;
+  layoutVariant?: "embedded" | "page";
   selectedDbIdentifier?: string;
   catalogContext?: string | null;
   onRunSqlAction?: (params: {
@@ -171,6 +172,12 @@ type DuckdbReplProps = {
 };
 
 const HISTORY_KEY = "bi.repl.history";
+
+export function getDuckdbReplToolbarInsetClassName(
+  layoutVariant: DuckdbReplProps["layoutVariant"] = "embedded",
+) {
+  return layoutVariant === "page" ? "top-2 right-2" : "top-4 right-4";
+}
 
 export function createDuckdbReplAutocompleteAction(
   options: {
@@ -265,6 +272,7 @@ export function createDuckdbReplAutocompleteAction(
 
 export function DuckdbRepl({
   className,
+  layoutVariant = "embedded",
   selectedDbIdentifier,
   catalogContext,
   onRunSqlAction,
@@ -475,6 +483,8 @@ export function DuckdbRepl({
     !onSaveQueryAction ||
     isSavingQuery ||
     currentSql.length === 0;
+  const toolbarInsetClassName =
+    getDuckdbReplToolbarInsetClassName(layoutVariant);
 
   const handleSaveQuery = () => {
     if (isSaveQueryDisabled || !onSaveQueryAction) {
@@ -580,7 +590,9 @@ export function DuckdbRepl({
       {/* Editor + Results area */}
       <div className="relative flex-1 min-w-0 h-full p-4">
         {/* Toolbar Buttons */}
-        <div className="absolute top-4 right-4 z-20 flex gap-2 text-xs">
+        <div
+          className={cn("absolute z-20 flex gap-2 text-xs", toolbarInsetClassName)}
+        >
           {lastResult && showClearButton && (
             <Tooltip>
               <TooltipTrigger asChild>

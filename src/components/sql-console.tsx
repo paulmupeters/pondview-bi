@@ -408,8 +408,18 @@ export function SqlConsole({
       )}
     >
       <div className="flex min-h-0 flex-1 flex-col rounded-sm bg-card transition-colors">
-        <div className="flex min-h-0 flex-1 flex-col gap-3 p-0 sm:flex-row sm:items-center sm:gap-4">
-          <div className="mt-12 flex min-h-0 flex-1 min-w-0 flex-col gap-2">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-3 p-0",
+            showRunControls && "sm:flex-row sm:items-center sm:gap-4",
+          )}
+        >
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 min-w-0 flex-col gap-2",
+              showRunControls && "mt-12",
+            )}
+          >
             <SqlCodeEditor
               ref={editorRef}
               value={sql}

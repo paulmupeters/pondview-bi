@@ -1,6 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import { createDuckdbReplAutocompleteAction } from "@/components/duckdb-shell/repl";
+import {
+  createDuckdbReplAutocompleteAction,
+  getDuckdbReplToolbarInsetClassName,
+} from "@/components/duckdb-shell/repl";
 import type { ConnectedTable } from "@/lib/connected-tables";
+
+describe("getDuckdbReplToolbarInsetClassName", () => {
+  test("uses the tighter inset on the dedicated SQL editor page", () => {
+    expect(getDuckdbReplToolbarInsetClassName("page")).toBe("top-2 right-2");
+  });
+
+  test("keeps the embedded inset by default", () => {
+    expect(getDuckdbReplToolbarInsetClassName()).toBe("top-4 right-4");
+  });
+});
 
 describe("createDuckdbReplAutocompleteAction", () => {
   test("delegates to the shared autocomplete action when no external source is attached", async () => {

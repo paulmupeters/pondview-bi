@@ -95,7 +95,7 @@ const CSS_PLACEHOLDER = `:root{
 const CUSTOM_THEME_VALUE = "custom";
 
 export default function SettingsPage() {
-  const [aiProvider, setAiProvider] = useState<AiProvider>("gateway");
+  const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [openResponsesUrl, setOpenResponsesUrl] = useState("");

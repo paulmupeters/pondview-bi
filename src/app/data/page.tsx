@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
-import { DuckdbShellDialog } from "@/components/duckdb-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -78,7 +77,6 @@ export default function ViewDataPage() {
   const { theme } = useTheme();
   const isDarkMode = theme === "dark";
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
-  const [isShellDialogOpen, setIsShellDialogOpen] = useState(false);
   const [joinDefsRaw, setJoinDefsRaw] = useState("[]");
   const [joinDefsError, setJoinDefsError] = useState<string | null>(null);
   const [joinDefsSuccess, setJoinDefsSuccess] = useState<string | null>(null);
@@ -224,13 +222,6 @@ export default function ViewDataPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsShellDialogOpen(true)}
-                >
-                  Open SQL Shell
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
                   onClick={() => setIsConnectDialogOpen(true)}
                 >
                   Connect Data Source
@@ -356,31 +347,9 @@ export default function ViewDataPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    Configure cross-table dashboard filtering joins stored in{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      bi.dashboard.joinDefs.v1
-                    </code>
-                    . Values must be a JSON array with{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      leftTable
-                    </code>
-                    ,{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      leftColumn
-                    </code>
-                    ,{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      rightTable
-                    </code>
-                    ,{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      rightColumn
-                    </code>
-                    , and optional{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      type
-                    </code>
-                    .
+                    Configure cross-table dashboard filtering joins. Values must
+                    be a JSON array with leftTable , leftColumn , rightTable ,{" "}
+                    rightColumn , and optional type .
                   </p>
 
                   <Textarea
@@ -390,7 +359,7 @@ export default function ViewDataPage() {
                       setJoinDefsError(null);
                       setJoinDefsSuccess(null);
                     }}
-                    className="min-h-[220px] font-mono text-xs"
+                    className="min-h-55 font-mono text-xs"
                     spellCheck={false}
                     placeholder="[]"
                   />
@@ -536,10 +505,6 @@ export default function ViewDataPage() {
         open={isConnectDialogOpen}
         onOpenChange={setIsConnectDialogOpen}
         effectiveSqlBackend={effectiveSqlBackend}
-      />
-      <DuckdbShellDialog
-        open={isShellDialogOpen}
-        onOpenChange={setIsShellDialogOpen}
       />
     </div>
   );

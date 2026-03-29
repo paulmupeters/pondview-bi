@@ -15,6 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { PondviewLogo } from "@/components/pondview-logo";
 import { useChatHistory } from "@/hooks/use-chat-history";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
@@ -141,81 +142,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
       <div className="relative flex flex-col items-center gap-2">
         <div className="relative">
           <Link href="/">
-            <svg
-              width="60%"
-              height="60%"
-              viewBox="0 0 1280 792"
-              version="1.1"
-              xmlns="http://www.w3.org/2000/svg"
-              xmlnsXlink="http://www.w3.org/1999/xlink"
-              style={{
-                fillRule: "evenodd",
-                clipRule: "evenodd",
-                strokeLinecap: "round",
-                strokeLinejoin: "round",
-                strokeMiterlimit: 1.5,
-              }}
-              className="h-16 w-16"
-              aria-label="DataChat"
-            >
-              <title>Pondview</title>
-              <g id="water1">
-                <path
-                  d="M804.167,291.667l87.5,0l0,16.667l62.5,0l0,16.667l33.333,0l0,20.833l29.167,0l0,12.5l33.333,0l0,16.667l16.667,0l0,20.833l16.667,0l0,83.333l-16.667,0l0,16.667l-12.5,0l0,16.667l-20.833,0l0,16.667l-16.667,0l0,12.5l-29.167,0l0,16.667l-50,0l0,12.5l-50,0l0,12.5l-100,0l0,20.833l-316.667,0l0,-20.833l-95.833,0l0,-16.667l-50,0l0,-16.667l-50,0l0,-16.667l-29.167,0l0,-16.667l-20.833,0l0,-12.5l-12.5,0l0,-16.667l-16.667,0l0,-16.667l-16.667,0l0,-79.167l16.667,0l0,-16.667l16.667,0l0,-16.667l33.333,0l0,-16.667l29.167,0l0,-16.667l33.333,0l0,-16.667l66.667,0l0,-16.667l75,0l0,16.667l-62.5,0l0,12.5l-54.167,0l0,16.667l-45.833,0l0,16.667l-12.5,0l0,16.667l-16.667,0l0,16.667l-16.667,0l0,66.667l12.5,0l0,20.833l33.333,0l0,20.833l33.333,0l0,16.667l45.833,0l0,16.667l66.667,0l0,20.833l387.5,0l0,-20.833l62.5,0l0,-16.667l50,0l0,-16.667l33.333,0l0,-20.833l33.333,0l0,-16.667l16.667,0l0,-62.5l-16.667,0l0,-16.667l-12.5,0l0,-12.5l-20.833,0l0,-20.833l-37.5,0l0,-16.667l-54.167,0l0,-20.833l-70.833,0l0,-16.667Z"
-                  style={{
-                    fill: "var(--secondary)",
-                    stroke: "var(--secondary)",
-                    strokeWidth: "4.17px",
-                  }}
-                />
-              </g>
-              <g id="drop">
-                <path
-                  d="M550,325c0.218,35.525 0,-50 0,-50l0,-4.167l16.667,0l0,-45.833l16.667,0l0,-25l16.667,0l0,-33.333l20.833,0l0,-16.667l20.833,0l0,16.667l16.667,0l0,33.333l20.833,0l0,29.167l16.667,0l0,45.833l16.667,0l0,83.333l-16.667,0l0,33.333l-16.667,0l0,16.667l-37.5,0l0,4.167l-29.167,0l0,-4.167l-25,0l0,-16.667l-20.833,0l0,-33.333l-16.667,0c0,0 -0.218,-68.858 0,-33.333Z"
-                  style={{
-                    fill: "var(--secondary)",
-                    stroke: "var(--secondary)",
-                    strokeWidth: "4.17px",
-                  }}
-                />
-                <path
-                  d="M675,304.167l0,37.5l-16.667,0l0,16.667l-25,0l0,20.833l25,0l0,-20.833l16.667,0l0,-16.667l16.667,0l0,-37.5l-16.667,0Z"
-                  style={{ fill: "var(--background)" }}
-                />
-              </g>
-              <g id="water2">
-                <path
-                  d="M450,358.333l-45.833,0l0,16.667l-29.167,0l0,16.667l-20.833,0l0,45.833l20.833,0l0,16.667l29.167,0l0,16.667l33.333,0l0,16.667l66.667,0l0,20.833l254.167,0l0,-20.833l62.5,0l0,-12.5l37.5,0l0,-20.833l25,0l0,-12.5l20.833,0l0,-45.833l-20.833,0l0,-16.667l-29.167,0l0,-16.667l-45.833,0l0,16.667l33.333,0l0,12.5l16.667,0l0,33.333l-16.667,0l0,16.667l-33.333,0l0,16.667l-66.667,0l0,20.833l-225,0l0,-20.833l-66.667,0l0,-16.667l-33.333,0l0,-16.667l-16.667,0l0,-37.5l16.667,0l0,-12.5l33.333,0l0,-16.667"
-                  style={{
-                    fill: "var(--secondary)",
-                    stroke: "var(--secondary)",
-                    strokeWidth: "4.17px",
-                  }}
-                />
-                <rect
-                  x="454.167"
-                  y="341.667"
-                  width="45.833"
-                  height="16.667"
-                  style={{
-                    fill: "var(--secondary)",
-                    stroke: "var(--secondary)",
-                    strokeWidth: "4.17px",
-                  }}
-                />
-                <rect
-                  x="762.5"
-                  y="341.667"
-                  width="45.833"
-                  height="16.667"
-                  style={{
-                    fill: "var(--secondary)",
-                    stroke: "var(--secondary)",
-                    strokeWidth: "4.17px",
-                  }}
-                />
-              </g>
-            </svg>
+            <PondviewLogo className="h-16 w-16" />
             <div className="absolute inset-x-0 top-[30%] flex justify-center pointer-events-none z-10">
               {/* <span className="text-primary font-bold text-xs font-mono">POND</span>
             <span className="text-xs font-mono font-semibold text-sidebar-foreground">VIEW</span> */}

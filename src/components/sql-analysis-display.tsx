@@ -1,7 +1,7 @@
 import { Squares2X2Icon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
-import { useArtifactMutation } from "@/components/artifact-mutation-context";
+import { useOptionalArtifactMutation } from "@/components/artifact-mutation-context";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import type { CardConfig, Config, Result } from "@/lib/types";
@@ -77,7 +77,7 @@ export function SqlAnalysisDisplay({
   onConfigChange,
   onVisualTypeChange,
 }: SqlAnalysisDisplayProps) {
-  const { updateArtifactConfig } = useArtifactMutation();
+  const artifactMutation = useOptionalArtifactMutation();
   const [activeView, setActiveView] = useState<ActiveView>(() =>
     data?.visualType === "chart" || data?.visualType === "card"
       ? "chart"
@@ -104,29 +104,29 @@ export function SqlAnalysisDisplay({
   const handleChartConfigChange = useCallback(
     (newConfig: Config | null) => {
       setChartConfig(newConfig);
-      if (artifactId) {
-        updateArtifactConfig(artifactId, {
+      if (artifactId && artifactMutation) {
+        artifactMutation.updateArtifactConfig(artifactId, {
           chartConfig: newConfig ?? undefined,
         });
       } else if (onConfigChange) {
         onConfigChange({ chartConfig: newConfig ?? undefined });
       }
     },
-    [artifactId, onConfigChange, updateArtifactConfig],
+    [artifactId, artifactMutation, onConfigChange],
   );
 
   const handleCardConfigChange = useCallback(
     (newConfig: CardConfig | null) => {
       setCardConfig(newConfig);
-      if (artifactId) {
-        updateArtifactConfig(artifactId, {
+      if (artifactId && artifactMutation) {
+        artifactMutation.updateArtifactConfig(artifactId, {
           cardConfig: newConfig ?? undefined,
         });
       } else if (onConfigChange) {
         onConfigChange({ cardConfig: newConfig ?? undefined });
       }
     },
-    [artifactId, onConfigChange, updateArtifactConfig],
+    [artifactId, artifactMutation, onConfigChange],
   );
 
   // Reset state when query changes (different artifact) or visualType changes during streaming
