@@ -71,3 +71,10 @@ semantic-layer/models/sources.yml
 
 # vitepress
 .vitepress/
+
+# analyzer
+stats.html
+notes.md
+
+# local app state
+/state/

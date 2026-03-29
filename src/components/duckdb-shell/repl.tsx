@@ -10,7 +10,11 @@ import {
 } from "react";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import {
+  type AutocompleteQueryFn,
+  buildSqlAutocompleteQuery,
+  createSqlAutocompleteAction,
   type ExecuteQueryFn,
+  parseSqlAutocompleteSuggestion,
   SqlConsole,
   type SqlConsoleApi,
 } from "@/components/sql-console";
@@ -33,6 +37,7 @@ import {
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
 import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
+import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 import { runQuery } from "@/lib/sql/run-query";
@@ -132,6 +137,7 @@ const _SQL_SAMPLE_LINES: {
 
 type DuckdbReplProps = {
   className?: string;
+  layoutVariant?: "embedded" | "page";
   selectedDbIdentifier?: string;
   catalogContext?: string | null;
   onRunSqlAction?: (params: {
@@ -149,20 +155,124 @@ type DuckdbReplProps = {
       columns: { name: string; type?: string }[];
       durationMs: number;
       backend?: SqlBackend;
+      dbIdentifier?: string;
+      catalogContext?: string | null;
     } | null,
   ) => void;
   showRunControls?: boolean;
   showExplorer?: boolean;
+  showCopySnippetButton?: boolean;
+  showClearButton?: boolean;
   showSaveQueryButton?: boolean;
   onSaveQueryAction?: (sql: string) => void | Promise<void>;
   isSavingQuery?: boolean;
   chartConfig?: Config | null;
+  editorMinHeight?: string;
+  editorMaxHeight?: string;
 };
 
 const HISTORY_KEY = "bi.repl.history";
 
+export function getDuckdbReplToolbarInsetClassName(
+  layoutVariant: DuckdbReplProps["layoutVariant"] = "embedded",
+) {
+  return layoutVariant === "page" ? "top-2 right-2" : "top-4 right-4";
+}
+
+export function createDuckdbReplAutocompleteAction(
+  options: {
+    connectedEntry?: ConnectedTable;
+    effectiveSqlBackend: SqlBackend;
+    selectedDb?: string;
+    selectedDbIdentifier?: string;
+    catalogContext?: string | null;
+  },
+  deps: {
+    createSharedAutocompleteAction?: typeof createSqlAutocompleteAction;
+    runBridgeSql?: typeof runBridgeQuery;
+    runDuckDbHttpSql?: typeof runDuckDbHttpQuery;
+    runWasmSql?: typeof runQuery;
+  } = {},
+): AutocompleteQueryFn {
+  const effectiveDb = options.selectedDb ?? options.selectedDbIdentifier;
+  const connectedEntry = options.connectedEntry;
+  const createSharedAutocompleteAction =
+    deps.createSharedAutocompleteAction ?? createSqlAutocompleteAction;
+  const runBridgeSql = deps.runBridgeSql ?? runBridgeQuery;
+  const runDuckDbHttpSql = deps.runDuckDbHttpSql ?? runDuckDbHttpQuery;
+  const runWasmSql = deps.runWasmSql ?? runQuery;
+
+  if (!connectedEntry?.databasePath || connectedEntry.type === "duckdb") {
+    return createSharedAutocompleteAction({
+      dbIdentifier: effectiveDb,
+      catalogContext: options.catalogContext,
+    });
+  }
+
+  let isDisabled = false;
+
+  return async ({ sql, signal }) => {
+    if (isDisabled) {
+      return null;
+    }
+
+    if (
+      connectedEntry.type === "motherduck" &&
+      options.effectiveSqlBackend === "duckdb-wasm"
+    ) {
+      isDisabled = true;
+      return null;
+    }
+
+    const connectionConfig: SourceConnectionConfig = {
+      type: connectedEntry.type,
+      identifier: connectedEntry.databasePath,
+      alias: connectedEntry.attachAs || "source",
+      readOnly: connectedEntry.readOnly,
+      duckdbExtension: connectedEntry.duckdbExtension,
+    };
+    const plan = buildAttachmentPlan(connectionConfig);
+
+    const runAttached = async (statement: string) => {
+      if (options.effectiveSqlBackend === "bridge") {
+        return runBridgeSql(statement, signal);
+      }
+      if (options.effectiveSqlBackend === "duckdb-http") {
+        return runDuckDbHttpSql(statement, signal);
+      }
+      return runWasmSql({ sql: statement, signal });
+    };
+
+    try {
+      for (const statement of plan.statements) {
+        await runAttached(statement);
+      }
+
+      await runAttached("LOAD autocomplete;");
+
+      const result = await runWithCatalogContext({
+        sql: buildSqlAutocompleteQuery(sql),
+        selectedCatalog: plan.alias,
+        runQuery: runAttached,
+      });
+
+      return parseSqlAutocompleteSuggestion(result.rows[0]);
+    } catch {
+      isDisabled = true;
+      return null;
+    } finally {
+      try {
+        await runAttached(buildDetachStatement(plan.alias, { ifExists: true }));
+      } catch {
+        // Best-effort detach only.
+      }
+    }
+  };
+}
+
 export function DuckdbRepl({
   className,
+  layoutVariant = "embedded",
   selectedDbIdentifier,
   catalogContext,
   onRunSqlAction,
@@ -171,10 +281,14 @@ export function DuckdbRepl({
   onResultChangeAction,
   showRunControls = true,
   showExplorer = true,
+  showCopySnippetButton = true,
+  showClearButton = true,
   showSaveQueryButton = false,
   onSaveQueryAction,
   isSavingQuery = false,
   chartConfig: _chartConfig,
+  editorMinHeight = "8rem",
+  editorMaxHeight = inlineResults ? "20rem" : "14rem",
 }: DuckdbReplProps) {
   const [lastResult, setLastResult] = useState<{
     sql: string;
@@ -182,6 +296,8 @@ export function DuckdbRepl({
     columns: { name: string; type?: string }[];
     durationMs: number;
     backend?: SqlBackend;
+    dbIdentifier?: string;
+    catalogContext?: string | null;
   } | null>(null);
   const [internalApi, setInternalApi] = useState<SqlConsoleApi | null>(null);
   const [copiedSqlSnippet, setCopiedSqlSnippet] = useState(false);
@@ -210,6 +326,23 @@ export function DuckdbRepl({
 
   const effectiveCatalogContext =
     catalogContext !== undefined ? catalogContext : internalCatalogContext;
+  const autocompleteAction = useMemo(
+    () =>
+      createDuckdbReplAutocompleteAction({
+        connectedEntry,
+        effectiveSqlBackend,
+        selectedDb,
+        selectedDbIdentifier,
+        catalogContext: effectiveCatalogContext,
+      }),
+    [
+      connectedEntry,
+      effectiveCatalogContext,
+      effectiveSqlBackend,
+      selectedDb,
+      selectedDbIdentifier,
+    ],
+  );
 
   const executeQuery: ExecuteQueryFn = async ({ sql, signal }) => {
     const effectiveDb = selectedDb ?? selectedDbIdentifier;
@@ -278,6 +411,8 @@ export function DuckdbRepl({
         return {
           ...result,
           backend: effectiveSqlBackend,
+          dbIdentifier: effectiveDb,
+          catalogContext: plan.alias,
         };
       } finally {
         try {
@@ -297,12 +432,22 @@ export function DuckdbRepl({
         signal,
       });
     }
-    return runQuery({
+    const result = await runQuery({
       sql,
       dbIdentifier: effectiveDb,
       catalogContext: effectiveCatalogContext,
       signal,
     });
+    return {
+      ...result,
+      dbIdentifier:
+        (effectiveSqlBackend === "bridge" ||
+          effectiveSqlBackend === "duckdb-http") &&
+        !isMotherDuckIdentifier(effectiveDb)
+          ? undefined
+          : effectiveDb,
+      catalogContext: effectiveCatalogContext,
+    };
   };
 
   const handleCopySqlSnippet = () => {
@@ -338,6 +483,8 @@ export function DuckdbRepl({
     !onSaveQueryAction ||
     isSavingQuery ||
     currentSql.length === 0;
+  const toolbarInsetClassName =
+    getDuckdbReplToolbarInsetClassName(layoutVariant);
 
   const handleSaveQuery = () => {
     if (isSaveQueryDisabled || !onSaveQueryAction) {
@@ -443,8 +590,10 @@ export function DuckdbRepl({
       {/* Editor + Results area */}
       <div className="relative flex-1 min-w-0 h-full p-4">
         {/* Toolbar Buttons */}
-        <div className="absolute top-4 right-4 z-20 flex gap-2 text-xs">
-          {lastResult && (
+        <div
+          className={cn("absolute z-20 flex gap-2 text-xs", toolbarInsetClassName)}
+        >
+          {lastResult && showClearButton && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -467,36 +616,38 @@ export function DuckdbRepl({
               </TooltipContent>
             </Tooltip>
           )}
-          <button
-            type="button"
-            className="flex items-center gap-2 bg-card border border-border text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors shadow-sm h-[26px]"
-            onClick={handleCopySqlSnippet}
-          >
-            {copiedSqlSnippet ? (
-              <>
-                <svg
-                  aria-hidden="true"
-                  className="w-3 h-3 text-green-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Copied
-              </>
-            ) : (
-              <>
-                <ClipboardDocumentIcon className="w-3 h-3" />
-                Copy
-              </>
-            )}
-          </button>
+          {showCopySnippetButton && (
+            <button
+              type="button"
+              className="flex items-center gap-2 bg-card border border-border text-foreground px-3 py-1.5 rounded text-xs font-bold hover:bg-accent transition-colors shadow-sm h-[26px]"
+              onClick={handleCopySqlSnippet}
+            >
+              {copiedSqlSnippet ? (
+                <>
+                  <svg
+                    aria-hidden="true"
+                    className="w-3 h-3 text-green-600"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  Copied
+                </>
+              ) : (
+                <>
+                  <ClipboardDocumentIcon className="w-3 h-3" />
+                  Copy
+                </>
+              )}
+            </button>
+          )}
           {showSaveQueryButton && (
             <button
               type="button"
@@ -534,13 +685,32 @@ export function DuckdbRepl({
           <SqlConsole
             className="h-full w-full"
             historyKey={HISTORY_KEY}
+            editorMinHeight={editorMinHeight}
+            editorMaxHeight={editorMaxHeight}
             executeQueryAction={executeQuery}
+            autocompleteAction={autocompleteAction}
             onApiChangeAction={setInternalApi}
             onCancelQueryAction={handleCancelQuery}
             showInlineResults={inlineResults}
             showRunControls={false}
-            onSuccessAction={({ sql, rows, columns, durationMs, backend }) => {
-              setLastResult({ sql, rows, columns, durationMs, backend });
+            onSuccessAction={({
+              sql,
+              rows,
+              columns,
+              durationMs,
+              backend,
+              dbIdentifier,
+              catalogContext,
+            }) => {
+              setLastResult({
+                sql,
+                rows,
+                columns,
+                durationMs,
+                backend,
+                dbIdentifier,
+                catalogContext,
+              });
               setExplorerRefreshToken((prev) => prev + 1);
             }}
           />

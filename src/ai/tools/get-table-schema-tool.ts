@@ -1,6 +1,10 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { runQuery } from "@/lib/sql/run-query";
+import {
+  resolveDbIdentifierForSqlBackend,
+  resolveSqlBackend,
+} from "@/lib/sql/sql-runtime";
 import type { Result } from "@/lib/types";
 
 function normalizeRows(rows: Record<string, unknown>[]): Result[] {
@@ -27,10 +31,12 @@ function normalizeRows(rows: Record<string, unknown>[]): Result[] {
 }
 
 async function runSqlForRuntime(
-  databasePath: string,
+  databasePath: string | undefined,
   sql: string,
 ): Promise<Result[]> {
-  const result = await runQuery({ sql, dbIdentifier: databasePath });
+  const backend = resolveSqlBackend({ dbIdentifier: databasePath });
+  const dbIdentifier = resolveDbIdentifierForSqlBackend(databasePath, backend);
+  const result = await runQuery({ sql, dbIdentifier });
   return normalizeRows(result.rows);
 }
 
@@ -41,8 +47,10 @@ export const getTableSchemaTool = tool({
     table: z.string().describe("The table name to get schema for"),
     databasePath: z
       .string()
-      .describe("Database identifier/path to query (e.g. wasm:local)")
-      .default("wasm:local"),
+      .optional()
+      .describe(
+        "Optional database identifier/path to query. Omit to use the selected Query Runtime.",
+      ),
   }),
   execute: async ({ table, databasePath }) => {
     const describeSql = `DESCRIBE ${table}`;

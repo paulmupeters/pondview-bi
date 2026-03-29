@@ -265,11 +265,15 @@ export function ArtifactMutationProvider({
 }
 
 export function useArtifactMutation() {
-  const context = useContext(ArtifactMutationContext);
+  const context = useOptionalArtifactMutation();
   if (!context) {
     throw new Error(
       "useArtifactMutation must be used within an ArtifactMutationProvider",
     );
   }
   return context;
+}
+
+export function useOptionalArtifactMutation() {
+  return useContext(ArtifactMutationContext);
 }

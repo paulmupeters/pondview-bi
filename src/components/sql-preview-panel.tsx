@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -14,13 +15,20 @@ import {
 } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
 import { runQuery } from "@/lib/sql/run-query";
-import type { SqlBackendPreference } from "@/lib/sql/sql-runtime";
+import type {
+  SqlBackend,
+  SqlBackendPreference,
+} from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 
 export type SqlPreviewRunResult = {
   columns: { name: string; type?: string }[];
   rows: Record<string, unknown>[];
   durationMs: number;
+  backend?: SqlBackend;
+  dbIdentifier?: string;
+  catalogContext?: string | null;
+  sourceDescriptor?: ReturnType<typeof buildDashboardSourceDescriptor>;
 };
 
 export type SqlPreviewPanelHandle = {
@@ -181,6 +189,14 @@ export const SqlPreviewPanel = forwardRef<
         columns: result.columns,
         rows: result.rows,
         durationMs: result.durationMs,
+        backend: result.backend,
+        dbIdentifier,
+        catalogContext,
+        sourceDescriptor: buildDashboardSourceDescriptor({
+          runtimeBackend: result.backend,
+          dbIdentifier,
+          catalogContext,
+        }),
       });
     } catch (err) {
       const message =

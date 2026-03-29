@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
-import { DuckdbShellDialog } from "@/components/duckdb-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +18,7 @@ import {
   readJoinDefsRawFromStorage,
   saveJoinDefsRawToStorage,
 } from "@/lib/joins/browser-storage";
+import { isHiddenRuntimeSchema } from "@/lib/sql/runtime-table-schemas";
 import {
   useBridgeRuntimeState,
   useDuckDbHttpConfig,
@@ -29,6 +29,34 @@ import {
 import { useTheme } from "@/lib/theme-provider";
 
 import Image from "@/vite/next-image";
+
+function isHiddenMetadataTableReference(value: string | undefined): boolean {
+  const trimmedValue = value?.trim();
+  if (!trimmedValue) {
+    return false;
+  }
+
+  const [schemaCandidate] = trimmedValue.split(".");
+  return isHiddenRuntimeSchema(schemaCandidate ?? "");
+}
+
+function isVisibleConnectedEntry(entry: ConnectedTable): boolean {
+  if (entry.schema && isHiddenRuntimeSchema(entry.schema)) {
+    return false;
+  }
+
+  if (entry.table && isHiddenMetadataTableReference(entry.table)) {
+    return false;
+  }
+
+  if (
+    entry.tables?.some((tableName) => isHiddenMetadataTableReference(tableName))
+  ) {
+    return false;
+  }
+
+  return true;
+}
 
 export default function ViewDataPage() {
   const tables = useConnectedTables();
@@ -49,7 +77,6 @@ export default function ViewDataPage() {
   const { theme } = useTheme();
   const isDarkMode = theme === "dark";
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
-  const [isShellDialogOpen, setIsShellDialogOpen] = useState(false);
   const [joinDefsRaw, setJoinDefsRaw] = useState("[]");
   const [joinDefsError, setJoinDefsError] = useState<string | null>(null);
   const [joinDefsSuccess, setJoinDefsSuccess] = useState<string | null>(null);
@@ -101,11 +128,20 @@ export default function ViewDataPage() {
   const tablesBySchema = useMemo(() => {
     const grouped = new Map<string, { name: string; type: string }[]>();
     for (const table of duckdbTables) {
-      const existing = grouped.get(table.schema);
+      const schema = table.schema.trim();
+      const catalog = table.catalog?.trim();
+      if (isHiddenRuntimeSchema(schema)) {
+        continue;
+      }
+      if (catalog && isHiddenRuntimeSchema(catalog)) {
+        continue;
+      }
+
+      const existing = grouped.get(schema);
       if (existing) {
         existing.push({ name: table.name, type: table.type });
       } else {
-        grouped.set(table.schema, [{ name: table.name, type: table.type }]);
+        grouped.set(schema, [{ name: table.name, type: table.type }]);
       }
     }
 
@@ -119,7 +155,7 @@ export default function ViewDataPage() {
 
   const groupedConnectedSources = useMemo(() => {
     const grouped = new Map<string, ConnectedTable[]>();
-    for (const table of tables) {
+    for (const table of tables.filter(isVisibleConnectedEntry)) {
       const key =
         table.connectionId ?? table.databasePath ?? table.attachAs ?? "source";
       const existing = grouped.get(key);
@@ -183,13 +219,6 @@ export default function ViewDataPage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsShellDialogOpen(true)}
-                >
-                  Open SQL Shell
-                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -318,31 +347,9 @@ export default function ViewDataPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    Configure cross-table dashboard filtering joins stored in{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      bi.dashboard.joinDefs.v1
-                    </code>
-                    . Values must be a JSON array with{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      leftTable
-                    </code>
-                    ,{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      leftColumn
-                    </code>
-                    ,{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      rightTable
-                    </code>
-                    ,{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      rightColumn
-                    </code>
-                    , and optional{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      type
-                    </code>
-                    .
+                    Configure cross-table dashboard filtering joins. Values must
+                    be a JSON array with leftTable , leftColumn , rightTable ,{" "}
+                    rightColumn , and optional type .
                   </p>
 
                   <Textarea
@@ -352,7 +359,7 @@ export default function ViewDataPage() {
                       setJoinDefsError(null);
                       setJoinDefsSuccess(null);
                     }}
-                    className="min-h-[220px] font-mono text-xs"
+                    className="min-h-55 font-mono text-xs"
                     spellCheck={false}
                     placeholder="[]"
                   />
@@ -498,10 +505,6 @@ export default function ViewDataPage() {
         open={isConnectDialogOpen}
         onOpenChange={setIsConnectDialogOpen}
         effectiveSqlBackend={effectiveSqlBackend}
-      />
-      <DuckdbShellDialog
-        open={isShellDialogOpen}
-        onOpenChange={setIsShellDialogOpen}
       />
     </div>
   );

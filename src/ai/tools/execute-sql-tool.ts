@@ -2,7 +2,11 @@ import { tool } from "ai";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { runQuery } from "@/lib/sql/run-query";
-import type { SqlBackend } from "@/lib/sql/sql-runtime";
+import {
+  resolveDbIdentifierForSqlBackend,
+  resolveSqlBackend,
+  type SqlBackend,
+} from "@/lib/sql/sql-runtime";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { generateCardConfig } from "./generate-card-config-tool";
 import { generateChartConfig } from "./generate-chart-config-tool";
@@ -31,14 +35,22 @@ function normalizeRows(rows: Record<string, unknown>[]): Result[] {
 }
 
 async function executeSqlForRuntime(
-  databasePath: string,
   sql: string,
-): Promise<{ rows: Result[]; durationMs: number; backend: SqlBackend }> {
-  const response = await runQuery({ sql, dbIdentifier: databasePath });
+  databasePath?: string,
+): Promise<{
+  rows: Result[];
+  durationMs: number;
+  backend: SqlBackend;
+  dbIdentifier?: string;
+}> {
+  const backend = resolveSqlBackend({ dbIdentifier: databasePath });
+  const dbIdentifier = resolveDbIdentifierForSqlBackend(databasePath, backend);
+  const response = await runQuery({ sql, dbIdentifier });
   return {
     rows: normalizeRows(response.rows),
     durationMs: response.durationMs,
     backend: response.backend,
+    dbIdentifier,
   };
 }
 
@@ -49,14 +61,13 @@ export const executeSqlTool = tool({
     sql: z.string().describe("The SQL query to execute"),
     databasePath: z
       .string()
-      .describe(
-        "Database identifier/path to run the SQL against (e.g. wasm:local)",
-      )
-      .default("wasm:local"),
-    userQuery: z
-      .string()
       .optional()
-      .describe("The original user query/question that led to this SQL"),
+      .describe(
+        "Optional database identifier/path to run the SQL against. Omit to use the selected Query Runtime.",
+      ),
+    userQuery: z.string().optional().describe(
+      "The original user query/question that led to this SQL",
+    ),
     generateChart: z
       .boolean()
       .optional()
@@ -75,11 +86,13 @@ export const executeSqlTool = tool({
     let parsedResults: Result[] = [];
     let executionTime = 0;
     let sqlBackend: SqlBackend | undefined;
+    let resolvedDatabasePath: string | undefined;
     try {
-      const queryResult = await executeSqlForRuntime(databasePath, sql);
+      const queryResult = await executeSqlForRuntime(sql, databasePath);
       parsedResults = queryResult.rows;
       executionTime = queryResult.durationMs;
       sqlBackend = queryResult.backend;
+      resolvedDatabasePath = queryResult.dbIdentifier;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -205,7 +218,7 @@ export const executeSqlTool = tool({
       stage: "complete" as const,
       progress: 1 as const,
       query: sql,
-      dbIdentifier: databasePath,
+      dbIdentifier: resolvedDatabasePath,
       sqlBackend,
       executionTime,
       rowCount,
@@ -246,7 +259,9 @@ export const executeSqlTool = tool({
 
     // Return the text summary for the AI model
     return {
-      text: `Executed ${queryType} query successfully on ${databasePath}. Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
+      text: `Executed ${queryType} query successfully${
+        resolvedDatabasePath ? ` on ${resolvedDatabasePath}` : ""
+      } using ${sqlBackend ?? "the selected runtime"}. Retrieved ${rowCount} rows in ${executionTime}ms. ${insights.join(
         ". ",
       )}.`,
       parts: [artifactPart],

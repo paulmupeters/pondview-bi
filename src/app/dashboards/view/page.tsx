@@ -32,7 +32,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { executeDashboardChartsWithFilters } from "@/lib/dashboard/browser-filter-engine";
+import {
+  executeDashboardChartsWithFilters,
+  executeDashboardScopedQuery,
+} from "@/lib/dashboard/browser-filter-engine";
 import {
   buildMeasureOptions,
   buildMeasureRenderContextByName,
@@ -41,7 +44,6 @@ import {
   formatFirstRowMeasureValue,
   type MeasurePrimitive,
 } from "@/lib/dashboard/measures";
-import { runQuery } from "@/lib/sql/run-query";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import type {
   CardConfig,
@@ -60,9 +62,9 @@ import {
   updateChartConfig,
   updateChartSql,
   updateDashboardMeasure,
+  updateDashboardSettings,
   updateDashboardTitle,
 } from "@/lib/workspace/dashboard-repo";
-import { getPreference, setPreference } from "@/lib/workspace/preferences-repo";
 import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
 import Link from "@/vite/next-link";
 import { useSearchParams } from "@/vite/next-navigation";
@@ -92,8 +94,6 @@ import {
   parseChartConfig,
 } from "../[dashboardId]/utils";
 
-const PREF_COLUMNS_PREFIX = "dashboard:columns:";
-const PREF_AUTOFIT_PREFIX = "dashboard:auto-fit:";
 const DASHBOARD_AUTH_ERROR_MESSAGE =
   "Dashboard queries need DuckDB HTTP authentication. Re-enter your DuckDB HTTP auth in Settings to load data.";
 
@@ -181,33 +181,6 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const savedColumns = await getPreference<number>(
-        `${PREF_COLUMNS_PREFIX}${dashboardId}`,
-      );
-      const savedAutoFit = await getPreference<boolean>(
-        `${PREF_AUTOFIT_PREFIX}${dashboardId}`,
-      );
-      if (cancelled) return;
-      if (
-        typeof savedColumns === "number" &&
-        savedColumns >= 1 &&
-        savedColumns <= 6
-      ) {
-        setColumns(savedColumns);
-      }
-      if (typeof savedAutoFit === "boolean") {
-        setAutoFitRows(savedAutoFit);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dashboardId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
       setLoading(true);
       try {
         const dashboards = await listDashboards();
@@ -215,6 +188,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
           dashboards.find((item) => item.id === dashboardId) ?? null;
         if (!cancelled) {
           setDashboard(selected as Dashboard | null);
+          setColumns(selected?.columns ?? 3);
+          setAutoFitRows(selected?.autoFitRows ?? false);
         }
       } finally {
         if (!cancelled) {
@@ -237,21 +212,18 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       const valueEntries = await Promise.all(
         measures.map(async (measure) => {
           try {
-            const result = await runQuery({
+            const result = await executeDashboardScopedQuery({
+              dashboardId,
               sql: measure.sql,
-              dbIdentifier: measure.dbIdentifier ?? undefined,
-              backendPreference: measure.sqlBackend ?? undefined,
+              sourceDescriptor: measure.sourceDescriptor ?? null,
+              snapshotId: measure.snapshotId ?? null,
             });
 
             return [
               measure.id,
               {
-                formattedValue: formatFirstRowMeasureValue(
-                  result.rows as Result[],
-                ),
-                rawValue: extractFirstRowMeasurePrimitive(
-                  result.rows as Result[],
-                ),
+                formattedValue: formatFirstRowMeasureValue(result.rows),
+                rawValue: extractFirstRowMeasurePrimitive(result.rows),
               },
             ] as const;
           } catch (error) {
@@ -437,7 +409,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
           title: textConfig.title ?? "Text Card",
           description: textConfig.title ?? null,
           sql: "SELECT 1",
-          dbIdentifier: DEFAULT_WASM_DB_IDENTIFIER,
+          dbIdentifier: null,
+          sqlBackend: null,
           chartConfigJson: JSON.stringify(textConfig),
         });
         await refreshDashboardData();
@@ -470,7 +443,16 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     (value: string) => {
       const newColumns = parseInt(value, 10);
       setColumns(newColumns);
-      void setPreference(`${PREF_COLUMNS_PREFIX}${dashboardId}`, newColumns);
+      setDashboard((prev) =>
+        prev
+          ? {
+              ...prev,
+              columns: newColumns,
+              updatedAt: Date.now(),
+            }
+          : prev,
+      );
+      void updateDashboardSettings(dashboardId, { columns: newColumns });
       setIsSettingsOpen(false);
     },
     [dashboardId],
@@ -479,7 +461,16 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   const handleAutoFitChange = useCallback(
     (checked: boolean) => {
       setAutoFitRows(checked);
-      void setPreference(`${PREF_AUTOFIT_PREFIX}${dashboardId}`, checked);
+      setDashboard((prev) =>
+        prev
+          ? {
+              ...prev,
+              autoFitRows: checked,
+              updatedAt: Date.now(),
+            }
+          : prev,
+      );
+      void updateDashboardSettings(dashboardId, { autoFitRows: checked });
     },
     [dashboardId],
   );

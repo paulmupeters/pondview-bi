@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { resolveCurrentCatalog } from "@/lib/duckdb/catalog-context";
 import { runQuery } from "@/lib/sql/run-query";
+import {
+  isHiddenRuntimeSchema,
+  RUNTIME_SCHEMA_EXCLUSION_SQL,
+} from "@/lib/sql/runtime-table-schemas";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 
 export type WasmTableEntry = {
@@ -13,7 +17,7 @@ export type WasmTableEntry = {
 const LIST_WASM_TABLES_SQL = `
   SELECT table_catalog, table_schema, table_name, table_type
   FROM information_schema.tables
-  WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+  WHERE table_schema NOT IN (${RUNTIME_SCHEMA_EXCLUSION_SQL})
   ORDER BY table_catalog, table_schema, table_name
 `;
 
@@ -27,7 +31,12 @@ export function parseWasmTables(
       name: String(row.table_name ?? "").trim(),
       type: String(row.table_type ?? "").trim(),
     }))
-    .filter((entry) => entry.schema.length > 0 && entry.name.length > 0);
+    .filter(
+      (entry) =>
+        entry.schema.length > 0 &&
+        entry.name.length > 0 &&
+        !isHiddenRuntimeSchema(entry.schema),
+    );
 }
 
 export function useWasmTables() {

@@ -2,10 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
+import { quoteString } from "@/lib/duckdb/duckdb-attachments";
 import { runQuery } from "@/lib/sql/run-query";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
-import { SqlCodeEditor, type SqlCodeEditorApi } from "./sql-code-editor";
+import {
+  type AutocompleteQueryFn,
+  type SqlAutocompleteSuggestion,
+  SqlCodeEditor,
+  type SqlCodeEditorApi,
+} from "./sql-code-editor";
+
+export type { AutocompleteQueryFn } from "./sql-code-editor";
 
 type ResultsPayload = {
   stage: "complete";
@@ -26,7 +34,46 @@ export type ExecuteQueryFn = (params: {
   rows: Record<string, unknown>[];
   columns?: { name: string; type?: string }[];
   backend?: SqlBackend;
+  dbIdentifier?: string;
+  catalogContext?: string | null;
 }>;
+
+export function buildSqlAutocompleteQuery(sql: string): string {
+  return `SELECT suggestion, suggestion_start FROM sql_auto_complete(${quoteString(sql)}) LIMIT 1;`;
+}
+
+export function parseSqlAutocompleteSuggestion(
+  row: Record<string, unknown> | undefined,
+): SqlAutocompleteSuggestion | null {
+  if (!row) {
+    return null;
+  }
+
+  const suggestion =
+    typeof row.suggestion === "string" ? row.suggestion : undefined;
+  const rawSuggestionStart = row.suggestion_start;
+  const suggestionStart =
+    typeof rawSuggestionStart === "number"
+      ? rawSuggestionStart
+      : typeof rawSuggestionStart === "bigint"
+        ? Number(rawSuggestionStart)
+        : typeof rawSuggestionStart === "string"
+          ? Number.parseInt(rawSuggestionStart, 10)
+          : Number.NaN;
+
+  if (
+    !suggestion ||
+    !Number.isInteger(suggestionStart) ||
+    suggestionStart < 0
+  ) {
+    return null;
+  }
+
+  return {
+    suggestion,
+    suggestionStart,
+  };
+}
 
 export function createSqlExecuteQuery(options: {
   dbIdentifier?: string;
@@ -40,12 +87,61 @@ export function createSqlExecuteQuery(options: {
       signal,
     });
 
-    return { rows, columns, backend };
+    return {
+      rows,
+      columns,
+      backend,
+      dbIdentifier: options.dbIdentifier,
+      catalogContext: null,
+    };
   };
 }
 
 // Backward-compatible alias for existing callers.
 export const createDuckDbExecuteQuery = createSqlExecuteQuery;
+
+export function createSqlAutocompleteAction(
+  options: {
+    dbIdentifier?: string;
+    config?: HttpDuckDbConfig;
+    catalogContext?: string | null;
+  },
+  deps: {
+    runSqlQuery?: typeof runQuery;
+  } = {},
+): AutocompleteQueryFn {
+  let isDisabled = false;
+  const runSqlQuery = deps.runSqlQuery ?? runQuery;
+
+  return async ({ sql, signal }) => {
+    if (isDisabled) {
+      return null;
+    }
+
+    try {
+      await runSqlQuery({
+        sql: "LOAD autocomplete;",
+        config: options.config,
+        dbIdentifier: options.dbIdentifier,
+        catalogContext: options.catalogContext,
+        signal,
+      });
+
+      const result = await runSqlQuery({
+        sql: buildSqlAutocompleteQuery(sql),
+        config: options.config,
+        dbIdentifier: options.dbIdentifier,
+        catalogContext: options.catalogContext,
+        signal,
+      });
+
+      return parseSqlAutocompleteSuggestion(result.rows[0]);
+    } catch {
+      isDisabled = true;
+      return null;
+    }
+  };
+}
 
 export type SqlConsoleApi = {
   /**
@@ -79,15 +175,20 @@ export type SqlConsoleProps = {
   historyKey: string;
   historyLimit?: number;
   placeholder?: string;
+  editorMinHeight?: string;
+  editorMaxHeight?: string;
   runButtonLabel?: string;
   stopButtonLabel?: string;
   executeQueryAction: ExecuteQueryFn;
+  autocompleteAction?: AutocompleteQueryFn;
   onSuccessAction?: (payload: {
     sql: string;
     rows: Record<string, unknown>[];
     columns: { name: string; type?: string }[];
     durationMs: number;
     backend?: SqlBackend;
+    dbIdentifier?: string;
+    catalogContext?: string | null;
   }) => void;
   onApiChangeAction?: (api: SqlConsoleApi | null) => void;
   onCancelQueryAction?: () => Promise<void> | void;
@@ -105,9 +206,12 @@ export function SqlConsole({
   historyKey,
   historyLimit = DEFAULT_HISTORY_LIMIT,
   placeholder = DEFAULT_PLACEHOLDER,
+  editorMinHeight = "8rem",
+  editorMaxHeight,
   runButtonLabel = DEFAULT_RUN_LABEL,
   stopButtonLabel = DEFAULT_STOP_LABEL,
   executeQueryAction,
+  autocompleteAction,
   onSuccessAction,
   onApiChangeAction,
   onCancelQueryAction,
@@ -207,6 +311,8 @@ export function SqlConsole({
         rows,
         columns: providedColumns,
         backend,
+        dbIdentifier,
+        catalogContext,
       } = await executeQueryAction({
         sql: currentSql,
         signal: controller.signal,
@@ -230,6 +336,8 @@ export function SqlConsole({
         columns,
         durationMs: duration,
         backend,
+        dbIdentifier,
+        catalogContext,
       });
     } catch (err) {
       if ((err as Error).name === "AbortError") {
@@ -299,15 +407,27 @@ export function SqlConsole({
         className,
       )}
     >
-      <div className="rounded-sm bg-card transition-colors flex-1 min-h-0">
-        <div className="flex flex-col gap-3 p-0 sm:flex-row sm:items-center sm:gap-4">
-          <div className="flex-1 min-w-0 flex flex-col gap-2 mt-12">
+      <div className="flex min-h-0 flex-1 flex-col rounded-sm bg-card transition-colors">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-3 p-0",
+            showRunControls && "sm:flex-row sm:items-center sm:gap-4",
+          )}
+        >
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 min-w-0 flex-col gap-2",
+              showRunControls && "mt-12",
+            )}
+          >
             <SqlCodeEditor
               ref={editorRef}
               value={sql}
               onChange={setSql}
+              autocompleteAction={autocompleteAction}
               placeholder={placeholder}
-              minHeight="8rem"
+              minHeight={editorMinHeight}
+              maxHeight={editorMaxHeight}
               autoFocus
               onRunQuery={() => void handleRunQuery()}
               onCancel={cancelRun}
@@ -315,6 +435,9 @@ export function SqlConsole({
               onHistoryNext={handleHistoryNext}
               className="flex-1"
             />
+            <div className="text-[11px] text-muted-foreground">
+              Shift + Enter to run
+            </div>
           </div>
           {showRunControls && (
             <div className="flex flex-row justify-end gap-2 sm:flex-col sm:items-center sm:px-1 absolute top-2 right-1">

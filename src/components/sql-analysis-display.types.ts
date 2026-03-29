@@ -1,3 +1,4 @@
+import type { DashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
 
@@ -14,7 +15,9 @@ export type SqlAnalysisData = {
   progress?: number;
   query?: string;
   dbIdentifier?: string;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend;
+  sourceDescriptor?: DashboardSourceDescriptor | null;
   executionTime?: number;
   rowCount?: number;
   columns?: { name: string; type?: string }[];

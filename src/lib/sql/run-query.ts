@@ -7,6 +7,7 @@ import {
 } from "@/lib/duckdb/duckdb-attachments";
 import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
 import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
+import { rewriteSqlForAttachedDatabase } from "@/lib/duckdb/rewrite-sql";
 import { runQueryWasm } from "@/lib/sql/run-query-wasm";
 import {
   assertWasmCompatibleDbIdentifier,
@@ -103,8 +104,12 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
       }
 
       try {
+        const rewrittenSql = rewriteSqlForAttachedDatabase(
+          trimmedSql,
+          plan.alias,
+        );
         const result = await runWithCatalogContext({
-          sql: trimmedSql,
+          sql: rewrittenSql,
           selectedCatalog: plan.alias,
           runQuery: remoteSqlRunner,
         });

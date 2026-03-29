@@ -33,8 +33,8 @@ Once your data is connected, you should be able to browse available tables in th
 
 Read more:
 
-- [Connected Data Sources](/guide/connected-data-sources)
-- [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
+- [Connected Data Sources](/introduction/connected-data-sources)
+- [Uploads and Browser Storage](/introduction/uploads-and-browser-storage)
 
 ## 2) Set up your AI provider
 
@@ -52,7 +52,7 @@ After that, return to chat.
 
 Read more:
 
-- [AI Provider Configuration](/guide/ai-provider-configuration)
+- [AI Provider Configuration](/introduction/ai-provider-configuration)
 
 ## 3) Create your first analysis in chat
 
@@ -139,16 +139,16 @@ Common issues include:
 
 Helpful guides:
 
-- [AI Provider Configuration](/guide/ai-provider-configuration)
-- [Connected Data Sources](/guide/connected-data-sources)
-- [SQL Runtime Backends](/guide/sql-runtime-backends)
+- [AI Provider Configuration](/introduction/ai-provider-configuration)
+- [Connected Data Sources](/introduction/connected-data-sources)
+- [SQL Runtime Backends](/introduction/sql-runtime-backends)
 
 ## Next steps
 
 Once you have completed your first analysis, continue with:
 
-- [Connected Data Sources](/guide/connected-data-sources)
-- [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
+- [Connected Data Sources](/introduction/connected-data-sources)
+- [Uploads and Browser Storage](/introduction/uploads-and-browser-storage)
 - [Dashboards](/guide/dashboards)
-- [Workspace Persistence](/guide/workspace-persistence)
+- [Workspace Persistence](/introduction/workspace-persistence)
 - [Docs Map](/guide/)

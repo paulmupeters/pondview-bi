@@ -96,6 +96,56 @@ describe("runQuery routing", () => {
     expect(result.columns).toEqual([{ name: "value" }]);
   });
 
+  test("routes placeholder identifiers to bridge when bridge is selected", async () => {
+    let receivedDbIdentifier: string | undefined;
+
+    const runQuery = createRunQuery({
+      resolveBackend: () => "bridge",
+      runBridge: async () => ({
+        rows: [{ ok: true }],
+        columns: [{ name: "ok", type: "BOOLEAN" }],
+        durationMs: 5,
+      }),
+      runWasm: async ({ dbIdentifier }) => {
+        receivedDbIdentifier = dbIdentifier;
+        throw new Error("should not reach wasm");
+      },
+      assertWasmCompatibleIdentifier: () => {},
+    });
+
+    const result = await runQuery({
+      sql: "SELECT 1",
+      dbIdentifier: "wasm:local",
+      backendPreference: "bridge",
+    });
+
+    expect(receivedDbIdentifier).toBeUndefined();
+    expect(result.backend).toBe("bridge");
+  });
+
+  test("routes placeholder identifiers to duckdb-http when http is selected", async () => {
+    const runQuery = createRunQuery({
+      resolveBackend: () => "duckdb-http",
+      runDuckDbHttp: async () => ({
+        rows: [{ ok: true }],
+        columns: [{ name: "ok", type: "BOOLEAN" }],
+        durationMs: 6,
+      }),
+      runWasm: async () => {
+        throw new Error("should not reach wasm");
+      },
+      assertWasmCompatibleIdentifier: () => {},
+    });
+
+    const result = await runQuery({
+      sql: "SELECT 1",
+      dbIdentifier: "wasm:local",
+      backendPreference: "duckdb-http",
+    });
+
+    expect(result.backend).toBe("duckdb-http");
+  });
+
   test("runs MotherDuck queries through duckdb-http attach lifecycle", async () => {
     const receivedSql: string[] = [];
     let receivedSignal: AbortSignal | undefined;
@@ -148,7 +198,7 @@ describe("runQuery routing", () => {
       `ATTACH 'md:my_db' AS "motherduck";`,
       "SELECT current_catalog() AS current_catalog;",
       'USE "motherduck";',
-      "SELECT * FROM unicorns",
+      "SELECT * FROM motherduck.unicorns",
       'USE "duckdb";',
       'DETACH DATABASE IF EXISTS "motherduck";',
     ]);
@@ -209,6 +259,49 @@ describe("runQuery routing", () => {
       'DETACH DATABASE IF EXISTS "motherduck";',
     ]);
     expect(result.rows).toEqual([{ company: "Stripe" }]);
+  });
+
+  test("rewrites default-schema MotherDuck queries to catalog-qualified refs", async () => {
+    const receivedSql: string[] = [];
+    const runQuery = createRunQuery({
+      resolveBackend: () => "duckdb-http",
+      runDuckDbHttp: async (sql) => {
+        receivedSql.push(sql);
+        if (sql.includes("current_catalog()")) {
+          return {
+            rows: [{ current_catalog: "duckdb" }],
+            columns: [{ name: "current_catalog", type: "VARCHAR" }],
+            durationMs: 0,
+          };
+        }
+        return {
+          rows: [],
+          columns: [],
+          durationMs: 0,
+        };
+      },
+      runWasm: async () => {
+        throw new Error("should not reach wasm");
+      },
+      assertWasmCompatibleIdentifier: () => {},
+    });
+
+    await runQuery({
+      sql: "SELECT * FROM main.unicorns",
+      dbIdentifier: "md:my_db",
+      backendPreference: "duckdb-http",
+    });
+
+    expect(receivedSql).toEqual([
+      "INSTALL motherduck;",
+      "LOAD motherduck;",
+      `ATTACH 'md:my_db' AS "motherduck";`,
+      "SELECT current_catalog() AS current_catalog;",
+      'USE "motherduck";',
+      "SELECT * FROM motherduck.unicorns",
+      'USE "duckdb";',
+      'DETACH DATABASE IF EXISTS "motherduck";',
+    ]);
   });
 
   test("wraps bridge queries with a selected catalog context", async () => {

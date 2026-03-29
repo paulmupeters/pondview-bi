@@ -26,6 +26,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  buildDashboardSourceDescriptor,
+  type DashboardSourceDescriptor,
+} from "@/lib/dashboard/source-descriptor";
+import {
   formatFirstRowMeasureValue,
   type MeasureOption,
 } from "@/lib/dashboard/measures";
@@ -69,6 +73,27 @@ function resolveStoredDbIdentifier(
   }
 
   return DEFAULT_WASM_DB_IDENTIFIER;
+}
+
+function resolveRunResultSourceDescriptor(
+  runResult: SqlPreviewRunResult,
+  fallbackBackend: SqlBackend | null,
+  fallbackDbIdentifier: string | null,
+  fallbackCatalogContext: string | null,
+): DashboardSourceDescriptor | null {
+  if (runResult.sourceDescriptor) {
+    return runResult.sourceDescriptor;
+  }
+
+  if (!runResult.backend && !fallbackBackend) {
+    return null;
+  }
+
+  return buildDashboardSourceDescriptor({
+    runtimeBackend: runResult.backend ?? fallbackBackend ?? "duckdb-wasm",
+    dbIdentifier: runResult.dbIdentifier ?? fallbackDbIdentifier,
+    catalogContext: runResult.catalogContext ?? fallbackCatalogContext,
+  });
 }
 
 function getExistingMeasureId(measure: MeasureOption): string {
@@ -479,7 +504,9 @@ export function DashboardDataCardDialog({
           title: cardConfig.title,
           description: cardConfig.description,
           sql: measureSqlValue,
+          sourceDescriptor: measure.sourceDescriptor ?? null,
           dbIdentifier: measure.dbIdentifier ?? null,
+          catalogContext: measure.catalogContext ?? null,
           sqlBackend: measure.sqlBackend ?? null,
           chartConfigJson: JSON.stringify(cardConfig),
         });
@@ -487,6 +514,13 @@ export function DashboardDataCardDialog({
         if (!runResult) {
           throw new Error("Run a SQL query before saving.");
         }
+
+        const resolvedSourceDescriptor = resolveRunResultSourceDescriptor(
+          runResult,
+          resolvedSqlBackend,
+          resolvedDbIdentifier,
+          selectedCatalogContext ?? null,
+        );
 
         if (sqlVisualType === "chart") {
           const nextConfig: Config = {
@@ -500,8 +534,11 @@ export function DashboardDataCardDialog({
             title: nextConfig.title,
             description: nextConfig.description,
             sql: sql.trim(),
-            dbIdentifier: resolvedDbIdentifier,
-            sqlBackend: resolvedSqlBackend,
+            sourceDescriptor: resolvedSourceDescriptor,
+            dbIdentifier: runResult.dbIdentifier ?? resolvedDbIdentifier,
+            catalogContext:
+              runResult.catalogContext ?? selectedCatalogContext ?? null,
+            sqlBackend: runResult.backend ?? resolvedSqlBackend,
             chartConfigJson: JSON.stringify(nextConfig),
           });
         } else if (sqlVisualType === "table") {
@@ -516,8 +553,11 @@ export function DashboardDataCardDialog({
             title: tableConfig.title,
             description: tableConfig.description,
             sql: sql.trim(),
-            dbIdentifier: resolvedDbIdentifier,
-            sqlBackend: resolvedSqlBackend,
+            sourceDescriptor: resolvedSourceDescriptor,
+            dbIdentifier: runResult.dbIdentifier ?? resolvedDbIdentifier,
+            catalogContext:
+              runResult.catalogContext ?? selectedCatalogContext ?? null,
+            sqlBackend: runResult.backend ?? resolvedSqlBackend,
             chartConfigJson: JSON.stringify(tableConfig),
           });
         } else {
@@ -535,8 +575,11 @@ export function DashboardDataCardDialog({
             title: cardConfig.title,
             description: cardConfig.description,
             sql: sql.trim(),
-            dbIdentifier: resolvedDbIdentifier,
-            sqlBackend: resolvedSqlBackend,
+            sourceDescriptor: resolvedSourceDescriptor,
+            dbIdentifier: runResult.dbIdentifier ?? resolvedDbIdentifier,
+            catalogContext:
+              runResult.catalogContext ?? selectedCatalogContext ?? null,
+            sqlBackend: runResult.backend ?? resolvedSqlBackend,
             chartConfigJson: JSON.stringify(cardConfig),
           });
         }

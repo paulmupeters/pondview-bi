@@ -1,26 +1,43 @@
 # Workspace Persistence
 
-BI Chat stores most user state locally in the browser. The core workspace database is IndexedDB, while feature-specific settings also use local storage/session storage.
+BI Chat stores user state in a few different places depending on what kind of data is being persisted.
 
-## Storage architecture
+## Storage Architecture
 
 ### IndexedDB workspace database
 
+The browser workspace database stores app-local state such as chat history, preferences, and uploaded file blobs.
+
 - DB name: `pondview-workspace`
-- Version: `2`
+- Current version: see `WORKSPACE_DB_VERSION` in `src/lib/workspace/workspace-db.ts`
 - Stores:
   - `chats`
   - `messages`
-  - `dashboards`
-  - `charts`
-  - `dashboardSlicers`
-  - `chartSlicers`
   - `preferences`
   - `uploadedFileBlobs`
 
+Dashboards, charts, measures, and slicers are no longer stored as IndexedDB object stores.
+
 Access is centralized in `src/lib/workspace/workspace-db.ts`.
 
-### Local/session storage (feature settings)
+### DuckDB metadata schema
+
+Dashboard metadata now lives in the DuckDB metadata schema `pondview`.
+
+That schema stores:
+
+- dashboards
+- dashboard charts
+- dashboard measures
+- dashboard slicers
+- chart slicers
+- dashboard join definitions
+- dashboard source-cache metadata
+- dashboard snapshot metadata
+
+Access is centralized in `src/lib/dashboard/dashboard-storage-service.ts`.
+
+### Local/session storage
 
 Examples of browser storage keys outside IndexedDB:
 
@@ -31,27 +48,45 @@ Examples of browser storage keys outside IndexedDB:
 - Uploaded file metadata (`uploadedFiles`)
 - Dashboard join defs (`bi.dashboard.joinDefs.v1`)
 
-## Repository split: browser vs server
+## Dashboard Persistence Model
 
-There are two persistence layers in the codebase:
+Saved charts and measures persist:
 
-- Browser repositories (`src/lib/workspace/*-repo.ts`) for app-local state.
-- Server repositories (`src/lib/repositories/*.ts`) used by the remaining server-side dashboard/chart APIs.
+- canonical `source_sql`
+- `source_descriptor_json`
+- optional `snapshot_id`
+- visualization config JSON
 
-Server repositories store JSON sidecar files on disk; browser repositories store in IndexedDB.
+They do not persist runtime-rewritten SQL, alias names, or save-time snapshot SQL.
 
-## Export / import / reset behavior
+Dashboard execution metadata such as runtime aliases belongs to execution-time planning rather than to the stored dashboard records.
+
+## Repository Split
+
+There are two main browser-side persistence layers involved in normal app usage:
+
+- `src/lib/workspace/*` for IndexedDB-backed workspace state
+- `src/lib/dashboard/*` for DuckDB-backed dashboard metadata and execution planning
+
+The dashboard repository (`src/lib/workspace/dashboard-repo.ts`) is now a thin browser-side facade over the DuckDB metadata service.
+
+## Export / Import / Reset Behavior
 
 Settings page offers:
 
-- **Export Workspace** -> builds `WorkspaceExportV1` JSON (`pondview-workspace-v1.json`)
-- **Import Workspace** -> validates and restores `WorkspaceExportV1`
-- **Reset Workspace** -> clears workspace DB stores
+- **Export Workspace**
+- **Import Workspace**
+- **Reset Workspace**
+
+The workspace export format includes dashboard entities alongside chat state, but storage is not symmetrical under the hood:
+
+- chat-like state comes from IndexedDB
+- dashboard-like state comes from the DuckDB metadata schema
 
 ### What export includes
 
 - chats/messages
-- dashboards/charts
+- dashboards/charts/measures
 - dashboard/chart slicers
 - preferences
 
@@ -62,10 +97,12 @@ Settings page offers:
 
 After import/reset, the app reloads to rehydrate state.
 
-## Import format and compatibility
+## Compatibility Notes
 
-- `validateWorkspaceImport(...)` requires `version === 1`
-- Import expects top-level arrays for each exported collection
-- Unsupported versions are rejected
-
-If schema evolves, update both `WorkspaceExportV1` and validation/migration logic together.
+- Dashboard metadata is intentionally treated as a clean-start schema.
+- The current dashboard runtime expects canonical source descriptors on saved charts and measures.
+- If the persistence model changes again, update:
+  - `src/lib/workspace/workspace-db.ts`
+  - `src/lib/workspace/export-import.ts`
+  - `src/lib/dashboard/dashboard-storage-service.ts`
+  - this document

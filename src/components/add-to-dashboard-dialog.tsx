@@ -15,6 +15,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  buildDashboardSourceDescriptor,
+  type DashboardSourceDescriptor,
+} from "@/lib/dashboard/source-descriptor";
+import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
   type SqlBackend,
@@ -67,7 +71,9 @@ function resolveStoredChartDbIdentifier(
 export function AddToDashboardDialog({
   trigger,
   sql,
+  sourceDescriptor,
   dbIdentifier,
+  catalogContext,
   sqlBackend,
   defaultTitle,
   tooltip,
@@ -76,7 +82,9 @@ export function AddToDashboardDialog({
 }: {
   trigger: React.ReactNode;
   sql: string;
+  sourceDescriptor?: DashboardSourceDescriptor | null;
   dbIdentifier?: string | null;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend;
   defaultTitle?: string;
   tooltip?: string;
@@ -192,9 +200,26 @@ export function AddToDashboardDialog({
     if (!canSubmit || !currentVisualOption || !selectedVisualType) return;
     setLoading(true);
     try {
+      const resolvedSourceDescriptor =
+        sourceDescriptor ??
+        (sqlBackend
+          ? buildDashboardSourceDescriptor({
+              runtimeBackend: sqlBackend,
+              dbIdentifier,
+              catalogContext,
+            })
+          : null);
+
       let dashboardId = selectedDashboardId as string;
       if (selectedDashboardId === "new") {
-        const data = await createDashboard(newDashboardTitle.trim());
+        const data = await createDashboard(newDashboardTitle.trim(), {
+          sourceDescriptor: resolvedSourceDescriptor,
+          dbIdentifier: resolveStoredChartDbIdentifier(
+            dbIdentifier,
+            sqlBackend ?? null,
+          ),
+          sqlBackend: sqlBackend ?? null,
+        });
         dashboardId = data.id;
       }
 
@@ -226,10 +251,12 @@ export function AddToDashboardDialog({
         title: currentFormState.title,
         description: currentFormState.description,
         sql,
+        sourceDescriptor: resolvedSourceDescriptor,
         dbIdentifier: resolveStoredChartDbIdentifier(
           dbIdentifier,
           sqlBackend ?? null,
         ),
+        catalogContext,
         sqlBackend: sqlBackend ?? null,
         chartConfigJson: JSON.stringify(configJson),
       });

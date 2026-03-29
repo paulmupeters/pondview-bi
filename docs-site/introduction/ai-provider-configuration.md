@@ -15,13 +15,13 @@ All of these values are saved by `saveAiSettingsToStorage()` and reloaded by `lo
 
 ## Provider and required fields
 
-| Provider | Required fields | Notes |
-| --- | --- | --- |
-| `gateway` | model, API key | Uses `createGateway(...)` in the browser. |
-| `openai` | model, API key | Uses `createOpenAI(...)`. |
-| `anthropic` | model, API key | Uses `createAnthropic(...)`. |
-| `xai` | model, API key | Uses `createXai(...)`. |
-| `open-responses` | model, API key, URL, provider name | Uses `createOpenResponses(...)`. |
+| Provider         | Required fields                    | Notes                                     |
+| ---------------- | ---------------------------------- | ----------------------------------------- |
+| `gateway`        | model, API key                     | Uses `createGateway(...)` in the browser. |
+| `openai`         | model, API key                     | Uses `createOpenAI(...)`.                 |
+| `anthropic`      | model, API key                     | Uses `createAnthropic(...)`.              |
+| `xai`            | model, API key                     | Uses `createXai(...)`.                    |
+| `open-responses` | model, API key, URL, provider name | Uses `createOpenResponses(...)`.          |
 
 Validation is enforced by `getMissingRequiredSetting()` before saving and when model resolution runs.
 
@@ -43,7 +43,7 @@ Validation is enforced by `getMissingRequiredSetting()` before saving and when m
 ### Defaults
 
 - Default provider: `gateway`
-- Default model fallback: `CHAT_MODEL` from `src/ai/models.ts` (`zai/glm-5`)
+- Default model fallback: `CHAT_MODEL` from `src/ai/models.ts` (`openai/gpt-5.4`)
 - If `AI_MODEL` is empty, the fallback model is used
 
 ## Runtime behavior: browser only

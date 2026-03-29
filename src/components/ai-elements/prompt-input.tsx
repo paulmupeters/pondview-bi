@@ -764,7 +764,7 @@ export const PromptInput = ({
         onSubmit={handleSubmit}
         {...props}
       >
-        <InputGroup>{children}</InputGroup>
+        <InputGroup className="">{children}</InputGroup>
       </form>
     </>
   );

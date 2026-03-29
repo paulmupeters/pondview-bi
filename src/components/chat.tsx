@@ -17,6 +17,7 @@ import {
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
 import {
+  type ManualShellVariant,
   PromptInputWrapper,
   type PromptMode,
 } from "@/components/prompt-input-wrapper";
@@ -33,15 +34,15 @@ import {
   useExecuteSqlRawOutputPreference,
   useShowToolCallsPreference,
 } from "@/lib/chat-display-preferences";
+import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
+import { getDefaultPromptModePreference } from "@/lib/default-prompt-mode";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
+  resolveDbIdentifierForSqlBackend,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
-import {
-  useResolvedSqlBackend,
-  useResolveSqlBackend,
-} from "@/lib/sql/use-sql-backend";
+import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
@@ -146,6 +147,7 @@ function toPromptErrorMessage(error: Error): string {
 
 const EMPTY_INITIAL_MESSAGES: UIMessage[] = [];
 const MANUAL_REPL_VISUALIZATION_ID = "manual-repl";
+const CHAT_MANUAL_SHELL_VARIANT: ManualShellVariant = "minimal";
 
 export default function Chat({
   chatId,
@@ -158,9 +160,10 @@ export default function Chat({
   const router = useRouter();
   const searchParams = useSearchParams();
   const connectedTables = useConnectedTables();
-  const resolveCurrentSqlBackend = useResolveSqlBackend();
   const effectiveSqlBackend = useResolvedSqlBackend();
-  const [promptMode, setPromptMode] = useState<PromptMode>("ai");
+  const [promptMode, setPromptMode] = useState<PromptMode>(() =>
+    getDefaultPromptModePreference(),
+  );
   const [promptError, setPromptError] = useState<string | null>(null);
   const [chatTitle, setChatTitle] = useState<string | null>(null);
   const [isEditingChatTitle, setIsEditingChatTitle] = useState(false);
@@ -240,11 +243,15 @@ export default function Chat({
     columns: { name: string; type?: string }[];
     durationMs: number;
     backend?: SqlBackend;
+    dbIdentifier?: string;
+    catalogContext?: string | null;
+    sourceDescriptor?: SqlAnalysisData["sourceDescriptor"];
   } | null>(null);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
   const [storedSqlQueries, setStoredSqlQueries] = useState<SavedSqlQuery[]>([]);
   const [isSavingStoredSqlQuery, setIsSavingStoredSqlQuery] = useState(false);
   const [pendingSqlToLoad, setPendingSqlToLoad] = useState<string | null>(null);
+  const [pendingSqlShouldAutoRun, setPendingSqlShouldAutoRun] = useState(false);
   const [manualChartConfig, setManualChartConfig] = useState<Config | null>(
     null,
   );
@@ -306,8 +313,19 @@ export default function Chat({
           stage: "complete",
           progress: 1,
           query: sqlResult.sql,
-          dbIdentifier: selectedDb,
+          dbIdentifier: sqlResult.dbIdentifier,
+          catalogContext: sqlResult.catalogContext ?? selectedCatalogContext,
           sqlBackend: sqlResult.backend,
+          sourceDescriptor:
+            sqlResult.sourceDescriptor ??
+            (sqlResult.backend
+              ? buildDashboardSourceDescriptor({
+                  runtimeBackend: sqlResult.backend,
+                  dbIdentifier: sqlResult.dbIdentifier,
+                  catalogContext:
+                    sqlResult.catalogContext ?? selectedCatalogContext ?? null,
+                })
+              : null),
           executionTime: sqlResult.durationMs,
           rowCount: sqlResult.rows.length,
           columns: sqlResult.columns,
@@ -335,7 +353,7 @@ export default function Chat({
     manualCardConfig,
     manualChartConfig,
     manualVisualType,
-    selectedDb,
+    selectedCatalogContext,
     sqlResult,
   ]);
 
@@ -551,10 +569,23 @@ export default function Chat({
     if (!pendingSqlToLoad || !sqlConsoleApi) {
       return;
     }
-    sqlConsoleApi.setQuery(pendingSqlToLoad);
-    sqlConsoleApi.focus();
+
+    const sqlToLoad = pendingSqlToLoad;
+    const shouldAutoRun = pendingSqlShouldAutoRun;
+
     setPendingSqlToLoad(null);
-  }, [pendingSqlToLoad, sqlConsoleApi]);
+    setPendingSqlShouldAutoRun(false);
+
+    sqlConsoleApi.clearResults();
+    sqlConsoleApi.setQuery(sqlToLoad);
+    sqlConsoleApi.focus();
+
+    if (shouldAutoRun && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        sqlConsoleApi.runQuery();
+      });
+    }
+  }, [pendingSqlShouldAutoRun, pendingSqlToLoad, sqlConsoleApi]);
 
   const handleSaveStoredSqlQuery = useCallback(
     async (sqlOverride?: string) => {
@@ -718,18 +749,22 @@ export default function Chat({
     const messageId = `manual-visual-${now}`;
     const artifactId = `manual-artifact-${now}`;
     const first = connectedTables[0];
-    const defaultDatabase =
+    const defaultDatabase = resolveDbIdentifierForSqlBackend(
       first?.connectionId ??
-      first?.databasePath ??
-      first?.attachAs ??
-      DEFAULT_WASM_DB_IDENTIFIER;
+        first?.databasePath ??
+        first?.attachAs ??
+        DEFAULT_WASM_DB_IDENTIFIER,
+      effectiveSqlBackend,
+    );
 
     const defaultPayload: SqlAnalysisData = {
       stage: "complete",
       progress: 1,
       query: "",
       dbIdentifier: defaultDatabase,
-      sqlBackend: resolveCurrentSqlBackend({
+      sqlBackend: effectiveSqlBackend,
+      sourceDescriptor: buildDashboardSourceDescriptor({
+        runtimeBackend: effectiveSqlBackend,
         dbIdentifier: defaultDatabase,
       }),
       isSqlExpandedInitial: true,
@@ -772,7 +807,7 @@ export default function Chat({
     } catch (error) {
       console.error("Failed to persist visual placeholder:", error);
     }
-  }, [connectedTables, persistArtifactMessage, resolveCurrentSqlBackend]);
+  }, [connectedTables, effectiveSqlBackend, persistArtifactMessage]);
 
   useChatUrlParams({
     chatId,
@@ -784,6 +819,11 @@ export default function Chat({
     router,
     handleAddVisual,
     setPromptMode,
+    loadManualSql: ({ sql, autorun }) => {
+      setPromptMode("manual");
+      setPendingSqlToLoad(sql);
+      setPendingSqlShouldAutoRun(autorun);
+    },
   });
   useEffect(() => {
     if (status === "streaming" || status === "submitted") {
@@ -811,7 +851,17 @@ export default function Chat({
         progress: payload.progress ?? 1,
         query: payload.query ?? "",
         dbIdentifier: payload.dbIdentifier,
+        catalogContext: payload.catalogContext ?? null,
         sqlBackend: payload.sqlBackend,
+        sourceDescriptor:
+          payload.sourceDescriptor ??
+          (payload.sqlBackend
+            ? buildDashboardSourceDescriptor({
+                runtimeBackend: payload.sqlBackend,
+                dbIdentifier: payload.dbIdentifier,
+                catalogContext: payload.catalogContext ?? null,
+              })
+            : null),
         executionTime: payload.executionTime,
         rowCount:
           payload.rowCount ??
@@ -873,6 +923,10 @@ export default function Chat({
         rows: Record<string, unknown>[];
         columns: { name: string; type?: string }[];
         durationMs: number;
+        backend?: SqlBackend;
+        dbIdentifier?: string;
+        catalogContext?: string | null;
+        sourceDescriptor?: SqlAnalysisData["sourceDescriptor"];
       } | null,
     ) => {
       setSqlResult(result);
@@ -937,9 +991,9 @@ export default function Chat({
   }, [chatId, chatTitle, chatTitleDraft]);
 
   const rightPanelContent = (
-    <div className="relative h-full w-full overflow-hidden">
-      <div className="group/title border-border/70 px-3 py-4">
-        <div className="flex items-center gap-1">
+    <div className="relative h-full w-full overflow-hidden bg-card">
+      <div className="group/title border-b border-border/50 px-4 py-3">
+        <div className="flex items-center gap-2">
           {isEditingChatTitle ? (
             <input
               ref={chatTitleInputRef}
@@ -962,14 +1016,15 @@ export default function Chat({
                   cancelChatTitleEdit();
                 }
               }}
-              className="h-6 w-full rounded border border-border bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-7 w-full rounded-md border border-primary/30 bg-background px-2.5 font-mono text-xs font-medium text-foreground shadow-sm transition-shadow focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
               placeholder="Untitled chat"
               aria-label="Edit chat title"
             />
           ) : (
             <>
+              <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60" />
               <p
-                className="truncate text-xs font-medium text-muted-foreground"
+                className="truncate font-mono text-xs font-medium tracking-wide text-muted-foreground transition-colors group-hover/title:text-foreground"
                 title={chatTitle || "Untitled chat"}
               >
                 {chatTitle || "Untitled chat"}
@@ -977,16 +1032,16 @@ export default function Chat({
               <button
                 type="button"
                 onClick={beginChatTitleEdit}
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring group-hover/title:opacity-100"
+                className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 opacity-0 transition-all hover:bg-accent/50 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring group-hover/title:opacity-100"
                 aria-label="Edit chat title"
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <Pencil className="h-3 w-3" />
               </button>
             </>
           )}
         </div>
       </div>
-      <div className="absolute inset-x-0 bottom-0 top-9 flex flex-col">
+      <div className="absolute inset-x-0 bottom-0 top-[45px] flex flex-col">
         <VisualizationPanel
           visualizations={visualizations}
           selectedVisualizationId={activeVisualizationId}
@@ -1054,24 +1109,25 @@ export default function Chat({
                       onSelectVisualization={handleSelectVisualization}
                       onRemoveMessage={handleRemoveMessage}
                       conversationClassName="flex-1 min-h-0"
-                      contentSpacingClassName="space-y-2 pb-36 lg:pb-40"
+                      contentSpacingClassName={cn("space-y-2", promptMode === "manual" ? "pb-[28rem] lg:pb-[32rem]" : "pb-32 lg:pb-36")}
                       messagePaddingClassName="p-3"
                       userResponsePaddingClassName="p-1"
                       showToolCalls={showToolCalls}
                       showExecuteSqlRawOutput={showExecuteSqlRawOutput}
                     />
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 px-4 pb-4">
-                      <div className="pointer-events-auto w-full">
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50">
+                      <div className="h-12 bg-gradient-to-t from-card via-card/80 to-transparent" />
+                      <div className="pointer-events-auto w-full bg-card px-4 pb-4">
                         {promptError ? (
-                          <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                            <div className="flex items-start gap-2">
-                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                          <div className="mb-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3.5 py-2.5 font-mono text-xs text-destructive backdrop-blur-sm dark:border-destructive/30 dark:bg-destructive/10">
+                            <div className="flex items-start gap-2.5">
+                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 opacity-80" />
                               <div className="min-w-0 flex-1">
-                                <p>{promptError}</p>
+                                <p className="leading-relaxed">{promptError}</p>
                                 <div className="mt-2">
                                   <Link
                                     href="/settings"
-                                    className="inline-flex items-center font-medium underline underline-offset-2"
+                                    className="inline-flex items-center font-medium text-destructive/90 underline decoration-destructive/30 underline-offset-4 transition-colors hover:text-destructive hover:decoration-destructive/60"
                                   >
                                     Open Settings
                                   </Link>
@@ -1102,11 +1158,11 @@ export default function Chat({
                           storedSqlQueries={storedSqlQueries}
                           onSaveQuery={handleSaveStoredSqlQuery}
                           isSavingQuery={isSavingStoredSqlQuery}
+                          manualShellVariant={CHAT_MANUAL_SHELL_VARIANT}
                           manualChartConfig={manualChartConfig}
                           manualCardConfig={manualCardConfig}
                           manualVisualType={manualVisualType}
                           onManualReplFocus={handleManualReplFocus}
-                          onInsertTable={handleInsertTableIntoSql}
                         />
                       </div>
                     </div>
@@ -1118,10 +1174,17 @@ export default function Chat({
                 ref={resizeHandleRef}
                 onPointerDown={handleResizeStart}
                 className={cn(
-                  "hidden lg:block w-1 shrink-0 cursor-col-resize transition-colors hover:bg-border",
-                  isResizing && "bg-border",
+                  "group/resize hidden lg:flex w-2 shrink-0 cursor-col-resize items-center justify-center transition-colors hover:bg-border/40",
+                  isResizing && "bg-border/60",
                 )}
-              />
+              >
+                <div
+                  className={cn(
+                    "h-8 w-0.5 rounded-full bg-border/60 transition-all group-hover/resize:h-12 group-hover/resize:bg-primary/40",
+                    isResizing && "h-12 bg-primary/50",
+                  )}
+                />
+              </div>
               <div
                 className="hidden lg:flex flex-col min-w-0 h-full border-l border-border"
                 style={{ width: `${rightPanelWidth}%` }}
@@ -1131,8 +1194,8 @@ export default function Chat({
             </div>
           </div>
 
-          <div className="lg:hidden border-t border-border bg-background">
-            <div className="h-[400px] p-6">{rightPanelContent}</div>
+          <div className="lg:hidden border-t border-border/50 bg-card">
+            <div className="h-[400px]">{rightPanelContent}</div>
           </div>
         </div>
 
@@ -1140,7 +1203,7 @@ export default function Chat({
           open={isDashboardBuilderOpen}
           onOpenChange={setIsDashboardBuilderOpen}
         >
-          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogContent className="flex max-h-[85vh] min-h-0 w-[calc(100vw-2rem)] max-w-4xl flex-col overflow-hidden">
             <DashboardBuilderPanel
               open={isDashboardBuilderOpen}
               onOpenChange={setIsDashboardBuilderOpen}

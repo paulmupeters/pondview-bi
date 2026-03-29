@@ -1,8 +1,13 @@
-# BI Chat Docs
+# Pondview Docs
 
-Technical documentation for BI Chat internals, runtime behavior, and product-level architecture notes.
+This docs site now has two tracks:
 
-- Start with [Getting Started](/guide/getting-started) for first run setup.
-- Start with the [Docs Map](/guide/) for an overview.
-- Use the left sidebar to navigate each topic.
-- This site is intended to be deployed independently from the main BI Chat app.
+- [User Guide](/user/) for people using Pondview day to day
+- [Technical Guide](/guide/) for developer-focused and runtime documentation
+
+## Recommended starting points
+
+- Start with [What Pondview Is](/user/what-is-pondview) if you are new to the product.
+- Go to [Getting Started](/user/getting-started) for setup, data import, and first analysis.
+- Use [Main Workflows](/user/workflows) for the everyday chat and dashboard flow.
+- Use the [Technical Guide](/guide/) when you need runtime, architecture, or implementation details.

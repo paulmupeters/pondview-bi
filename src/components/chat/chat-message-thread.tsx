@@ -123,7 +123,7 @@ function hasRenderableAssistantContent(
       }
 
       return (
-        part.type === "tool-executeSql" &&
+        part.type === "tool-execute_sql" &&
         ((sqlArtifactsByTopLevelPartIndex.get(partIndex)?.length ?? 0) > 0 ||
           Boolean(getToolErrorText(part)))
       );
@@ -419,12 +419,12 @@ export function ChatMessageThread({
                     const toolOutput = getToolOutput(part);
                     const toolErrorText = getToolErrorText(part);
                     const showToolOutput =
-                      part.type !== "tool-executeSql" ||
+                      part.type !== "tool-execute_sql" ||
                       showExecuteSqlRawOutput ||
                       Boolean(toolErrorText);
 
                     let executeSqlBlocks: ReactNode = null;
-                    if (part.type === "tool-executeSql") {
+                    if (part.type === "tool-execute_sql") {
                       const entriesForPart =
                         sqlArtifactsByTopLevelPartIndex.get(partIndex) ?? [];
                       executeSqlBlocks = entriesForPart.map((entry) =>

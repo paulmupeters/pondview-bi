@@ -2,6 +2,7 @@ import type {
   MeasureOption,
   MeasureRenderContextByName,
 } from "@/lib/dashboard/measures";
+import type { DashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import type {
   CardConfig,
@@ -17,6 +18,13 @@ export type Dashboard = {
   title: string;
   createdAt: number;
   updatedAt: number;
+  columns?: number;
+  autoFitRows?: boolean;
+  runtimeBackend?: SqlBackend | null;
+  activeSnapshotId?: string | null;
+  homeDbIdentifier?: string | null;
+  homeSqlBackend?: SqlBackend | null;
+  storageStatus?: "shared" | "best-effort" | null;
 };
 
 export type DashboardChart = {
@@ -24,6 +32,8 @@ export type DashboardChart = {
   title: string | null;
   description: string | null;
   sql: string;
+  sourceDescriptor?: DashboardSourceDescriptor | null;
+  snapshotId?: string | null;
   dbIdentifier: string | null;
   sqlBackend?: SqlBackend | null;
   chartConfigJson: string;

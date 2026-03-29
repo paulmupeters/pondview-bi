@@ -1,4 +1,7 @@
+import type { DashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
+
+export type DashboardStorageStatus = "shared" | "best-effort";
 
 export interface WorkspaceChat {
   id: string;
@@ -22,6 +25,13 @@ export interface WorkspaceDashboard {
   title: string;
   createdAt: number;
   updatedAt: number;
+  columns?: number;
+  autoFitRows?: boolean;
+  runtimeBackend?: SqlBackend | null;
+  activeSnapshotId?: string | null;
+  homeDbIdentifier?: string | null;
+  homeSqlBackend?: SqlBackend | null;
+  storageStatus?: DashboardStorageStatus | null;
 }
 
 export interface WorkspaceChart {
@@ -30,7 +40,11 @@ export interface WorkspaceChart {
   title: string | null;
   description: string | null;
   sql: string;
+  sourceDescriptor?: DashboardSourceDescriptor | null;
+  sourceDescriptorJson?: string | null;
+  snapshotId?: string | null;
   dbIdentifier: string | null;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
   chartConfigJson: string;
   semanticQueryJson: string | null;
@@ -38,6 +52,10 @@ export interface WorkspaceChart {
   position: number;
   createdAt: number;
   updatedAt: number;
+  sourceSql?: string | null;
+  sourceDbIdentifier?: string | null;
+  sourceCatalogContext?: string | null;
+  sourceSqlBackend?: SqlBackend | null;
 }
 
 export interface WorkspaceDashboardMeasure {
@@ -46,10 +64,18 @@ export interface WorkspaceDashboardMeasure {
   key: string;
   label: string;
   sql: string;
+  sourceDescriptor?: DashboardSourceDescriptor | null;
+  sourceDescriptorJson?: string | null;
+  snapshotId?: string | null;
   dbIdentifier: string | null;
+  catalogContext?: string | null;
   sqlBackend?: SqlBackend | null;
   createdAt: number;
   updatedAt: number;
+  sourceSql?: string | null;
+  sourceDbIdentifier?: string | null;
+  sourceCatalogContext?: string | null;
+  sourceSqlBackend?: SqlBackend | null;
 }
 
 export interface WorkspaceDashboardSlicer {
@@ -117,27 +143,17 @@ export interface WorkspaceExportV2 {
 export type WorkspaceExport = WorkspaceExportV1 | WorkspaceExportV2;
 
 export const WORKSPACE_DB_NAME = "pondview-workspace";
-export const WORKSPACE_DB_VERSION = 3;
+export const WORKSPACE_DB_VERSION = 4;
 const WORKSPACE_DB_NAME_OVERRIDE_KEY = "pondview-workspace-name-override";
 
 export const STORE_CHATS = "chats";
 export const STORE_MESSAGES = "messages";
-export const STORE_DASHBOARDS = "dashboards";
-export const STORE_CHARTS = "charts";
-export const STORE_DASHBOARD_MEASURES = "dashboardMeasures";
-export const STORE_DASHBOARD_SLICERS = "dashboardSlicers";
-export const STORE_CHART_SLICERS = "chartSlicers";
 export const STORE_PREFERENCES = "preferences";
 export const STORE_UPLOADED_FILE_BLOBS = "uploadedFileBlobs";
 
 type StoreName =
   | typeof STORE_CHATS
   | typeof STORE_MESSAGES
-  | typeof STORE_DASHBOARDS
-  | typeof STORE_CHARTS
-  | typeof STORE_DASHBOARD_MEASURES
-  | typeof STORE_DASHBOARD_SLICERS
-  | typeof STORE_CHART_SLICERS
   | typeof STORE_PREFERENCES
   | typeof STORE_UPLOADED_FILE_BLOBS;
 
@@ -239,6 +255,18 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
 }
 
 function createStores(db: IDBDatabase): void {
+  for (const legacyStoreName of [
+    "dashboards",
+    "charts",
+    "dashboardMeasures",
+    "dashboardSlicers",
+    "chartSlicers",
+  ]) {
+    if (db.objectStoreNames.contains(legacyStoreName)) {
+      db.deleteObjectStore(legacyStoreName);
+    }
+  }
+
   if (!db.objectStoreNames.contains(STORE_CHATS)) {
     const chats = db.createObjectStore(STORE_CHATS, { keyPath: "id" });
     chats.createIndex("updatedAt", "updatedAt", { unique: false });
@@ -248,59 +276,6 @@ function createStores(db: IDBDatabase): void {
     const messages = db.createObjectStore(STORE_MESSAGES, { keyPath: "id" });
     messages.createIndex("chatId", "chatId", { unique: false });
     messages.createIndex("chatIdCreatedAt", ["chatId", "createdAt"], {
-      unique: false,
-    });
-  }
-
-  if (!db.objectStoreNames.contains(STORE_DASHBOARDS)) {
-    const dashboards = db.createObjectStore(STORE_DASHBOARDS, {
-      keyPath: "id",
-    });
-    dashboards.createIndex("updatedAt", "updatedAt", { unique: false });
-  }
-
-  if (!db.objectStoreNames.contains(STORE_CHARTS)) {
-    const charts = db.createObjectStore(STORE_CHARTS, { keyPath: "id" });
-    charts.createIndex("dashboardId", "dashboardId", { unique: false });
-    charts.createIndex("dashboardIdPosition", ["dashboardId", "position"], {
-      unique: false,
-    });
-  }
-
-  if (!db.objectStoreNames.contains(STORE_DASHBOARD_MEASURES)) {
-    const dashboardMeasures = db.createObjectStore(STORE_DASHBOARD_MEASURES, {
-      keyPath: "id",
-    });
-    dashboardMeasures.createIndex("dashboardId", "dashboardId", {
-      unique: false,
-    });
-    dashboardMeasures.createIndex("dashboardIdKey", ["dashboardId", "key"], {
-      unique: true,
-    });
-  }
-
-  if (!db.objectStoreNames.contains(STORE_DASHBOARD_SLICERS)) {
-    const dashboardSlicers = db.createObjectStore(STORE_DASHBOARD_SLICERS, {
-      keyPath: "id",
-    });
-    dashboardSlicers.createIndex("dashboardId", "dashboardId", {
-      unique: false,
-    });
-    dashboardSlicers.createIndex(
-      "dashboardIdPosition",
-      ["dashboardId", "position"],
-      {
-        unique: false,
-      },
-    );
-  }
-
-  if (!db.objectStoreNames.contains(STORE_CHART_SLICERS)) {
-    const chartSlicers = db.createObjectStore(STORE_CHART_SLICERS, {
-      keyPath: "id",
-    });
-    chartSlicers.createIndex("chartId", "chartId", { unique: false });
-    chartSlicers.createIndex("chartIdPosition", ["chartId", "position"], {
       unique: false,
     });
   }
@@ -521,27 +496,12 @@ export async function clearStore(storeName: StoreName): Promise<void> {
 export async function clearWorkspaceDb(): Promise<void> {
   const db = await openWorkspaceDb();
   const tx = db.transaction(
-    [
-      STORE_CHATS,
-      STORE_MESSAGES,
-      STORE_DASHBOARDS,
-      STORE_CHARTS,
-      STORE_DASHBOARD_MEASURES,
-      STORE_DASHBOARD_SLICERS,
-      STORE_CHART_SLICERS,
-      STORE_PREFERENCES,
-      STORE_UPLOADED_FILE_BLOBS,
-    ],
+    [STORE_CHATS, STORE_MESSAGES, STORE_PREFERENCES, STORE_UPLOADED_FILE_BLOBS],
     "readwrite",
   );
 
   tx.objectStore(STORE_CHATS).clear();
   tx.objectStore(STORE_MESSAGES).clear();
-  tx.objectStore(STORE_DASHBOARDS).clear();
-  tx.objectStore(STORE_CHARTS).clear();
-  tx.objectStore(STORE_DASHBOARD_MEASURES).clear();
-  tx.objectStore(STORE_DASHBOARD_SLICERS).clear();
-  tx.objectStore(STORE_CHART_SLICERS).clear();
   tx.objectStore(STORE_PREFERENCES).clear();
   tx.objectStore(STORE_UPLOADED_FILE_BLOBS).clear();
 

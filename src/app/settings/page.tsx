@@ -44,6 +44,11 @@ import {
   setSelectedTheme as setThemeInStorage,
 } from "@/lib/custom-css";
 import {
+  type DefaultPromptMode,
+  setDefaultPromptModePreference,
+  useDefaultPromptModePreference,
+} from "@/lib/default-prompt-mode";
+import {
   clearDuckDbHttpConfigInStorage,
   clearDuckDbHttpSessionAuth,
   getDuckDbHttpConfigFromStorage,
@@ -72,6 +77,7 @@ import {
 } from "@/lib/workspace/export-import";
 import { switchToFreshWorkspaceDatabase } from "@/lib/workspace/workspace-db";
 import { getAllThemes } from "@/themes";
+import { getActiveRuntimeLabel } from "./runtime-label";
 
 const CSS_PLACEHOLDER = `:root{
   --background: 0 0% 100%;
@@ -89,7 +95,7 @@ const CSS_PLACEHOLDER = `:root{
 const CUSTOM_THEME_VALUE = "custom";
 
 export default function SettingsPage() {
-  const [aiProvider, setAiProvider] = useState<AiProvider>("gateway");
+  const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [openResponsesUrl, setOpenResponsesUrl] = useState("");
@@ -124,6 +130,7 @@ export default function SettingsPage() {
   const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
   const showToolCalls = useShowToolCallsPreference();
   const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
+  const defaultPromptMode = useDefaultPromptModePreference();
   const bridgeHealthStatus = bridgeRuntimeState.healthStatus;
   const bridgeConfig = bridgeRuntimeState.config;
   const hasBridgeSessionSecret = bridgeRuntimeState.hasSessionSecret;
@@ -467,21 +474,14 @@ export default function SettingsPage() {
     }
   };
 
-  const effectiveRuntimeLabel =
-    effectiveSqlBackend === "bridge"
-      ? "Bridge"
-      : effectiveSqlBackend === "duckdb-http"
-        ? "DuckDB over HTTP"
-        : selectedSqlBackend === "bridge" && !isBridgeDiscoverable
-          ? "DuckDB WASM (bridge unavailable)"
-          : selectedSqlBackend === "bridge" && !isBridgeQueryReady
-            ? "DuckDB WASM (bridge selected, waiting for auth)"
-            : selectedSqlBackend === "duckdb-http" &&
-                duckDbHttpHealthStatus === "offline"
-              ? "DuckDB WASM (HTTP unavailable)"
-              : selectedSqlBackend === "duckdb-http" && isDuckDbHttpConfigured
-                ? "DuckDB WASM (HTTP pending)"
-                : "DuckDB WASM";
+  const effectiveRuntimeLabel = getActiveRuntimeLabel({
+    selectedSqlBackend,
+    effectiveSqlBackend,
+    isBridgeDiscoverable,
+    isBridgeQueryReady,
+    isDuckDbHttpConfigured,
+    duckDbHttpHealthStatus,
+  });
   const bridgeOptionLabel = !isBridgeDiscoverable
     ? "Bridge (Unavailable)"
     : !isBridgeQueryReady
@@ -906,7 +906,38 @@ export default function SettingsPage() {
               <div>
                 <h2 className="text-xl font-semibold mb-2">Chat Display</h2>
                 <p className="text-sm text-muted-foreground">
-                  Configure how tool results are shown in chat messages.
+                  Configure how chat opens and how tool results are shown in
+                  messages.
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="default-prompt-mode"
+                  className="text-sm font-medium mb-2 block"
+                >
+                  Default prompt mode
+                </label>
+                <Select
+                  value={defaultPromptMode}
+                  onValueChange={(value) =>
+                    setDefaultPromptModePreference(value as DefaultPromptMode)
+                  }
+                >
+                  <SelectTrigger
+                    id="default-prompt-mode"
+                    className="w-full sm:w-auto"
+                  >
+                    <SelectValue placeholder="Select default prompt mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ai">AI</SelectItem>
+                    <SelectItem value="manual">Manual</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Applies to the home page and new chat sessions unless the URL
+                  explicitly sets `?mode=ai` or `?mode=manual`.
                 </p>
               </div>
 
@@ -941,7 +972,7 @@ export default function SettingsPage() {
                     Show raw executeSql output JSON
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    When enabled, the tool card shows raw `tool-executeSql`
+                    When enabled, the tool card shows raw `tool-execute_sql`
                     output in addition to the SQL result block. This only
                     applies when tool calls are visible.
                   </p>
