@@ -455,7 +455,10 @@ export function PromptInputWrapper({
     <div className="flex w-full mx-auto">
       <PromptInput
         onSubmit={handlePromptSubmit}
-        className={cn("flex-1 w-full flex flex-row border-none", className)}
+        className={cn(
+          "flex-1 w-full flex flex-row [&_[data-slot=input-group]]:border-2 [&_[data-slot=input-group]]:rounded-xl",
+          className,
+        )}
         globalDrop={internalMode !== "manual"}
         multiple
       >
@@ -483,8 +486,8 @@ export function PromptInputWrapper({
                       "w-full overflow-hidden",
                       showMinimalManualShell
                         ? compact
-                          ? "h-[18rem] rounded-xl border border-border"
-                          : "h-[22rem] rounded-xl border border-border"
+                          ? "h-72 rounded-xl border border-border"
+                          : "h-88 rounded-xl border border-border"
                         : compact
                           ? "h-85 rounded-lg"
                           : "h-105 rounded-lg",

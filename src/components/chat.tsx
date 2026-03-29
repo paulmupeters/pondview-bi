@@ -1109,7 +1109,7 @@ export default function Chat({
                       onSelectVisualization={handleSelectVisualization}
                       onRemoveMessage={handleRemoveMessage}
                       conversationClassName="flex-1 min-h-0"
-                      contentSpacingClassName="space-y-2 pb-32 lg:pb-36"
+                      contentSpacingClassName={cn("space-y-2", promptMode === "manual" ? "pb-[28rem] lg:pb-[32rem]" : "pb-32 lg:pb-36")}
                       messagePaddingClassName="p-3"
                       userResponsePaddingClassName="p-1"
                       showToolCalls={showToolCalls}
