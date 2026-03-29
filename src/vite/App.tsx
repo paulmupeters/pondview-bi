@@ -6,6 +6,7 @@ import DataPage from "@/app/data/page";
 import HomePage from "@/app/page";
 import SettingsPage from "@/app/settings/page";
 import ShellPage from "@/app/shell/page";
+import SqlEditorPage from "@/app/sql-editor/page";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CustomCssLoader } from "@/components/custom-css-loader";
 import { SidebarLayout } from "@/components/sidebar-layout";
@@ -47,6 +48,7 @@ export function App() {
             <Route path="/data" element={<DataPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/shell" element={<ShellPage />} />
+            <Route path="/sql-editor" element={<SqlEditorPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </SidebarLayout>

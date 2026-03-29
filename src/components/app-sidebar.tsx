@@ -1,4 +1,11 @@
-import { ClockIcon, Database, LayoutGrid, Plus, Settings } from "lucide-react";
+import {
+  ClockIcon,
+  Database,
+  LayoutGrid,
+  Plus,
+  Settings,
+  SquareTerminal,
+} from "lucide-react";
 import type { MouseEvent } from "react";
 import { useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -39,6 +46,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   const [resettingDb, setResettingDb] = useState(false);
 
   const isDashboardsRoute = pathname?.startsWith("/dashboards");
+  const isSqlEditorRoute = pathname === "/sql-editor";
   const isDataRoute = pathname === "/data";
   const isSettingsRoute = pathname === "/settings";
 
@@ -342,6 +350,21 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
           >
             <LayoutGrid className="h-4 w-4" />
             <span className="text-center">Dashboards</span>
+          </Button>
+        </Link>
+        <Link href="/sql-editor" className="w-full">
+          <Button
+            variant="ghost"
+            className={cn(
+              railButtonClassName,
+              isSqlEditorRoute &&
+                "bg-sidebar-accent text-sidebar-accent-foreground",
+            )}
+            aria-label="SQL"
+            title="SQL Editor"
+          >
+            <SquareTerminal className="h-4 w-4" />
+            <span className="text-center">SQL</span>
           </Button>
         </Link>
         <Link href="/data" className="w-full">
