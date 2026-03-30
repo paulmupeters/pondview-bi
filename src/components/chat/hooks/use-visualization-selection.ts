@@ -140,6 +140,14 @@ export function useVisualizationSelection({
     return vizList;
   }, [messages, executeSqlArtifactType, supplementalVisualizations]);
 
+  const visualizationMap = useMemo(() => {
+    const map = new Map<string, VisualizationEntry>();
+    for (const viz of visualizations) {
+      map.set(viz.id, viz);
+    }
+    return map;
+  }, [visualizations]);
+
   useEffect(() => {
     if (visualizations.length === 0) {
       if (activeVisualizationId !== null) {
@@ -208,6 +216,7 @@ export function useVisualizationSelection({
 
   return {
     visualizations,
+    visualizationMap,
     activeVisualizationId,
     handleSelectVisualization,
     getLastSelectableVisualizationIdForMessage,

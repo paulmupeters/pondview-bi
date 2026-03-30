@@ -20,11 +20,13 @@ import {
   type ToolState,
 } from "@/components/ai-elements/tool";
 import { GeneratedSqlBlock } from "@/components/chat/generated-sql-block";
+import type { VisualizationEntry } from "@/components/chat/hooks/use-visualization-selection";
 import {
   extractSqlArtifactParts,
   getTopLevelPartIndex,
   getVisualizationIdForArtifact,
 } from "@/components/chat/sql-artifact-utils";
+import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -35,11 +37,7 @@ type ChatMessageThreadProps = {
   animationFrame: string;
   verbAiIsThinking: string;
   executeSqlArtifactType: string;
-  activeVisualizationId: string | null;
-  getLastSelectableVisualizationIdForMessage: (
-    message: UIMessage,
-  ) => string | null;
-  onSelectVisualization: (visualizationId: string) => void;
+  visualizationMap: Map<string, VisualizationEntry>;
   onRemoveMessage: (messageId: string) => Promise<void>;
   conversationClassName: string;
   contentSpacingClassName: string;
@@ -188,9 +186,7 @@ export function ChatMessageThread({
   animationFrame,
   verbAiIsThinking,
   executeSqlArtifactType,
-  activeVisualizationId,
-  getLastSelectableVisualizationIdForMessage,
-  onSelectVisualization,
+  visualizationMap,
   onRemoveMessage,
   conversationClassName,
   contentSpacingClassName,
@@ -259,20 +255,6 @@ export function ChatMessageThread({
                 executeSqlArtifactType,
               ),
             );
-          const messageVisualizationId =
-            getLastSelectableVisualizationIdForMessage(message);
-          const isSelectableMessage =
-            message.role === "assistant" && Boolean(messageVisualizationId);
-          const isSelectedMessage =
-            isSelectableMessage &&
-            activeVisualizationId === messageVisualizationId;
-
-          const handleMessageSelection = () => {
-            if (messageVisualizationId) {
-              onSelectVisualization(messageVisualizationId);
-            }
-          };
-
           const sqlArtifactsByTopLevelPartIndex =
             getSqlArtifactsByTopLevelPartIndex(
               message.parts,
@@ -330,21 +312,39 @@ export function ChatMessageThread({
               messageId: message.id,
               partIndex,
             });
+            const vizEntry = visualizationMap.get(visualizationId);
 
             return (
-              <GeneratedSqlBlock
+              <div
                 key={`${message.id}-part-${partIndex}`}
-                query={payload.query}
-                executionTimeMs={executionTimeMs}
-                rowCount={rowCount}
-                queryType={queryType}
-                visualizationId={visualizationId}
-                artifactId={artifactData.id}
-                dbIdentifier={payload.dbIdentifier}
-                payload={payload}
-                onSelectVisualization={onSelectVisualization}
-                isSelected={activeVisualizationId === visualizationId}
-              />
+                className="space-y-2"
+              >
+                <GeneratedSqlBlock
+                  query={payload.query}
+                  executionTimeMs={executionTimeMs}
+                  rowCount={rowCount}
+                  queryType={queryType}
+                  artifactId={artifactData.id}
+                  dbIdentifier={payload.dbIdentifier}
+                  payload={payload}
+                />
+                {vizEntry && (
+                  <div className="w-full overflow-hidden rounded-lg border border-border bg-background shadow-sm">
+                    <SqlAnalysisDisplay
+                      key={vizEntry.id}
+                      data={vizEntry.data}
+                      stage={vizEntry.stage}
+                      progress={vizEntry.progress}
+                      showStageIndicator={true}
+                      className="w-full"
+                      artifactId={vizEntry.artifactId}
+                      canAddToChat={vizEntry.canAddToChat}
+                      onConfigChange={vizEntry.onConfigChange}
+                      onVisualTypeChange={vizEntry.onVisualTypeChange}
+                    />
+                  </div>
+                )}
+              </div>
             );
           };
 
@@ -362,13 +362,7 @@ export function ChatMessageThread({
                 className={cn(
                   "relative w-full group-[.is-user]:bg-card group-[.is-assistant]:bg-sidebar group-[.is-assistant]:border border-border rounded-lg group-[.is-assistant]:shadow-sm",
                   messagePaddingClassName,
-                  isSelectableMessage && "cursor-pointer",
-                  isSelectedMessage &&
-                    "group-[.is-assistant]:border-primary/60 group-[.is-assistant]:bg-accent/10",
                 )}
-                onClick={
-                  isSelectableMessage ? handleMessageSelection : undefined
-                }
               >
                 <Button
                   type="button"

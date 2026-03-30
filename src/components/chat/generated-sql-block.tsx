@@ -11,7 +11,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { runQuery } from "@/lib/sql/run-query";
 import type { Result } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 function formatExecutionTimeLabel(executionTimeMs: number): string {
   if (executionTimeMs >= 1000) {
@@ -52,23 +51,17 @@ export function GeneratedSqlBlock({
   executionTimeMs,
   rowCount,
   queryType,
-  visualizationId,
   artifactId,
   dbIdentifier,
   payload,
-  onSelectVisualization,
-  isSelected = false,
 }: {
   query: string;
   executionTimeMs?: number;
   rowCount?: number;
   queryType?: string;
-  visualizationId?: string;
   artifactId?: string;
   dbIdentifier?: string;
   payload?: SqlAnalysisData | null;
-  onSelectVisualization?: (visualizationId: string) => void;
-  isSelected?: boolean;
 }) {
   const { updateArtifactPayload } = useArtifactMutation();
   const [editableQuery, setEditableQuery] = useState(query);
@@ -84,13 +77,6 @@ export function GeneratedSqlBlock({
   const hasRowCount = typeof rowCount === "number" && Number.isFinite(rowCount);
   const statusLabel = queryType?.trim() ? queryType.trim() : "Ran query";
 
-  const handleSelectVisualization = () => {
-    if (!visualizationId) {
-      return;
-    }
-    onSelectVisualization?.(visualizationId);
-  };
-
   const handleRunQuery = async () => {
     const nextQuery = editableQuery.trim();
     if (!nextQuery) {
@@ -105,7 +91,6 @@ export function GeneratedSqlBlock({
 
     setRunError(null);
     setIsRunning(true);
-    handleSelectVisualization();
 
     try {
       const result = await runQuery({
@@ -175,15 +160,8 @@ export function GeneratedSqlBlock({
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              handleSelectVisualization();
             }}
-            onFocus={handleSelectVisualization}
-            aria-pressed={isSelected}
-            className={cn(
-              "group flex w-full items-center justify-between gap-3 rounded-md border border-border/80 bg-card/70 px-3 py-2 text-left shadow-sm transition-colors hover:bg-accent/40",
-              isSelected && "border-primary/60 bg-accent/30",
-            )}
-            data-selected={isSelected ? "true" : "false"}
+            className="group flex w-full items-center justify-between gap-3 rounded-md border border-border/80 bg-card/70 px-3 py-2 text-left shadow-sm transition-colors hover:bg-accent/40"
           >
             <span className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Run summary</span>
