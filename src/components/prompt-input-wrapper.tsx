@@ -1,6 +1,5 @@
 import {
   ChatBubbleBottomCenterTextIcon,
-  PaperClipIcon,
   Squares2X2Icon,
   WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
@@ -166,15 +165,6 @@ function FileAttachmentHoverCard() {
 
   return (
     <PromptInputHoverCard>
-      <PromptInputHoverCardTrigger>
-        <PromptInputButton
-          size="icon-sm"
-          variant="outline"
-          className="h-8! group dark:hover:bg-accent"
-        >
-          <PaperClipIcon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
-        </PromptInputButton>
-      </PromptInputHoverCardTrigger>
       <PromptInputHoverCardContent className="w-100 p-0 transform translate-y-[-10px]">
         <PromptInputCommand>
           <PromptInputCommandInput

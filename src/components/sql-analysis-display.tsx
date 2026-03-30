@@ -18,6 +18,7 @@ import type {
   SelectedForCard,
   SelectedForChart,
   SelectedForTable,
+  SqlAnalysisData,
   SqlAnalysisDisplayProps,
   SqlAnalysisStage,
 } from "./sql-analysis-display.types";
@@ -63,6 +64,27 @@ function normalizeChartConfigForRows(
   };
 }
 
+export function resolveSqlAnalysisActiveView(input: {
+  activeView: ActiveView;
+  currentQuery: string | null;
+  previousQuery: string | null;
+  currentVisualType: SqlAnalysisData["visualType"];
+  previousVisualType: SqlAnalysisData["visualType"];
+}): ActiveView {
+  const queryChanged = input.currentQuery !== input.previousQuery;
+  const visualTypeChanged =
+    input.currentVisualType !== input.previousVisualType;
+
+  if (!queryChanged && !visualTypeChanged) {
+    return input.activeView;
+  }
+
+  return input.currentVisualType === "chart" ||
+    input.currentVisualType === "card"
+    ? "chart"
+    : "table";
+}
+
 export function SqlAnalysisDisplay({
   data,
   stage,
@@ -91,8 +113,19 @@ export function SqlAnalysisDisplay({
     () => data?.cardConfig ?? null,
   );
   const lastQueryRef = useRef<string | null>(data?.query ?? null);
-  const lastVisualTypeRef = useRef<string | undefined>(data?.visualType);
+  const lastVisualTypeRef = useRef<SqlAnalysisData["visualType"]>(
+    data?.visualType,
+  );
   const [showVisualOptions, setShowVisualOptions] = useState(false);
+  const currentQuery = data?.query ?? null;
+  const currentDataVisualType = data?.visualType;
+  const resolvedActiveView = resolveSqlAnalysisActiveView({
+    activeView,
+    currentQuery,
+    previousQuery: lastQueryRef.current,
+    currentVisualType: currentDataVisualType,
+    previousVisualType: lastVisualTypeRef.current,
+  });
 
   const handleClear = () => {
     setChartConfig(null);
@@ -131,26 +164,23 @@ export function SqlAnalysisDisplay({
 
   // Reset state when query changes (different artifact) or visualType changes during streaming
   useEffect(() => {
-    const currentQuery = data?.query ?? null;
-    const currentVisualType = data?.visualType;
-
     if (currentQuery !== lastQueryRef.current) {
       // Query changed - full reset to data's config
       setChartConfig(data?.chartConfig ?? null);
       setCardConfig(data?.cardConfig ?? null);
       setShowVisualOptions(false);
       setActiveView(
-        currentVisualType === "chart" || currentVisualType === "card"
+        currentDataVisualType === "chart" || currentDataVisualType === "card"
           ? "chart"
           : "table",
       );
       lastQueryRef.current = currentQuery;
-      lastVisualTypeRef.current = currentVisualType;
-    } else if (currentVisualType !== lastVisualTypeRef.current) {
+      lastVisualTypeRef.current = currentDataVisualType;
+    } else if (currentDataVisualType !== lastVisualTypeRef.current) {
       // Same query but visualType changed (data streaming completed)
       // Update activeView to match the new visualType
       setActiveView(
-        currentVisualType === "chart" || currentVisualType === "card"
+        currentDataVisualType === "chart" || currentDataVisualType === "card"
           ? "chart"
           : "table",
       );
@@ -163,15 +193,20 @@ export function SqlAnalysisDisplay({
         const nextCardConfig = data.cardConfig;
         setCardConfig((previous) => previous ?? nextCardConfig);
       }
-      lastVisualTypeRef.current = currentVisualType;
+      lastVisualTypeRef.current = currentDataVisualType;
     }
-  }, [data?.query, data?.visualType, data?.chartConfig, data?.cardConfig]);
+  }, [
+    currentDataVisualType,
+    currentQuery,
+    data?.chartConfig,
+    data?.cardConfig,
+  ]);
 
   useEffect(() => {
-    if (activeView !== "chart") {
+    if (resolvedActiveView !== "chart") {
       setShowVisualOptions(false);
     }
-  }, [activeView]);
+  }, [resolvedActiveView]);
 
   const columnsForDialog = useMemo(
     () => (data?.columns ?? []).map((c) => ({ name: c.name })),
@@ -233,7 +268,9 @@ export function SqlAnalysisDisplay({
 
   const canShowTable = Boolean(selectedForTable);
   const canShowVisualOptionsToggle =
-    activeView === "chart" && columnsForDialog.length > 0 && !selectedForCard;
+    resolvedActiveView === "chart" &&
+    columnsForDialog.length > 0 &&
+    !selectedForCard;
   const { effectiveChartConfig, visualOptions } = useMemo(
     () =>
       data
@@ -256,7 +293,7 @@ export function SqlAnalysisDisplay({
     ],
   ) ?? { effectiveChartConfig: null, visualOptions: [] };
   const defaultDashboardVisualType = resolveDefaultDashboardVisualType({
-    activeView,
+    activeView: resolvedActiveView,
     selectedForCard,
   });
 
@@ -286,7 +323,7 @@ export function SqlAnalysisDisplay({
 
     // Determine visual type based on active view and configuration/data shape
     let visualType: "table" | "chart" | "card" = "table";
-    if (activeView === "chart") {
+    if (resolvedActiveView === "chart") {
       if (cardConfig || data?.cardConfig) {
         visualType = "card";
       } else if (resolvedChartConfig) {
@@ -322,10 +359,14 @@ export function SqlAnalysisDisplay({
             }
           : undefined),
     };
-  }, [data, chartConfig, cardConfig, activeView]);
+  }, [data, chartConfig, cardConfig, resolvedActiveView]);
 
   const currentVisualType: "table" | "chart" | "card" | undefined =
-    activeView === "table" ? "table" : selectedForCard ? "card" : "chart";
+    resolvedActiveView === "table"
+      ? "table"
+      : selectedForCard
+        ? "card"
+        : "chart";
   const lastEmittedVisualTypeRef = useRef<"table" | "chart" | "card" | null>(
     null,
   );
@@ -380,7 +421,7 @@ export function SqlAnalysisDisplay({
       {data && (
         <div className="flex flex-col gap-4 w-full">
           <SqlAnalysisHeader
-            activeView={activeView}
+            activeView={resolvedActiveView}
             canShowTable={canShowTable}
             onActiveViewChange={setActiveView}
             canShowVisualOptionsToggle={canShowVisualOptionsToggle}
@@ -423,8 +464,9 @@ export function SqlAnalysisDisplay({
 
           <div className="w-full px-4">
             {(data ||
-              (effectiveStage === "initial" && activeView === "chart")) &&
-              activeView === "chart" &&
+              (effectiveStage === "initial" &&
+                resolvedActiveView === "chart")) &&
+              resolvedActiveView === "chart" &&
               (() => {
                 const dbIdentifier = data?.dbIdentifier;
                 const isSqlExpandedInitial = data?.isSqlExpandedInitial;
@@ -456,7 +498,7 @@ export function SqlAnalysisDisplay({
                 );
               })()}
 
-            {data && activeView === "table" && (
+            {data && resolvedActiveView === "table" && (
               <div className="group relative">
                 <SqlResultsTable
                   dataOverride={selectedForTable}

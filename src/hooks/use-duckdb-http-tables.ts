@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DuckdbTableEntry } from "@/lib/api/types/duckdb";
 import { getBridgeSession, runBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import { resolveCurrentCatalog } from "@/lib/duckdb/catalog-context";
@@ -68,124 +68,131 @@ export function useDuckdbHttpTables(
   const [isConfigured, setIsConfigured] = useState(false);
   const [connectionInfo, setConnectionInfo] =
     useState<DuckdbHttpConnectionInfo | null>(null);
+  const isMountedRef = useRef(true);
+  const refreshRequestIdRef = useRef(0);
   const duckDbHttpConfig = useDuckDbHttpConfig();
   const _duckDbHttpConfigKey = duckDbHttpConfig
     ? `${duckDbHttpConfig.host}:${duckDbHttpConfig.port}`
     : "";
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshToken is intentionally used to trigger re-fetches without being read
-  useEffect(() => {
-    let cancelled = false;
+  const refresh = useCallback(async () => {
+    const requestId = refreshRequestIdRef.current + 1;
+    refreshRequestIdRef.current = requestId;
+    const isStale = () =>
+      !isMountedRef.current || refreshRequestIdRef.current !== requestId;
 
-    async function fetchTables() {
-      if (backend === "duckdb-wasm") {
+    if (backend === "duckdb-wasm") {
+      if (!isStale()) {
         setTables([]);
         setCurrentCatalog(null);
         setError(null);
         setIsConfigured(false);
         setConnectionInfo(null);
         setIsLoading(false);
-        return;
       }
+      return;
+    }
 
-      try {
-        setIsLoading(true);
-        setError(null);
+    try {
+      setIsLoading(true);
+      setError(null);
 
-        if (backend === "bridge") {
-          const session = await getBridgeSession().catch(() => null);
-          const runBridgeSql = (sql: string) => runBridgeQuery(sql);
+      if (backend === "bridge") {
+        const session = await getBridgeSession().catch(() => null);
+        const runBridgeSql = (sql: string) => runBridgeQuery(sql);
 
-          if (!cancelled) {
-            setIsConfigured(true);
-            setConnectionInfo(
-              session ? { host: session.host, port: session.port } : null,
-            );
-          }
-
-          try {
-            const [result, nextCurrentCatalog] = await Promise.all([
-              runBridgeSql(LIST_TABLES_SQL),
-              resolveCurrentCatalog(runBridgeSql),
-            ]);
-            if (!cancelled) {
-              setTables(mapInformationSchemaRows(result.rows));
-              setCurrentCatalog(nextCurrentCatalog);
-            }
-          } catch {
-            const [fallback, nextCurrentCatalog] = await Promise.all([
-              runBridgeSql("SHOW ALL TABLES;"),
-              resolveCurrentCatalog(runBridgeSql),
-            ]);
-            if (!cancelled) {
-              setTables(mapShowAllTablesRows(fallback.rows));
-              setCurrentCatalog(nextCurrentCatalog);
-            }
-          }
-
-          return;
-        }
-
-        const config = getDuckDbHttpConfigFromStorage();
-        if (!config) {
-          if (!cancelled) {
-            setTables([]);
-            setCurrentCatalog(null);
-            setError(null);
-            setIsConfigured(false);
-            setConnectionInfo(null);
-          }
-          return;
-        }
-
-        if (!cancelled) {
+        if (!isStale()) {
           setIsConfigured(true);
-          setConnectionInfo({ host: config.host, port: config.port });
+          setConnectionInfo(
+            session ? { host: session.host, port: session.port } : null,
+          );
         }
-
-        const runDuckDbHttpSql = (sql: string) => runDuckDbHttpQuery(sql);
 
         try {
           const [result, nextCurrentCatalog] = await Promise.all([
-            runDuckDbHttpSql(LIST_TABLES_SQL),
-            resolveCurrentCatalog(runDuckDbHttpSql),
+            runBridgeSql(LIST_TABLES_SQL),
+            resolveCurrentCatalog(runBridgeSql),
           ]);
-          if (!cancelled) {
+          if (!isStale()) {
             setTables(mapInformationSchemaRows(result.rows));
             setCurrentCatalog(nextCurrentCatalog);
           }
         } catch {
           const [fallback, nextCurrentCatalog] = await Promise.all([
-            runDuckDbHttpSql("SHOW ALL TABLES;"),
-            resolveCurrentCatalog(runDuckDbHttpSql),
+            runBridgeSql("SHOW ALL TABLES;"),
+            resolveCurrentCatalog(runBridgeSql),
           ]);
-          if (!cancelled) {
+          if (!isStale()) {
             setTables(mapShowAllTablesRows(fallback.rows));
             setCurrentCatalog(nextCurrentCatalog);
           }
         }
-      } catch (err) {
-        if (!cancelled) {
-          const message =
-            err instanceof Error ? err.message : String(err ?? "");
-          setError(message);
+
+        return;
+      }
+
+      const config = getDuckDbHttpConfigFromStorage();
+      if (!config) {
+        if (!isStale()) {
           setTables([]);
           setCurrentCatalog(null);
-          console.error("[useDuckdbHttpTables] Error:", message);
+          setError(null);
+          setIsConfigured(false);
+          setConnectionInfo(null);
         }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
+        return;
+      }
+
+      if (!isStale()) {
+        setIsConfigured(true);
+        setConnectionInfo({ host: config.host, port: config.port });
+      }
+
+      const runDuckDbHttpSql = (sql: string) => runDuckDbHttpQuery(sql);
+
+      try {
+        const [result, nextCurrentCatalog] = await Promise.all([
+          runDuckDbHttpSql(LIST_TABLES_SQL),
+          resolveCurrentCatalog(runDuckDbHttpSql),
+        ]);
+        if (!isStale()) {
+          setTables(mapInformationSchemaRows(result.rows));
+          setCurrentCatalog(nextCurrentCatalog);
+        }
+      } catch {
+        const [fallback, nextCurrentCatalog] = await Promise.all([
+          runDuckDbHttpSql("SHOW ALL TABLES;"),
+          resolveCurrentCatalog(runDuckDbHttpSql),
+        ]);
+        if (!isStale()) {
+          setTables(mapShowAllTablesRows(fallback.rows));
+          setCurrentCatalog(nextCurrentCatalog);
         }
       }
+    } catch (err) {
+      if (!isStale()) {
+        const message = err instanceof Error ? err.message : String(err ?? "");
+        setError(message);
+        setTables([]);
+        setCurrentCatalog(null);
+        console.error("[useDuckdbHttpTables] Error:", message);
+      }
+    } finally {
+      if (!isStale()) {
+        setIsLoading(false);
+      }
     }
+  }, [backend]);
 
-    void fetchTables();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshToken is intentionally used to trigger re-fetches without being read
+  useEffect(() => {
+    isMountedRef.current = true;
+    void refresh();
 
     return () => {
-      cancelled = true;
+      isMountedRef.current = false;
     };
-  }, [backend, refreshToken]);
+  }, [refresh, refreshToken]);
 
   return {
     tables,
@@ -194,5 +201,6 @@ export function useDuckdbHttpTables(
     error,
     isConfigured,
     connectionInfo,
+    refresh,
   };
 }

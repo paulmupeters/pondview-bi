@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   getConnectedEntryCatalog,
   getConnectedEntryDisplayName,
+  getSampleDataActionState,
   shouldShowConnectedEntry,
 } from "@/components/connected-data-panel";
 import type { ConnectedTable } from "@/lib/connected-tables";
@@ -91,5 +92,50 @@ describe("connected source explorer helpers", () => {
     };
 
     expect(shouldShowConnectedEntry(entry, new Set())).toBe(false);
+  });
+
+  test("shows the add sample data action only when a runtime section is empty", () => {
+    expect(
+      getSampleDataActionState({
+        hasTables: false,
+        isLoading: false,
+        error: null,
+      }),
+    ).toEqual({
+      isLoading: false,
+      error: null,
+    });
+
+    expect(
+      getSampleDataActionState({
+        hasTables: true,
+        isLoading: false,
+        error: null,
+      }),
+    ).toBeNull();
+  });
+
+  test("preserves loading and error state for sample data actions", () => {
+    expect(
+      getSampleDataActionState({
+        hasTables: false,
+        isLoading: true,
+        error: null,
+      }),
+    ).toEqual({
+      isLoading: true,
+      error: null,
+    });
+
+    expect(
+      getSampleDataActionState({
+        hasTables: false,
+        isLoading: false,
+        error: "Failed to add sample data.",
+      }),
+    ).toEqual({
+      isLoading: false,
+      error: "Failed to add sample data.",
+    });
   });
 });
