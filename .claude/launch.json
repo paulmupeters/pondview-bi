@@ -4,19 +4,19 @@
     {
       "name": "App Dev Server",
       "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["run", "dev", "--host", "0.0.0.0", "--port", "4173"],
       "port": 4173
     },
     {
       "name": "Docs Dev Server",
       "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "docs:dev"],
+      "runtimeArgs": ["run", "docs:dev", "--host", "0.0.0.0", "--port", "4174"],
       "port": 4174
     },
     {
       "name": "Production Preview",
       "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "preview"],
+      "runtimeArgs": ["run", "preview", "--host", "0.0.0.0", "--port", "4172"],
       "port": 4172
     }
   ]

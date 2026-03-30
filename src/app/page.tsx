@@ -216,7 +216,7 @@ export default function Home() {
             <div className="flex w-full max-w-7xl items-stretch gap-4 overflow-hidden transition-all duration-300 ease-out">
               <div
                 className={cn(
-                  "flex min-h-0 overflow-hidden transition-all duration-300 ease-out",
+                  "hidden md:flex min-h-0 overflow-hidden transition-all duration-300 ease-out",
                   isManualMode
                     ? "w-80 min-w-80 translate-x-0 opacity-100"
                     : "pointer-events-none w-0 min-w-0 -translate-x-4 opacity-0",

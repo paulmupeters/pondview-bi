@@ -25,7 +25,7 @@ function ChatPageContent() {
   }
 
   return (
-    <div className="font-sans h-screen overflow-hidden">
+    <div className="font-sans h-full overflow-hidden">
       <Chat chatId={chatId} />
     </div>
   );

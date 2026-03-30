@@ -44,6 +44,7 @@ import {
 } from "@/lib/sql/sql-runtime";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config, Result } from "@/lib/types";
+import { useIsMobile, useIsLg } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import {
   appendAssistantMessage,
@@ -233,6 +234,8 @@ export default function Chat({
   const [selectedCatalogContext, setSelectedCatalogContext] = useState<
     string | null
   >(null);
+  const isMobile = useIsMobile();
+  const isLgScreen = useIsLg();
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(true);
   const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(
     null,
@@ -1057,7 +1060,7 @@ export default function Chat({
       setMessages={setMessages}
       executeSqlArtifactType={executeSqlArtifactType}
     >
-      <div className="chat-container relative flex h-screen flex-col">
+      <div className="chat-container relative flex h-full flex-col">
         <div className="relative flex flex-1 min-h-0 w-full flex-col">
           <div className="flex-1 overflow-hidden bg-card">
             <div
@@ -1065,11 +1068,11 @@ export default function Chat({
               className={cn("flex h-full", isResizing && "select-none")}
             >
               <div
-                className="flex flex-col min-w-0 h-full overflow-hidden"
-                style={{ width: `${100 - rightPanelWidth}%` }}
+                className={cn("flex flex-col min-w-0 h-full overflow-hidden", !isLgScreen && "w-full")}
+                style={isLgScreen ? { width: `${100 - rightPanelWidth}%` } : undefined}
               >
                 <div className="flex-1 min-h-0 flex overflow-hidden">
-                  <ConnectedDataPanel
+                  {!isMobile && <ConnectedDataPanel
                     selectedDb={selectedDb}
                     onSelect={(db) => {
                       setSelectedDb(db);
@@ -1094,7 +1097,7 @@ export default function Chat({
                       void handleRenameStoredSqlQuery(queryId);
                     }}
                     showStoredSqlQueries
-                  />
+                  />}
                   <div className="relative flex-1 min-h-0 min-w-0 flex flex-col">
                     <ChatMessageThread
                       messages={messages}
@@ -1109,7 +1112,7 @@ export default function Chat({
                       onSelectVisualization={handleSelectVisualization}
                       onRemoveMessage={handleRemoveMessage}
                       conversationClassName="flex-1 min-h-0"
-                      contentSpacingClassName={cn("space-y-2", promptMode === "manual" ? "pb-[28rem] lg:pb-[32rem]" : "pb-32 lg:pb-36")}
+                      contentSpacingClassName={cn("space-y-2", promptMode === "manual" ? "pb-[16rem] md:pb-[28rem] lg:pb-[32rem]" : "pb-24 md:pb-32 lg:pb-36")}
                       messagePaddingClassName="p-3"
                       userResponsePaddingClassName="p-1"
                       showToolCalls={showToolCalls}
@@ -1195,7 +1198,7 @@ export default function Chat({
           </div>
 
           <div className="lg:hidden border-t border-border/50 bg-card">
-            <div className="h-[400px]">{rightPanelContent}</div>
+            <div className="h-[250px]">{rightPanelContent}</div>
           </div>
         </div>
 

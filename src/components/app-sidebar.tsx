@@ -139,7 +139,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   };
 
   return (
-    <div className="relative flex h-full w-12 sm:w-20 flex-col border-r border-border bg-sidebar py-4 p-1">
+    <div className="relative hidden md:flex h-full w-12 sm:w-20 flex-col border-r border-border bg-sidebar py-4 p-1">
       <div className="relative flex flex-col items-center gap-2">
         <div className="relative">
           <Link href="/">
