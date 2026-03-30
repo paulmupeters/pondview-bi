@@ -289,7 +289,28 @@ export default function Home() {
                 )}
               >
                 <PromptInputWrapper
-                  onSubmit={handleSubmit}
+                  chatComposer={{
+                    submitPrompt: async (message) => {
+                      handleSubmit(message);
+                    },
+                    status: "ready",
+                    pendingMode: null,
+                  }}
+                  sqlRepl={{
+                    result: null,
+                    setConsoleApi: setManualConsoleApi,
+                    saveQuery: async () => {},
+                    isSavingQuery: false,
+                    persistManualResultToChat: async () => {},
+                  }}
+                  manualVisualization={{
+                    chartConfig: null,
+                    cardConfig: null,
+                    visualType: null,
+                    handleReplResultChange: () => {},
+                    focusManualVisualization: () => {},
+                    createPayload: () => null,
+                  }}
                   className="transition delay-150 duration-300 ease-in-out"
                   onHomePage={true}
                   mode={mode}
@@ -298,7 +319,6 @@ export default function Home() {
                   manualShellVariant={manualShellVariant}
                   selectedDb={selectedDb}
                   selectedCatalogContext={selectedCatalogContext}
-                  onConsoleApiChange={setManualConsoleApi}
                 />
                 <div
                   className={cn(

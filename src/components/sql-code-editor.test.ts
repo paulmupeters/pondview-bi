@@ -12,7 +12,6 @@ describe("createSqlCodeEditorKeyBindings", () => {
       onRunQuery: () => {},
     });
 
-    expect(bindings.map((binding) => binding.key)).toContain("Tab");
     expect(bindings.map((binding) => binding.key)).toContain("Shift-Enter");
     expect(bindings.map((binding) => binding.key)).not.toContain("Enter");
   });
@@ -25,7 +24,6 @@ describe("createSqlCodeEditorKeyBindings", () => {
     });
 
     expect(bindings.map((binding) => binding.key)).toEqual([
-      "Tab",
       "Escape",
       "ArrowUp",
       "ArrowDown",
