@@ -1,5 +1,7 @@
 import { PostgreSQL, sql } from "@codemirror/lang-sql";
+import { syntaxHighlighting } from "@codemirror/language";
 import { Prec, StateEffect, StateField } from "@codemirror/state";
+import { oneDarkHighlightStyle } from "@codemirror/theme-one-dark";
 import {
   Decoration,
   EditorView,
@@ -17,6 +19,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from "react";
 import { cn } from "@/lib/utils";
 
@@ -300,6 +303,22 @@ export function createSqlCodeEditorKeyBindings(options: {
   return bindings;
 }
 
+function useIsDarkMode(): boolean {
+  const [isDark, setIsDark] = useState(
+    () => document.documentElement.classList.contains("dark"),
+  );
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains("dark"));
+    });
+    observer.observe(document.documentElement, { attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
+  return isDark;
+}
+
 export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
   function SqlCodeEditor(
     {
@@ -318,6 +337,7 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
     },
     ref,
   ) {
+    const isDark = useIsDarkMode();
     const editorRef = useRef<ReactCodeMirrorRef>(null);
     const autocompleteActionRef = useRef<AutocompleteQueryFn | undefined>(
       autocompleteAction,
@@ -548,6 +568,7 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
     const extensions: Extension[] = [
       customKeymap(),
       sql({ dialect: PostgreSQL }),
+      ...(isDark ? [syntaxHighlighting(oneDarkHighlightStyle)] : []),
       EditorView.lineWrapping,
       sqlAutocompleteField,
       EditorView.updateListener.of((update) => {
