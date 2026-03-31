@@ -85,15 +85,14 @@ export default function Chat({
     supplementalVisualizations,
   });
 
+  const focusManualVisualization = useCallback(() => {}, []);
+
   const manualVisualizationController = useMemo(
     () => ({
       ...manualVisualization,
-      handleReplResultChange: (result: typeof sqlRepl.result) => {
-        manualVisualization.handleReplResultChange(result);
-      },
-      focusManualVisualization: () => {},
+      focusManualVisualization,
     }),
-    [manualVisualization],
+    [focusManualVisualization, manualVisualization],
   );
 
   useEffect(() => {

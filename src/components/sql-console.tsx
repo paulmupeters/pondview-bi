@@ -27,6 +27,25 @@ type ResultsPayload = {
   };
 };
 
+type QueryNotice = {
+  kind: "error" | "warning";
+  message: string;
+};
+
+function toQueryNotice(error: unknown): QueryNotice {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return {
+      kind: error.name === "QueryWarning" ? "warning" : "error",
+      message: error.message,
+    };
+  }
+
+  return {
+    kind: "error",
+    message: String(error),
+  };
+}
+
 export type ExecuteQueryFn = (params: {
   sql: string;
   signal: AbortSignal;
@@ -191,6 +210,7 @@ export type SqlConsoleProps = {
     catalogContext?: string | null;
   }) => void;
   onApiChangeAction?: (api: SqlConsoleApi | null) => void;
+  onQueryChangeAction?: (sql: string) => void;
   onCancelQueryAction?: () => Promise<void> | void;
   showInlineResults?: boolean;
   showRunControls?: boolean;
@@ -214,6 +234,7 @@ export function SqlConsole({
   autocompleteAction,
   onSuccessAction,
   onApiChangeAction,
+  onQueryChangeAction,
   onCancelQueryAction,
   showInlineResults = true,
   showRunControls = true,
@@ -223,10 +244,11 @@ export function SqlConsole({
 
   const [sql, setSql] = useState<string>("");
   const [results, setResults] = useState<ResultsPayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<QueryNotice | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState<number>(-1);
+  const latestSqlRef = useRef(sql);
 
   useEffect(() => {
     try {
@@ -294,7 +316,7 @@ export function SqlConsole({
 
   const handleRunQuery = useCallback(async () => {
     if (isRunning) return;
-    setError(null);
+    setNotice(null);
     setResults(null);
 
     const currentSql = sql.trim();
@@ -341,9 +363,12 @@ export function SqlConsole({
       });
     } catch (err) {
       if ((err as Error).name === "AbortError") {
-        setError("Query cancelled");
+        setNotice({
+          kind: "warning",
+          message: "Query cancelled",
+        });
       } else {
-        setError((err as Error).message || String(err));
+        setNotice(toQueryNotice(err));
       }
     } finally {
       setIsRunning(false);
@@ -370,11 +395,13 @@ export function SqlConsole({
   }, [handleRunQuery]);
 
   useEffect(() => {
-    if (!onApiChangeAction) {
-      return;
-    }
+    latestSqlRef.current = sql;
+    onQueryChangeAction?.(sql);
+  }, [onQueryChangeAction, sql]);
 
-    const api: SqlConsoleApi = {
+  const apiRef = useRef<SqlConsoleApi | null>(null);
+  if (apiRef.current === null) {
+    apiRef.current = {
       insertText: (text: string) => {
         editorRef.current?.insertText(text);
       },
@@ -382,23 +409,25 @@ export function SqlConsole({
         setSql(value);
         editorRef.current?.setValue(value);
       },
-      getQuery: () => editorRef.current?.getValue() ?? sql,
+      getQuery: () => editorRef.current?.getValue() ?? latestSqlRef.current,
       focus: () => {
         editorRef.current?.focus();
       },
       clearResults: () => {
         setResults(null);
-        setError(null);
+        setNotice(null);
       },
       runQuery: () => runQueryRef.current(),
     };
+  }
 
-    onApiChangeAction(api);
+  useEffect(() => {
+    if (!onApiChangeAction || !apiRef.current) {
+      return;
+    }
 
-    return () => {
-      // Intentionally not cleaning up to avoid flickering null API state
-    };
-  }, [onApiChangeAction, sql]);
+    onApiChangeAction(apiRef.current);
+  }, [onApiChangeAction]);
 
   return (
     <div
@@ -472,9 +501,16 @@ export function SqlConsole({
           <SqlResultsTable dataOverride={results} pageSize={50} expandable />
         </div>
       )}
-      {error && (
-        <div className="border border-destructive/60 bg-destructive/20 px-3 py-2 text-xs text-destructive font-mono rounded-sm dark:border-destructive/60 dark:bg-destructive/20 dark:text-destructive z-20">
-          ERROR: {error}
+      {notice && (
+        <div
+          className={cn(
+            "px-3 py-2 text-xs font-mono rounded-sm z-20",
+            notice.kind === "warning"
+              ? "border border-amber-500/60 bg-amber-500/15 text-amber-900 dark:text-amber-200"
+              : "border border-destructive/60 bg-destructive/20 text-destructive dark:border-destructive/60 dark:bg-destructive/20 dark:text-destructive",
+          )}
+        >
+          {notice.kind === "warning" ? "WARNING" : "ERROR"}: {notice.message}
         </div>
       )}
     </div>

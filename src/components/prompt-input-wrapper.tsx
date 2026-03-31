@@ -289,6 +289,7 @@ export function PromptInputWrapper({
   const [internalMode, setInternalMode] = useState<PromptMode>(mode ?? "ai");
   const [manualConsoleApi, setManualConsoleApi] =
     useState<SqlConsoleApi | null>(null);
+  const [manualQuery, setManualQuery] = useState("");
   const status = chatComposer.status;
   const pendingMode = chatComposer.pendingMode ?? null;
   const sqlResult = sqlRepl?.result ?? null;
@@ -343,7 +344,7 @@ export function PromptInputWrapper({
   );
 
   const handleManualRun = useCallback(() => {
-    const sql = manualConsoleApi?.getQuery()?.trim();
+    const sql = manualQuery.trim() || manualConsoleApi?.getQuery()?.trim();
     if (!sql) {
       return;
     }
@@ -354,7 +355,7 @@ export function PromptInputWrapper({
     }
 
     manualConsoleApi?.runQuery();
-  }, [manualConsoleApi, onHomePage, onManualRunRequest]);
+  }, [manualConsoleApi, manualQuery, onHomePage, onManualRunRequest]);
 
   const handleManualSend = useCallback(() => {
     if (!sqlRepl || !manualVisualization || !sqlResult) {
@@ -376,6 +377,10 @@ export function PromptInputWrapper({
     sqlRepl,
     sqlResult,
   ]);
+
+  const handleManualQueryChange = useCallback((query: string) => {
+    setManualQuery(query);
+  }, []);
 
   const content = aiButtonLabel;
   const nextMode: PromptMode = internalMode === "ai" ? "manual" : "ai";
@@ -446,6 +451,7 @@ export function PromptInputWrapper({
                       selectedDbIdentifier={selectedDb}
                       catalogContext={selectedCatalogContext}
                       onConsoleApiChangeAction={handleManualConsoleApiChange}
+                      onQueryChangeAction={handleManualQueryChange}
                       inlineResults={false}
                       editorMinHeight={
                         showMinimalManualShell ? "11rem" : "8rem"
@@ -494,7 +500,7 @@ export function PromptInputWrapper({
                       variant="outline"
                       type="button"
                       className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-                      disabled={!manualConsoleApi?.getQuery()?.trim()}
+                      disabled={!manualQuery.trim()}
                       onClick={handleManualRun}
                     >
                       {showHomeManualComposer ? "[Run in chat ▷]" : "[Run ▷]"}

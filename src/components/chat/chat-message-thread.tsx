@@ -457,10 +457,7 @@ export function ChatMessageThread({
         !lastMessageHasRenderableAssistantContent,
     );
 
-  const cells = useMemo(
-    () => groupMessagesIntoCells(messages),
-    [messages],
-  );
+  const cells = useMemo(() => groupMessagesIntoCells(messages), [messages]);
 
   const renderThinkingIndicator = () => (
     <div className="p-3">
@@ -499,8 +496,7 @@ export function ChatMessageThread({
       );
     }
 
-    const payload = (artifactData.payload ??
-      null) as SqlAnalysisData | null;
+    const payload = (artifactData.payload ?? null) as SqlAnalysisData | null;
 
     if (!payload?.query) {
       return null;
@@ -509,9 +505,7 @@ export function ChatMessageThread({
     const executionTimeMs =
       payload.summary?.executionTimeMs ?? payload.executionTime;
     const rowCount =
-      payload.summary?.totalRows ??
-      payload.rowCount ??
-      payload.rows?.length;
+      payload.summary?.totalRows ?? payload.rowCount ?? payload.rows?.length;
     const queryType = payload.summary?.queryType;
     const visualizationId = getVisualizationIdForArtifact({
       artifactId: artifactData.id,
@@ -521,10 +515,7 @@ export function ChatMessageThread({
     const vizEntry = visualizationMap.get(visualizationId);
 
     return (
-      <div
-        key={`${messageId}-part-${partIndex}`}
-        className="space-y-2"
-      >
+      <div key={`${messageId}-part-${partIndex}`} className="space-y-2">
         <GeneratedSqlBlock
           query={payload.query}
           executionTimeMs={executionTimeMs}
@@ -555,16 +546,14 @@ export function ChatMessageThread({
   };
 
   const renderAssistantMessage = (message: UIMessage) => {
-    const isLatestAssistantMessage =
-      message.id === latestAssistantMessageId;
-    const isAssistantRunMessage = trailingAssistantMessageIdSet.has(
-      message.id,
-    );
+    const isLatestAssistantMessage = message.id === latestAssistantMessageId;
+    const isAssistantRunMessage = trailingAssistantMessageIdSet.has(message.id);
     const isAssistantMessageExpanded = Boolean(
       isLatestAssistantMessage && expandedAssistantMessages[message.id],
     );
-    const isCollapsedAssistantMessage =
-      collapsedAssistantMessageIdSet.has(message.id);
+    const isCollapsedAssistantMessage = collapsedAssistantMessageIdSet.has(
+      message.id,
+    );
     const latestAssistantPreviewPartIndex =
       isLatestAssistantMessage && !isAssistantMessageExpanded
         ? getLatestAssistantPreviewPartIndex({
@@ -583,13 +572,11 @@ export function ChatMessageThread({
           })
         : [],
     );
-    const sqlArtifactsByTopLevelPartIndex =
-      getSqlArtifactsByTopLevelPartIndex(
-        message.parts,
-        executeSqlArtifactType,
-      );
-    const isLastMessageInThread =
-      message.id === lastMessage?.id;
+    const sqlArtifactsByTopLevelPartIndex = getSqlArtifactsByTopLevelPartIndex(
+      message.parts,
+      executeSqlArtifactType,
+    );
+    const isLastMessageInThread = message.id === lastMessage?.id;
     const isEmptyAssistantMessage =
       isLastMessageInThread &&
       isAssistantThinking &&
@@ -616,11 +603,7 @@ export function ChatMessageThread({
       ) || latestAssistantPreviewPartIndex !== null;
 
     if (isEmptyAssistantMessage) {
-      return (
-        <div key={message.id}>
-          {renderThinkingIndicator()}
-        </div>
-      );
+      return <div key={message.id}>{renderThinkingIndicator()}</div>;
     }
 
     if (isCollapsedAssistantMessage) {
@@ -682,7 +665,10 @@ export function ChatMessageThread({
       }
 
       return (
-        <div key={message.id} className={cn("relative", messagePaddingClassName)}>
+        <div
+          key={message.id}
+          className={cn("relative", messagePaddingClassName)}
+        >
           {visibleParts}
         </div>
       );
@@ -788,9 +774,7 @@ export function ChatMessageThread({
                 className="w-full"
               >
                 <Tool
-                  defaultOpen={
-                    isLatestPreviewPart || Boolean(toolErrorText)
-                  }
+                  defaultOpen={isLatestPreviewPart || Boolean(toolErrorText)}
                 >
                   <ToolHeader state={toolState} type={part.type} />
                   <ToolContent>
@@ -843,11 +827,6 @@ export function ChatMessageThread({
       <ConversationContent
         className={cn("max-w-full mx-auto w-full", contentSpacingClassName)}
       >
-        {isConversationEmpty && (
-          <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground shadow-sm">
-            Ready
-          </div>
-        )}
         {cells.map((cell) => (
           <div
             key={cell.id}
@@ -896,12 +875,11 @@ export function ChatMessageThread({
           </div>
         ))}
 
-        {isAssistantThinking &&
-          !hasInlineThinkingPlaceholder && (
-            <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-              {renderThinkingIndicator()}
-            </div>
-          )}
+        {isAssistantThinking && !hasInlineThinkingPlaceholder && (
+          <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+            {renderThinkingIndicator()}
+          </div>
+        )}
 
         {footerContent}
       </ConversationContent>

@@ -20,6 +20,7 @@ import {
   type FormEvent,
   type FormEventHandler,
   Fragment,
+  forwardRef,
   type HTMLAttributes,
   type KeyboardEventHandler,
   type PropsWithChildren,
@@ -924,17 +925,19 @@ export const PromptInputTools = ({
 
 export type PromptInputButtonProps = ComponentProps<typeof InputGroupButton>;
 
-export const PromptInputButton = ({
-  variant = "ghost",
-  className,
-  size,
-  ...props
-}: PromptInputButtonProps) => {
+export const PromptInputButton = forwardRef<
+  HTMLButtonElement,
+  PromptInputButtonProps
+>(function PromptInputButton(
+  { variant = "ghost", className, size, ...props },
+  ref,
+) {
   const newSize =
     size ?? (Children.count(props.children) > 1 ? "sm" : "icon-sm");
 
   return (
     <InputGroupButton
+      ref={ref}
       className={cn(className)}
       size={newSize}
       type="button"
@@ -942,7 +945,7 @@ export const PromptInputButton = ({
       {...props}
     />
   );
-};
+});
 
 export type PromptInputActionMenuProps = ComponentProps<typeof DropdownMenu>;
 export const PromptInputActionMenu = (props: PromptInputActionMenuProps) => (
@@ -990,14 +993,20 @@ export type PromptInputSubmitProps = ComponentProps<typeof InputGroupButton> & {
   status?: ChatStatus;
 };
 
-export const PromptInputSubmit = ({
-  className,
-  variant = "default",
-  size = "icon-sm",
-  status,
-  children,
-  ...props
-}: PromptInputSubmitProps) => {
+export const PromptInputSubmit = forwardRef<
+  HTMLButtonElement,
+  PromptInputSubmitProps
+>(function PromptInputSubmit(
+  {
+    className,
+    variant = "default",
+    size = "icon-sm",
+    status,
+    children,
+    ...props
+  },
+  ref,
+) {
   let Icon = <PaperAirplaneIcon className="size-5" />;
 
   if (status === "submitted") {
@@ -1010,6 +1019,7 @@ export const PromptInputSubmit = ({
 
   return (
     <InputGroupButton
+      ref={ref}
       aria-label="Submit"
       className={cn(className)}
       size={size}
@@ -1020,7 +1030,7 @@ export const PromptInputSubmit = ({
       {children ?? Icon}
     </InputGroupButton>
   );
-};
+});
 
 interface SpeechRecognition extends EventTarget {
   continuous: boolean;
