@@ -1,5 +1,12 @@
 import type React from "react";
 import { useRef, useState } from "react";
+import {
+  BarChart3,
+  LineChart,
+  AreaChart,
+  PieChart,
+  Layers,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -268,18 +275,25 @@ export function ChartConfigForm({
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium">Chart type</legend>
             <div className="flex gap-2">
-              {["Line", "Bar", "Pie", "StackBar", "Area"].map((type) => (
+              {([
+                { type: "line", icon: LineChart, label: "Line" },
+                { type: "bar", icon: BarChart3, label: "Bar" },
+                { type: "pie", icon: PieChart, label: "Pie" },
+                { type: "stackbar", icon: Layers, label: "StackBar" },
+                { type: "area", icon: AreaChart, label: "Area" },
+              ] as const).map(({ type, icon: Icon, label }) => (
                 <label key={type} className="cursor-pointer">
                   <input
                     type="radio"
                     name="type"
-                    value={type.toLowerCase()}
-                    checked={chartType === type.toLowerCase()}
+                    value={type}
+                    checked={chartType === type}
                     onChange={(e) => setChartType(e.target.value)}
                     className="sr-only peer"
                   />
-                  <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                    {type}
+                  <div className="flex flex-col items-center gap-1 px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20" title={label}>
+                    <Icon className="w-5 h-5" />
+                    <span className="text-xs">{label}</span>
                   </div>
                 </label>
               ))}

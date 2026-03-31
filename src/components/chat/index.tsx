@@ -33,7 +33,6 @@ import {
   resolveDbIdentifierForSqlBackend,
 } from "@/lib/sql/sql-runtime";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
-import { cn } from "@/lib/utils";
 import { useRouter, useSearchParams } from "@/vite/next-navigation";
 
 const CHAT_MANUAL_SHELL_VARIANT: ManualShellVariant = "minimal";
@@ -253,65 +252,60 @@ export default function Chat({
                   visualizationMap={visualizationMap}
                   onRemoveMessage={chatSession.thread.removeMessage}
                   conversationClassName="flex-1 min-h-0"
-                  contentSpacingClassName={cn(
-                    "space-y-2",
-                    promptMode === "manual"
-                      ? "pb-[16rem] md:pb-[28rem] lg:pb-[32rem]"
-                      : "pb-24 md:pb-32 lg:pb-[18rem]",
-                  )}
+                  contentSpacingClassName="space-y-3 pb-4"
                   messagePaddingClassName="p-3"
                   userResponsePaddingClassName="p-1"
                   showToolCalls={showToolCalls}
                   showExecuteSqlRawOutput={showExecuteSqlRawOutput}
+                  footerContent={
+                    <div className="w-full rounded-lg border border-border bg-card shadow-sm overflow-hidden">
+                      {promptMode === "manual" &&
+                        sqlRepl.result &&
+                        (() => {
+                          const manualPayload =
+                            manualVisualization.createPayload({
+                              result: sqlRepl.result,
+                              selectedCatalogContext,
+                            });
+                          return manualPayload ? (
+                            <div className="max-h-[50vh] overflow-y-auto border-b border-border">
+                              <SqlAnalysisDisplay
+                                data={manualPayload}
+                                stage="complete"
+                                progress={1}
+                                showStageIndicator={false}
+                                className="w-full"
+                                onConfigChange={
+                                  manualVisualization.handleConfigChange
+                                }
+                                onVisualTypeChange={
+                                  manualVisualization.handleVisualTypeChange
+                                }
+                              />
+                            </div>
+                          ) : null;
+                        })()}
+                      <PromptErrorBanner
+                        message={chatSession.composer.promptError}
+                      />
+                      <div className="px-4 py-3">
+                        <PromptInputWrapper
+                          chatComposer={chatSession.composer}
+                          sqlRepl={sqlRepl}
+                          manualVisualization={manualVisualizationController}
+                          mode={promptMode}
+                          onModeChange={setPromptMode}
+                          compact
+                          showAiInput
+                          onCreateDashboard={handleOpenDashboardBuilder}
+                          selectedDb={selectedDb}
+                          selectedCatalogContext={selectedCatalogContext}
+                          manualShellVariant={CHAT_MANUAL_SHELL_VARIANT}
+                        />
+                      </div>
+                    </div>
+                  }
                 />
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50">
-                  <div className="h-12 bg-gradient-to-t from-card via-card/80 to-transparent" />
-                  <div className="pointer-events-auto w-full bg-card px-4 pb-4">
-                    {promptMode === "manual" &&
-                      sqlRepl.result &&
-                      (() => {
-                        const manualPayload = manualVisualization.createPayload(
-                          {
-                            result: sqlRepl.result,
-                            selectedCatalogContext,
-                          },
-                        );
-                        return manualPayload ? (
-                          <div className="mb-4 max-h-[50vh] overflow-y-auto rounded-lg border border-border bg-background shadow-sm">
-                            <SqlAnalysisDisplay
-                              data={manualPayload}
-                              stage="complete"
-                              progress={1}
-                              showStageIndicator={false}
-                              className="w-full"
-                              onConfigChange={
-                                manualVisualization.handleConfigChange
-                              }
-                              onVisualTypeChange={
-                                manualVisualization.handleVisualTypeChange
-                              }
-                            />
-                          </div>
-                        ) : null;
-                      })()}
-                    <PromptErrorBanner
-                      message={chatSession.composer.promptError}
-                    />
-                    <PromptInputWrapper
-                      chatComposer={chatSession.composer}
-                      sqlRepl={sqlRepl}
-                      manualVisualization={manualVisualizationController}
-                      mode={promptMode}
-                      onModeChange={setPromptMode}
-                      compact
-                      showAiInput
-                      onCreateDashboard={handleOpenDashboardBuilder}
-                      selectedDb={selectedDb}
-                      selectedCatalogContext={selectedCatalogContext}
-                      manualShellVariant={CHAT_MANUAL_SHELL_VARIANT}
-                    />
-                  </div>
-                </div>
               </div>
             </div>
           </div>
