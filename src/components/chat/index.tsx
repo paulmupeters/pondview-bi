@@ -1,32 +1,38 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArtifactMutationProvider } from "@/components/artifact-mutation-context";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import { NotebookAnalysisCell } from "@/components/chat/notebook-analysis-cell";
+import { ArtifactMutationProvider } from "@/components/artifact-mutation-context";
 import { ChatMessageThread } from "@/components/chat/chat-message-thread";
-import { toUiMessages } from "@/components/chat/hooks/chat-session-utils";
 import { ChatTitleBar } from "@/components/chat/chat-title-bar";
+import { toUiMessages } from "@/components/chat/hooks/chat-session-utils";
 import { useChatSession } from "@/components/chat/hooks/use-chat-session";
 import { useChatUrlParams } from "@/components/chat/hooks/use-chat-url-params";
 import { useManualVisualization } from "@/components/chat/hooks/use-manual-visualization";
+import { useNotebookCellController } from "@/components/chat/hooks/use-notebook-cell-controller";
 import { useSqlRepl } from "@/components/chat/hooks/use-sql-repl";
 import { useVisualizationSelection } from "@/components/chat/hooks/use-visualization-selection";
+import { NotebookAnalysisCell } from "@/components/chat/notebook-analysis-cell";
+import { getTrailingAssistantMessages } from "@/components/chat/notebook-cell-utils";
 import {
-  getTrailingAssistantMessages,
-} from "@/components/chat/notebook-cell-utils";
+  getNotebookDebugInstructions,
+  logNotebookDebug,
+} from "@/components/chat/notebook-debug";
 import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
 import { extractSqlArtifactParts } from "@/components/chat/sql-artifact-utils";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
-import { PromptInputWrapper, type PromptMode } from "@/components/prompt-input-wrapper";
+import {
+  PromptInputWrapper,
+  type PromptMode,
+} from "@/components/prompt-input-wrapper";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
-import type { NotebookSession } from "@/hooks/use-notebook-session";
 import { useIsMobile } from "@/hooks/use-mobile";
+import type { NotebookSession } from "@/hooks/use-notebook-session";
 import {
   useExecuteSqlRawOutputPreference,
   useShowToolCallsPreference,
@@ -159,28 +165,13 @@ export default function Chat({
   const [selectedCatalogContext, setSelectedCatalogContext] = useState<
     string | null
   >(null);
-  const [focusedNotebookCellId, setFocusedNotebookCellId] = useState<
-    string | null
-  >(null);
-  const [notebookCellModes, setNotebookCellModes] = useState<
-    Record<string, PromptMode>
-  >({});
-  const [pendingNotebookSqlLoads, setPendingNotebookSqlLoads] = useState<
-    Record<string, { sql: string; autorun: boolean }>
-  >({});
   const notebookConsoleApisRef = useRef<Map<string, SqlConsoleApi | null>>(
     new Map(),
   );
-  const notebookCellCreationPromiseRef = useRef<Promise<
-    NotebookSession["cells"][number]
-  > | null>(null);
-  const hasSeededNotebookCellRef = useRef(false);
   const pendingAssistantCellIdRef = useRef<string | null>(null);
   const [streamingNotebookCellId, setStreamingNotebookCellId] = useState<
     string | null
   >(null);
-  const [isNotebookBootstrapPending, setIsNotebookBootstrapPending] =
-    useState(false);
   const hasPendingNotebookBootstrapParam = Boolean(
     searchParams.get("q")?.trim() ||
       searchParams.get("sql")?.trim() ||
@@ -193,10 +184,45 @@ export default function Chat({
   const showToolCalls = useShowToolCallsPreference();
   const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
   const isNotebookMode = Boolean(notebookSession);
+  const notebookSessionCells = notebookSession?.cells;
+  const notebookCells = useMemo(() => {
+    if (!notebookSessionCells) {
+      return [];
+    }
+
+    return Array.from(
+      new Map(notebookSessionCells.map((cell) => [cell.id, cell])).values(),
+    ).sort((left, right) => {
+      if (left.position !== right.position) {
+        return left.position - right.position;
+      }
+      return left.createdAt - right.createdAt;
+    });
+  }, [notebookSessionCells]);
+  const notebookCellController = useNotebookCellController({
+    chatId,
+    notebookSession,
+    notebookCells,
+    hasPendingNotebookBootstrapParam,
+  });
+  const {
+    focusedCellId: focusedNotebookCellId,
+    notebookCellModes,
+    pendingNotebookSqlLoads,
+    focusCell: focusNotebookCell,
+    setCellMode: setNotebookCellMode,
+    queuePendingSqlLoad: queueNotebookPendingSqlLoad,
+    markPendingSqlLoadHandled: markNotebookPendingSqlLoadHandled,
+    createCell: createNotebookCell,
+    ensureTargetCell: ensureNotebookTargetCell,
+    withBootstrapMutation: withNotebookBootstrapMutation,
+  } = notebookCellController;
 
   useEffect(() => {
-    hasSeededNotebookCellRef.current = false;
-    setIsNotebookBootstrapPending(false);
+    logNotebookDebug("chat:mounted-notebook-debug", {
+      chatId,
+      instructions: getNotebookDebugInstructions(),
+    });
   }, [chatId]);
 
   const loadNotebookMessages = useCallback(async () => {
@@ -221,7 +247,7 @@ export default function Chat({
       const targetCellId =
         pendingAssistantCellIdRef.current ??
         focusedNotebookCellId ??
-        notebookSession.cells[notebookSession.cells.length - 1]?.id;
+        notebookCells[notebookCells.length - 1]?.id;
       if (!targetCellId) {
         return;
       }
@@ -281,6 +307,7 @@ export default function Chat({
     },
     [
       focusedNotebookCellId,
+      notebookCells,
       notebookSession,
       selectedCatalogContext,
       selectedDb,
@@ -342,70 +369,25 @@ export default function Chat({
   }, [connectedTables, selectedDb]);
 
   useEffect(() => {
-    if (
-      !notebookSession ||
-      hasSeededNotebookCellRef.current ||
-      notebookSession.isLoading ||
-      isNotebookBootstrapPending ||
-      hasPendingNotebookBootstrapParam ||
-      notebookSession.cells.length > 0
-    ) {
+    if (!notebookSession || !focusedNotebookCellId) {
       return;
     }
 
-    hasSeededNotebookCellRef.current = true;
-    void (async () => {
-      if (notebookCellCreationPromiseRef.current) {
-        const cell = await notebookCellCreationPromiseRef.current;
-        setFocusedNotebookCellId(cell.id);
-        return;
-      }
-
-      const pending = notebookSession.addCell();
-      notebookCellCreationPromiseRef.current = pending;
-
-      try {
-        const cell = await pending;
-        setFocusedNotebookCellId(cell.id);
-      } finally {
-        notebookCellCreationPromiseRef.current = null;
-      }
-    })();
-  }, [
-    hasPendingNotebookBootstrapParam,
-    isNotebookBootstrapPending,
-    notebookSession,
-    notebookSession?.cells.length,
-    notebookSession?.isLoading,
-  ]);
-
-  useEffect(() => {
-    if (!notebookSession || notebookSession.cells.length === 0) {
-      setFocusedNotebookCellId(null);
+    const focusedCell = notebookCells.find(
+      (cell) => cell.id === focusedNotebookCellId,
+    );
+    if (!focusedCell) {
       return;
     }
 
-    if (
-      focusedNotebookCellId &&
-      notebookSession.cells.some((cell) => cell.id === focusedNotebookCellId)
-    ) {
-      return;
+    if (focusedCell.selectedDbIdentifier) {
+      setSelectedDb(focusedCell.selectedDbIdentifier);
     }
 
-    const nextFocusedCell =
-      notebookSession.cells[notebookSession.cells.length - 1] ?? null;
-    if (!nextFocusedCell) {
-      return;
+    if (focusedCell.selectedCatalogContext !== undefined) {
+      setSelectedCatalogContext(focusedCell.selectedCatalogContext);
     }
-
-    setFocusedNotebookCellId(nextFocusedCell.id);
-    if (nextFocusedCell.selectedDbIdentifier) {
-      setSelectedDb(nextFocusedCell.selectedDbIdentifier);
-    }
-    if (nextFocusedCell.selectedCatalogContext !== undefined) {
-      setSelectedCatalogContext(nextFocusedCell.selectedCatalogContext);
-    }
-  }, [focusedNotebookCellId, notebookSession]);
+  }, [focusedNotebookCellId, notebookCells, notebookSession]);
 
   useEffect(() => {
     if (!notebookSession || !chatSession.composer.promptError) {
@@ -430,61 +412,6 @@ export default function Chat({
         setStreamingNotebookCellId(null);
       });
   }, [chatSession.composer.promptError, notebookSession]);
-
-  const createNotebookCell = useCallback(async () => {
-    if (!notebookSession) {
-      throw new Error("Notebook session is required.");
-    }
-
-    if (notebookCellCreationPromiseRef.current) {
-      return notebookCellCreationPromiseRef.current;
-    }
-
-    const pending = notebookSession.addCell();
-    notebookCellCreationPromiseRef.current = pending;
-
-    try {
-      return await pending;
-    } finally {
-      notebookCellCreationPromiseRef.current = null;
-    }
-  }, [notebookSession]);
-
-  const ensureNotebookTargetCell = useCallback(
-    async (preferredCellId?: string | null) => {
-      if (!notebookSession) {
-        throw new Error("Notebook session is required.");
-      }
-
-      if (preferredCellId) {
-        const preferredCell = notebookSession.cells.find(
-          (cell) => cell.id === preferredCellId,
-        );
-        if (preferredCell) {
-          return preferredCell;
-        }
-      }
-
-      if (focusedNotebookCellId) {
-        const focusedCell = notebookSession.cells.find(
-          (cell) => cell.id === focusedNotebookCellId,
-        );
-        if (focusedCell) {
-          return focusedCell;
-        }
-      }
-
-      const lastCell = notebookSession.cells[notebookSession.cells.length - 1];
-      if (lastCell) {
-        return lastCell;
-      }
-
-      const createdCell = await createNotebookCell();
-      setFocusedNotebookCellId(createdCell.id);
-      return createdCell;
-    },
-    [createNotebookCell, focusedNotebookCellId, notebookSession],
-  );
 
   const handleOpenDashboardBuilder = useCallback(() => {
     setIsDashboardBuilderOpen(true);
@@ -512,16 +439,12 @@ export default function Chat({
       }
 
       const targetCellId =
-        focusedNotebookCellId ??
-        notebookSession?.cells[notebookSession.cells.length - 1]?.id;
+        focusedNotebookCellId ?? notebookCells[notebookCells.length - 1]?.id;
       if (!targetCellId) {
         return;
       }
 
-      setNotebookCellModes((previous) => ({
-        ...previous,
-        [targetCellId]: "manual",
-      }));
+      setNotebookCellMode(targetCellId, "manual");
 
       const targetApi = notebookConsoleApisRef.current.get(targetCellId);
       if (targetApi) {
@@ -532,19 +455,15 @@ export default function Chat({
         targetApi.focus();
       } else {
         const targetCell =
-          notebookSession?.cells.find((cell) => cell.id === targetCellId) ??
-          null;
+          notebookCells.find((cell) => cell.id === targetCellId) ?? null;
         const current = targetCell?.sqlDraft ?? "";
         const lastChar = current.length > 0 ? current[current.length - 1] : "";
         const needsSpace = current.length > 0 && !/\s/.test(lastChar);
 
-        setPendingNotebookSqlLoads((previous) => ({
-          ...previous,
-          [targetCellId]: {
-            sql: `${current}${needsSpace ? " " : ""}${payload.reference}`,
-            autorun: false,
-          },
-        }));
+        queueNotebookPendingSqlLoad(targetCellId, {
+          sql: `${current}${needsSpace ? " " : ""}${payload.reference}`,
+          autorun: false,
+        });
       }
 
       if (payload.dbIdentifier) {
@@ -552,7 +471,14 @@ export default function Chat({
       }
       setSelectedCatalogContext(payload.catalogContext ?? null);
     },
-    [focusedNotebookCellId, isNotebookMode, notebookSession, sqlRepl.consoleApi],
+    [
+      focusedNotebookCellId,
+      isNotebookMode,
+      notebookCells,
+      queueNotebookPendingSqlLoad,
+      setNotebookCellMode,
+      sqlRepl.consoleApi,
+    ],
   );
 
   const handleSubmitPrompt = useCallback(
@@ -569,22 +495,26 @@ export default function Chat({
         return;
       }
 
+      logNotebookDebug("chat:intent:submit-prompt", {
+        requestedCellId: options?.cellId ?? null,
+        messagePreview: (message.text ?? "").slice(0, 100),
+      });
       const targetCell = await ensureNotebookTargetCell(options?.cellId);
       const promptText = message.text?.trim() ?? "";
 
       pendingAssistantCellIdRef.current = targetCell.id;
       setStreamingNotebookCellId(targetCell.id);
-      setFocusedNotebookCellId(targetCell.id);
-      setNotebookCellModes((previous) => ({
-        ...previous,
-        [targetCell.id]: "ai",
-      }));
+      focusNotebookCell(targetCell.id);
+      setNotebookCellMode(targetCell.id, "ai");
 
       await notebookSession.updateCell(targetCell.id, {
         promptText,
         status: "running",
         selectedDbIdentifier:
-          options?.selectedDb ?? targetCell.selectedDbIdentifier ?? selectedDb ?? null,
+          options?.selectedDb ??
+          targetCell.selectedDbIdentifier ??
+          selectedDb ??
+          null,
         selectedCatalogContext:
           options?.selectedCatalogContext ??
           targetCell.selectedCatalogContext ??
@@ -596,21 +526,22 @@ export default function Chat({
     [
       chatSession.composer,
       ensureNotebookTargetCell,
+      focusNotebookCell,
       isNotebookMode,
       notebookSession,
       selectedCatalogContext,
       selectedDb,
+      setNotebookCellMode,
     ],
   );
 
   const handleAddVisual = useCallback(async () => {
     if (isNotebookMode && notebookSession) {
-      const newCell = await createNotebookCell();
-      setFocusedNotebookCellId(newCell.id);
-      setNotebookCellModes((previous) => ({
-        ...previous,
-        [newCell.id]: "manual",
-      }));
+      logNotebookDebug("chat:intent:add-cell", { source: "add-visual-button" });
+      await createNotebookCell({
+        focus: true,
+        mode: "manual",
+      });
       return;
     }
 
@@ -667,6 +598,13 @@ export default function Chat({
 
   const handleNotebookPromptModeChange = useCallback(
     (mode: PromptMode) => {
+      logNotebookDebug("chat:intent:set-prompt-mode", {
+        mode,
+        isNotebookMode,
+        hasSqlParam: Boolean(searchParams.get("sql")?.trim()),
+        hasModeParam: Boolean(searchParams.get("mode")),
+      });
+
       if (!isNotebookMode) {
         setPromptMode(mode);
         return;
@@ -677,65 +615,75 @@ export default function Chat({
       }
 
       const hasModeParam = Boolean(searchParams.get("mode"));
+      const applyMode = async () => {
+        const cell = await ensureNotebookTargetCell();
+        focusNotebookCell(cell.id);
+        setNotebookCellMode(cell.id, mode);
+      };
+
       if (hasModeParam) {
-        setIsNotebookBootstrapPending(true);
+        void withNotebookBootstrapMutation(applyMode);
+        return;
       }
 
-      void ensureNotebookTargetCell().then((cell) => {
-        setFocusedNotebookCellId(cell.id);
-        setNotebookCellModes((previous) => ({
-          ...previous,
-          [cell.id]: mode,
-        }));
-      }).finally(() => {
-        if (hasModeParam) {
-          setIsNotebookBootstrapPending(false);
-        }
-      });
+      void applyMode();
     },
-    [ensureNotebookTargetCell, isNotebookMode, searchParams],
+    [
+      ensureNotebookTargetCell,
+      focusNotebookCell,
+      isNotebookMode,
+      searchParams,
+      setNotebookCellMode,
+      withNotebookBootstrapMutation,
+    ],
   );
 
   const handleUrlSendMessage = useCallback(
     ({ text }: { text: string }) => {
+      logNotebookDebug("chat:url:send-message", {
+        isNotebookMode,
+        textPreview: text.slice(0, 100),
+      });
       if (!isNotebookMode) {
         setPromptMode("ai");
         void handleSubmitPrompt({ text });
         return;
       }
 
-      setIsNotebookBootstrapPending(true);
-      void handleSubmitPrompt({ text }).finally(() => {
-        setIsNotebookBootstrapPending(false);
-      });
+      void withNotebookBootstrapMutation(() => handleSubmitPrompt({ text }));
     },
-    [handleSubmitPrompt, isNotebookMode],
+    [handleSubmitPrompt, isNotebookMode, withNotebookBootstrapMutation],
   );
 
   const handleUrlLoadManualSql = useCallback(
     ({ sql, autorun }: { sql: string; autorun: boolean }) => {
+      logNotebookDebug("chat:url:load-manual-sql", {
+        isNotebookMode,
+        autorun,
+        sqlPreview: sql.slice(0, 100),
+      });
       if (!isNotebookMode) {
         setPromptMode("manual");
         queueSqlLoad({ sql, autorun });
         return;
       }
 
-      setIsNotebookBootstrapPending(true);
-      void ensureNotebookTargetCell().then((cell) => {
-        setFocusedNotebookCellId(cell.id);
-        setNotebookCellModes((previous) => ({
-          ...previous,
-          [cell.id]: "manual",
-        }));
-        setPendingNotebookSqlLoads((previous) => ({
-          ...previous,
-          [cell.id]: { sql, autorun },
-        }));
-      }).finally(() => {
-        setIsNotebookBootstrapPending(false);
+      void withNotebookBootstrapMutation(async () => {
+        const cell = await ensureNotebookTargetCell();
+        focusNotebookCell(cell.id);
+        setNotebookCellMode(cell.id, "manual");
+        queueNotebookPendingSqlLoad(cell.id, { sql, autorun });
       });
     },
-    [ensureNotebookTargetCell, isNotebookMode, queueSqlLoad],
+    [
+      ensureNotebookTargetCell,
+      focusNotebookCell,
+      isNotebookMode,
+      queueNotebookPendingSqlLoad,
+      queueSqlLoad,
+      setNotebookCellMode,
+      withNotebookBootstrapMutation,
+    ],
   );
 
   useChatUrlParams({
@@ -765,17 +713,16 @@ export default function Chat({
         return;
       }
 
-      const selected = sqlRepl.savedQueries.find((entry) => entry.id === queryId);
+      const selected = sqlRepl.savedQueries.find(
+        (entry) => entry.id === queryId,
+      );
       if (!selected) {
         return;
       }
 
       void ensureNotebookTargetCell().then((cell) => {
-        setFocusedNotebookCellId(cell.id);
-        setNotebookCellModes((previous) => ({
-          ...previous,
-          [cell.id]: "manual",
-        }));
+        focusNotebookCell(cell.id);
+        setNotebookCellMode(cell.id, "manual");
 
         const targetApi = notebookConsoleApisRef.current.get(cell.id);
         if (targetApi) {
@@ -785,19 +732,19 @@ export default function Chat({
           return;
         }
 
-        setPendingNotebookSqlLoads((previous) => ({
-          ...previous,
-          [cell.id]: {
-            sql: selected.sql,
-            autorun: false,
-          },
-        }));
+        queueNotebookPendingSqlLoad(cell.id, {
+          sql: selected.sql,
+          autorun: false,
+        });
       });
     },
     [
       ensureNotebookTargetCell,
+      focusNotebookCell,
       isNotebookMode,
       promptMode,
+      queueNotebookPendingSqlLoad,
+      setNotebookCellMode,
       sqlRepl,
       sqlRepl.savedQueries,
     ],
@@ -821,9 +768,7 @@ export default function Chat({
         return;
       }
 
-      const targetCell = notebookSession.cells.find(
-        (cell) => cell.id === messageId,
-      );
+      const targetCell = notebookCells.find((cell) => cell.id === messageId);
       if (targetCell) {
         const entryIds = new Set(
           (notebookSession.cellEntriesByCellId.get(targetCell.id) ?? []).map(
@@ -858,21 +803,23 @@ export default function Chat({
         previous.filter((message) => message.id !== messageId),
       );
     },
-    [chatSession.thread, notebookSession],
+    [chatSession.thread, notebookCells, notebookSession],
   );
 
   const handleNotebookCellModeChange = useCallback(
     (cellId: string, mode: PromptMode) => {
-      setNotebookCellModes((previous) => ({
-        ...previous,
-        [cellId]: mode,
-      }));
+      logNotebookDebug("chat:intent:cell-mode-change", { cellId, mode });
+      setNotebookCellMode(cellId, mode);
     },
-    [],
+    [setNotebookCellMode],
   );
 
   const handleNotebookConsoleApiChange = useCallback(
     (cellId: string, api: SqlConsoleApi | null) => {
+      logNotebookDebug("chat:event:register-console-api", {
+        cellId,
+        hasApi: Boolean(api),
+      });
       if (api) {
         notebookConsoleApisRef.current.set(cellId, api);
         return;
@@ -883,13 +830,13 @@ export default function Chat({
     [],
   );
 
-  const handleNotebookSqlLoadHandled = useCallback((cellId: string) => {
-    setPendingNotebookSqlLoads((previous) => {
-      const next = { ...previous };
-      delete next[cellId];
-      return next;
-    });
-  }, []);
+  const handleNotebookSqlLoadHandled = useCallback(
+    (cellId: string) => {
+      logNotebookDebug("chat:event:sql-load-handled", { cellId });
+      markNotebookPendingSqlLoadHandled(cellId);
+    },
+    [markNotebookPendingSqlLoadHandled],
+  );
 
   const handleNotebookCellFocus = useCallback(
     ({
@@ -901,13 +848,18 @@ export default function Chat({
       selectedDb?: string;
       selectedCatalogContext?: string | null;
     }) => {
-      setFocusedNotebookCellId(cellId);
+      logNotebookDebug("chat:event:cell-focus", {
+        cellId,
+        selectedDb: selectedDb ?? null,
+        selectedCatalogContext: selectedCatalogContext ?? null,
+      });
+      focusNotebookCell(cellId);
       if (selectedDb) {
         setSelectedDb(selectedDb);
       }
       setSelectedCatalogContext(selectedCatalogContext ?? null);
     },
-    [],
+    [focusNotebookCell],
   );
 
   const isAssistantThinking =
@@ -961,13 +913,14 @@ export default function Chat({
                 {isNotebookMode && notebookSession ? (
                   <div className="flex-1 overflow-y-auto">
                     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4">
-                      {notebookSession.cells.map((cell, cellIndex) => (
+                      {notebookCells.map((cell, cellIndex) => (
                         <NotebookAnalysisCell
                           key={cell.id}
                           cell={cell}
                           cellIndex={cellIndex}
                           entries={
-                            notebookSession.cellEntriesByCellId.get(cell.id) ?? []
+                            notebookSession.cellEntriesByCellId.get(cell.id) ??
+                            []
                           }
                           streamingAssistantMessages={
                             streamingNotebookCellId === cell.id
@@ -994,10 +947,17 @@ export default function Chat({
                           isFocused={focusedNotebookCellId === cell.id}
                           sharedSelectedDb={selectedDb}
                           sharedSelectedCatalogContext={selectedCatalogContext}
-                          pendingSqlLoad={pendingNotebookSqlLoads[cell.id] ?? null}
+                          pendingSqlLoad={
+                            pendingNotebookSqlLoads[cell.id] ?? null
+                          }
                           saveQuery={sqlRepl.saveQuery}
                           isSavingQuery={sqlRepl.isSavingQuery}
-                          onSubmitPrompt={({ cellId, message, selectedDb, selectedCatalogContext }) =>
+                          onSubmitPrompt={({
+                            cellId,
+                            message,
+                            selectedDb,
+                            selectedCatalogContext,
+                          }) =>
                             handleSubmitPrompt(message, {
                               cellId,
                               selectedDb,
@@ -1072,7 +1032,9 @@ export default function Chat({
                                 submitPrompt: handleSubmitPrompt,
                               }}
                               sqlRepl={sqlRepl}
-                              manualVisualization={manualVisualizationController}
+                              manualVisualization={
+                                manualVisualizationController
+                              }
                               mode={promptMode}
                               onModeChange={setPromptMode}
                               compact

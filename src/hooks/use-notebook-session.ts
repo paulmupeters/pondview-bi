@@ -18,6 +18,7 @@ import type {
 
 export type NotebookSessionState = {
   isLoading: boolean;
+  hasLoaded: boolean;
   error: string | null;
   notebook: WorkspaceAnalysisNotebook | null;
   cells: WorkspaceAnalysisCell[];
@@ -59,6 +60,7 @@ export type NotebookSession = NotebookSessionState & NotebookSessionActions;
 
 export function useNotebookSession(notebookId: string | null): NotebookSession {
   const [isLoading, setIsLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notebook, setNotebook] = useState<WorkspaceAnalysisNotebook | null>(
     null,
@@ -70,6 +72,12 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
 
   const load = useCallback(async () => {
     if (!notebookId) {
+      setNotebook(null);
+      setCells([]);
+      setCellEntriesByCellId(new Map());
+      setError(null);
+      setIsLoading(false);
+      setHasLoaded(true);
       return;
     }
     setIsLoading(true);
@@ -84,12 +92,14 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
       setError(err instanceof Error ? err.message : "Failed to load notebook.");
     } finally {
       setIsLoading(false);
+      setHasLoaded(true);
     }
   }, [notebookId]);
 
   useEffect(() => {
+    setHasLoaded(false);
     void load();
-  }, [load]);
+  }, [load, notebookId]);
 
   const updateTitle = useCallback(
     async (title: string | null) => {
@@ -127,7 +137,12 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
       };
       await upsertAnalysisCell(newCell);
       await touchAnalysisNotebookUpdatedAt(notebookId, now);
-      setCells((prev) => [...prev, newCell]);
+      setCells((prev) => {
+        if (prev.some((cell) => cell.id === newCell.id)) {
+          return prev;
+        }
+        return [...prev, newCell];
+      });
       setNotebook((prev) => (prev ? { ...prev, updatedAt: now } : prev));
       return newCell;
     },
@@ -269,6 +284,7 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
 
   return {
     isLoading,
+    hasLoaded,
     error,
     notebook,
     cells,

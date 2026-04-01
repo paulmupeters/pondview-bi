@@ -3,30 +3,31 @@ import { TrashIcon } from "@heroicons/react/24/outline";
 import type { ChatStatus } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
+import { useManualVisualization } from "@/components/chat/hooks/use-manual-visualization";
+import type { SqlReplResult } from "@/components/chat/hooks/use-sql-repl";
 import { NotebookCellTranscript } from "@/components/chat/notebook-cell-transcript";
 import {
   analysisCellEntryToUiMessage,
   buildNotebookArtifactEntry,
   parseStoredPayload,
 } from "@/components/chat/notebook-cell-utils";
-import { useManualVisualization } from "@/components/chat/hooks/use-manual-visualization";
-import type { SqlReplResult } from "@/components/chat/hooks/use-sql-repl";
+import { logNotebookDebug } from "@/components/chat/notebook-debug";
+import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
 import {
   type ManualShellVariant,
-  type PromptMode,
   PromptInputWrapper,
+  type PromptMode,
 } from "@/components/prompt-input-wrapper";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { QueryNotice, SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
+import { cn } from "@/lib/utils";
 import type {
   WorkspaceAnalysisCell,
   WorkspaceAnalysisCellEntry,
 } from "@/lib/workspace/workspace-db";
-import { cn } from "@/lib/utils";
 
 const CHAT_MANUAL_SHELL_VARIANT: ManualShellVariant = "minimal";
 
@@ -72,7 +73,9 @@ type NotebookAnalysisCellProps = {
   >;
 };
 
-function normalizeNullableString(value: string | null | undefined): string | null {
+function normalizeNullableString(
+  value: string | null | undefined,
+): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
@@ -150,45 +153,42 @@ export function NotebookAnalysisCell({
   const manualRunNoticeRef = useRef<QueryNotice | null>(null);
   const manualRunSucceededRef = useRef(false);
 
-  const transcriptMessages = useMemo(
-    () => {
-      const persistedAssistantMessages = entries
-        .map(analysisCellEntryToUiMessage)
-        .filter((message) => message.role === "assistant");
-      const dedupedPersistedAssistantMessages = Array.from(
-        new Map(
-          persistedAssistantMessages.map((message) => [message.id, message]),
-        ).values(),
-      );
-      const persistedIds = new Set(
-        dedupedPersistedAssistantMessages.map((message) => message.id),
-      );
+  const transcriptMessages = useMemo(() => {
+    const persistedAssistantMessages = entries
+      .map(analysisCellEntryToUiMessage)
+      .filter((message) => message.role === "assistant");
+    const dedupedPersistedAssistantMessages = Array.from(
+      new Map(
+        persistedAssistantMessages.map((message) => [message.id, message]),
+      ).values(),
+    );
+    const persistedIds = new Set(
+      dedupedPersistedAssistantMessages.map((message) => message.id),
+    );
 
-      return [
-        ...dedupedPersistedAssistantMessages,
-        ...streamingAssistantMessages.filter(
-          (message) => !persistedIds.has(message.id),
-        ),
-      ];
-    },
-    [entries, streamingAssistantMessages],
-  );
+    return [
+      ...dedupedPersistedAssistantMessages,
+      ...streamingAssistantMessages.filter(
+        (message) => !persistedIds.has(message.id),
+      ),
+    ];
+  }, [entries, streamingAssistantMessages]);
 
   useEffect(() => {
     setPromptDraft(cell.promptText);
-  }, [cell.id, cell.promptText]);
+  }, [cell.promptText]);
 
   useEffect(() => {
     setSqlDraft(cell.sqlDraft ?? "");
-  }, [cell.id, cell.sqlDraft]);
+  }, [cell.sqlDraft]);
 
   useEffect(() => {
     setLocalSelectedDb(cell.selectedDbIdentifier ?? sharedSelectedDb);
-  }, [cell.id, cell.selectedDbIdentifier]);
+  }, [cell.selectedDbIdentifier, sharedSelectedDb]);
 
   useEffect(() => {
     setLocalSelectedCatalogContext(cell.selectedCatalogContext ?? null);
-  }, [cell.id, cell.selectedCatalogContext]);
+  }, [cell.selectedCatalogContext]);
 
   useEffect(() => {
     if (!isFocused) {
@@ -217,6 +217,12 @@ export function NotebookAnalysisCell({
       return;
     }
 
+    logNotebookDebug("notebook-cell:effect:focused", {
+      cellId: cell.id,
+      localSelectedDb: localSelectedDb ?? null,
+      localSelectedCatalogContext,
+      mode,
+    });
     onFocusCell({
       cellId: cell.id,
       selectedDb: localSelectedDb,
@@ -228,6 +234,7 @@ export function NotebookAnalysisCell({
     localSelectedCatalogContext,
     localSelectedDb,
     onFocusCell,
+    mode,
   ]);
 
   useEffect(() => {
@@ -293,6 +300,11 @@ export function NotebookAnalysisCell({
       return;
     }
 
+    logNotebookDebug("notebook-cell:effect:apply-pending-sql", {
+      cellId: cell.id,
+      autorun: pendingSqlLoad.autorun,
+      sqlPreview: pendingSqlLoad.sql.slice(0, 100),
+    });
     const api = consoleApiRef.current;
     api.clearResults();
     api.setQuery(pendingSqlLoad.sql);
@@ -346,7 +358,8 @@ export function NotebookAnalysisCell({
         notebookSession.updateCell(cell.id, {
           sqlDraft: manualResult.sql || null,
           selectedDbIdentifier:
-            manualResult.dbIdentifier ?? normalizeNullableString(localSelectedDb),
+            manualResult.dbIdentifier ??
+            normalizeNullableString(localSelectedDb),
           selectedCatalogContext:
             manualResult.catalogContext ?? localSelectedCatalogContext,
           status: "complete",
@@ -375,6 +388,10 @@ export function NotebookAnalysisCell({
 
   const handleConsoleApiChange = useCallback(
     (api: SqlConsoleApi | null) => {
+      logNotebookDebug("notebook-cell:event:console-api-change", {
+        cellId: cell.id,
+        hasApi: Boolean(api),
+      });
       consoleApiRef.current = api;
       onRegisterConsoleApi(cell.id, api);
     },
@@ -489,12 +506,7 @@ export function NotebookAnalysisCell({
       isSavingQuery,
       persistManualResultToChat: async () => {},
     }),
-    [
-      handleConsoleApiChange,
-      isSavingQuery,
-      manualResult,
-      saveQuery,
-    ],
+    [handleConsoleApiChange, isSavingQuery, manualResult, saveQuery],
   );
 
   return (

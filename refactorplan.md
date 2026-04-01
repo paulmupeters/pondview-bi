@@ -112,3 +112,25 @@ This refactor removes implicit save-time SQL rewriting, removes `pondview_source
 - External sources must support cross-source joins and filters by being cached into dashboard-managed tables first.
 - Snapshotting remains a supported feature, but only as an explicit dashboard action.
 - Existing dashboards and cards in the old model will not be migrated; the old `pondview` schema remains untouched for safety, and users recreate dashboards manually in v2.
+
+
+How to enable logs
+
+  1. In browser devtools console run:
+     localStorage.setItem("pondview:debug:notebook-controller", "1")
+  2. Reload and reproduce (add cell / toggle manual).
+  3. Logs will appear as:
+     [notebook-debug:<n>] <event>
+  4. To disable:
+     localStorage.removeItem("pondview:debug:notebook-controller")
+
+  You can also use URL param ?debugNotebook=1.
+
+  What to send me
+
+  - The first repeated event sequence right before the crash.
+  - Especially if you see tight repeats of:
+      - prompt-input:event:manual-console-api-change
+      - notebook-cell:event:console-api-change
+      - controller:reconcile:*
+      - chat:event:cell-focus

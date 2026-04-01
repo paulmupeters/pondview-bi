@@ -22,14 +22,14 @@ import {
   PromptInputHeader,
   PromptInputHoverCard,
   PromptInputHoverCardContent,
-  PromptInputHoverCardTrigger,
   PromptInputTextarea,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
-import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import type { ChatSessionController } from "@/components/chat/hooks/use-chat-session";
 import type { ManualVisualizationController } from "@/components/chat/hooks/use-manual-visualization";
 import type { SqlReplController } from "@/components/chat/hooks/use-sql-repl";
+import { logNotebookDebug } from "@/components/chat/notebook-debug";
+import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import type { QueryNotice, SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import {
@@ -312,7 +312,7 @@ export function PromptInputWrapper({
   const pendingMode = chatComposer.pendingMode ?? null;
   const sqlResult = sqlRepl?.result ?? null;
   const manualChartConfig = manualVisualization?.chartConfig ?? null;
-  const manualVisualType = manualVisualization?.visualType ?? null;
+  const _manualVisualType = manualVisualization?.visualType ?? null;
   const effectivePromptValue = promptValue ?? undefined;
 
   useEffect(() => {
@@ -337,6 +337,13 @@ export function PromptInputWrapper({
     if (!value || value === internalMode) {
       return;
     }
+    logNotebookDebug("prompt-input:event:mode-toggle", {
+      fromMode: internalMode,
+      toMode: value,
+      integratedComposer,
+      selectedDb: selectedDb ?? null,
+      selectedCatalogContext,
+    });
     if (!mode) {
       setInternalMode(value);
     }
@@ -368,6 +375,9 @@ export function PromptInputWrapper({
 
   const handleManualConsoleApiChange = useCallback(
     (api: SqlConsoleApi | null) => {
+      logNotebookDebug("prompt-input:event:manual-console-api-change", {
+        hasApi: Boolean(api),
+      });
       setManualConsoleApi(api);
       sqlRepl?.setConsoleApi(api);
     },
