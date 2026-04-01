@@ -450,15 +450,7 @@ export function PromptInputWrapper({
         <PromptInputModeEffects mode={internalMode} />
         {showAiInput && (
           <div className="flex w-full flex-col">
-            <div
-              aria-hidden={!showManualPane}
-              className={cn(
-                "grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
-                showManualPane
-                  ? "grid-rows-[1fr] opacity-100 translate-y-0"
-                  : "pointer-events-none grid-rows-[0fr] opacity-0 -translate-y-2",
-              )}
-            >
+            {showManualPane ? (
               <div className="min-h-0">
                 <div
                   className={cn(
@@ -570,7 +562,7 @@ export function PromptInputWrapper({
                   </div>
                 </div>
               </div>
-            </div>
+            ) : null}
             <div
               aria-hidden={!showPromptPane}
               className={cn(

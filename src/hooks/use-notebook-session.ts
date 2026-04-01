@@ -168,6 +168,15 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
       setCellEntriesByCellId((prev) => {
         const next = new Map(prev);
         const existing = next.get(cellId) ?? [];
+        if (existing.some((entry) => entry.id === nextEntry.id)) {
+          next.set(
+            cellId,
+            existing.map((entry) =>
+              entry.id === nextEntry.id ? nextEntry : entry,
+            ),
+          );
+          return next;
+        }
         next.set(cellId, [...existing, nextEntry]);
         return next;
       });

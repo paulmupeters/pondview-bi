@@ -531,11 +531,17 @@ export async function listAnalysisCellEntriesByCellId(
 export async function getAnalysisNotebookSnapshot(
   notebookId: string,
 ): Promise<AnalysisNotebookSnapshot> {
-  const [notebook, cells, entries] = await Promise.all([
+  const [notebook, rawCells, rawEntries] = await Promise.all([
     getAnalysisNotebookById(notebookId),
     listAnalysisCellsByNotebookId(notebookId),
     listAnalysisCellEntriesByNotebookId(notebookId),
   ]);
+  const cells = sortCells(
+    Array.from(new Map(rawCells.map((cell) => [cell.id, cell])).values()),
+  );
+  const entries = sortEntries(
+    Array.from(new Map(rawEntries.map((entry) => [entry.id, entry])).values()),
+  );
 
   const cellEntriesByCellId = new Map<string, WorkspaceAnalysisCellEntry[]>();
   for (const entry of entries) {
