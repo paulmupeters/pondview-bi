@@ -27,7 +27,7 @@ type ResultsPayload = {
   };
 };
 
-type QueryNotice = {
+export type QueryNotice = {
   kind: "error" | "warning";
   message: string;
 };
@@ -211,6 +211,8 @@ export type SqlConsoleProps = {
   }) => void;
   onApiChangeAction?: (api: SqlConsoleApi | null) => void;
   onQueryChangeAction?: (sql: string) => void;
+  onNoticeAction?: (notice: QueryNotice | null) => void;
+  onRunStateChangeAction?: (isRunning: boolean) => void;
   onCancelQueryAction?: () => Promise<void> | void;
   showInlineResults?: boolean;
   showRunControls?: boolean;
@@ -235,6 +237,8 @@ export function SqlConsole({
   onSuccessAction,
   onApiChangeAction,
   onQueryChangeAction,
+  onNoticeAction,
+  onRunStateChangeAction,
   onCancelQueryAction,
   showInlineResults = true,
   showRunControls = true,
@@ -398,6 +402,14 @@ export function SqlConsole({
     latestSqlRef.current = sql;
     onQueryChangeAction?.(sql);
   }, [onQueryChangeAction, sql]);
+
+  useEffect(() => {
+    onNoticeAction?.(notice);
+  }, [notice, onNoticeAction]);
+
+  useEffect(() => {
+    onRunStateChangeAction?.(isRunning);
+  }, [isRunning, onRunStateChangeAction]);
 
   const apiRef = useRef<SqlConsoleApi | null>(null);
   if (apiRef.current === null) {

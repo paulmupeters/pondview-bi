@@ -13,6 +13,7 @@ type UseChatUrlParamsArgs = {
   searchParams: ReadonlyURLSearchParams | null;
   sendMessage: (message: { text: string }) => void;
   router: { replace: (href: string) => void };
+  normalizedPath?: string;
   handleAddVisual: () => void | Promise<void>;
   setPromptMode: (mode: PromptMode) => void;
   loadManualSql?: (payload: { sql: string; autorun: boolean }) => void;
@@ -23,6 +24,7 @@ export function useChatUrlParams({
   searchParams,
   sendMessage,
   router,
+  normalizedPath = "/chat",
   handleAddVisual,
   setPromptMode,
   loadManualSql,
@@ -105,7 +107,7 @@ export function useChatUrlParams({
       }
 
       // Drop the query param to avoid duplicate sends on remounts.
-      router.replace(`/chat?id=${encodeURIComponent(chatId)}`);
+      router.replace(`${normalizedPath}?id=${encodeURIComponent(chatId)}`);
       window.localStorage.setItem(
         flagKey,
         JSON.stringify({ timestamp: Date.now() }),
@@ -113,16 +115,30 @@ export function useChatUrlParams({
       setAutoSentFromQuery(true);
       sendMessage({ text: sanitizedQuery });
     }
-  }, [chatId, searchParams, autoSentFromQuery, router, sendMessage]);
+  }, [
+    autoSentFromQuery,
+    chatId,
+    normalizedPath,
+    router,
+    searchParams,
+    sendMessage,
+  ]);
 
   useEffect(() => {
     const manual = searchParams?.get("manual");
     if (manual === "1" && !manualVisualHandled) {
       void handleAddVisual();
       setManualVisualHandled(true);
-      router.replace(`/chat?id=${encodeURIComponent(chatId)}`);
+      router.replace(`${normalizedPath}?id=${encodeURIComponent(chatId)}`);
     }
-  }, [searchParams, manualVisualHandled, handleAddVisual, router, chatId]);
+  }, [
+    chatId,
+    handleAddVisual,
+    manualVisualHandled,
+    normalizedPath,
+    router,
+    searchParams,
+  ]);
 
   useEffect(() => {
     const modeParam = searchParams?.get("mode");
@@ -137,16 +153,23 @@ export function useChatUrlParams({
     if (sqlParam?.trim()) {
       setPromptMode("manual");
       loadManualSql?.({ sql: sqlParam, autorun: shouldAutorun });
-      router.replace(`/chat?id=${encodeURIComponent(chatId)}`);
+      router.replace(`${normalizedPath}?id=${encodeURIComponent(chatId)}`);
       return;
     }
 
     const resolvedMode = resolvePromptModePreference(modeParam);
     if (hasExplicitMode) {
       setPromptMode(resolvedMode);
-      router.replace(`/chat?id=${encodeURIComponent(chatId)}`);
+      router.replace(`${normalizedPath}?id=${encodeURIComponent(chatId)}`);
     }
-  }, [chatId, loadManualSql, router, searchParams, setPromptMode]);
+  }, [
+    chatId,
+    loadManualSql,
+    normalizedPath,
+    router,
+    searchParams,
+    setPromptMode,
+  ]);
 
   // Remove the auto-send marker after it served its purpose to avoid storage build-up.
   useEffect(() => {

@@ -19,6 +19,7 @@ import { PondviewLogo } from "@/components/pondview-logo";
 import { useChatHistory } from "@/hooks/use-chat-history";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
+import { deleteAnalysisNotebook } from "@/lib/workspace/analysis-notebook-repo";
 import { deleteChat } from "@/lib/workspace/chat-repo";
 import { switchToFreshWorkspaceDatabase } from "@/lib/workspace/workspace-db";
 import Link from "@/vite/next-link";
@@ -41,7 +42,9 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const activeChatId =
-    pathname === "/chat" ? (searchParams.get("id") ?? null) : null;
+    pathname === "/analysis" || pathname === "/chat"
+      ? (searchParams.get("id") ?? null)
+      : null;
   const { chats, isLoading, error, loadChats } = useChatHistory(initialChats);
   const [isChatHistoryPopoverOpen, setIsChatHistoryPopoverOpen] =
     useState(false);
@@ -102,7 +105,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
     }
 
     try {
-      await deleteChat(chatId);
+      await Promise.all([deleteAnalysisNotebook(chatId), deleteChat(chatId)]);
       await loadChats();
     } catch {
       await loadChats();
@@ -122,7 +125,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   };
 
   const handleChatClick = (chatId: string) => {
-    router.push(`/chat?id=${encodeURIComponent(chatId)}`);
+    router.push(`/analysis?id=${encodeURIComponent(chatId)}`);
     setIsChatHistoryPopoverOpen(false);
   };
 

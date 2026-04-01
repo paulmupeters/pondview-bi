@@ -30,7 +30,7 @@ import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import type { ChatSessionController } from "@/components/chat/hooks/use-chat-session";
 import type { ManualVisualizationController } from "@/components/chat/hooks/use-manual-visualization";
 import type { SqlReplController } from "@/components/chat/hooks/use-sql-repl";
-import type { SqlConsoleApi } from "@/components/sql-console";
+import type { QueryNotice, SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -81,6 +81,15 @@ interface PromptInputWrapperProps {
   onModeChange?: (mode: PromptMode) => void;
   selectedDb?: string;
   selectedCatalogContext?: string | null;
+  integratedComposer?: boolean;
+  promptValue?: string;
+  onPromptChange?: (value: string) => void;
+  sqlValue?: string;
+  onSqlChange?: (value: string) => void;
+  onManualRun?: () => void;
+  onManualRunNotice?: (notice: QueryNotice | null) => void;
+  onManualRunStateChange?: (isRunning: boolean) => void;
+  onManualRunSuccess?: () => void;
 }
 
 // Inner component that uses the attachments hook within PromptInput context
@@ -285,6 +294,15 @@ export function PromptInputWrapper({
   onModeChange,
   selectedDb,
   selectedCatalogContext = null,
+  integratedComposer = false,
+  promptValue,
+  onPromptChange,
+  sqlValue,
+  onSqlChange,
+  onManualRun,
+  onManualRunNotice,
+  onManualRunStateChange,
+  onManualRunSuccess,
 }: PromptInputWrapperProps) {
   const [internalMode, setInternalMode] = useState<PromptMode>(mode ?? "ai");
   const [manualConsoleApi, setManualConsoleApi] =
@@ -295,12 +313,25 @@ export function PromptInputWrapper({
   const sqlResult = sqlRepl?.result ?? null;
   const manualChartConfig = manualVisualization?.chartConfig ?? null;
   const manualVisualType = manualVisualization?.visualType ?? null;
+  const effectivePromptValue = promptValue ?? undefined;
 
   useEffect(() => {
     if (mode) {
       setInternalMode(mode);
     }
   }, [mode]);
+
+  useEffect(() => {
+    if (!manualConsoleApi || sqlValue === undefined) {
+      return;
+    }
+
+    if (manualConsoleApi.getQuery() === sqlValue) {
+      return;
+    }
+
+    manualConsoleApi.setQuery(sqlValue);
+  }, [manualConsoleApi, sqlValue]);
 
   const handlePromptModeChange = (value: PromptMode) => {
     if (!value || value === internalMode) {
@@ -349,13 +380,21 @@ export function PromptInputWrapper({
       return;
     }
 
+    onManualRun?.();
+
     if (onHomePage && onManualRunRequest) {
       onManualRunRequest(sql);
       return;
     }
 
     manualConsoleApi?.runQuery();
-  }, [manualConsoleApi, manualQuery, onHomePage, onManualRunRequest]);
+  }, [
+    manualConsoleApi,
+    manualQuery,
+    onHomePage,
+    onManualRun,
+    onManualRunRequest,
+  ]);
 
   const handleManualSend = useCallback(() => {
     if (!sqlRepl || !manualVisualization || !sqlResult) {
@@ -371,16 +410,15 @@ export function PromptInputWrapper({
     }
 
     void sqlRepl.persistManualResultToChat(payload);
-  }, [
-    manualVisualization,
-    selectedCatalogContext,
-    sqlRepl,
-    sqlResult,
-  ]);
+  }, [manualVisualization, selectedCatalogContext, sqlRepl, sqlResult]);
 
-  const handleManualQueryChange = useCallback((query: string) => {
-    setManualQuery(query);
-  }, []);
+  const handleManualQueryChange = useCallback(
+    (query: string) => {
+      setManualQuery(query);
+      onSqlChange?.(query);
+    },
+    [onSqlChange],
+  );
 
   const content = aiButtonLabel;
   const nextMode: PromptMode = internalMode === "ai" ? "manual" : "ai";
@@ -388,8 +426,11 @@ export function PromptInputWrapper({
   const showMinimalManualShell =
     manualShellVariant === "minimal" && internalMode === "manual";
   const showHomeManualComposer = onHomePage && showMinimalManualShell;
-  const showManualAddToChatButton = !onHomePage;
+  const showManualAddToChatButton = !onHomePage && !integratedComposer;
   const useSegmentedModeToggle = manualShellVariant === "minimal";
+  const showIntegratedComposer = integratedComposer;
+  const showManualPane = internalMode === "manual";
+  const showPromptPane = internalMode !== "manual";
 
   if (!showHeader && !showAiInput) {
     return null;
@@ -410,10 +451,10 @@ export function PromptInputWrapper({
         {showAiInput && (
           <div className="flex w-full flex-col">
             <div
-              aria-hidden={internalMode !== "manual"}
+              aria-hidden={!showManualPane}
               className={cn(
                 "grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
-                internalMode === "manual"
+                showManualPane
                   ? "grid-rows-[1fr] opacity-100 translate-y-0"
                   : "pointer-events-none grid-rows-[0fr] opacity-0 -translate-y-2",
               )}
@@ -452,6 +493,9 @@ export function PromptInputWrapper({
                       catalogContext={selectedCatalogContext}
                       onConsoleApiChangeAction={handleManualConsoleApiChange}
                       onQueryChangeAction={handleManualQueryChange}
+                      onNoticeAction={onManualRunNotice}
+                      onRunStateChangeAction={onManualRunStateChange}
+                      onRunSuccessAction={onManualRunSuccess}
                       inlineResults={false}
                       editorMinHeight={
                         showMinimalManualShell ? "11rem" : "8rem"
@@ -487,7 +531,9 @@ export function PromptInputWrapper({
                       "flex gap-2",
                       showMinimalManualShell
                         ? "items-center justify-between px-1 pb-1"
-                        : "m-2 justify-end",
+                        : showIntegratedComposer
+                          ? "flex-wrap items-center justify-between border-t border-border/70 px-1 pt-3"
+                          : "m-2 justify-end",
                       showMinimalManualShell
                         ? "pt-0"
                         : compact
@@ -503,7 +549,11 @@ export function PromptInputWrapper({
                       disabled={!manualQuery.trim()}
                       onClick={handleManualRun}
                     >
-                      {showHomeManualComposer ? "[Run in chat ▷]" : "[Run ▷]"}
+                      {showIntegratedComposer
+                        ? "[Run SQL ▷]"
+                        : showHomeManualComposer
+                          ? "[Run in chat ▷]"
+                          : "[Run ▷]"}
                     </Button>
                     {showManualAddToChatButton && (
                       <Button
@@ -522,10 +572,10 @@ export function PromptInputWrapper({
               </div>
             </div>
             <div
-              aria-hidden={internalMode === "manual"}
+              aria-hidden={!showPromptPane}
               className={cn(
                 "grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
-                internalMode !== "manual"
+                showPromptPane
                   ? "grid-rows-[1fr] opacity-100 translate-y-0"
                   : "pointer-events-none grid-rows-[0fr] opacity-0 translate-y-2",
               )}
@@ -542,9 +592,17 @@ export function PromptInputWrapper({
                       <div className="relative w-full">
                         <PromptInputTextarea
                           placeholder={placeholder}
+                          value={effectivePromptValue}
+                          onChange={(event) =>
+                            onPromptChange?.(event.currentTarget.value)
+                          }
                           className={cn(
                             "flex-1 pr-4",
-                            compact ? "min-h-10 pb-10" : "min-h-28 pb-10",
+                            showIntegratedComposer
+                              ? "min-h-18 pb-10"
+                              : compact
+                                ? "min-h-10 pb-10"
+                                : "min-h-28 pb-10",
                           )}
                         />
                         <div
@@ -560,7 +618,7 @@ export function PromptInputWrapper({
                             className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
                             disabled={pendingMode === "ai"}
                           >
-                            {content}
+                            {showIntegratedComposer ? "[Ask AI |>]" : content}
                           </Button>
                         </div>
                       </div>

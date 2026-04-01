@@ -3,6 +3,8 @@ import { getSelectedAiProviderDisplayName } from "@/ai/gateway-model";
 import type { DbMessageRow } from "@/lib/workspace/chat-repo";
 
 const SUPPORTED_TOOL_NAMES = new Set([
+  "execute_exploratory_sql",
+  "execute_final_sql",
   "execute_sql",
   "get_table_schema",
   "list_tables",
@@ -18,9 +20,7 @@ function safeJsonParse(value: string): unknown {
   }
 }
 
-function sanitizeUiMessageParts(
-  parts: UIMessage["parts"],
-): UIMessage["parts"] {
+function sanitizeUiMessageParts(parts: UIMessage["parts"]): UIMessage["parts"] {
   return parts.filter((part) => {
     if (!part.type.startsWith("tool-")) {
       return true;

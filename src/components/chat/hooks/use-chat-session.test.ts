@@ -74,6 +74,13 @@ describe("chat session helpers", () => {
             state: "input-available",
             input: {},
           },
+          {
+            type: "tool-execute_exploratory_sql",
+            toolCallId: "tool-3",
+            state: "output-available",
+            input: { sql: "select 1" },
+            output: { sql: "select 1" },
+          },
         ]),
         "fallback",
       ),
@@ -84,6 +91,13 @@ describe("chat session helpers", () => {
         toolCallId: "tool-2",
         state: "input-available",
         input: {},
+      },
+      {
+        type: "tool-execute_exploratory_sql",
+        toolCallId: "tool-3",
+        state: "output-available",
+        input: { sql: "select 1" },
+        output: { sql: "select 1" },
       },
     ]);
   });

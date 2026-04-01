@@ -87,7 +87,7 @@ describe("ChatMessageThread", () => {
         role: "assistant",
         parts: [
           {
-            type: "tool-execute_sql",
+            type: "tool-execute_final_sql",
             toolCallId: "tool-1",
             state: "output-available",
             input: { sql: payload.query },
@@ -134,12 +134,12 @@ describe("ChatMessageThread", () => {
       showToolCalls: true,
     });
 
-    expect(markup).toContain("Latest assistant output stays visible");
+    expect(markup).not.toContain("Latest assistant output stays visible");
     expect(markup).toContain("Run summary");
     expect(markup).toContain("North");
-    expect(markup).toContain("Show assistant output");
+    expect(markup).toContain("Show transcript");
     expect(markup).not.toContain("Hidden earlier assistant output");
-    expect(markup).not.toContain("execute_sql");
+    expect(markup).not.toContain("execute_final_sql");
   });
 
   test("hides the toggle while the assistant is still streaming", () => {
@@ -161,8 +161,8 @@ describe("ChatMessageThread", () => {
     });
 
     expect(markup).toContain("Streaming latest assistant step");
-    expect(markup).not.toContain("Earlier assistant step");
-    expect(markup).not.toContain("Show assistant output");
+    expect(markup).toContain("Earlier assistant step");
+    expect(markup).toContain("Transcript open while running");
   });
 
   test("shows only the latest part inside the latest assistant message until expanded", () => {
@@ -189,7 +189,7 @@ describe("ChatMessageThread", () => {
               output: { tables: ["unicorns"] },
             },
             {
-              type: "tool-execute_sql",
+              type: "tool-execute_final_sql",
               toolCallId: "tool-3",
               state: "output-available",
               input: { sql: payload.query },
@@ -230,13 +230,13 @@ describe("ChatMessageThread", () => {
     });
 
     expect(markup).not.toContain("I'll help you analyze trends of unicorns");
-    expect(markup).toContain("Here is the final assistant summary");
+    expect(markup).not.toContain("Here is the final assistant summary");
     expect(markup).not.toContain("read_skills_md");
     expect(markup).not.toContain("list_tables");
-    expect(markup).not.toContain("execute_sql");
+    expect(markup).not.toContain("execute_final_sql");
     expect(markup).toContain("Run summary");
     expect(markup).toContain("North");
-    expect(markup).toContain("Show assistant output");
+    expect(markup).toContain("Show transcript");
   });
 
   test("keeps tool errors visible even when earlier assistant messages are hidden", () => {
@@ -265,7 +265,7 @@ describe("ChatMessageThread", () => {
     });
 
     expect(markup).toContain("Warehouse connection failed");
-    expect(markup).toContain("Show assistant output");
+    expect(markup).toContain("Transcript open on error");
     expect(markup).not.toContain("Hidden explanation");
   });
 });
@@ -410,7 +410,7 @@ describe("chat message thread helpers", () => {
           output: { ok: true },
         },
         {
-          type: "tool-execute_sql",
+          type: "tool-execute_final_sql",
           toolCallId: "tool-2",
           state: "output-available",
           input: { sql: "select 1" },

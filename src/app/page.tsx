@@ -156,11 +156,11 @@ export default function Home() {
 
       if (mode === "ai") {
         const queryParam = text ? `&q=${encodeURIComponent(text)}` : "";
-        router.push(`/chat?id=${chatId}&mode=ai${queryParam}`);
+        router.push(`/analysis?id=${chatId}&mode=ai${queryParam}`);
         return;
       }
 
-      router.push(`/chat?id=${chatId}&mode=manual`);
+      router.push(`/analysis?id=${chatId}&mode=manual`);
     },
     [mode, router],
   );
@@ -182,7 +182,7 @@ export default function Home() {
         autorun: "1",
       });
 
-      router.push(`/chat?${params.toString()}`);
+      router.push(`/analysis?${params.toString()}`);
     },
     [router],
   );

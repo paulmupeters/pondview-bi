@@ -15,6 +15,7 @@ import {
   createSqlAutocompleteAction,
   type ExecuteQueryFn,
   parseSqlAutocompleteSuggestion,
+  type QueryNotice,
   SqlConsole,
   type SqlConsoleApi,
 } from "@/components/sql-console";
@@ -193,6 +194,9 @@ type DuckdbReplProps = {
   }) => ReturnType<ExecuteQueryFn>;
   onConsoleApiChangeAction?: (api: SqlConsoleApi | null) => void;
   onQueryChangeAction?: (sql: string) => void;
+  onNoticeAction?: (notice: QueryNotice | null) => void;
+  onRunStateChangeAction?: (isRunning: boolean) => void;
+  onRunSuccessAction?: () => void;
   inlineResults?: boolean;
   onResultChangeAction?: (
     result: {
@@ -324,6 +328,9 @@ export function DuckdbRepl({
   onRunSqlAction,
   onConsoleApiChangeAction,
   onQueryChangeAction,
+  onNoticeAction,
+  onRunStateChangeAction,
+  onRunSuccessAction,
   inlineResults = true,
   onResultChangeAction,
   showRunControls = true,
@@ -765,6 +772,8 @@ export function DuckdbRepl({
             autocompleteAction={autocompleteAction}
             onApiChangeAction={setInternalApi}
             onQueryChangeAction={handleQueryChange}
+            onNoticeAction={onNoticeAction}
+            onRunStateChangeAction={onRunStateChangeAction}
             onCancelQueryAction={handleCancelQuery}
             showInlineResults={inlineResults}
             showRunControls={false}
@@ -787,6 +796,7 @@ export function DuckdbRepl({
                 catalogContext,
               });
               setExplorerRefreshToken((prev) => prev + 1);
+              onRunSuccessAction?.();
             }}
           />
         </div>

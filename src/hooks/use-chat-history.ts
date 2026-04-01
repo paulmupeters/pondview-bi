@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
-import { listRecentChats } from "@/lib/workspace/chat-repo";
+import { listRecentAnalysisNotebooks } from "@/lib/workspace/analysis-notebook-repo";
 
 type LoadChatsOptions = {
   showLoading?: boolean;
@@ -24,7 +24,7 @@ export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
       setError(null);
 
       try {
-        const chatList = await listRecentChats();
+        const chatList = await listRecentAnalysisNotebooks();
         setChats(chatList);
         return chatList;
       } catch (error) {

@@ -969,10 +969,11 @@ export default function SettingsPage() {
               >
                 <div>
                   <p className="text-sm font-medium">
-                    Show raw executeSql output JSON
+                    Show raw SQL tool output JSON
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    When enabled, the tool card shows raw `tool-execute_sql`
+                    When enabled, the tool card shows raw
+                    `tool-execute_final_sql` and `tool-execute_exploratory_sql`
                     output in addition to the SQL result block. This only
                     applies when tool calls are visible.
                   </p>

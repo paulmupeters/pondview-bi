@@ -1,6 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { TrashIcon } from "@heroicons/react/24/outline";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -90,6 +90,20 @@ type ToolMessagePart = UIMessage["parts"][number] & {
   errorText?: ToolErrorText;
   error?: unknown;
 };
+
+function isSqlExecutionToolType(type: string): boolean {
+  return type === "tool-execute_sql" || type === "tool-execute_final_sql";
+}
+
+function messageHasToolError(message: UIMessage): boolean {
+  return (message.parts ?? []).some((part) => {
+    if (!isToolMessagePart(part)) {
+      return false;
+    }
+
+    return Boolean(getToolErrorText(part));
+  });
+}
 
 type SqlArtifactEntry = {
   partIndex: number;
@@ -308,9 +322,9 @@ function hasRenderableAssistantContent(
       }
 
       return (
-        part.type === "tool-execute_sql" &&
-        ((sqlArtifactsByTopLevelPartIndex.get(partIndex)?.length ?? 0) > 0 ||
-          Boolean(getToolErrorText(part)))
+        Boolean(getToolErrorText(part)) ||
+        (isSqlExecutionToolType(part.type) &&
+          (sqlArtifactsByTopLevelPartIndex.get(partIndex)?.length ?? 0) > 0)
       );
     }
 
@@ -385,77 +399,9 @@ export function ChatMessageThread({
 }: ChatMessageThreadProps) {
   const isConversationEmpty = messages.length === 0;
   const isAssistantThinking = status === "streaming" || status === "submitted";
-  const lastMessage = messages[messages.length - 1];
-  const trailingAssistantMessageIds = getTrailingAssistantMessageIds(messages);
-  const trailingAssistantMessageIdSet = new Set(trailingAssistantMessageIds);
-  const latestAssistantMessageId =
-    trailingAssistantMessageIds[trailingAssistantMessageIds.length - 1] ?? null;
-  const [expandedAssistantMessages, setExpandedAssistantMessages] = useState<
-    Record<string, boolean>
-  >({});
-
-  useEffect(() => {
-    setExpandedAssistantMessages((previous) => {
-      if (!latestAssistantMessageId) {
-        return Object.keys(previous).length === 0 ? previous : {};
-      }
-
-      const nextExpanded = previous[latestAssistantMessageId] ?? false;
-      const previousKeys = Object.keys(previous);
-
-      if (
-        previousKeys.length === 1 &&
-        previousKeys[0] === latestAssistantMessageId &&
-        previous[latestAssistantMessageId] === nextExpanded
-      ) {
-        return previous;
-      }
-
-      return {
-        [latestAssistantMessageId]: nextExpanded,
-      };
-    });
-  }, [latestAssistantMessageId]);
-
-  const lastMessageSqlArtifacts = getSqlArtifactsByTopLevelPartIndex(
-    lastMessage?.parts,
-    executeSqlArtifactType,
-  );
-  const lastMessageIsExpanded = latestAssistantMessageId
-    ? Boolean(expandedAssistantMessages[latestAssistantMessageId])
-    : false;
-  const collapsedAssistantMessageIdSet = new Set(
-    getCollapsedAssistantMessageIds({
-      messages,
-      isExpanded: lastMessageIsExpanded,
-    }),
-  );
-  const lastMessagePreviewPartIndex =
-    lastMessage?.role === "assistant" && !lastMessageIsExpanded
-      ? getLatestAssistantPreviewPartIndex({
-          parts: lastMessage.parts,
-          executeSqlArtifactType,
-          isAssistantThinking,
-        })
-      : null;
-  const lastMessageHasRenderableAssistantContent = Boolean(
-    lastMessage &&
-      lastMessage.role === "assistant" &&
-      (hasRenderableAssistantContent(
-        lastMessage,
-        executeSqlArtifactType,
-        showToolCalls,
-        lastMessageSqlArtifacts,
-      ) ||
-        lastMessagePreviewPartIndex !== null),
-  );
-  const hasInlineThinkingPlaceholder =
-    isAssistantThinking &&
-    Boolean(
-      lastMessage &&
-        lastMessage.role === "assistant" &&
-        !lastMessageHasRenderableAssistantContent,
-    );
+  const [expandedCellTranscripts, setExpandedCellTranscripts] = useState<
+    Set<string>
+  >(new Set());
 
   const cells = useMemo(() => groupMessagesIntoCells(messages), [messages]);
 
@@ -545,68 +491,31 @@ export function ChatMessageThread({
     );
   };
 
-  const renderAssistantMessage = (message: UIMessage) => {
-    const isLatestAssistantMessage = message.id === latestAssistantMessageId;
-    const isAssistantRunMessage = trailingAssistantMessageIdSet.has(message.id);
-    const isAssistantMessageExpanded = Boolean(
-      isLatestAssistantMessage && expandedAssistantMessages[message.id],
-    );
-    const isCollapsedAssistantMessage = collapsedAssistantMessageIdSet.has(
-      message.id,
-    );
-    const latestAssistantPreviewPartIndex =
-      isLatestAssistantMessage && !isAssistantMessageExpanded
-        ? getLatestAssistantPreviewPartIndex({
-            parts: message.parts,
-            executeSqlArtifactType,
-            isAssistantThinking,
-          })
-        : null;
-    const collapsedAssistantPartIndexSet = new Set(
-      isLatestAssistantMessage
-        ? getCollapsedAssistantPartIndexes({
-            message,
-            executeSqlArtifactType,
-            isAssistantThinking,
-            isExpanded: isAssistantMessageExpanded,
-          })
-        : [],
-    );
+  const renderAssistantMessage = ({
+    message,
+    transcriptExpanded,
+    showRunningState,
+  }: {
+    message: UIMessage;
+    transcriptExpanded: boolean;
+    showRunningState: boolean;
+  }) => {
     const sqlArtifactsByTopLevelPartIndex = getSqlArtifactsByTopLevelPartIndex(
       message.parts,
       executeSqlArtifactType,
     );
-    const isLastMessageInThread = message.id === lastMessage?.id;
-    const isEmptyAssistantMessage =
-      isLastMessageInThread &&
-      isAssistantThinking &&
-      !(
-        hasRenderableAssistantContent(
-          message,
-          executeSqlArtifactType,
-          showToolCalls,
-          sqlArtifactsByTopLevelPartIndex,
-        ) || latestAssistantPreviewPartIndex !== null
-      );
-    const showToolCallsForMessage =
-      isAssistantRunMessage && lastMessageIsExpanded
-        ? true
-        : isLatestAssistantMessage
-          ? false
-          : showToolCalls;
-    const hasRenderableContent =
-      hasRenderableAssistantContent(
-        message,
-        executeSqlArtifactType,
-        showToolCallsForMessage,
-        sqlArtifactsByTopLevelPartIndex,
-      ) || latestAssistantPreviewPartIndex !== null;
+    const hasRenderableContent = hasRenderableAssistantContent(
+      message,
+      executeSqlArtifactType,
+      showToolCalls,
+      sqlArtifactsByTopLevelPartIndex,
+    );
 
-    if (isEmptyAssistantMessage) {
+    if (showRunningState && !hasRenderableContent) {
       return <div key={message.id}>{renderThinkingIndicator()}</div>;
     }
 
-    if (isCollapsedAssistantMessage) {
+    if (!transcriptExpanded) {
       const visibleParts: ReactNode[] = [];
 
       message.parts?.forEach((part, partIndex) => {
@@ -645,7 +554,7 @@ export function ChatMessageThread({
           );
         }
 
-        if (part.type === "tool-execute_sql") {
+        if (isSqlExecutionToolType(part.type)) {
           const entriesForPart =
             sqlArtifactsByTopLevelPartIndex.get(partIndex) ?? [];
           visibleParts.push(
@@ -695,10 +604,6 @@ export function ChatMessageThread({
         </Button>
         {message.parts?.map((part, partIndex) => {
           if (part.type === "text") {
-            if (collapsedAssistantPartIndexSet.has(partIndex)) {
-              return null;
-            }
-
             return (
               <Response
                 key={getMessagePartKey({
@@ -733,15 +638,13 @@ export function ChatMessageThread({
             const toolState = deriveToolState(part);
             const toolOutput = getToolOutput(part);
             const toolErrorText = getToolErrorText(part);
-            const isLatestPreviewPart =
-              latestAssistantPreviewPartIndex === partIndex;
             const showToolOutput =
-              part.type !== "tool-execute_sql" ||
+              !isSqlExecutionToolType(part.type) ||
               showExecuteSqlRawOutput ||
               Boolean(toolErrorText);
 
             let executeSqlBlocks: ReactNode = null;
-            if (part.type === "tool-execute_sql") {
+            if (isSqlExecutionToolType(part.type)) {
               const entriesForPart =
                 sqlArtifactsByTopLevelPartIndex.get(partIndex) ?? [];
               executeSqlBlocks = entriesForPart.map((entry) =>
@@ -754,7 +657,7 @@ export function ChatMessageThread({
             }
 
             const shouldRenderToolDetail =
-              showToolCallsForMessage || isLatestPreviewPart;
+              showToolCalls || Boolean(toolErrorText) || showRunningState;
 
             if (!shouldRenderToolDetail) {
               if (toolErrorText) {
@@ -773,9 +676,7 @@ export function ChatMessageThread({
                 })}
                 className="w-full"
               >
-                <Tool
-                  defaultOpen={isLatestPreviewPart || Boolean(toolErrorText)}
-                >
+                <Tool defaultOpen={showRunningState || Boolean(toolErrorText)}>
                   <ToolHeader state={toolState} type={part.type} />
                   <ToolContent>
                     {typeof part.input !== "undefined" ? (
@@ -796,28 +697,6 @@ export function ChatMessageThread({
 
           return null;
         })}
-        {isLatestAssistantMessage &&
-        (collapsedAssistantMessageIdSet.size > 0 ||
-          collapsedAssistantPartIndexSet.size > 0) &&
-        !isAssistantThinking ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-2 w-fit"
-            onClick={(event) => {
-              event.stopPropagation();
-              setExpandedAssistantMessages((previous) => ({
-                ...previous,
-                [message.id]: !previous[message.id],
-              }));
-            }}
-          >
-            {isAssistantMessageExpanded
-              ? "Hide assistant output"
-              : "Show assistant output"}
-          </Button>
-        ) : null}
       </div>
     );
   };
@@ -827,55 +706,105 @@ export function ChatMessageThread({
       <ConversationContent
         className={cn("max-w-full mx-auto w-full", contentSpacingClassName)}
       >
-        {cells.map((cell) => (
-          <div
-            key={cell.id}
-            className="group rounded-lg border border-border bg-card shadow-sm overflow-hidden"
-          >
-            {cell.userMessage && (
-              <div className="relative border-b border-border bg-muted/30 px-4 py-3">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void onRemoveMessage(cell.userMessage!.id);
-                  }}
-                  aria-label="Remove message"
-                >
-                  <TrashIcon className="h-4 w-4" />
-                </Button>
-                {cell.userMessage.parts?.map((part, partIndex) => {
-                  if (part.type === "text") {
-                    return (
-                      <Response
-                        key={getMessagePartKey({
-                          messageId: cell.userMessage!.id,
-                          part,
-                          partIndex,
-                        })}
-                      >
-                        {part.text}
-                      </Response>
-                    );
-                  }
-                  return null;
-                })}
-              </div>
-            )}
-            {cell.assistantMessages.length > 0 && (
-              <div className="flex flex-col gap-2">
-                {cell.assistantMessages.map((assistantMessage) =>
-                  renderAssistantMessage(assistantMessage),
-                )}
-              </div>
-            )}
-          </div>
-        ))}
+        {cells.map((cell, cellIndex) => {
+          const isLastCell = cellIndex === cells.length - 1;
+          const hasAssistantOutput = cell.assistantMessages.length > 0;
+          const cellHasError = cell.assistantMessages.some(messageHasToolError);
+          const cellIsRunning = isLastCell && isAssistantThinking;
+          const transcriptExpanded =
+            cellIsRunning ||
+            cellHasError ||
+            expandedCellTranscripts.has(cell.id);
+          const transcriptButtonLabel = cellIsRunning
+            ? "Transcript open while running"
+            : cellHasError
+              ? "Transcript open on error"
+              : transcriptExpanded
+                ? "Hide transcript"
+                : "Show transcript";
+          const canToggleTranscript = !cellIsRunning && !cellHasError;
 
-        {isAssistantThinking && !hasInlineThinkingPlaceholder && (
+          return (
+            <div
+              key={cell.id}
+              className="group rounded-lg border border-border bg-card shadow-sm overflow-hidden"
+            >
+              {cell.userMessage && (
+                <div className="relative border-b border-border bg-muted/30 px-4 py-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-2 right-2 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 z-30"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void onRemoveMessage(cell.userMessage!.id);
+                    }}
+                    aria-label="Remove message"
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </Button>
+                  {cell.userMessage.parts?.map((part, partIndex) => {
+                    if (part.type === "text") {
+                      return (
+                        <Response
+                          key={getMessagePartKey({
+                            messageId: cell.userMessage!.id,
+                            part,
+                            partIndex,
+                          })}
+                        >
+                          {part.text}
+                        </Response>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+              )}
+              {hasAssistantOutput && (
+                <div className="border-b border-border/50 px-4 py-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground font-mono"
+                    disabled={!canToggleTranscript}
+                    onClick={() =>
+                      setExpandedCellTranscripts((previous) => {
+                        const next = new Set(previous);
+                        if (next.has(cell.id)) {
+                          next.delete(cell.id);
+                        } else {
+                          next.add(cell.id);
+                        }
+                        return next;
+                      })
+                    }
+                  >
+                    {transcriptButtonLabel}
+                  </Button>
+                </div>
+              )}
+              {(hasAssistantOutput || cellIsRunning) && (
+                <div className="flex flex-col gap-2">
+                  {cellIsRunning && !hasAssistantOutput
+                    ? renderThinkingIndicator()
+                    : null}
+                  {cell.assistantMessages.map((assistantMessage) =>
+                    renderAssistantMessage({
+                      message: assistantMessage,
+                      transcriptExpanded,
+                      showRunningState: cellIsRunning,
+                    }),
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {isAssistantThinking && isConversationEmpty && (
           <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
             {renderThinkingIndicator()}
           </div>

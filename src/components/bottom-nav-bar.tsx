@@ -17,6 +17,7 @@ import {
 import { useChatHistory } from "@/hooks/use-chat-history";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
+import { deleteAnalysisNotebook } from "@/lib/workspace/analysis-notebook-repo";
 import { deleteChat } from "@/lib/workspace/chat-repo";
 import Link from "@/vite/next-link";
 import {
@@ -37,7 +38,9 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const activeChatId =
-    pathname === "/chat" ? (searchParams.get("id") ?? null) : null;
+    pathname === "/analysis" || pathname === "/chat"
+      ? (searchParams.get("id") ?? null)
+      : null;
   const { chats, isLoading, error, loadChats } = useChatHistory(initialChats);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
@@ -45,7 +48,7 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
   const isSqlEditorRoute = pathname === "/sql-editor";
   const isDataRoute = pathname === "/data";
   const isSettingsRoute = pathname === "/settings";
-  const isChatRoute = pathname === "/chat" || pathname === "/";
+  const isChatRoute = pathname === "/analysis" || pathname === "/chat" || pathname === "/";
 
   useEffect(() => {
     if (isHistoryOpen) {
@@ -65,7 +68,7 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
       router.push("/");
     }
     try {
-      await deleteChat(chatId);
+      await Promise.all([deleteAnalysisNotebook(chatId), deleteChat(chatId)]);
       await loadChats();
     } catch {
       await loadChats();
@@ -73,7 +76,7 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
   };
 
   const handleChatClick = (chatId: string) => {
-    router.push(`/chat?id=${encodeURIComponent(chatId)}`);
+    router.push(`/analysis?id=${encodeURIComponent(chatId)}`);
     setIsHistoryOpen(false);
   };
 

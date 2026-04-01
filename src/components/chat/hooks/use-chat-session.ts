@@ -13,6 +13,11 @@ import {
   showRandomAnimation,
 } from "@/lib/animations";
 import {
+  getAnalysisNotebookById,
+  touchAnalysisNotebookUpdatedAt,
+  updateAnalysisNotebookTitle,
+} from "@/lib/workspace/analysis-notebook-repo";
+import {
   appendAssistantMessage,
   appendUserMessageTx,
   deleteMessageFromChat,
@@ -69,10 +74,14 @@ export function useChatSession({
   chatId,
   initialMessages,
   executeSqlArtifactType,
+  onAssistantMessageFinished,
+  loadPersistedMessages,
 }: {
   chatId: string;
   initialMessages?: UIMessage[];
   executeSqlArtifactType: string;
+  onAssistantMessageFinished?: (message: UIMessage) => void | Promise<void>;
+  loadPersistedMessages?: () => Promise<UIMessage[]>;
 }): ChatSessionController {
   const connectedTables = useConnectedTables();
   const resolvedInitialMessages = initialMessages ?? EMPTY_INITIAL_MESSAGES;
@@ -135,6 +144,8 @@ export function useChatSession({
         text,
         JSON.stringify(message.parts ?? [{ type: "text", text }]),
       );
+      void touchAnalysisNotebookUpdatedAt(chatId);
+      void onAssistantMessageFinished?.(message);
     },
   });
 
@@ -143,7 +154,11 @@ export function useChatSession({
 
     const loadChatTitle = async () => {
       try {
-        const title = await getChatTitleById(chatId);
+        const notebook = await getAnalysisNotebookById(chatId);
+        const title =
+          notebook?.title !== undefined
+            ? notebook.title
+            : await getChatTitleById(chatId);
         if (!cancelled) {
           setChatTitle(title);
         }
@@ -176,6 +191,15 @@ export function useChatSession({
 
     const loadMessages = async () => {
       try {
+        if (loadPersistedMessages) {
+          const nextMessages = await loadPersistedMessages();
+          if (!cancelled) {
+            setMessages(nextMessages);
+            hydratedChatIdRef.current = chatId;
+          }
+          return;
+        }
+
         const rows = await listMessagesByChatId(chatId);
         if (!cancelled) {
           setMessages(toUiMessages(rows));
@@ -193,7 +217,7 @@ export function useChatSession({
     return () => {
       cancelled = true;
     };
-  }, [chatId, resolvedInitialMessages, setMessages]);
+  }, [chatId, loadPersistedMessages, resolvedInitialMessages, setMessages]);
 
   const commitChatTitle = useCallback(
     (nextValue: string) => {
@@ -205,7 +229,10 @@ export function useChatSession({
       }
 
       setChatTitle(nextTitle);
-      void updateChatTitle(chatId, nextTitle).catch((error) => {
+      void Promise.all([
+        updateChatTitle(chatId, nextTitle),
+        updateAnalysisNotebookTitle(chatId, nextTitle),
+      ]).catch((error) => {
         console.error("Failed to update chat title:", error);
         setChatTitle(previousTitle);
       });
@@ -277,6 +304,9 @@ export function useChatSession({
       const inferredTitle = deriveTitleFromInput(text);
       if (inferredTitle) {
         setChatTitle((previous) => previous || inferredTitle);
+        void updateAnalysisNotebookTitle(chatId, inferredTitle);
+      } else {
+        void touchAnalysisNotebookUpdatedAt(chatId, now);
       }
 
       setMessages((previous) => {

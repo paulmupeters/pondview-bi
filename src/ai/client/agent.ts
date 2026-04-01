@@ -17,6 +17,6 @@ export function createPondviewAgent(connectedTables: ConnectedTable[]) {
     model: resolveGatewayModel(CHAT_MODEL),
     instructions: buildInstructions(connectedTables),
     tools,
-    stopWhen: stepCountIs(5),
+    stopWhen: stepCountIs(8),
   });
 }

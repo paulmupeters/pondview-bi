@@ -20,6 +20,50 @@ export interface WorkspaceMessage {
   createdAt: number;
 }
 
+export interface WorkspaceAnalysisNotebook {
+  id: string;
+  title: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type WorkspaceAnalysisCellStatus =
+  | "idle"
+  | "running"
+  | "complete"
+  | "error";
+
+export interface WorkspaceAnalysisCell {
+  id: string;
+  notebookId: string;
+  position: number;
+  promptText: string;
+  sqlDraft: string | null;
+  selectedDbIdentifier: string | null;
+  selectedCatalogContext: string | null;
+  status: WorkspaceAnalysisCellStatus;
+  resultPayloadJson: string | null;
+  createdAt: number;
+  updatedAt: number;
+  lastRunAt: number | null;
+}
+
+export type WorkspaceAnalysisCellEntryRole =
+  | "user"
+  | "assistant"
+  | "tool"
+  | "system";
+
+export interface WorkspaceAnalysisCellEntry {
+  id: string;
+  notebookId: string;
+  cellId: string;
+  order: number;
+  role: WorkspaceAnalysisCellEntryRole;
+  partsJson: string;
+  createdAt: number;
+}
+
 export interface WorkspaceDashboard {
   id: string;
   title: string;
@@ -140,20 +184,45 @@ export interface WorkspaceExportV2 {
   preferences: WorkspacePreference[];
 }
 
-export type WorkspaceExport = WorkspaceExportV1 | WorkspaceExportV2;
+export interface WorkspaceExportV3 {
+  version: 3;
+  exportedAt: string;
+  chats: WorkspaceChat[];
+  messages: WorkspaceMessage[];
+  notebooks: WorkspaceAnalysisNotebook[];
+  analysisCells: WorkspaceAnalysisCell[];
+  analysisCellEntries: WorkspaceAnalysisCellEntry[];
+  dashboards: WorkspaceDashboard[];
+  charts: WorkspaceChart[];
+  dashboardMeasures: WorkspaceDashboardMeasure[];
+  dashboardSlicers: WorkspaceDashboardSlicer[];
+  chartSlicers: WorkspaceChartSlicer[];
+  preferences: WorkspacePreference[];
+}
+
+export type WorkspaceExport =
+  | WorkspaceExportV1
+  | WorkspaceExportV2
+  | WorkspaceExportV3;
 
 export const WORKSPACE_DB_NAME = "pondview-workspace";
-export const WORKSPACE_DB_VERSION = 4;
+export const WORKSPACE_DB_VERSION = 5;
 const WORKSPACE_DB_NAME_OVERRIDE_KEY = "pondview-workspace-name-override";
 
 export const STORE_CHATS = "chats";
 export const STORE_MESSAGES = "messages";
+export const STORE_ANALYSIS_NOTEBOOKS = "analysisNotebooks";
+export const STORE_ANALYSIS_CELLS = "analysisCells";
+export const STORE_ANALYSIS_CELL_ENTRIES = "analysisCellEntries";
 export const STORE_PREFERENCES = "preferences";
 export const STORE_UPLOADED_FILE_BLOBS = "uploadedFileBlobs";
 
 type StoreName =
   | typeof STORE_CHATS
   | typeof STORE_MESSAGES
+  | typeof STORE_ANALYSIS_NOTEBOOKS
+  | typeof STORE_ANALYSIS_CELLS
+  | typeof STORE_ANALYSIS_CELL_ENTRIES
   | typeof STORE_PREFERENCES
   | typeof STORE_UPLOADED_FILE_BLOBS;
 
@@ -276,6 +345,41 @@ function createStores(db: IDBDatabase): void {
     const messages = db.createObjectStore(STORE_MESSAGES, { keyPath: "id" });
     messages.createIndex("chatId", "chatId", { unique: false });
     messages.createIndex("chatIdCreatedAt", ["chatId", "createdAt"], {
+      unique: false,
+    });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_ANALYSIS_NOTEBOOKS)) {
+    const notebooks = db.createObjectStore(STORE_ANALYSIS_NOTEBOOKS, {
+      keyPath: "id",
+    });
+    notebooks.createIndex("updatedAt", "updatedAt", { unique: false });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_ANALYSIS_CELLS)) {
+    const analysisCells = db.createObjectStore(STORE_ANALYSIS_CELLS, {
+      keyPath: "id",
+    });
+    analysisCells.createIndex("notebookId", "notebookId", { unique: false });
+    analysisCells.createIndex(
+      "notebookIdPosition",
+      ["notebookId", "position"],
+      { unique: false },
+    );
+  }
+
+  if (!db.objectStoreNames.contains(STORE_ANALYSIS_CELL_ENTRIES)) {
+    const analysisCellEntries = db.createObjectStore(
+      STORE_ANALYSIS_CELL_ENTRIES,
+      {
+        keyPath: "id",
+      },
+    );
+    analysisCellEntries.createIndex("notebookId", "notebookId", {
+      unique: false,
+    });
+    analysisCellEntries.createIndex("cellId", "cellId", { unique: false });
+    analysisCellEntries.createIndex("cellIdOrder", ["cellId", "order"], {
       unique: false,
     });
   }
@@ -496,12 +600,23 @@ export async function clearStore(storeName: StoreName): Promise<void> {
 export async function clearWorkspaceDb(): Promise<void> {
   const db = await openWorkspaceDb();
   const tx = db.transaction(
-    [STORE_CHATS, STORE_MESSAGES, STORE_PREFERENCES, STORE_UPLOADED_FILE_BLOBS],
+    [
+      STORE_CHATS,
+      STORE_MESSAGES,
+      STORE_ANALYSIS_NOTEBOOKS,
+      STORE_ANALYSIS_CELLS,
+      STORE_ANALYSIS_CELL_ENTRIES,
+      STORE_PREFERENCES,
+      STORE_UPLOADED_FILE_BLOBS,
+    ],
     "readwrite",
   );
 
   tx.objectStore(STORE_CHATS).clear();
   tx.objectStore(STORE_MESSAGES).clear();
+  tx.objectStore(STORE_ANALYSIS_NOTEBOOKS).clear();
+  tx.objectStore(STORE_ANALYSIS_CELLS).clear();
+  tx.objectStore(STORE_ANALYSIS_CELL_ENTRIES).clear();
   tx.objectStore(STORE_PREFERENCES).clear();
   tx.objectStore(STORE_UPLOADED_FILE_BLOBS).clear();
 
