@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import {
   createSqlAutocompleteAction,
@@ -25,16 +25,25 @@ import { runQuery } from "@/lib/sql/run-query";
 
 type SqlCellProps = {
   cell: AnalysisCellState;
+  bootstrapSql?: { sql: string; autorun: boolean } | null;
   notebookSession: NotebookSession;
+  onBootstrapConsumed?: () => void;
 };
 
-export function SqlCell({ cell, notebookSession }: SqlCellProps) {
+export function SqlCell({
+  cell,
+  bootstrapSql = null,
+  notebookSession,
+  onBootstrapConsumed,
+}: SqlCellProps) {
   const consoleApiRef = useRef<SqlConsoleApi | null>(null);
   const syncTimeoutRef = useRef<number | null>(null);
   const noticeRef = useRef<QueryNotice | null>(null);
   const runSucceededRef = useRef(false);
   const hasSeenInitialQueryRef = useRef(false);
   const previousRunStateRef = useRef<boolean | null>(null);
+  const appliedBootstrapKeyRef = useRef<string | null>(null);
+  const [isSqlRunning, setIsSqlRunning] = useState(false);
   const storedPayload = useMemo(
     () => parseSqlCellPayload(cell.resultPayloadJson),
     [cell.resultPayloadJson],
@@ -78,6 +87,36 @@ export function SqlCell({ cell, notebookSession }: SqlCellProps) {
 
     api.setQuery(nextSql);
   }, [cell.sqlDraft]);
+
+  useEffect(() => {
+    const api = consoleApiRef.current;
+    if (!bootstrapSql || !api) {
+      if (!bootstrapSql) {
+        appliedBootstrapKeyRef.current = null;
+      }
+      return;
+    }
+
+    const bootstrapKey = `${cell.id}:${bootstrapSql.autorun ? "1" : "0"}:${bootstrapSql.sql}`;
+    if (appliedBootstrapKeyRef.current === bootstrapKey) {
+      return;
+    }
+    appliedBootstrapKeyRef.current = bootstrapKey;
+
+    api.clearResults();
+    if (api.getQuery() !== bootstrapSql.sql) {
+      api.setQuery(bootstrapSql.sql);
+    }
+    api.focus();
+
+    if (bootstrapSql.autorun) {
+      window.requestAnimationFrame(() => {
+        api.runQuery();
+      });
+    }
+
+    onBootstrapConsumed?.();
+  }, [bootstrapSql, cell.id, onBootstrapConsumed]);
 
   useEffect(() => {
     return () => {
@@ -150,6 +189,8 @@ export function SqlCell({ cell, notebookSession }: SqlCellProps) {
 
   const handleRunStateChange = useCallback(
     (isRunning: boolean) => {
+      setIsSqlRunning(isRunning);
+
       if (isRunning) {
         runSucceededRef.current = false;
         noticeRef.current = null;
@@ -241,16 +282,15 @@ export function SqlCell({ cell, notebookSession }: SqlCellProps) {
         />
       </div>
 
-      {storedPayload || cell.status === "running" ? (
+      {storedPayload || isSqlRunning ? (
         <div className="overflow-hidden rounded-lg border bg-background">
           <SqlAnalysisDisplay
             data={storedPayload}
             stage={
-              storedPayload?.stage ??
-              (cell.status === "running" ? "loading" : undefined)
+              storedPayload?.stage ?? (isSqlRunning ? "loading" : undefined)
             }
             progress={storedPayload?.progress}
-            showStageIndicator={cell.status === "running"}
+            showStageIndicator={isSqlRunning}
             className="w-full"
             onConfigChange={handleConfigChange}
             onVisualTypeChange={handleVisualTypeChange}

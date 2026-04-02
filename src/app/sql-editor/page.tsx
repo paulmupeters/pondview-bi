@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRightPanelResize } from "@/components/chat/hooks/use-right-panel-resize";
-import type { VisualizationEntry } from "@/components/chat/hooks/use-visualization-selection";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
+import type { VisualizationEntry } from "@/components/visualization-entry";
 import { VisualizationPanel } from "@/components/visualization-panel";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";

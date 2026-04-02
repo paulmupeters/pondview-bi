@@ -7,8 +7,22 @@ import type { NotebookSession } from "@/hooks/use-notebook-session";
 type CellListProps = {
   cells: AnalysisCellState[];
   selectedCellId: string | null;
+  pendingBootstrap:
+    | {
+        kind: "ai";
+        cellId: string;
+        prompt: string;
+      }
+    | {
+        kind: "sql";
+        cellId: string;
+        sql: string;
+        autorun: boolean;
+      }
+    | null;
   notebookSession: NotebookSession;
   onSelectCell: (cellId: string) => void;
+  onBootstrapConsumed: (cellId: string) => void;
   onDeleteCell: (cellId: string) => void;
   onToggleAiPane: (cellId: string, enabled: boolean) => void;
   onToggleSqlPane: (cellId: string, enabled: boolean) => void;
@@ -17,8 +31,10 @@ type CellListProps = {
 export function CellList({
   cells,
   selectedCellId,
+  pendingBootstrap,
   notebookSession,
   onSelectCell,
+  onBootstrapConsumed,
   onDeleteCell,
   onToggleAiPane,
   onToggleSqlPane,
@@ -45,9 +61,35 @@ export function CellList({
           onToggleSql={() => onToggleSqlPane(cell.id, !cell.sqlEnabled)}
         >
           <div className="space-y-4">
-            {cell.aiEnabled ? <AiCell cell={cell} /> : null}
+            {cell.aiEnabled ? (
+              <AiCell
+                cell={cell}
+                bootstrapPrompt={
+                  pendingBootstrap?.kind === "ai" &&
+                  pendingBootstrap.cellId === cell.id
+                    ? pendingBootstrap.prompt
+                    : null
+                }
+                entries={notebookSession.cellEntriesByCellId.get(cell.id) ?? []}
+                notebookSession={notebookSession}
+                onBootstrapConsumed={() => onBootstrapConsumed(cell.id)}
+              />
+            ) : null}
             {cell.sqlEnabled ? (
-              <SqlCell cell={cell} notebookSession={notebookSession} />
+              <SqlCell
+                cell={cell}
+                bootstrapSql={
+                  pendingBootstrap?.kind === "sql" &&
+                  pendingBootstrap.cellId === cell.id
+                    ? {
+                        sql: pendingBootstrap.sql,
+                        autorun: pendingBootstrap.autorun,
+                      }
+                    : null
+                }
+                notebookSession={notebookSession}
+                onBootstrapConsumed={() => onBootstrapConsumed(cell.id)}
+              />
             ) : null}
             {!cell.aiEnabled && !cell.sqlEnabled ? (
               <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">

@@ -47,15 +47,6 @@ type MutableMigratedCell = {
   nextEntryOrder: number;
 };
 
-export type AnalysisCompatibilityMessageRow = {
-  id: string;
-  chatId: string;
-  role: "user" | "assistant";
-  content: string;
-  parts: string | null;
-  createdAt: number;
-};
-
 export type AnalysisNotebookSnapshot = {
   notebook: WorkspaceAnalysisNotebook | null;
   cells: WorkspaceAnalysisCell[];
@@ -590,39 +581,6 @@ export async function getAnalysisNotebookSnapshot(
     cells,
     cellEntriesByCellId,
   };
-}
-
-export async function listLegacyCompatibleMessagesByNotebookId(
-  notebookId: string,
-): Promise<AnalysisCompatibilityMessageRow[]> {
-  const snapshot = await getAnalysisNotebookSnapshot(notebookId);
-  const rows: AnalysisCompatibilityMessageRow[] = [];
-
-  for (const cell of snapshot.cells) {
-    if (cell.promptText.trim()) {
-      rows.push({
-        id: cell.id,
-        chatId: notebookId,
-        role: "user",
-        content: cell.promptText,
-        parts: JSON.stringify([{ type: "text", text: cell.promptText }]),
-        createdAt: cell.createdAt,
-      });
-    }
-
-    for (const entry of snapshot.cellEntriesByCellId.get(cell.id) ?? []) {
-      rows.push({
-        id: entry.id,
-        chatId: notebookId,
-        role: entry.role === "user" ? "user" : "assistant",
-        content: extractTextFromParts(entry.partsJson),
-        parts: entry.partsJson,
-        createdAt: entry.createdAt,
-      });
-    }
-  }
-
-  return rows.sort(compareByCreatedAt);
 }
 
 export async function upsertAnalysisNotebook(

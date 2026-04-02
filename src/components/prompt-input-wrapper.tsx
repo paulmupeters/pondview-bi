@@ -25,11 +25,9 @@ import {
   PromptInputTextarea,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
-import type { ChatSessionController } from "@/components/chat/hooks/use-chat-session";
-import type { ManualVisualizationController } from "@/components/chat/hooks/use-manual-visualization";
-import type { SqlReplController } from "@/components/chat/hooks/use-sql-repl";
 import { logNotebookDebug } from "@/components/chat/notebook-debug";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
+import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { QueryNotice, SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +36,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
+import type { CardConfig, Config } from "@/lib/types";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import { getUploadedFileBlob, persistUploadedFile } from "@/lib/uploaded-files";
 import { cn } from "@/lib/utils";
@@ -45,28 +44,45 @@ import { cn } from "@/lib/utils";
 export type PromptMode = "ai" | "manual";
 export type ManualShellVariant = "default" | "minimal";
 
+type PromptInputChatComposer = {
+  submitPrompt: (message: PromptInputMessage) => Promise<void>;
+  status: ChatStatus;
+  pendingMode?: "ai" | null;
+};
+
+type PromptInputSqlRepl = {
+  result: {
+    sql: string;
+    rows: Record<string, unknown>[];
+    columns: { name: string; type?: string }[];
+    durationMs: number;
+    backend?: string;
+    dbIdentifier?: string;
+    catalogContext?: string | null;
+    sourceDescriptor?: SqlAnalysisData["sourceDescriptor"];
+  } | null;
+  setConsoleApi: (api: SqlConsoleApi | null) => void;
+  saveQuery: (sql?: string) => Promise<void>;
+  isSavingQuery: boolean;
+  persistManualResultToChat: (payload: SqlAnalysisData) => Promise<void>;
+};
+
+type PromptInputManualVisualization = {
+  chartConfig: Config | null;
+  cardConfig: CardConfig | null;
+  visualType: "table" | "chart" | "card" | null;
+  handleReplResultChange: (result: PromptInputSqlRepl["result"]) => void;
+  focusManualVisualization: () => void;
+  createPayload: (params: {
+    result: PromptInputSqlRepl["result"];
+    selectedCatalogContext?: string | null;
+  }) => SqlAnalysisData | null;
+};
+
 interface PromptInputWrapperProps {
-  chatComposer: Pick<
-    ChatSessionController["composer"],
-    "submitPrompt" | "status" | "pendingMode"
-  >;
-  sqlRepl?: Pick<
-    SqlReplController,
-    | "result"
-    | "setConsoleApi"
-    | "saveQuery"
-    | "isSavingQuery"
-    | "persistManualResultToChat"
-  >;
-  manualVisualization?: Pick<
-    ManualVisualizationController,
-    | "chartConfig"
-    | "cardConfig"
-    | "visualType"
-    | "handleReplResultChange"
-    | "focusManualVisualization"
-    | "createPayload"
-  >;
+  chatComposer: PromptInputChatComposer;
+  sqlRepl?: PromptInputSqlRepl;
+  manualVisualization?: PromptInputManualVisualization;
   onManualRunRequest?: (sql: string) => void;
   placeholder?: string;
   className?: string;
