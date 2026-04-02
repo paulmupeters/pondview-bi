@@ -1,29 +1,80 @@
-import { Bot, Plus, SquareTerminal } from "lucide-react";
+import { LayoutDashboard, Plus } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  type DefaultPromptMode,
+  useDefaultPromptModePreference,
+} from "@/lib/default-prompt-mode";
 
 type AnalysisToolbarProps = {
-  onAddAiCell: () => void;
-  onAddSqlCell: () => void;
+  onAddCell: (mode: DefaultPromptMode) => void;
   isBusy: boolean;
+  title: string | null;
+  onTitleChange: (title: string | null) => void;
+  onCreateDashboard: () => void;
 };
 
 export function AnalysisToolbar({
-  onAddAiCell,
-  onAddSqlCell,
+  onAddCell,
   isBusy,
+  title,
+  onTitleChange,
+  onCreateDashboard,
 }: AnalysisToolbarProps) {
+  const defaultMode = useDefaultPromptModePreference();
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState<string>("");
+
+  function handleTitleClick() {
+    setTitleDraft(title ?? "");
+    setEditingTitle(true);
+  }
+
+  function handleTitleBlur() {
+    const trimmed = titleDraft.trim();
+    onTitleChange(trimmed.length > 0 ? trimmed : null);
+    setEditingTitle(false);
+  }
+
+  function handleTitleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.currentTarget.blur();
+    } else if (event.key === "Escape") {
+      setEditingTitle(false);
+    }
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-3 border-b px-6 py-4">
-      <Button onClick={onAddAiCell} disabled={isBusy}>
+      <Button onClick={() => onAddCell(defaultMode)} disabled={isBusy}>
         <Plus />
-        <Bot />
-        Add AI cell
+        Add cell
       </Button>
-      <Button variant="outline" onClick={onAddSqlCell} disabled={isBusy}>
-        <Plus />
-        <SquareTerminal />
-        Add SQL cell
-      </Button>
+      {editingTitle ? (
+        <Input
+          autoFocus
+          value={titleDraft}
+          onChange={(e) => setTitleDraft(e.target.value)}
+          onBlur={handleTitleBlur}
+          onKeyDown={handleTitleKeyDown}
+          className="h-8 w-48 text-sm font-medium"
+          placeholder="Untitled notebook"
+        />
+      ) : (
+        <button
+          onClick={handleTitleClick}
+          className="cursor-text rounded px-1 py-0.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          {title ?? "Untitled notebook"}
+        </button>
+      )}
+      <div className="ml-auto">
+        <Button variant="outline" size="sm" onClick={onCreateDashboard}>
+          <LayoutDashboard />
+          Create dashboard
+        </Button>
+      </div>
     </div>
   );
 }

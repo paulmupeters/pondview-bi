@@ -49,7 +49,7 @@ export function CellList({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-8">
       {cells.map((cell) => (
         <CellFrame
           key={cell.id}
@@ -57,45 +57,40 @@ export function CellList({
           isSelected={cell.id === selectedCellId}
           onSelect={() => onSelectCell(cell.id)}
           onDelete={() => onDeleteCell(cell.id)}
-          onToggleAi={() => onToggleAiPane(cell.id, !cell.aiEnabled)}
-          onToggleSql={() => onToggleSqlPane(cell.id, !cell.sqlEnabled)}
         >
           <div className="space-y-4">
-            {cell.aiEnabled ? (
-              <AiCell
-                cell={cell}
-                bootstrapPrompt={
-                  pendingBootstrap?.kind === "ai" &&
-                  pendingBootstrap.cellId === cell.id
-                    ? pendingBootstrap.prompt
-                    : null
-                }
-                entries={notebookSession.cellEntriesByCellId.get(cell.id) ?? []}
-                notebookSession={notebookSession}
-                onBootstrapConsumed={() => onBootstrapConsumed(cell.id)}
-              />
-            ) : null}
-            {cell.sqlEnabled ? (
-              <SqlCell
-                cell={cell}
-                bootstrapSql={
-                  pendingBootstrap?.kind === "sql" &&
-                  pendingBootstrap.cellId === cell.id
-                    ? {
-                        sql: pendingBootstrap.sql,
-                        autorun: pendingBootstrap.autorun,
-                      }
-                    : null
-                }
-                notebookSession={notebookSession}
-                onBootstrapConsumed={() => onBootstrapConsumed(cell.id)}
-              />
-            ) : null}
-            {!cell.aiEnabled && !cell.sqlEnabled ? (
-              <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                Enable AI or SQL for this cell to keep working in place.
-              </div>
-            ) : null}
+            <AiCell
+              cell={cell}
+              bootstrapPrompt={
+                pendingBootstrap?.kind === "ai" &&
+                pendingBootstrap.cellId === cell.id
+                  ? pendingBootstrap.prompt
+                  : null
+              }
+              entries={notebookSession.cellEntriesByCellId.get(cell.id) ?? []}
+              notebookSession={notebookSession}
+              aiEnabled={cell.aiEnabled}
+              onToggleAi={() => onToggleAiPane(cell.id, !cell.aiEnabled)}
+              onBootstrapConsumed={() => onBootstrapConsumed(cell.id)}
+            />
+            <SqlCell
+              cell={cell}
+              bootstrapSql={
+                pendingBootstrap?.kind === "sql" &&
+                pendingBootstrap.cellId === cell.id
+                  ? {
+                      sql: pendingBootstrap.sql,
+                      autorun: pendingBootstrap.autorun,
+                    }
+                  : null
+              }
+              notebookSession={notebookSession}
+              sqlEditorVisible={cell.sqlEnabled}
+              onToggleSqlEditor={() =>
+                onToggleSqlPane(cell.id, !cell.sqlEnabled)
+              }
+              onBootstrapConsumed={() => onBootstrapConsumed(cell.id)}
+            />
           </div>
         </CellFrame>
       ))}

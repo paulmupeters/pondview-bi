@@ -18,8 +18,6 @@ type CellFrameProps = {
   isSelected: boolean;
   onSelect: () => void;
   onDelete: () => void;
-  onToggleAi: () => void;
-  onToggleSql: () => void;
   children: ReactNode;
 };
 
@@ -48,15 +46,13 @@ export function CellFrame({
   isSelected,
   onSelect,
   onDelete,
-  onToggleAi,
-  onToggleSql,
   children,
 }: CellFrameProps) {
   return (
     <Card
       className={cn(
         "gap-4 py-4 transition-colors",
-        isSelected && "border-primary ring-primary/15 ring-4",
+        isSelected && "border-primary/30 ring-primary/15 ring-2",
       )}
     >
       <CardHeader className="gap-3 px-4 pb-0">
@@ -67,10 +63,6 @@ export function CellFrame({
           onClick={onSelect}
         >
           <div className="flex items-center gap-2">
-            <Badge variant={cell.aiEnabled ? "default" : "outline"}>AI</Badge>
-            <Badge variant={cell.sqlEnabled ? "secondary" : "outline"}>
-              SQL
-            </Badge>
             <Badge variant="outline">{cell.status}</Badge>
           </div>
           <CardTitle className="text-base">Cell {cell.position + 1}</CardTitle>
@@ -79,22 +71,6 @@ export function CellFrame({
           </CardDescription>
         </button>
         <CardAction className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant={cell.aiEnabled ? "default" : "outline"}
-            onClick={onToggleAi}
-          >
-            AI
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={cell.sqlEnabled ? "default" : "outline"}
-            onClick={onToggleSql}
-          >
-            SQL
-          </Button>
           <Button
             type="button"
             size="icon"

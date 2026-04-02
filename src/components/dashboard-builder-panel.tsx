@@ -298,9 +298,10 @@ function buildJoinSourceInfo(
     }),
     executionDbIdentifier:
       sqlBackend === "duckdb-wasm"
-        ? (getDashboardSourceDescriptorDbIdentifier(sourceDescriptor) ??
-            snapshot.payload.dbIdentifier)?.trim() ||
-          selectedDbIdentifier?.trim()
+        ? (
+            getDashboardSourceDescriptorDbIdentifier(sourceDescriptor) ??
+            snapshot.payload.dbIdentifier
+          )?.trim() || selectedDbIdentifier?.trim()
         : (
             getDashboardSourceDescriptorDbIdentifier(sourceDescriptor) ??
             snapshot.payload.dbIdentifier
@@ -837,7 +838,8 @@ export function DashboardBuilderPanel({
             ? buildDashboardSourceDescriptor({
                 runtimeBackend:
                   payload.sqlBackend ?? selectedSqlBackend ?? "duckdb-wasm",
-                dbIdentifier: payload.dbIdentifier ?? selectedDbIdentifier ?? null,
+                dbIdentifier:
+                  payload.dbIdentifier ?? selectedDbIdentifier ?? null,
                 catalogContext: payload.catalogContext ?? null,
               })
             : null);
@@ -880,7 +882,7 @@ export function DashboardBuilderPanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 min-w-0 flex-col w-full overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-2">
         <div className="space-y-4 min-w-0">
           <div>

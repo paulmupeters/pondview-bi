@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import {
@@ -27,6 +28,8 @@ type SqlCellProps = {
   cell: AnalysisCellState;
   bootstrapSql?: { sql: string; autorun: boolean } | null;
   notebookSession: NotebookSession;
+  sqlEditorVisible: boolean;
+  onToggleSqlEditor: () => void;
   onBootstrapConsumed?: () => void;
 };
 
@@ -34,6 +37,8 @@ export function SqlCell({
   cell,
   bootstrapSql = null,
   notebookSession,
+  sqlEditorVisible,
+  onToggleSqlEditor,
   onBootstrapConsumed,
 }: SqlCellProps) {
   const consoleApiRef = useRef<SqlConsoleApi | null>(null);
@@ -264,26 +269,41 @@ export function SqlCell({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border bg-background px-3">
-        <SqlConsole
-          className="py-0"
-          historyKey={`analysis-sql-history:${cell.id}`}
-          editorMinHeight="10rem"
-          executeQueryAction={executeQueryAction}
-          autocompleteAction={autocompleteAction}
-          showInlineResults={false}
-          onApiChangeAction={(api) => {
-            consoleApiRef.current = api;
-          }}
-          onQueryChangeAction={handleQueryChange}
-          onSuccessAction={handleSuccess}
-          onNoticeAction={handleNotice}
-          onRunStateChangeAction={handleRunStateChange}
-        />
+      <div className="border bg-background">
+        <button
+          type="button"
+          className="flex w-full items-center gap-1.5 border-b rounded-lg px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          aria-label={sqlEditorVisible ? "Collapse editor" : "Expand editor"}
+          onClick={onToggleSqlEditor}
+        >
+          {sqlEditorVisible ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+          SQL Editor
+        </button>
+        {sqlEditorVisible ? (
+          <SqlConsole
+            className="py-0"
+            historyKey={`analysis-sql-history:${cell.id}`}
+            editorMinHeight="10rem"
+            executeQueryAction={executeQueryAction}
+            autocompleteAction={autocompleteAction}
+            showInlineResults={false}
+            onApiChangeAction={(api) => {
+              consoleApiRef.current = api;
+            }}
+            onQueryChangeAction={handleQueryChange}
+            onSuccessAction={handleSuccess}
+            onNoticeAction={handleNotice}
+            onRunStateChangeAction={handleRunStateChange}
+          />
+        ) : null}
       </div>
 
       {storedPayload || isSqlRunning ? (
-        <div className="overflow-hidden rounded-lg border bg-background">
+        <div className="overflow-hidden rounded-lg border bg-background pb-4">
           <SqlAnalysisDisplay
             data={storedPayload}
             stage={

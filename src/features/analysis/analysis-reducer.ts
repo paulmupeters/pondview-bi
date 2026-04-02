@@ -53,10 +53,6 @@ function inferPaneVisibility(cell: WorkspaceAnalysisCell): {
     typeof cell.aiEnabled === "boolean" &&
     typeof cell.sqlEnabled === "boolean"
   ) {
-    if (!cell.aiEnabled && !cell.sqlEnabled) {
-      return { aiEnabled: true, sqlEnabled: false };
-    }
-
     return {
       aiEnabled: cell.aiEnabled,
       sqlEnabled: cell.sqlEnabled,
@@ -122,10 +118,6 @@ function updateCellPaneState(
 ): AnalysisCellState {
   const aiEnabled = patch.aiEnabled ?? cell.aiEnabled;
   const sqlEnabled = patch.sqlEnabled ?? cell.sqlEnabled;
-
-  if (!aiEnabled && !sqlEnabled) {
-    return cell;
-  }
 
   return {
     ...cell,

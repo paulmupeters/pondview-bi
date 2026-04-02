@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { useEffect, useRef, useState } from "react";
 import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
@@ -22,6 +23,8 @@ type AiCellProps = {
     NotebookSession,
     "appendCellEntry" | "refreshUpdatedAt" | "updateCell"
   >;
+  aiEnabled: boolean;
+  onToggleAi: () => void;
   onBootstrapConsumed?: () => void;
 };
 
@@ -30,6 +33,8 @@ export function AiCell({
   bootstrapPrompt = null,
   entries,
   notebookSession,
+  aiEnabled,
+  onToggleAi,
   onBootstrapConsumed,
 }: AiCellProps) {
   const {
@@ -83,10 +88,27 @@ export function AiCell({
     });
   }, [bootstrapPrompt, cell.id, onBootstrapConsumed, submitPrompt]);
 
+  if (!aiEnabled) {
+    return (
+      <div className="border bg-background">
+        <button
+          type="button"
+          className="flex w-full items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Expand AI input"
+          onClick={onToggleAi}
+        >
+          <ChevronDown className="h-4 w-4" />
+          <Sparkles className="h-3.5 w-3.5" />
+          AI
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3 rounded-lg border bg-background p-3">
+    <div className="space-y-3">
       {latestAssistantText || isAssistantThinking ? (
-        <div className="rounded-lg border bg-muted/20 px-3 py-2">
+        <div className="rounded-lg border bg-background/80 px-3 py-2">
           {latestAssistantText ? (
             <Response className="text-sm">{latestAssistantText}</Response>
           ) : (
@@ -100,7 +122,7 @@ export function AiCell({
       {promptError ? <PromptErrorBanner message={promptError} /> : null}
 
       {hasTranscript ? (
-        <div>
+        <div className="my-2 bg-card">
           <Button
             type="button"
             variant="ghost"
@@ -113,7 +135,7 @@ export function AiCell({
               : `Show transcript (${transcriptTextEntries.length})`}
           </Button>
           {isTranscriptExpanded ? (
-            <div className="mt-2 space-y-2 rounded-lg border bg-muted/10 p-2">
+            <div className="mt-2 space-y-2 rounded-lg border bg-background/80 p-2">
               {transcriptTextEntries.map((entry) => (
                 <div
                   key={entry.id}
@@ -136,24 +158,39 @@ export function AiCell({
           void submitPrompt();
         }}
       >
-        <InputGroup className="items-end">
-          <InputGroupTextarea
-            value={promptDraft}
-            onChange={(event) => setPromptDraft(event.target.value)}
-            placeholder="Ask AI to refine this cell..."
-            rows={2}
-            disabled={isAssistantThinking}
-          />
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              type="submit"
-              size="sm"
-              disabled={isAssistantThinking || !promptDraft.trim()}
+        <div className="rounded-lg border">
+          <div className="flex items-center border-b px-3 py-1.5 rounded-lg dark:bg-background">
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              aria-label="Collapse AI input"
+              onClick={onToggleAi}
             >
-              {isAssistantThinking ? "Running..." : "Ask AI"}
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
+              <ChevronUp className="h-4 w-4" />
+              <Sparkles className="h-3.5 w-3.5" />
+              AI
+            </button>
+          </div>
+          <InputGroup className="border-0 shadow-none bg-transparent dark:bg-background items-end">
+            <InputGroupTextarea
+              value={promptDraft}
+              onChange={(event) => setPromptDraft(event.target.value)}
+              placeholder="Ask AI to refine this cell..."
+              rows={2}
+              disabled={isAssistantThinking}
+            />
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                type="submit"
+                size="sm"
+                className="dark:bg-background"
+                disabled={isAssistantThinking || !promptDraft.trim()}
+              >
+                {isAssistantThinking ? "Running..." : "Ask AI"}
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
+        </div>
       </form>
     </div>
   );

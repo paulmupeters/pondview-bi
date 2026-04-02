@@ -10,6 +10,13 @@ import {
 } from "@/features/analysis/analysis-reducer";
 import { AnalysisToolbar } from "@/features/analysis/components/AnalysisToolbar";
 import { CellList } from "@/features/analysis/components/CellList";
+import {
+  DASHBOARD_BUILDER_DIALOG_BODY_CLASS,
+  DASHBOARD_BUILDER_DIALOG_CONTENT_CLASS,
+} from "@/features/analysis/dashboard-builder-dialog-layout";
+import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { buildDashboardBuilderMessages } from "@/features/analysis/dashboard-builder-messages";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
 import { useRouter, useSearchParams } from "@/vite/next-navigation";
 
@@ -30,6 +37,7 @@ export function AnalysisWorkspace({
     createInitialAnalysisState,
   );
   const [isMutating, setIsMutating] = useState(false);
+  const [isDashboardPanelOpen, setIsDashboardPanelOpen] = useState(false);
   const [pendingBootstrap, setPendingBootstrap] = useState<
     | {
         kind: "ai";
@@ -195,11 +203,6 @@ export function AnalysisWorkspace({
   }
 
   async function handleToggleAiPane(cellId: string, enabled: boolean) {
-    const cell = state.cells.find((entry) => entry.id === cellId);
-    if (!cell || (!enabled && !cell.sqlEnabled)) {
-      return;
-    }
-
     setIsMutating(true);
     try {
       await notebookSession.updateCell(cellId, { aiEnabled: enabled });
@@ -210,11 +213,6 @@ export function AnalysisWorkspace({
   }
 
   async function handleToggleSqlPane(cellId: string, enabled: boolean) {
-    const cell = state.cells.find((entry) => entry.id === cellId);
-    if (!cell || (!enabled && !cell.aiEnabled)) {
-      return;
-    }
-
     setIsMutating(true);
     try {
       await notebookSession.updateCell(cellId, { sqlEnabled: enabled });
@@ -223,6 +221,17 @@ export function AnalysisWorkspace({
       setIsMutating(false);
     }
   }
+
+  const allCellMessages = useMemo(() => {
+    return buildDashboardBuilderMessages({
+      cells: notebookSession.cells,
+      cellEntriesByCellId: notebookSession.cellEntriesByCellId,
+    });
+  }, [notebookSession.cellEntriesByCellId, notebookSession.cells]);
+
+  const firstCellWithDb = notebookSession.cells.find(
+    (cell) => cell.selectedDbIdentifier,
+  );
 
   if (notebookSession.isLoading && !notebookSession.hasLoaded) {
     return (
@@ -243,14 +252,36 @@ export function AnalysisWorkspace({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <AnalysisToolbar
-        onAddAiCell={() =>
-          void handleAddCell({ aiEnabled: true, sqlEnabled: false })
-        }
-        onAddSqlCell={() =>
-          void handleAddCell({ aiEnabled: false, sqlEnabled: true })
+        onAddCell={(mode) =>
+          void handleAddCell({
+            aiEnabled: mode === "ai",
+            sqlEnabled: mode === "manual",
+          })
         }
         isBusy={isMutating}
+        title={notebookSession.notebook?.title ?? null}
+        onTitleChange={(newTitle) =>
+          void notebookSession.updateTitle(newTitle)
+        }
+        onCreateDashboard={() => setIsDashboardPanelOpen(true)}
       />
+      <Dialog
+        open={isDashboardPanelOpen}
+        onOpenChange={setIsDashboardPanelOpen}
+      >
+        <DialogContent className={DASHBOARD_BUILDER_DIALOG_CONTENT_CLASS}>
+          <div className={DASHBOARD_BUILDER_DIALOG_BODY_CLASS}>
+            <DashboardBuilderPanel
+              open={isDashboardPanelOpen}
+              onOpenChange={setIsDashboardPanelOpen}
+              messages={allCellMessages}
+              selectedDbIdentifier={
+                firstCellWithDb?.selectedDbIdentifier ?? undefined
+              }
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <CellList
           cells={state.cells}

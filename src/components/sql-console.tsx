@@ -451,13 +451,13 @@ export function SqlConsole({
       <div className="flex min-h-0 flex-1 flex-col rounded-sm bg-card transition-colors">
         <div
           className={cn(
-            "flex min-h-0 flex-1 flex-col gap-3 p-0",
+            "flex min-h-0 flex-1 flex-col gap-3 p-0 bg-background",
             showRunControls && "sm:flex-row sm:items-center sm:gap-4",
           )}
         >
           <div
             className={cn(
-              "flex min-h-0 flex-1 min-w-0 flex-col gap-2",
+              "flex min-h-0 flex-1 min-w-0 flex-col gap-2 bg-background",
               showRunControls && "mt-12",
             )}
           >
@@ -474,9 +474,9 @@ export function SqlConsole({
               onCancel={cancelRun}
               onHistoryPrev={handleHistoryPrev}
               onHistoryNext={handleHistoryNext}
-              className="flex-1"
+              className="flex-1 bg-background"
             />
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-[11px] p-2 text-muted-foreground">
               Shift + Enter to run
             </div>
           </div>
