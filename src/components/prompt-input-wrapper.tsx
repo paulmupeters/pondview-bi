@@ -305,8 +305,7 @@ export function PromptInputWrapper({
   onManualRunSuccess,
 }: PromptInputWrapperProps) {
   const [internalMode, setInternalMode] = useState<PromptMode>(mode ?? "ai");
-  const [manualConsoleApi, setManualConsoleApi] =
-    useState<SqlConsoleApi | null>(null);
+  const manualConsoleApiRef = useRef<SqlConsoleApi | null>(null);
   const [manualQuery, setManualQuery] = useState("");
   const status = chatComposer.status;
   const pendingMode = chatComposer.pendingMode ?? null;
@@ -322,6 +321,7 @@ export function PromptInputWrapper({
   }, [mode]);
 
   useEffect(() => {
+    const manualConsoleApi = manualConsoleApiRef.current;
     if (!manualConsoleApi || sqlValue === undefined) {
       return;
     }
@@ -331,7 +331,7 @@ export function PromptInputWrapper({
     }
 
     manualConsoleApi.setQuery(sqlValue);
-  }, [manualConsoleApi, sqlValue]);
+  }, [sqlValue]);
 
   const handlePromptModeChange = (value: PromptMode) => {
     if (!value || value === internalMode) {
@@ -378,13 +378,17 @@ export function PromptInputWrapper({
       logNotebookDebug("prompt-input:event:manual-console-api-change", {
         hasApi: Boolean(api),
       });
-      setManualConsoleApi(api);
+      manualConsoleApiRef.current = api;
+      if (api && sqlValue !== undefined && api.getQuery() !== sqlValue) {
+        api.setQuery(sqlValue);
+      }
       sqlRepl?.setConsoleApi(api);
     },
-    [sqlRepl],
+    [sqlRepl, sqlValue],
   );
 
   const handleManualRun = useCallback(() => {
+    const manualConsoleApi = manualConsoleApiRef.current;
     const sql = manualQuery.trim() || manualConsoleApi?.getQuery()?.trim();
     if (!sql) {
       return;
@@ -399,7 +403,6 @@ export function PromptInputWrapper({
 
     manualConsoleApi?.runQuery();
   }, [
-    manualConsoleApi,
     manualQuery,
     onHomePage,
     onManualRun,

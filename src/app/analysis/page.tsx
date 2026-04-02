@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import Chat from "@/components/chat";
+import { AnalysisWorkspace } from "@/features/analysis/AnalysisWorkspace";
 import { useNotebookSession } from "@/hooks/use-notebook-session";
 import { useSearchParams } from "@/vite/next-navigation";
 
@@ -30,7 +30,10 @@ function AnalysisPageContent() {
 
   return (
     <div className="font-sans h-full overflow-hidden">
-      <Chat chatId={notebookId} notebookSession={notebookSession} />
+      <AnalysisWorkspace
+        notebookId={notebookId}
+        notebookSession={notebookSession}
+      />
     </div>
   );
 }

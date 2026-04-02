@@ -152,6 +152,7 @@ export function NotebookAnalysisCell({
   const consoleApiRef = useRef<SqlConsoleApi | null>(null);
   const manualRunNoticeRef = useRef<QueryNotice | null>(null);
   const manualRunSucceededRef = useRef(false);
+  const lastFocusedPayloadKeyRef = useRef<string | null>(null);
 
   const transcriptMessages = useMemo(() => {
     const persistedAssistantMessages = entries
@@ -214,9 +215,21 @@ export function NotebookAnalysisCell({
 
   useEffect(() => {
     if (!isFocused) {
+      lastFocusedPayloadKeyRef.current = null;
       return;
     }
 
+    const nextFocusedPayloadKey = JSON.stringify({
+      cellId: cell.id,
+      selectedDb: localSelectedDb ?? null,
+      selectedCatalogContext: localSelectedCatalogContext,
+    });
+
+    if (lastFocusedPayloadKeyRef.current === nextFocusedPayloadKey) {
+      return;
+    }
+
+    lastFocusedPayloadKeyRef.current = nextFocusedPayloadKey;
     logNotebookDebug("notebook-cell:effect:focused", {
       cellId: cell.id,
       localSelectedDb: localSelectedDb ?? null,
@@ -234,7 +247,6 @@ export function NotebookAnalysisCell({
     localSelectedCatalogContext,
     localSelectedDb,
     onFocusCell,
-    mode,
   ]);
 
   useEffect(() => {
@@ -491,6 +503,11 @@ export function NotebookAnalysisCell({
   );
 
   const handleCellFocus = useCallback(() => {
+    lastFocusedPayloadKeyRef.current = JSON.stringify({
+      cellId: cell.id,
+      selectedDb: localSelectedDb ?? null,
+      selectedCatalogContext: localSelectedCatalogContext,
+    });
     onFocusCell({
       cellId: cell.id,
       selectedDb: localSelectedDb,

@@ -14,6 +14,7 @@ import {
   STORE_MESSAGES,
   type WorkspaceAnalysisCell,
   type WorkspaceAnalysisCellEntry,
+  type WorkspaceAnalysisCellKind,
   type WorkspaceAnalysisCellStatus,
   type WorkspaceAnalysisNotebook,
   type WorkspaceChat,
@@ -243,12 +244,19 @@ function createCellRow(input: {
   notebookId: string;
   position: number;
   promptText: string;
+  kind?: WorkspaceAnalysisCellKind;
+  aiEnabled?: boolean;
+  sqlEnabled?: boolean;
   createdAt: number;
 }): WorkspaceAnalysisCell {
+  const kind = input.kind ?? "ai";
   return {
     id: input.id,
     notebookId: input.notebookId,
     position: input.position,
+    kind,
+    aiEnabled: input.aiEnabled ?? kind !== "sql",
+    sqlEnabled: input.sqlEnabled ?? kind === "sql",
     promptText: input.promptText,
     sqlDraft: null,
     selectedDbIdentifier: null,
@@ -259,6 +267,24 @@ function createCellRow(input: {
     updatedAt: input.createdAt,
     lastRunAt: null,
   };
+}
+
+function resolveAnalysisCellKind(
+  cell: WorkspaceAnalysisCell,
+): WorkspaceAnalysisCellKind {
+  if (cell.kind === "ai" || cell.kind === "sql") {
+    return cell.kind;
+  }
+
+  if (
+    (typeof cell.sqlDraft === "string" && cell.sqlDraft.trim().length > 0) ||
+    (typeof cell.resultPayloadJson === "string" &&
+      cell.resultPayloadJson.trim().length > 0)
+  ) {
+    return "sql";
+  }
+
+  return "ai";
 }
 
 function applyAssistantMessageToCell(
@@ -293,6 +319,7 @@ function applyAssistantMessageToCell(
     }
 
     cell.resultPayloadJson = JSON.stringify(payload);
+    cell.kind = "sql";
     cell.status = mapArtifactStatus(latestArtifact.status);
     cell.lastRunAt = artifactTimestamp;
     cell.updatedAt = Math.max(cell.updatedAt, artifactTimestamp);
@@ -537,7 +564,12 @@ export async function getAnalysisNotebookSnapshot(
     listAnalysisCellEntriesByNotebookId(notebookId),
   ]);
   const cells = sortCells(
-    Array.from(new Map(rawCells.map((cell) => [cell.id, cell])).values()),
+    Array.from(new Map(rawCells.map((cell) => [cell.id, cell])).values()).map(
+      (cell) => ({
+        ...cell,
+        kind: resolveAnalysisCellKind(cell),
+      }),
+    ),
   );
   const entries = sortEntries(
     Array.from(new Map(rawEntries.map((entry) => [entry.id, entry])).values()),

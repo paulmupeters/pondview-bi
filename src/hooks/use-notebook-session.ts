@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useState } from "react";
+import { mergeAnalysisCellPatch } from "@/hooks/use-notebook-session.utils";
 import {
   deleteAnalysisCell,
   deleteAnalysisCellEntry,
@@ -13,6 +14,7 @@ import {
 import type {
   WorkspaceAnalysisCell,
   WorkspaceAnalysisCellEntry,
+  WorkspaceAnalysisCellKind,
   WorkspaceAnalysisNotebook,
 } from "@/lib/workspace/workspace-db";
 
@@ -27,7 +29,16 @@ export type NotebookSessionState = {
 
 export type NotebookSessionActions = {
   updateTitle: (title: string | null) => Promise<void>;
-  addCell: (promptText?: string) => Promise<WorkspaceAnalysisCell>;
+  addCell: (
+    input?:
+      | string
+      | {
+          promptText?: string;
+          kind?: WorkspaceAnalysisCellKind;
+          aiEnabled?: boolean;
+          sqlEnabled?: boolean;
+        },
+  ) => Promise<WorkspaceAnalysisCell>;
   appendCellEntry: (input: {
     cellId: string;
     role: WorkspaceAnalysisCellEntry["role"];
@@ -41,6 +52,9 @@ export type NotebookSessionActions = {
       Pick<
         WorkspaceAnalysisCell,
         | "promptText"
+        | "kind"
+        | "aiEnabled"
+        | "sqlEnabled"
         | "sqlDraft"
         | "selectedDbIdentifier"
         | "selectedCatalogContext"
@@ -99,7 +113,7 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
   useEffect(() => {
     setHasLoaded(false);
     void load();
-  }, [load, notebookId]);
+  }, [load]);
 
   const updateTitle = useCallback(
     async (title: string | null) => {
@@ -116,15 +130,36 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
   );
 
   const addCell = useCallback(
-    async (promptText = ""): Promise<WorkspaceAnalysisCell> => {
+    async (
+      input:
+        | string
+        | {
+            promptText?: string;
+            kind?: WorkspaceAnalysisCellKind;
+            aiEnabled?: boolean;
+            sqlEnabled?: boolean;
+          } = "",
+    ): Promise<WorkspaceAnalysisCell> => {
       if (!notebookId) {
         throw new Error("No notebook id");
       }
+      const promptText =
+        typeof input === "string" ? input : (input.promptText ?? "");
+      const kind = typeof input === "string" ? "ai" : (input.kind ?? "ai");
+      const aiEnabled =
+        typeof input === "string" ? true : (input.aiEnabled ?? kind !== "sql");
+      const sqlEnabled =
+        typeof input === "string"
+          ? false
+          : (input.sqlEnabled ?? kind === "sql");
       const now = Date.now();
       const newCell: WorkspaceAnalysisCell = {
         id: nanoid(),
         notebookId,
         position: cells.length,
+        kind,
+        aiEnabled,
+        sqlEnabled,
         promptText,
         sqlDraft: null,
         selectedDbIdentifier: null,
@@ -208,6 +243,9 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
         Pick<
           WorkspaceAnalysisCell,
           | "promptText"
+          | "kind"
+          | "aiEnabled"
+          | "sqlEnabled"
           | "sqlDraft"
           | "selectedDbIdentifier"
           | "selectedCatalogContext"
@@ -224,8 +262,16 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
           if (cell.id !== cellId) {
             return cell;
           }
-          updatedCell = { ...cell, ...patch, updatedAt: now };
-          return updatedCell;
+          const mergedCell = mergeAnalysisCellPatch({
+            cell,
+            patch,
+            updatedAt: now,
+          });
+          if (!mergedCell) {
+            return cell;
+          }
+          updatedCell = mergedCell;
+          return mergedCell;
         }),
       );
       if (updatedCell) {

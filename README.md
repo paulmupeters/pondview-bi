@@ -119,6 +119,34 @@ OPENAI_API_KEY=
 
 The template lives at `env.local.example`.
 
+### Workspace DB debug logging
+
+Workspace IndexedDB debug logs are off by default.
+
+To turn them on in your browser console:
+
+```js
+localStorage.setItem("WORKSPACE_DB_DEBUG", "true");
+```
+
+To turn them off again:
+
+```js
+localStorage.removeItem("WORKSPACE_DB_DEBUG");
+```
+
+Or:
+
+```js
+localStorage.setItem("WORKSPACE_DB_DEBUG", "false");
+```
+
+for rnotebook debugging run:
+
+```js
+localStorage.setItem("pondview:debug:notebook-controller", "1");
+```
+
 ### MotherDuck
 
 MotherDuck authentication is completed by the remote DuckDB runtime. To persist auth across restarts, set motherduck_token in the environment used to launch DuckDB.

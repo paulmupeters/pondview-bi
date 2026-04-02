@@ -33,10 +33,15 @@ export type WorkspaceAnalysisCellStatus =
   | "complete"
   | "error";
 
+export type WorkspaceAnalysisCellKind = "ai" | "sql";
+
 export interface WorkspaceAnalysisCell {
   id: string;
   notebookId: string;
   position: number;
+  kind?: WorkspaceAnalysisCellKind;
+  aiEnabled?: boolean;
+  sqlEnabled?: boolean;
   promptText: string;
   sqlDraft: string | null;
   selectedDbIdentifier: string | null;
@@ -229,6 +234,26 @@ type StoreName =
 let openDbPromise: Promise<IDBDatabase> | null = null;
 let workspaceTraceId = 0;
 const WORKSPACE_DB_OPEN_TIMEOUT_MS = 4000;
+const WORKSPACE_DB_LOGS_ENABLED =
+  typeof window !== "undefined" &&
+  window.localStorage.getItem("WORKSPACE_DB_DEBUG") === "true";
+
+function logWorkspaceDb(
+  level: "info" | "warn",
+  message: string,
+  details?: Record<string, unknown>,
+): void {
+  if (!WORKSPACE_DB_LOGS_ENABLED) {
+    return;
+  }
+
+  if (level === "warn") {
+    console.warn(message, details);
+    return;
+  }
+
+  console.info(message, details);
+}
 
 function readWorkspaceDbNameOverride(): string | null {
   try {
@@ -268,10 +293,14 @@ export function switchToFreshWorkspaceDatabase(): string {
   const nextDbName = `${WORKSPACE_DB_NAME}-recovery-${Date.now()}`;
   writeWorkspaceDbNameOverride(nextDbName);
   resetOpenDbPromise();
-  console.warn("[workspace-db] switched to a fresh workspace database", {
-    previousDbName,
-    nextDbName,
-  });
+  logWorkspaceDb(
+    "warn",
+    "[workspace-db] switched to a fresh workspace database",
+    {
+      previousDbName,
+      nextDbName,
+    },
+  );
   return nextDbName;
 }
 
@@ -288,15 +317,19 @@ function beginWorkspaceTrace(
   const id = ++workspaceTraceId;
   const startedAt = Date.now();
   const timeoutId = globalThis.setTimeout(() => {
-    console.warn(`[workspace-db:${id}] still pending: ${operation}`, details);
+    logWorkspaceDb(
+      "info",
+      `[workspace-db:${id}] still pending: ${operation}`,
+      details,
+    );
   }, 2000);
 
-  console.info(`[workspace-db:${id}] start ${operation}`, details);
+  logWorkspaceDb("info", `[workspace-db:${id}] start ${operation}`, details);
 
   return {
     finish: (status, extra) => {
       globalThis.clearTimeout(timeoutId);
-      console.info(`[workspace-db:${id}] ${status} ${operation}`, {
+      logWorkspaceDb("info", `[workspace-db:${id}] ${status} ${operation}`, {
         ...details,
         ...extra,
         durationMs: Date.now() - startedAt,
@@ -398,7 +431,7 @@ function createStores(db: IDBDatabase): void {
 
 export async function openWorkspaceDb(): Promise<IDBDatabase> {
   if (openDbPromise) {
-    console.info("[workspace-db] reusing existing open promise");
+    logWorkspaceDb("info", "[workspace-db] reusing existing open promise");
     return openDbPromise;
   }
 
@@ -421,7 +454,7 @@ export async function openWorkspaceDb(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = () => {
       const db = request.result;
-      console.info("[workspace-db] onupgradeneeded", {
+      logWorkspaceDb("info", "[workspace-db] onupgradeneeded", {
         dbName: db.name,
         version: db.version,
         objectStoreNames: Array.from(db.objectStoreNames),
@@ -449,13 +482,16 @@ export async function openWorkspaceDb(): Promise<IDBDatabase> {
       });
 
       db.onversionchange = () => {
-        console.warn("[workspace-db] versionchange received, closing db");
+        logWorkspaceDb(
+          "info",
+          "[workspace-db] versionchange received, closing db",
+        );
         db.close();
         resetOpenDbPromise();
       };
 
       db.onclose = () => {
-        console.warn("[workspace-db] database connection closed");
+        logWorkspaceDb("info", "[workspace-db] database connection closed");
         resetOpenDbPromise();
       };
 
