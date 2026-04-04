@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { ConnectedDataPanel } from "@/components/connected-data-panel";
+import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   getAnalysisPostBootstrapHref,
   resolveAnalysisBootstrapIntent,
 } from "@/features/analysis/analysis-bootstrap";
+import { buildNotebookExplorerInsertPatch } from "@/features/analysis/analysis-explorer";
 import {
   analysisReducer,
   createInitialAnalysisState,
@@ -14,10 +18,11 @@ import {
   DASHBOARD_BUILDER_DIALOG_BODY_CLASS,
   DASHBOARD_BUILDER_DIALOG_CONTENT_CLASS,
 } from "@/features/analysis/dashboard-builder-dialog-layout";
-import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { buildDashboardBuilderMessages } from "@/features/analysis/dashboard-builder-messages";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
+import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
+import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
+import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import { useRouter, useSearchParams } from "@/vite/next-navigation";
 
 type AnalysisWorkspaceProps = {
@@ -36,7 +41,12 @@ export function AnalysisWorkspace({
     notebookId,
     createInitialAnalysisState,
   );
+  const effectiveSqlBackend = useResolvedSqlBackend();
   const [isMutating, setIsMutating] = useState(false);
+  const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false);
+  const [selectedExplorerDb, setSelectedExplorerDb] = useState<
+    string | undefined
+  >(DEFAULT_WASM_DB_IDENTIFIER);
   const [isDashboardPanelOpen, setIsDashboardPanelOpen] = useState(false);
   const [pendingBootstrap, setPendingBootstrap] = useState<
     | {
@@ -65,6 +75,30 @@ export function AnalysisWorkspace({
   }, [bootstrapIntent]);
 
   useEffect(() => {
+    if (effectiveSqlBackend === "duckdb-wasm") {
+      if (!selectedExplorerDb) {
+        setSelectedExplorerDb(DEFAULT_WASM_DB_IDENTIFIER);
+      }
+      return;
+    }
+
+    if (selectedExplorerDb === DEFAULT_WASM_DB_IDENTIFIER) {
+      setSelectedExplorerDb(undefined);
+    }
+  }, [effectiveSqlBackend, selectedExplorerDb]);
+
+  useEffect(() => {
+    const selectedCell = state.cells.find(
+      (cell) => cell.id === state.selectedCellId,
+    );
+    if (!selectedCell?.selectedDbIdentifier) {
+      return;
+    }
+
+    setSelectedExplorerDb(selectedCell.selectedDbIdentifier);
+  }, [state.cells, state.selectedCellId]);
+
+  useEffect(() => {
     if (!notebookSession.hasLoaded) {
       return;
     }
@@ -81,7 +115,11 @@ export function AnalysisWorkspace({
   }, [notebookSession.cells, notebookSession.error, notebookSession.hasLoaded]);
 
   useEffect(() => {
-    if (!notebookSession.hasLoaded || notebookSession.error || !bootstrapIntent) {
+    if (
+      !notebookSession.hasLoaded ||
+      notebookSession.error ||
+      !bootstrapIntent
+    ) {
       return;
     }
 
@@ -96,7 +134,9 @@ export function AnalysisWorkspace({
     void (async () => {
       const selectedCell =
         (state.selectedCellId
-          ? notebookSession.cells.find((cell) => cell.id === state.selectedCellId)
+          ? notebookSession.cells.find(
+              (cell) => cell.id === state.selectedCellId,
+            )
           : null) ?? null;
       let targetCell = selectedCell ?? notebookSession.cells.at(-1) ?? null;
 
@@ -122,7 +162,10 @@ export function AnalysisWorkspace({
         if (!targetCell.sqlEnabled) {
           nextPatch.sqlEnabled = true;
         }
-        if (bootstrapIntent.sql && targetCell.sqlDraft !== bootstrapIntent.sql) {
+        if (
+          bootstrapIntent.sql &&
+          targetCell.sqlDraft !== bootstrapIntent.sql
+        ) {
           nextPatch.sqlDraft = bootstrapIntent.sql;
         }
       } else if (!targetCell.aiEnabled) {
@@ -222,6 +265,31 @@ export function AnalysisWorkspace({
     }
   }
 
+  async function handleInsertExplorerTable(payload: ExplorerInsertPayload) {
+    if (payload.dbIdentifier) {
+      setSelectedExplorerDb(payload.dbIdentifier);
+    }
+
+    const nextPatch = buildNotebookExplorerInsertPatch({
+      cells: state.cells,
+      selectedCellId: state.selectedCellId,
+      reference: payload.reference,
+      dbIdentifier: payload.dbIdentifier ?? selectedExplorerDb,
+      catalogContext: payload.catalogContext,
+    });
+
+    if (!nextPatch) {
+      return;
+    }
+
+    setIsMutating(true);
+    try {
+      await notebookSession.updateCell(nextPatch.cellId, nextPatch.patch);
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   const allCellMessages = useMemo(() => {
     return buildDashboardBuilderMessages({
       cells: notebookSession.cells,
@@ -250,54 +318,73 @@ export function AnalysisWorkspace({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <AnalysisToolbar
-        onAddCell={(mode) =>
-          void handleAddCell({
-            aiEnabled: mode === "ai",
-            sqlEnabled: mode === "manual",
-          })
-        }
-        isBusy={isMutating}
-        title={notebookSession.notebook?.title ?? null}
-        onTitleChange={(newTitle) =>
-          void notebookSession.updateTitle(newTitle)
-        }
-        onCreateDashboard={() => setIsDashboardPanelOpen(true)}
+    <div className="flex h-full min-h-0 overflow-hidden">
+      <ConnectedDataPanel
+        selectedDb={selectedExplorerDb}
+        onSelect={(dbIdentifier) => setSelectedExplorerDb(dbIdentifier)}
+        mode="sidebar"
+        onInsertTable={(payload) => void handleInsertExplorerTable(payload)}
+        collapsed={isExplorerCollapsed}
+        collapsedBehavior="overlay"
+        onToggleCollapse={() => setIsExplorerCollapsed((previous) => !previous)}
+        className="shrink-0 bg-background"
+        sqlBackend={effectiveSqlBackend}
       />
-      <Dialog
-        open={isDashboardPanelOpen}
-        onOpenChange={setIsDashboardPanelOpen}
-      >
-        <DialogContent className={DASHBOARD_BUILDER_DIALOG_CONTENT_CLASS}>
-          <div className={DASHBOARD_BUILDER_DIALOG_BODY_CLASS}>
-            <DashboardBuilderPanel
-              open={isDashboardPanelOpen}
-              onOpenChange={setIsDashboardPanelOpen}
-              messages={allCellMessages}
-              selectedDbIdentifier={
-                firstCellWithDb?.selectedDbIdentifier ?? undefined
-              }
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <CellList
-          cells={state.cells}
-          selectedCellId={state.selectedCellId}
-          pendingBootstrap={pendingBootstrap}
-          notebookSession={notebookSession}
-          onSelectCell={(cellId) => dispatch({ type: "cellSelected", cellId })}
-          onBootstrapConsumed={handleBootstrapConsumed}
-          onDeleteCell={(cellId) => void handleDeleteCell(cellId)}
-          onToggleAiPane={(cellId, enabled) =>
-            void handleToggleAiPane(cellId, enabled)
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <AnalysisToolbar
+          onAddCell={(mode) =>
+            void handleAddCell({
+              aiEnabled: mode === "ai",
+              sqlEnabled: mode === "manual",
+            })
           }
-          onToggleSqlPane={(cellId, enabled) =>
-            void handleToggleSqlPane(cellId, enabled)
+          isBusy={isMutating}
+          title={notebookSession.notebook?.title ?? null}
+          onTitleChange={(newTitle) =>
+            void notebookSession.updateTitle(newTitle)
+          }
+          onCreateDashboard={() => setIsDashboardPanelOpen(true)}
+          isExplorerCollapsed={isExplorerCollapsed}
+          onToggleExplorer={() =>
+            setIsExplorerCollapsed((previous) => !previous)
           }
         />
+        <Dialog
+          open={isDashboardPanelOpen}
+          onOpenChange={setIsDashboardPanelOpen}
+        >
+          <DialogContent className={DASHBOARD_BUILDER_DIALOG_CONTENT_CLASS}>
+            <div className={DASHBOARD_BUILDER_DIALOG_BODY_CLASS}>
+              <DashboardBuilderPanel
+                open={isDashboardPanelOpen}
+                onOpenChange={setIsDashboardPanelOpen}
+                messages={allCellMessages}
+                selectedDbIdentifier={
+                  firstCellWithDb?.selectedDbIdentifier ?? undefined
+                }
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <CellList
+            cells={state.cells}
+            selectedCellId={state.selectedCellId}
+            pendingBootstrap={pendingBootstrap}
+            notebookSession={notebookSession}
+            onSelectCell={(cellId) =>
+              dispatch({ type: "cellSelected", cellId })
+            }
+            onBootstrapConsumed={handleBootstrapConsumed}
+            onDeleteCell={(cellId) => void handleDeleteCell(cellId)}
+            onToggleAiPane={(cellId, enabled) =>
+              void handleToggleAiPane(cellId, enabled)
+            }
+            onToggleSqlPane={(cellId, enabled) =>
+              void handleToggleSqlPane(cellId, enabled)
+            }
+          />
+        </div>
       </div>
     </div>
   );

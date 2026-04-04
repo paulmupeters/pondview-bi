@@ -1,6 +1,11 @@
-import { Trash2 } from "lucide-react";
+import {
+  Circle,
+  CircleAlert,
+  CircleCheck,
+  Loader2,
+  Trash2,
+} from "lucide-react";
 import type { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -41,6 +46,34 @@ function getCellPreview(cell: AnalysisCellState): string {
   return "Empty analysis cell";
 }
 
+function getStatusMeta(status: AnalysisCellState["status"]): {
+  icon: typeof Circle;
+  className: string;
+} {
+  switch (status) {
+    case "running":
+      return {
+        icon: Loader2,
+        className: "text-muted-foreground",
+      };
+    case "complete":
+      return {
+        icon: CircleCheck,
+        className: "text-green-600 dark:text-green-400",
+      };
+    case "error":
+      return {
+        icon: CircleAlert,
+        className: "text-destructive",
+      };
+    default:
+      return {
+        icon: Circle,
+        className: "text-muted-foreground",
+      };
+  }
+}
+
 export function CellFrame({
   cell,
   isSelected,
@@ -48,6 +81,9 @@ export function CellFrame({
   onDelete,
   children,
 }: CellFrameProps) {
+  const statusMeta = getStatusMeta(cell.status);
+  const StatusIcon = statusMeta.icon;
+
   return (
     <Card
       className={cn(
@@ -55,22 +91,34 @@ export function CellFrame({
         isSelected && "border-primary/30 ring-primary/15 ring-2",
       )}
     >
-      <CardHeader className="gap-3 px-4 pb-0">
+      <CardHeader className="grid-rows-[auto] items-center gap-3 px-4 pb-0">
         <button
           type="button"
-          className="flex w-full flex-col items-start gap-3 text-left"
+          className="flex min-w-0 w-full items-center gap-3 text-left"
           aria-pressed={isSelected}
           onClick={onSelect}
         >
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">{cell.status}</Badge>
-          </div>
-          <CardTitle className="text-base">Cell {cell.position + 1}</CardTitle>
-          <CardDescription className="line-clamp-2">
+          <span className="sr-only">Status: {cell.status}</span>
+          <span
+            data-status-icon={cell.status}
+            className={cn("shrink-0", statusMeta.className)}
+            aria-hidden="true"
+          >
+            <StatusIcon
+              className={cn(
+                "size-4",
+                cell.status === "running" && "animate-spin",
+              )}
+            />
+          </span>
+          <CardTitle className="shrink-0 font-thin text-sm">
+            Cell {cell.position + 1}
+          </CardTitle>
+          <CardDescription className="min-w-0 truncate">
             {getCellPreview(cell)}
           </CardDescription>
         </button>
-        <CardAction className="flex items-center gap-2">
+        <CardAction className="row-span-1 flex items-center gap-2">
           <Button
             type="button"
             size="icon"

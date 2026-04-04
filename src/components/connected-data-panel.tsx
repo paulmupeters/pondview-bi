@@ -754,19 +754,7 @@ export function ConnectedDataPanel({
               className,
               "bg-transparent",
             )}
-          >
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-11 w-11 rounded-full! border-border dark:bg-accent/80 bg-accent shadow-lg ring-1 ring-black/5 dark:ring-white/10 gap-1"
-              onClick={onToggleCollapse}
-              aria-label="Expand explorer"
-            >
-              <Database className="size-4 shrink-0" />
-              <ChevronRightIcon className="size-2.5 shrink-0" />
-            </Button>
-          </div>
+          ></div>
         );
       }
 
@@ -776,19 +764,7 @@ export function ConnectedDataPanel({
             "flex h-full w-11 flex-col items-center border-r border-border bg-background p-2 transition-all duration-200 ease-out",
             className,
           )}
-        >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 gap-0.5"
-            onClick={onToggleCollapse}
-            aria-label="Expand explorer"
-          >
-            <Database className="h-4 w-4" />
-            <ChevronRightIcon className="h-2 w-2 shrink-0" />
-          </Button>
-        </div>
+        ></div>
       );
     }
 
@@ -803,18 +779,6 @@ export function ConnectedDataPanel({
           <span className="text-xs font-bold tracking-widest text-[#5C6658] uppercase">
             Explorer
           </span>
-          {showCollapseToggle ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={onToggleCollapse}
-              aria-label="Collapse explorer"
-            >
-              <ChevronLeftIcon className="h-4 w-4" />
-            </Button>
-          ) : null}
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto p-2">

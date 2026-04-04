@@ -1,7 +1,8 @@
-import { LayoutDashboard, Plus } from "lucide-react";
+import { LayoutDashboard, PanelLeft, Plus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getAnalysisExplorerToggleLabel } from "@/features/analysis/analysis-explorer";
 import {
   type DefaultPromptMode,
   useDefaultPromptModePreference,
@@ -13,6 +14,8 @@ type AnalysisToolbarProps = {
   title: string | null;
   onTitleChange: (title: string | null) => void;
   onCreateDashboard: () => void;
+  isExplorerCollapsed: boolean;
+  onToggleExplorer: () => void;
 };
 
 export function AnalysisToolbar({
@@ -21,6 +24,8 @@ export function AnalysisToolbar({
   title,
   onTitleChange,
   onCreateDashboard,
+  isExplorerCollapsed,
+  onToggleExplorer,
 }: AnalysisToolbarProps) {
   const defaultMode = useDefaultPromptModePreference();
   const [editingTitle, setEditingTitle] = useState(false);
@@ -47,6 +52,15 @@ export function AnalysisToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-3 border-b px-6 py-4">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onToggleExplorer}
+        aria-label={getAnalysisExplorerToggleLabel(isExplorerCollapsed)}
+      >
+        <PanelLeft />
+        {getAnalysisExplorerToggleLabel(isExplorerCollapsed)}
+      </Button>
       <Button onClick={() => onAddCell(defaultMode)} disabled={isBusy}>
         <Plus />
         Add cell
@@ -63,6 +77,7 @@ export function AnalysisToolbar({
         />
       ) : (
         <button
+          type="button"
           onClick={handleTitleClick}
           className="cursor-text rounded px-1 py-0.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
         >
