@@ -16,6 +16,7 @@ import {
   updateSqlCellPayloadVisualType,
 } from "@/features/analysis/sql-cell-payload";
 import {
+  isSqlResultStale,
   normalizeSqlDraft,
   resolveCellStatusFromRunState,
   shouldPersistSqlDraftChange,
@@ -53,6 +54,12 @@ export function SqlCell({
     () => parseSqlCellPayload(cell.resultPayloadJson),
     [cell.resultPayloadJson],
   );
+  const hasFreshStoredPayload =
+    storedPayload &&
+    !isSqlResultStale({
+      currentSqlDraft: cell.sqlDraft,
+      persistedResultQuery: storedPayload.query,
+    });
 
   const executeQueryAction = useCallback(
     async ({ sql, signal }: { sql: string; signal: AbortSignal }) => {
@@ -302,7 +309,7 @@ export function SqlCell({
         ) : null}
       </div>
 
-      {storedPayload || isSqlRunning ? (
+      {hasFreshStoredPayload || isSqlRunning ? (
         <div className="overflow-hidden rounded-lg border bg-background pb-4">
           <SqlAnalysisDisplay
             data={storedPayload}

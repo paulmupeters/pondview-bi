@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  isSqlResultStale,
   normalizeSqlDraft,
   resolveCellStatusFromRunState,
   shouldPersistSqlDraftChange,
@@ -101,6 +102,24 @@ describe("sql cell sync", () => {
       shouldPersistVisualTypeChange({
         nextVisualType: "card",
         persistedVisualType: "card",
+      }),
+    ).toBe(false);
+  });
+
+  test("marks persisted results as stale when the current draft changed", () => {
+    expect(
+      isSqlResultStale({
+        currentSqlDraft: "select 2;",
+        persistedResultQuery: "select 1;",
+      }),
+    ).toBe(true);
+  });
+
+  test("keeps persisted results current when the draft matches the result query", () => {
+    expect(
+      isSqlResultStale({
+        currentSqlDraft: "select 1;",
+        persistedResultQuery: "select 1;",
       }),
     ).toBe(false);
   });

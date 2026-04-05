@@ -50,3 +50,13 @@ export function shouldPersistVisualTypeChange(input: {
 }): boolean {
   return input.persistedVisualType !== input.nextVisualType;
 }
+
+export function isSqlResultStale(input: {
+  currentSqlDraft: string | null | undefined;
+  persistedResultQuery: string | null | undefined;
+}): boolean {
+  return (
+    normalizeSqlDraft(input.currentSqlDraft ?? "") !==
+    normalizeSqlDraft(input.persistedResultQuery ?? "")
+  );
+}
