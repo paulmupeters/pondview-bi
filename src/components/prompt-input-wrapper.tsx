@@ -1,6 +1,5 @@
 import {
   ChatBubbleBottomCenterTextIcon,
-  PaperClipIcon,
   Squares2X2Icon,
   WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
@@ -23,13 +22,13 @@ import {
   PromptInputHeader,
   PromptInputHoverCard,
   PromptInputHoverCardContent,
-  PromptInputHoverCardTrigger,
   PromptInputTextarea,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
+import { logNotebookDebug } from "@/components/chat/notebook-debug";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
-import type { SqlConsoleApi } from "@/components/sql-console";
+import type { QueryNotice, SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -37,23 +36,56 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
-import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
-import type { SqlBackend } from "@/lib/sql/sql-runtime";
+import type { CardConfig, Config } from "@/lib/types";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
-import type { CardConfig, Config, Result } from "@/lib/types";
 import { getUploadedFileBlob, persistUploadedFile } from "@/lib/uploaded-files";
 import { cn } from "@/lib/utils";
-import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 
 export type PromptMode = "ai" | "manual";
 export type ManualShellVariant = "default" | "minimal";
 
+type PromptInputChatComposer = {
+  submitPrompt: (message: PromptInputMessage) => Promise<void>;
+  status: ChatStatus;
+  pendingMode?: "ai" | null;
+};
+
+type PromptInputSqlRepl = {
+  result: {
+    sql: string;
+    rows: Record<string, unknown>[];
+    columns: { name: string; type?: string }[];
+    durationMs: number;
+    backend?: string;
+    dbIdentifier?: string;
+    catalogContext?: string | null;
+    sourceDescriptor?: SqlAnalysisData["sourceDescriptor"];
+  } | null;
+  setConsoleApi: (api: SqlConsoleApi | null) => void;
+  saveQuery: (sql?: string) => Promise<void>;
+  isSavingQuery: boolean;
+  persistManualResultToChat: (payload: SqlAnalysisData) => Promise<void>;
+};
+
+type PromptInputManualVisualization = {
+  chartConfig: Config | null;
+  cardConfig: CardConfig | null;
+  visualType: "table" | "chart" | "card" | null;
+  handleReplResultChange: (result: PromptInputSqlRepl["result"]) => void;
+  focusManualVisualization: () => void;
+  createPayload: (params: {
+    result: PromptInputSqlRepl["result"];
+    selectedCatalogContext?: string | null;
+  }) => SqlAnalysisData | null;
+};
+
 interface PromptInputWrapperProps {
-  onSubmit: (message: PromptInputMessage) => void;
+  chatComposer: PromptInputChatComposer;
+  sqlRepl?: PromptInputSqlRepl;
+  manualVisualization?: PromptInputManualVisualization;
   onManualRunRequest?: (sql: string) => void;
   placeholder?: string;
   className?: string;
-  status?: ChatStatus;
   showHeader?: boolean;
   showAiInput?: boolean;
   onHomePage?: boolean;
@@ -63,39 +95,17 @@ interface PromptInputWrapperProps {
   onAddVisual?: () => void;
   mode?: PromptMode;
   onModeChange?: (mode: PromptMode) => void;
-  pendingMode?: PromptMode | null;
   selectedDb?: string;
-  onAddSqlResultToChat?: (payload: SqlAnalysisData) => void;
-  sqlResult?: {
-    sql: string;
-    rows: Record<string, unknown>[];
-    columns: { name: string; type?: string }[];
-    durationMs: number;
-    backend?: SqlBackend;
-    dbIdentifier?: string;
-    catalogContext?: string | null;
-    sourceDescriptor?: SqlAnalysisData["sourceDescriptor"];
-  } | null;
   selectedCatalogContext?: string | null;
-  onConsoleApiChange?: (api: SqlConsoleApi | null) => void;
-  onResultChange?: (
-    result: {
-      sql: string;
-      rows: Record<string, unknown>[];
-      columns: { name: string; type?: string }[];
-      durationMs: number;
-      backend?: SqlBackend;
-      dbIdentifier?: string;
-      catalogContext?: string | null;
-    } | null,
-  ) => void;
-  storedSqlQueries?: SavedSqlQuery[];
-  onSaveQuery?: (sql: string) => void | Promise<void>;
-  isSavingQuery?: boolean;
-  manualChartConfig?: Config | null;
-  manualCardConfig?: CardConfig | null;
-  manualVisualType?: "table" | "chart" | "card" | null;
-  onManualReplFocus?: () => void;
+  integratedComposer?: boolean;
+  promptValue?: string;
+  onPromptChange?: (value: string) => void;
+  sqlValue?: string;
+  onSqlChange?: (value: string) => void;
+  onManualRun?: () => void;
+  onManualRunNotice?: (notice: QueryNotice | null) => void;
+  onManualRunStateChange?: (isRunning: boolean) => void;
+  onManualRunSuccess?: () => void;
 }
 
 // Inner component that uses the attachments hook within PromptInput context
@@ -166,15 +176,6 @@ function FileAttachmentHoverCard() {
 
   return (
     <PromptInputHoverCard>
-      <PromptInputHoverCardTrigger>
-        <PromptInputButton
-          size="icon-sm"
-          variant="outline"
-          className="h-8! group dark:hover:bg-accent"
-        >
-          <PaperClipIcon className="h-4 w-4 text-muted-foreground group-hover:text-primary-foreground" />
-        </PromptInputButton>
-      </PromptInputHoverCardTrigger>
       <PromptInputHoverCardContent className="w-100 p-0 transform translate-y-[-10px]">
         <PromptInputCommand>
           <PromptInputCommandInput
@@ -292,11 +293,12 @@ function PromptInputModeEffects({ mode }: { mode: PromptMode }) {
 }
 
 export function PromptInputWrapper({
-  onSubmit,
+  chatComposer,
+  sqlRepl,
+  manualVisualization,
   onManualRunRequest,
   placeholder = "Ask a question about your data...",
   className,
-  status,
   showHeader = true,
   showAiInput = true,
   onHomePage = false,
@@ -306,24 +308,27 @@ export function PromptInputWrapper({
   onAddVisual: _onAddVisual,
   mode,
   onModeChange,
-  pendingMode = null,
   selectedDb,
-  onAddSqlResultToChat,
-  sqlResult = null,
   selectedCatalogContext = null,
-  onConsoleApiChange,
-  onResultChange,
-  storedSqlQueries: _storedSqlQueries,
-  onSaveQuery,
-  isSavingQuery = false,
-  manualChartConfig,
-  manualCardConfig,
-  manualVisualType,
-  onManualReplFocus,
+  integratedComposer = false,
+  promptValue,
+  onPromptChange,
+  sqlValue,
+  onSqlChange,
+  onManualRun,
+  onManualRunNotice,
+  onManualRunStateChange,
+  onManualRunSuccess,
 }: PromptInputWrapperProps) {
   const [internalMode, setInternalMode] = useState<PromptMode>(mode ?? "ai");
-  const [manualConsoleApi, setManualConsoleApi] =
-    useState<SqlConsoleApi | null>(null);
+  const manualConsoleApiRef = useRef<SqlConsoleApi | null>(null);
+  const [manualQuery, setManualQuery] = useState("");
+  const status = chatComposer.status;
+  const pendingMode = chatComposer.pendingMode ?? null;
+  const sqlResult = sqlRepl?.result ?? null;
+  const manualChartConfig = manualVisualization?.chartConfig ?? null;
+  const _manualVisualType = manualVisualization?.visualType ?? null;
+  const effectivePromptValue = promptValue ?? undefined;
 
   useEffect(() => {
     if (mode) {
@@ -331,17 +336,39 @@ export function PromptInputWrapper({
     }
   }, [mode]);
 
+  useEffect(() => {
+    const manualConsoleApi = manualConsoleApiRef.current;
+    if (!manualConsoleApi || sqlValue === undefined) {
+      return;
+    }
+
+    if (manualConsoleApi.getQuery() === sqlValue) {
+      return;
+    }
+
+    manualConsoleApi.setQuery(sqlValue);
+  }, [sqlValue]);
+
   const handlePromptModeChange = (value: PromptMode) => {
     if (!value || value === internalMode) {
       return;
     }
+    logNotebookDebug("prompt-input:event:mode-toggle", {
+      fromMode: internalMode,
+      toMode: value,
+      integratedComposer,
+      selectedDb: selectedDb ?? null,
+      selectedCatalogContext,
+    });
     if (!mode) {
       setInternalMode(value);
     }
     onModeChange?.(value);
   };
 
-  const handlePromptSubmit = (message: PromptInputMessage) => onSubmit(message);
+  const handlePromptSubmit = (message: PromptInputMessage) => {
+    void chatComposer.submitPrompt(message);
+  };
 
   const aiButtonLabel = useMemo(() => {
     if (
@@ -364,17 +391,26 @@ export function PromptInputWrapper({
 
   const handleManualConsoleApiChange = useCallback(
     (api: SqlConsoleApi | null) => {
-      setManualConsoleApi(api);
-      onConsoleApiChange?.(api);
+      logNotebookDebug("prompt-input:event:manual-console-api-change", {
+        hasApi: Boolean(api),
+      });
+      manualConsoleApiRef.current = api;
+      if (api && sqlValue !== undefined && api.getQuery() !== sqlValue) {
+        api.setQuery(sqlValue);
+      }
+      sqlRepl?.setConsoleApi(api);
     },
-    [onConsoleApiChange],
+    [sqlRepl, sqlValue],
   );
 
   const handleManualRun = useCallback(() => {
-    const sql = manualConsoleApi?.getQuery()?.trim();
+    const manualConsoleApi = manualConsoleApiRef.current;
+    const sql = manualQuery.trim() || manualConsoleApi?.getQuery()?.trim();
     if (!sql) {
       return;
     }
+
+    onManualRun?.();
 
     if (onHomePage && onManualRunRequest) {
       onManualRunRequest(sql);
@@ -382,61 +418,36 @@ export function PromptInputWrapper({
     }
 
     manualConsoleApi?.runQuery();
-  }, [manualConsoleApi, onHomePage, onManualRunRequest]);
+  }, [
+    manualQuery,
+    onHomePage,
+    onManualRun,
+    onManualRunRequest,
+  ]);
 
   const handleManualSend = useCallback(() => {
-    if (!onAddSqlResultToChat || !sqlResult) {
+    if (!sqlRepl || !manualVisualization || !sqlResult) {
       return;
     }
 
-    const isCardMode =
-      sqlResult.rows.length === 1 && sqlResult.columns.length === 1;
-    const visualType: "table" | "chart" | "card" =
-      manualVisualType ??
-      (isCardMode ? "card" : manualChartConfig ? "chart" : "table");
+    const payload = manualVisualization.createPayload({
+      result: sqlResult,
+      selectedCatalogContext,
+    });
+    if (!payload) {
+      return;
+    }
 
-    const payload: SqlAnalysisData = {
-      stage: "complete",
-      progress: 1,
-      query: sqlResult.sql,
-      dbIdentifier: sqlResult.dbIdentifier,
-      catalogContext: sqlResult.catalogContext ?? selectedCatalogContext,
-      sqlBackend: sqlResult.backend,
-      sourceDescriptor:
-        sqlResult.sourceDescriptor ??
-        (sqlResult.backend
-          ? buildDashboardSourceDescriptor({
-              runtimeBackend: sqlResult.backend,
-              dbIdentifier: sqlResult.dbIdentifier,
-              catalogContext:
-                sqlResult.catalogContext ?? selectedCatalogContext ?? null,
-            })
-          : null),
-      executionTime: sqlResult.durationMs,
-      rowCount: sqlResult.rows.length,
-      columns: sqlResult.columns,
-      rows: sqlResult.rows as Result[],
-      visualType,
-      chartConfig:
-        visualType === "chart" ? (manualChartConfig ?? undefined) : undefined,
-      cardConfig:
-        visualType === "card" ? (manualCardConfig ?? undefined) : undefined,
-      summary: {
-        totalRows: sqlResult.rows.length,
-        executionTimeMs: sqlResult.durationMs,
-        insights: [],
-      },
-    };
+    void sqlRepl.persistManualResultToChat(payload);
+  }, [manualVisualization, selectedCatalogContext, sqlRepl, sqlResult]);
 
-    onAddSqlResultToChat(payload);
-  }, [
-    manualCardConfig,
-    manualChartConfig,
-    manualVisualType,
-    onAddSqlResultToChat,
-    selectedCatalogContext,
-    sqlResult,
-  ]);
+  const handleManualQueryChange = useCallback(
+    (query: string) => {
+      setManualQuery(query);
+      onSqlChange?.(query);
+    },
+    [onSqlChange],
+  );
 
   const content = aiButtonLabel;
   const nextMode: PromptMode = internalMode === "ai" ? "manual" : "ai";
@@ -444,8 +455,11 @@ export function PromptInputWrapper({
   const showMinimalManualShell =
     manualShellVariant === "minimal" && internalMode === "manual";
   const showHomeManualComposer = onHomePage && showMinimalManualShell;
-  const showManualAddToChatButton = !onHomePage;
+  const showManualAddToChatButton = !onHomePage && !integratedComposer;
   const useSegmentedModeToggle = manualShellVariant === "minimal";
+  const showIntegratedComposer = integratedComposer;
+  const showManualPane = internalMode === "manual";
+  const showPromptPane = internalMode !== "manual";
 
   if (!showHeader && !showAiInput) {
     return null;
@@ -465,15 +479,7 @@ export function PromptInputWrapper({
         <PromptInputModeEffects mode={internalMode} />
         {showAiInput && (
           <div className="flex w-full flex-col">
-            <div
-              aria-hidden={internalMode !== "manual"}
-              className={cn(
-                "grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
-                internalMode === "manual"
-                  ? "grid-rows-[1fr] opacity-100 translate-y-0"
-                  : "pointer-events-none grid-rows-[0fr] opacity-0 -translate-y-2",
-              )}
-            >
+            {showManualPane ? (
               <div className="min-h-0">
                 <div
                   className={cn(
@@ -492,8 +498,12 @@ export function PromptInputWrapper({
                           ? "h-85 rounded-lg"
                           : "h-105 rounded-lg",
                     )}
-                    onFocusCapture={() => onManualReplFocus?.()}
-                    onPointerDownCapture={() => onManualReplFocus?.()}
+                    onFocusCapture={() =>
+                      manualVisualization?.focusManualVisualization()
+                    }
+                    onPointerDownCapture={() =>
+                      manualVisualization?.focusManualVisualization()
+                    }
                   >
                     <DuckdbRepl
                       className={cn(
@@ -503,6 +513,10 @@ export function PromptInputWrapper({
                       selectedDbIdentifier={selectedDb}
                       catalogContext={selectedCatalogContext}
                       onConsoleApiChangeAction={handleManualConsoleApiChange}
+                      onQueryChangeAction={handleManualQueryChange}
+                      onNoticeAction={onManualRunNotice}
+                      onRunStateChangeAction={onManualRunStateChange}
+                      onRunSuccessAction={onManualRunSuccess}
                       inlineResults={false}
                       editorMinHeight={
                         showMinimalManualShell ? "11rem" : "8rem"
@@ -520,11 +534,17 @@ export function PromptInputWrapper({
                       showExplorer={false}
                       showCopySnippetButton={!showHomeManualComposer}
                       showClearButton={!showHomeManualComposer}
-                      showSaveQueryButton={Boolean(onSaveQuery)}
-                      onSaveQueryAction={onSaveQuery}
-                      isSavingQuery={isSavingQuery}
+                      showSaveQueryButton={
+                        !onHomePage && Boolean(sqlRepl?.saveQuery)
+                      }
+                      onSaveQueryAction={
+                        !onHomePage ? sqlRepl?.saveQuery : undefined
+                      }
+                      isSavingQuery={sqlRepl?.isSavingQuery ?? false}
                       chartConfig={manualChartConfig}
-                      onResultChangeAction={onResultChange}
+                      onResultChangeAction={
+                        manualVisualization?.handleReplResultChange
+                      }
                     />
                   </div>
                   <div
@@ -532,7 +552,9 @@ export function PromptInputWrapper({
                       "flex gap-2",
                       showMinimalManualShell
                         ? "items-center justify-between px-1 pb-1"
-                        : "m-2 justify-end",
+                        : showIntegratedComposer
+                          ? "flex-wrap items-center justify-between border-t border-border/70 px-1 pt-3"
+                          : "m-2 justify-end",
                       showMinimalManualShell
                         ? "pt-0"
                         : compact
@@ -545,10 +567,14 @@ export function PromptInputWrapper({
                       variant="outline"
                       type="button"
                       className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
-                      disabled={!manualConsoleApi?.getQuery()?.trim()}
+                      disabled={!manualQuery.trim()}
                       onClick={handleManualRun}
                     >
-                      {showHomeManualComposer ? "[Run in chat ▷]" : "[Run ▷]"}
+                      {showIntegratedComposer
+                        ? "[Run SQL ▷]"
+                        : showHomeManualComposer
+                          ? "[Run in chat ▷]"
+                          : "[Run ▷]"}
                     </Button>
                     {showManualAddToChatButton && (
                       <Button
@@ -565,12 +591,12 @@ export function PromptInputWrapper({
                   </div>
                 </div>
               </div>
-            </div>
+            ) : null}
             <div
-              aria-hidden={internalMode === "manual"}
+              aria-hidden={!showPromptPane}
               className={cn(
                 "grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-300 ease-out",
-                internalMode !== "manual"
+                showPromptPane
                   ? "grid-rows-[1fr] opacity-100 translate-y-0"
                   : "pointer-events-none grid-rows-[0fr] opacity-0 translate-y-2",
               )}
@@ -587,9 +613,17 @@ export function PromptInputWrapper({
                       <div className="relative w-full">
                         <PromptInputTextarea
                           placeholder={placeholder}
+                          value={effectivePromptValue}
+                          onChange={(event) =>
+                            onPromptChange?.(event.currentTarget.value)
+                          }
                           className={cn(
                             "flex-1 pr-4",
-                            compact ? "min-h-10 pb-10" : "min-h-28 pb-10",
+                            showIntegratedComposer
+                              ? "min-h-18 pb-10"
+                              : compact
+                                ? "min-h-10 pb-10"
+                                : "min-h-28 pb-10",
                           )}
                         />
                         <div
@@ -605,7 +639,7 @@ export function PromptInputWrapper({
                             className="text-sm font-mono border-border hover:bg-primary/80 hover:text-primary-foreground hover:border-primary dark:hover:bg-primary/80 dark:hover:text-primary-foreground dark:hover:border-primary"
                             disabled={pendingMode === "ai"}
                           >
-                            {content}
+                            {showIntegratedComposer ? "[Ask AI |>]" : content}
                           </Button>
                         </div>
                       </div>

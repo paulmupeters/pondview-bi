@@ -15,6 +15,7 @@ import {
   createSqlAutocompleteAction,
   type ExecuteQueryFn,
   parseSqlAutocompleteSuggestion,
+  type QueryNotice,
   SqlConsole,
   type SqlConsoleApi,
 } from "@/components/sql-console";
@@ -33,6 +34,11 @@ import {
 } from "@/lib/connected-tables";
 import { runWithCatalogContext } from "@/lib/duckdb/catalog-context";
 import {
+  getDuckDbHttpHealthStatus,
+  hasDuckDbHttpConfig,
+  hasDuckDbHttpSessionAuth,
+} from "@/lib/duckdb/duckdb-http-browser";
+import {
   buildAttachmentPlan,
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
@@ -43,8 +49,10 @@ import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 import { runQuery } from "@/lib/sql/run-query";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
+  getSqlBackendPreference,
   isWasmLocalIdentifier,
   type SqlBackend,
+  type SqlBackendPreference,
 } from "@/lib/sql/sql-runtime";
 import {
   useResolvedSqlBackend,
@@ -52,6 +60,44 @@ import {
 } from "@/lib/sql/use-sql-backend";
 import type { Config } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+function createQueryWarning(message: string): Error {
+  const error = new Error(message);
+  error.name = "QueryWarning";
+  return error;
+}
+
+function getRemoteRuntimeWarning(params: {
+  sourceType: ConnectedTable["type"];
+  backendPreference: SqlBackendPreference;
+  isDuckDbHttpConfigured: boolean;
+  duckDbHttpHealthStatus: "unknown" | "online" | "offline";
+}): string {
+  const {
+    sourceType,
+    backendPreference,
+    isDuckDbHttpConfigured,
+    duckDbHttpHealthStatus,
+  } = params;
+
+  const shouldMentionDuckDbHttp =
+    backendPreference === "duckdb-http" ||
+    (backendPreference === "auto" &&
+      isDuckDbHttpConfigured &&
+      duckDbHttpHealthStatus !== "online");
+
+  if (shouldMentionDuckDbHttp) {
+    return hasDuckDbHttpSessionAuth()
+      ? `DuckDB over HTTP is currently unavailable, so this query fell back to DuckDB WASM. DuckDB WASM cannot query external ${sourceType} sources. Check the DuckDB HTTP server in Settings and retry.`
+      : `DuckDB over HTTP is not authenticated, so this query fell back to DuckDB WASM. DuckDB WASM cannot query external ${sourceType} sources. Re-enter your DuckDB HTTP auth in Settings and retry.`;
+  }
+
+  if (backendPreference === "bridge") {
+    return `Bridge is not currently query-ready, so this query fell back to DuckDB WASM. DuckDB WASM cannot query external ${sourceType} sources. Re-authenticate Bridge in Settings or switch runtimes and retry.`;
+  }
+
+  return `DuckDB WASM cannot query external ${sourceType} sources. Switch to Bridge or DuckDB over HTTP before running this query.`;
+}
 
 const SQL_SAMPLE_SQL = `-- Create a sample table with two columns (col1, col2)
 SELECT
@@ -147,6 +193,10 @@ type DuckdbReplProps = {
     signal: AbortSignal;
   }) => ReturnType<ExecuteQueryFn>;
   onConsoleApiChangeAction?: (api: SqlConsoleApi | null) => void;
+  onQueryChangeAction?: (sql: string) => void;
+  onNoticeAction?: (notice: QueryNotice | null) => void;
+  onRunStateChangeAction?: (isRunning: boolean) => void;
+  onRunSuccessAction?: () => void;
   inlineResults?: boolean;
   onResultChangeAction?: (
     result: {
@@ -277,6 +327,10 @@ export function DuckdbRepl({
   catalogContext,
   onRunSqlAction,
   onConsoleApiChangeAction,
+  onQueryChangeAction,
+  onNoticeAction,
+  onRunStateChangeAction,
+  onRunSuccessAction,
   inlineResults = true,
   onResultChangeAction,
   showRunControls = true,
@@ -300,6 +354,7 @@ export function DuckdbRepl({
     catalogContext?: string | null;
   } | null>(null);
   const [internalApi, setInternalApi] = useState<SqlConsoleApi | null>(null);
+  const [currentQuery, setCurrentQuery] = useState("");
   const [copiedSqlSnippet, setCopiedSqlSnippet] = useState(false);
   const copySnippetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [selectedDb, setSelectedDb] = useState<string | undefined>(
@@ -310,6 +365,7 @@ export function DuckdbRepl({
   >(catalogContext ?? null);
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(true);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
+  const onResultChangeActionRef = useRef(onResultChangeAction);
   const resolveCurrentSqlBackend = useResolveSqlBackend();
   const effectiveSqlBackend = useResolvedSqlBackend();
 
@@ -353,6 +409,21 @@ export function DuckdbRepl({
     ) {
       throw new Error(
         "MotherDuck requires Bridge or DuckDB over HTTP. Switch the SQL runtime in Settings before running this source.",
+      );
+    }
+
+    if (
+      connectedEntry?.databasePath &&
+      connectedEntry.type !== "duckdb" &&
+      effectiveSqlBackend === "duckdb-wasm"
+    ) {
+      throw createQueryWarning(
+        getRemoteRuntimeWarning({
+          sourceType: connectedEntry.type,
+          backendPreference: getSqlBackendPreference(),
+          isDuckDbHttpConfigured: hasDuckDbHttpConfig(),
+          duckDbHttpHealthStatus: getDuckDbHttpHealthStatus(),
+        }),
       );
     }
 
@@ -451,7 +522,7 @@ export function DuckdbRepl({
   };
 
   const handleCopySqlSnippet = () => {
-    const currentSql = internalApi?.getQuery()?.trim();
+    const currentSql = currentQuery.trim();
     const textToCopy = currentSql?.length ? currentSql : SQL_SAMPLE_SQL;
     if (
       !textToCopy ||
@@ -477,7 +548,7 @@ export function DuckdbRepl({
     internalApi.runQuery();
   };
 
-  const currentSql = internalApi?.getQuery()?.trim() ?? "";
+  const currentSql = currentQuery.trim();
   const isSaveQueryDisabled =
     !internalApi ||
     !onSaveQueryAction ||
@@ -492,6 +563,14 @@ export function DuckdbRepl({
     }
     void Promise.resolve(onSaveQueryAction(currentSql));
   };
+
+  const handleQueryChange = useCallback(
+    (nextQuery: string) => {
+      setCurrentQuery(nextQuery);
+      onQueryChangeAction?.(nextQuery);
+    },
+    [onQueryChangeAction],
+  );
 
   const handleInsertTableName = useCallback(
     (payload: ExplorerInsertPayload) => {
@@ -523,13 +602,15 @@ export function DuckdbRepl({
     await cancelBridgeQuery();
   };
 
+  useEffect(() => {
+    onResultChangeActionRef.current = onResultChangeAction;
+  }, [onResultChangeAction]);
+
   // Keep parent state in sync with the latest query result regardless of where
   // the result is rendered.
   useEffect(() => {
-    if (onResultChangeAction) {
-      onResultChangeAction(lastResult);
-    }
-  }, [lastResult, onResultChangeAction]);
+    onResultChangeActionRef.current?.(lastResult);
+  }, [lastResult]);
 
   useEffect(() => {
     if (internalApi && onConsoleApiChangeAction) {
@@ -603,8 +684,8 @@ export function DuckdbRepl({
                     setLastResult(null);
                     internalApi?.clearResults();
                     internalApi?.setQuery("");
-                    if (onResultChangeAction) {
-                      onResultChangeAction(null);
+                    if (onResultChangeActionRef.current) {
+                      onResultChangeActionRef.current(null);
                     }
                   }}
                 >
@@ -690,6 +771,9 @@ export function DuckdbRepl({
             executeQueryAction={executeQuery}
             autocompleteAction={autocompleteAction}
             onApiChangeAction={setInternalApi}
+            onQueryChangeAction={handleQueryChange}
+            onNoticeAction={onNoticeAction}
+            onRunStateChangeAction={onRunStateChangeAction}
             onCancelQueryAction={handleCancelQuery}
             showInlineResults={inlineResults}
             showRunControls={false}
@@ -712,6 +796,7 @@ export function DuckdbRepl({
                 catalogContext,
               });
               setExplorerRefreshToken((prev) => prev + 1);
+              onRunSuccessAction?.();
             }}
           />
         </div>

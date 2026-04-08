@@ -1,6 +1,6 @@
 import { CHAT_MODEL } from "@/ai/models";
 
-export type AiProvider = "gateway" | "openai" | "anthropic" | "open-responses";
+export type AiProvider = "openai" | "gateway" | "anthropic" | "open-responses";
 
 export interface AiSettings {
   provider: AiProvider;

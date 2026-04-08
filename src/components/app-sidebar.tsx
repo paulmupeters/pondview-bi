@@ -19,6 +19,7 @@ import { PondviewLogo } from "@/components/pondview-logo";
 import { useChatHistory } from "@/hooks/use-chat-history";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
+import { deleteAnalysisNotebook } from "@/lib/workspace/analysis-notebook-repo";
 import { deleteChat } from "@/lib/workspace/chat-repo";
 import { switchToFreshWorkspaceDatabase } from "@/lib/workspace/workspace-db";
 import Link from "@/vite/next-link";
@@ -29,7 +30,8 @@ import {
 } from "@/vite/next-navigation";
 
 const railButtonClassName =
-  "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-tight";
+  "h-auto w-full flex-col gap-0 sm:gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-tight";
+
 
 interface AppSidebarProps {
   initialChats?: ChatHistoryEntry[];
@@ -40,7 +42,9 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const activeChatId =
-    pathname === "/chat" ? (searchParams.get("id") ?? null) : null;
+    pathname === "/analysis" || pathname === "/chat"
+      ? (searchParams.get("id") ?? null)
+      : null;
   const { chats, isLoading, error, loadChats } = useChatHistory(initialChats);
   const [isChatHistoryPopoverOpen, setIsChatHistoryPopoverOpen] =
     useState(false);
@@ -101,7 +105,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
     }
 
     try {
-      await deleteChat(chatId);
+      await Promise.all([deleteAnalysisNotebook(chatId), deleteChat(chatId)]);
       await loadChats();
     } catch {
       await loadChats();
@@ -121,7 +125,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   };
 
   const handleChatClick = (chatId: string) => {
-    router.push(`/chat?id=${encodeURIComponent(chatId)}`);
+    router.push(`/analysis?id=${encodeURIComponent(chatId)}`);
     setIsChatHistoryPopoverOpen(false);
   };
 
@@ -138,11 +142,11 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   };
 
   return (
-    <div className="relative flex h-full w-20 flex-col border-r border-border bg-sidebar py-4 p-1">
+    <div className="relative hidden md:flex h-full w-12 sm:w-20 flex-col border-r border-border bg-sidebar py-4 p-1">
       <div className="relative flex flex-col items-center gap-2">
         <div className="relative">
           <Link href="/">
-            <PondviewLogo className="h-16 w-16" />
+            <PondviewLogo className="h-10 w-10 sm:h-16 sm:w-16" />
             <div className="absolute inset-x-0 top-[30%] flex justify-center pointer-events-none z-10">
               {/* <span className="text-primary font-bold text-xs font-mono">POND</span>
             <span className="text-xs font-mono font-semibold text-sidebar-foreground">VIEW</span> */}
@@ -162,7 +166,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
             title="New"
           >
             <Plus className="h-4 w-4" />
-            <span className="text-center">New</span>
+            <span className="hidden sm:inline text-center">New</span>
           </Button>
         </Link>
 
@@ -182,7 +186,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
               title="History"
             >
               <ClockIcon className="h-4 w-4" />
-              <span className="text-center">History</span>
+              <span className="hidden sm:inline text-center">History</span>
             </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-80 p-4">
@@ -276,7 +280,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
             title="Dashboards"
           >
             <LayoutGrid className="h-4 w-4" />
-            <span className="text-center">Dashboards</span>
+            <span className="hidden sm:inline text-center">Dashboards</span>
           </Button>
         </Link>
         <Link href="/sql-editor" className="w-full">
@@ -291,7 +295,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
             title="SQL Editor"
           >
             <SquareTerminal className="h-4 w-4" />
-            <span className="text-center">SQL</span>
+            <span className="hidden sm:inline text-center">SQL</span>
           </Button>
         </Link>
         <Link href="/data" className="w-full">
@@ -305,7 +309,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
             title="Data"
           >
             <Database className="h-4 w-4" />
-            <span className="text-center">Data</span>
+            <span className="hidden sm:inline text-center">Data</span>
           </Button>
         </Link>
       </div>
@@ -325,7 +329,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
             title="Settings"
           >
             <Settings className="h-4 w-4" />
-            <span className="text-center">Settings</span>
+            <span className="hidden sm:inline text-center">Settings</span>
           </Button>
         </Link>
         <div className="flex w-full flex-col items-center rounded-xl px-1 py-2">

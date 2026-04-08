@@ -1,12 +1,8 @@
 import { PostgreSQL, sql } from "@codemirror/lang-sql";
-import { Prec, StateEffect, StateField } from "@codemirror/state";
-import {
-  Decoration,
-  EditorView,
-  type KeyBinding,
-  keymap,
-  WidgetType,
-} from "@codemirror/view";
+import { syntaxHighlighting } from "@codemirror/language";
+import { Prec } from "@codemirror/state";
+import { oneDarkHighlightStyle } from "@codemirror/theme-one-dark";
+import { EditorView, type KeyBinding, keymap } from "@codemirror/view";
 import CodeMirror, {
   type Extension,
   type ReactCodeMirrorRef,
@@ -17,6 +13,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from "react";
 import { cn } from "@/lib/utils";
 
@@ -148,91 +145,6 @@ export function resolveSqlAutocompleteSuggestion(input: {
   };
 }
 
-class SqlAutocompleteGhostTextWidget extends WidgetType {
-  constructor(private readonly text: string) {
-    super();
-  }
-
-  eq(other: SqlAutocompleteGhostTextWidget): boolean {
-    return other.text === this.text;
-  }
-
-  toDOM(): HTMLElement {
-    const element = document.createElement("span");
-    element.className = "cm-sql-ghost-text";
-    element.textContent = this.text;
-    element.setAttribute("aria-hidden", "true");
-    return element;
-  }
-
-  ignoreEvent(): boolean {
-    return true;
-  }
-}
-
-const setSqlAutocompleteEffect =
-  StateEffect.define<ResolvedSqlAutocompleteSuggestion | null>();
-
-const sqlAutocompleteField =
-  StateField.define<ResolvedSqlAutocompleteSuggestion | null>({
-    create: () => null,
-    update(value, transaction) {
-      for (const effect of transaction.effects) {
-        if (effect.is(setSqlAutocompleteEffect)) {
-          return effect.value;
-        }
-      }
-
-      if (transaction.docChanged || transaction.selection) {
-        return null;
-      }
-
-      return value;
-    },
-    provide: (field) =>
-      EditorView.decorations.from(field, (value) => {
-        if (!value) {
-          return Decoration.none;
-        }
-
-        return Decoration.set([
-          Decoration.widget({
-            side: 1,
-            widget: new SqlAutocompleteGhostTextWidget(value.suffix),
-          }).range(value.from),
-        ]);
-      }),
-  });
-
-function acceptSqlAutocomplete(view: EditorView): boolean {
-  const suggestion = view.state.field(sqlAutocompleteField, false);
-  if (!suggestion) {
-    return false;
-  }
-
-  const nextState = applySqlAutocompleteSuggestion({
-    sql: view.state.doc.toString(),
-    suggestion,
-  });
-  if (!nextState) {
-    return false;
-  }
-
-  view.dispatch({
-    changes: {
-      from: suggestion.suggestionStart,
-      to: suggestion.to,
-      insert: suggestion.suggestion,
-    },
-    selection: {
-      anchor: nextState.selectionStart,
-    },
-    effects: setSqlAutocompleteEffect.of(null),
-  });
-
-  return true;
-}
-
 export function createSqlCodeEditorKeyBindings(options: {
   onRunQuery?: () => void;
   onCancel?: () => void;
@@ -240,12 +152,7 @@ export function createSqlCodeEditorKeyBindings(options: {
   onHistoryNext?: () => void;
 }): KeyBinding[] {
   const { onRunQuery, onCancel, onHistoryPrev, onHistoryNext } = options;
-  const bindings: KeyBinding[] = [
-    {
-      key: "Tab",
-      run: acceptSqlAutocomplete,
-    },
-  ];
+  const bindings: KeyBinding[] = [];
 
   if (onRunQuery) {
     bindings.push({
@@ -300,12 +207,28 @@ export function createSqlCodeEditorKeyBindings(options: {
   return bindings;
 }
 
+function useIsDarkMode(): boolean {
+  const [isDark, setIsDark] = useState(
+    () => document.documentElement.classList.contains("dark"),
+  );
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains("dark"));
+    });
+    observer.observe(document.documentElement, { attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
+  return isDark;
+}
+
 export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
   function SqlCodeEditor(
     {
       value,
       onChange,
-      autocompleteAction,
+      autocompleteAction: _autocompleteAction,
       placeholder,
       className,
       minHeight = "8rem",
@@ -318,15 +241,8 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
     },
     ref,
   ) {
+    const isDark = useIsDarkMode();
     const editorRef = useRef<ReactCodeMirrorRef>(null);
-    const autocompleteActionRef = useRef<AutocompleteQueryFn | undefined>(
-      autocompleteAction,
-    );
-    const autocompleteAbortRef = useRef<AbortController | null>(null);
-    const autocompleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-      null,
-    );
-    const autocompleteRequestIdRef = useRef(0);
 
     // Expose imperative API
     useImperativeHandle(
@@ -386,151 +302,6 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
       }
     }, [autoFocus]);
 
-    useEffect(() => {
-      autocompleteActionRef.current = autocompleteAction;
-    }, [autocompleteAction]);
-
-    const clearAutocompleteRequest = useCallback((view?: EditorView | null) => {
-      if (autocompleteTimerRef.current) {
-        clearTimeout(autocompleteTimerRef.current);
-        autocompleteTimerRef.current = null;
-      }
-
-      if (autocompleteAbortRef.current) {
-        autocompleteAbortRef.current.abort();
-        autocompleteAbortRef.current = null;
-      }
-
-      const targetView = view ?? editorRef.current?.view;
-      if (!targetView) {
-        return;
-      }
-
-      const activeSuggestion = targetView.state.field(
-        sqlAutocompleteField,
-        false,
-      );
-      if (!activeSuggestion) {
-        return;
-      }
-
-      targetView.dispatch({
-        effects: setSqlAutocompleteEffect.of(null),
-      });
-    }, []);
-
-    const scheduleAutocomplete = useCallback(
-      (view: EditorView) => {
-        const action = autocompleteActionRef.current;
-        const selection = view.state.selection.main;
-        const currentSql = view.state.doc.toString();
-
-        if (
-          !action ||
-          !view.hasFocus ||
-          !shouldRequestSqlAutocomplete({
-            sql: currentSql,
-            selectionFrom: selection.from,
-            selectionTo: selection.to,
-            docLength: view.state.doc.length,
-          })
-        ) {
-          clearAutocompleteRequest(view);
-          return;
-        }
-
-        if (autocompleteTimerRef.current) {
-          clearTimeout(autocompleteTimerRef.current);
-          autocompleteTimerRef.current = null;
-        }
-
-        if (autocompleteAbortRef.current) {
-          autocompleteAbortRef.current.abort();
-          autocompleteAbortRef.current = null;
-        }
-
-        const requestId = autocompleteRequestIdRef.current + 1;
-        autocompleteRequestIdRef.current = requestId;
-
-        const controller = new AbortController();
-        autocompleteAbortRef.current = controller;
-
-        autocompleteTimerRef.current = setTimeout(() => {
-          autocompleteTimerRef.current = null;
-
-          void action({
-            sql: currentSql,
-            signal: controller.signal,
-          })
-            .then((suggestion) => {
-              if (controller.signal.aborted) {
-                return;
-              }
-
-              const latestView = editorRef.current?.view;
-              if (
-                !latestView ||
-                autocompleteRequestIdRef.current !== requestId
-              ) {
-                return;
-              }
-
-              const latestSelection = latestView.state.selection.main;
-              const latestSql = latestView.state.doc.toString();
-              if (
-                !latestView.hasFocus ||
-                !shouldRequestSqlAutocomplete({
-                  sql: latestSql,
-                  selectionFrom: latestSelection.from,
-                  selectionTo: latestSelection.to,
-                  docLength: latestView.state.doc.length,
-                })
-              ) {
-                clearAutocompleteRequest(latestView);
-                return;
-              }
-
-              latestView.dispatch({
-                effects: setSqlAutocompleteEffect.of(
-                  resolveSqlAutocompleteSuggestion({
-                    sql: latestSql,
-                    suggestion,
-                  }),
-                ),
-              });
-            })
-            .catch((error) => {
-              if ((error as Error).name === "AbortError") {
-                return;
-              }
-
-              clearAutocompleteRequest(editorRef.current?.view);
-            })
-            .finally(() => {
-              if (autocompleteAbortRef.current === controller) {
-                autocompleteAbortRef.current = null;
-              }
-            });
-        }, 180);
-      },
-      [clearAutocompleteRequest],
-    );
-
-    useEffect(() => {
-      const view = editorRef.current?.view;
-      if (!view) {
-        return;
-      }
-
-      scheduleAutocomplete(view);
-    }, [scheduleAutocomplete]);
-
-    useEffect(() => {
-      return () => {
-        clearAutocompleteRequest(null);
-      };
-    }, [clearAutocompleteRequest]);
-
     // Custom keymap for run/cancel/history navigation
     const customKeymap = useCallback((): Extension => {
       return Prec.highest(
@@ -548,22 +319,8 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
     const extensions: Extension[] = [
       customKeymap(),
       sql({ dialect: PostgreSQL }),
+      ...(isDark ? [syntaxHighlighting(oneDarkHighlightStyle)] : []),
       EditorView.lineWrapping,
-      sqlAutocompleteField,
-      EditorView.updateListener.of((update) => {
-        if (
-          !(update.docChanged || update.selectionSet || update.focusChanged)
-        ) {
-          return;
-        }
-
-        if (update.focusChanged && !update.view.hasFocus) {
-          clearAutocompleteRequest(update.view);
-          return;
-        }
-
-        scheduleAutocomplete(update.view);
-      }),
     ];
 
     return (

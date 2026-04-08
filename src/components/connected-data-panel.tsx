@@ -5,7 +5,7 @@ import {
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import { Database } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   PromptInputHoverCard,
   PromptInputHoverCardContent,
@@ -29,6 +29,7 @@ import {
   isDefaultExplorerSchema,
 } from "@/lib/duckdb/table-reference";
 import { isHiddenRuntimeSchema } from "@/lib/sql/runtime-table-schemas";
+import { ensureSampleDataForEmptyRuntime } from "@/lib/sql/sample-data";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
@@ -122,6 +123,30 @@ export function shouldShowConnectedEntry(
   return !visibleRemoteCatalogs.has(catalog);
 }
 
+export type SampleDataState = {
+  isLoading: boolean;
+  error: string | null;
+};
+
+export function getSampleDataActionState({
+  hasTables,
+  isLoading,
+  error,
+}: {
+  hasTables: boolean;
+  isLoading: boolean;
+  error: string | null;
+}): SampleDataState | null {
+  if (hasTables) {
+    return null;
+  }
+
+  return {
+    isLoading,
+    error,
+  };
+}
+
 interface ConnectedDataPanelProps {
   selectedDb?: string;
   onSelect: (dbIdentifier: string) => void;
@@ -173,8 +198,19 @@ export function ConnectedDataPanel({
     isLoading: isLoadingRemoteTables,
     error: remoteTablesError,
     connectionInfo: remoteConnectionInfo,
+    refresh: refreshRemoteTables,
   } = useDuckdbHttpTables(sqlBackend, refreshToken);
   const [isOpen, setIsOpen] = useState(false);
+  const [sampleDataLoadingTarget, setSampleDataLoadingTarget] = useState<
+    "remote" | "wasm" | null
+  >(null);
+  const [sampleDataErrors, setSampleDataErrors] = useState<{
+    remote: string | null;
+    wasm: string | null;
+  }>({
+    remote: null,
+    wasm: null,
+  });
 
   useEffect(() => {
     if (refreshToken === undefined) {
@@ -182,6 +218,40 @@ export function ConnectedDataPanel({
     }
     void refreshWasmTables();
   }, [refreshToken, refreshWasmTables]);
+
+  const handleAddSampleData = useCallback(
+    async (target: "remote" | "wasm") => {
+      const backendPreference =
+        target === "remote" ? sqlBackend : "duckdb-wasm";
+
+      setSampleDataLoadingTarget(target);
+      setSampleDataErrors((previous) => ({
+        ...previous,
+        [target]: null,
+      }));
+
+      try {
+        await ensureSampleDataForEmptyRuntime({ backendPreference });
+        if (target === "remote") {
+          await refreshRemoteTables();
+        } else {
+          await refreshWasmTables();
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to add sample data.";
+        setSampleDataErrors((previous) => ({
+          ...previous,
+          [target]: message,
+        }));
+      } finally {
+        setSampleDataLoadingTarget((current) =>
+          current === target ? null : current,
+        );
+      }
+    },
+    [refreshRemoteTables, refreshWasmTables, sqlBackend],
+  );
 
   const groupExplorerTables = useMemo(
     () =>
@@ -452,6 +522,36 @@ export function ConnectedDataPanel({
     );
   };
 
+  const renderSampleDataAction = (
+    target: "remote" | "wasm",
+    emptyMessage: string,
+  ) => {
+    const state = getSampleDataActionState({
+      hasTables: false,
+      isLoading: sampleDataLoadingTarget === target,
+      error: sampleDataErrors[target],
+    });
+
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">{emptyMessage}</p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs"
+          disabled={state?.isLoading}
+          onClick={() => void handleAddSampleData(target)}
+        >
+          {state?.isLoading ? "Adding sample data..." : "Add sample data"}
+        </Button>
+        {state?.error ? (
+          <p className="text-xs text-destructive">{state.error}</p>
+        ) : null}
+      </div>
+    );
+  };
+
   const renderDatabaseList = () => {
     const hasConnectedTables = visibleConnectedTables.length > 0;
     const hasWasmTables = groupedWasmTables.length > 0;
@@ -490,9 +590,7 @@ export function ConnectedDataPanel({
                   },
                 })
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  No tables found.
-                </p>
+                renderSampleDataAction("remote", "No tables found.")
               )}
             </div>
           </div>
@@ -542,9 +640,7 @@ export function ConnectedDataPanel({
                   },
                 })
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  No local tables yet.
-                </p>
+                renderSampleDataAction("wasm", "No local tables yet.")
               )}
             </div>
           </div>
@@ -658,19 +754,7 @@ export function ConnectedDataPanel({
               className,
               "bg-transparent",
             )}
-          >
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-11 w-11 rounded-full! border-border dark:bg-accent/80 bg-accent shadow-lg ring-1 ring-black/5 dark:ring-white/10 gap-1"
-              onClick={onToggleCollapse}
-              aria-label="Expand explorer"
-            >
-              <Database className="size-4 shrink-0" />
-              <ChevronRightIcon className="size-2.5 shrink-0" />
-            </Button>
-          </div>
+          ></div>
         );
       }
 
@@ -680,19 +764,7 @@ export function ConnectedDataPanel({
             "flex h-full w-11 flex-col items-center border-r border-border bg-background p-2 transition-all duration-200 ease-out",
             className,
           )}
-        >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 gap-0.5"
-            onClick={onToggleCollapse}
-            aria-label="Expand explorer"
-          >
-            <Database className="h-4 w-4" />
-            <ChevronRightIcon className="h-2 w-2 shrink-0" />
-          </Button>
-        </div>
+        ></div>
       );
     }
 
@@ -707,18 +779,6 @@ export function ConnectedDataPanel({
           <span className="text-xs font-bold tracking-widest text-[#5C6658] uppercase">
             Explorer
           </span>
-          {showCollapseToggle ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={onToggleCollapse}
-              aria-label="Collapse explorer"
-            >
-              <ChevronLeftIcon className="h-4 w-4" />
-            </Button>
-          ) : null}
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto p-2">

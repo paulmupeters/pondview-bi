@@ -1,4 +1,10 @@
 import { useMemo } from "react";
+import {
+  BarChart3,
+  LineChart,
+  AreaChart,
+  PieChart,
+} from "lucide-react";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Separator } from "./ui/separator";
@@ -686,28 +692,37 @@ export function InlineChartConfig({
     <div className="border-b border-border bg-popover">
       <div className="p-4 py-8 grid grid-cols-2 xxl:grid-cols-4 gap-4">
         <div>
-          <label
-            htmlFor="visualization"
-            className="block text-[10px] text-muted-foreground mb-1 tracking-wider font-bold uppercase"
-          >
+          <label className="block text-[10px] text-muted-foreground mb-1 tracking-wider font-bold uppercase">
             Visualization
           </label>
-          <select
-            id="visualization"
-            className="w-full bg-background border border-input rounded px-2 py-1.5 text-xs focus:outline-none focus:border-primary"
-            value={effectiveChartConfig.type}
-            onChange={(e) =>
-              updateChartConfig((config) => ({
-                ...config,
-                type: e.target.value as Config["type"],
-              }))
-            }
-          >
-            <option value="line">Line Chart</option>
-            <option value="bar">Bar Chart</option>
-            <option value="area">Area Chart</option>
-            <option value="pie">Pie Chart</option>
-          </select>
+          <div className="flex gap-1 items-center h-[26px]">
+            {([
+              { type: "line" as const, icon: LineChart, label: "Line" },
+              { type: "bar" as const, icon: BarChart3, label: "Bar" },
+              { type: "area" as const, icon: AreaChart, label: "Area" },
+              { type: "pie" as const, icon: PieChart, label: "Pie" },
+            ] as const).map(({ type, icon: Icon, label }) => (
+              <button
+                key={type}
+                type="button"
+                title={`${label} Chart`}
+                onClick={() =>
+                  updateChartConfig((config) => ({
+                    ...config,
+                    type,
+                  }))
+                }
+                className={cn(
+                  "p-1.5 rounded border transition-colors",
+                  effectiveChartConfig.type === type
+                    ? "bg-card-foreground/10 border-card-foreground/20"
+                    : "bg-transparent border-input hover:bg-card-foreground/5",
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+              </button>
+            ))}
+          </div>
         </div>
         <div>
           <label

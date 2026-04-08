@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRightPanelResize } from "@/components/chat/hooks/use-right-panel-resize";
-import type { VisualizationEntry } from "@/components/chat/hooks/use-visualization-selection";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
+import type { VisualizationEntry } from "@/components/visualization-entry";
 import { VisualizationPanel } from "@/components/visualization-panel";
-import { useConnectedTables } from "@/hooks/use-connected-tables";
+import type { ConnectedTable } from "@/lib/connected-tables";
 import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import {
@@ -27,8 +27,14 @@ import {
 
 const VISUALIZATION_ID = "sql-editor-repl";
 
+export function getInitialSqlEditorDb(
+  selectedDb: string | undefined,
+  _connectedTables: ConnectedTable[],
+): string | undefined {
+  return selectedDb;
+}
+
 export default function SqlEditorPage() {
-  const connectedTables = useConnectedTables();
   const effectiveSqlBackend = useResolvedSqlBackend();
 
   const [selectedDb, setSelectedDb] = useState<string | undefined>();
@@ -67,19 +73,6 @@ export default function SqlEditorPage() {
     containerRef,
     handleResizeStart,
   } = useRightPanelResize();
-
-  // Auto-select the first connected database
-  useEffect(() => {
-    if (!selectedDb && connectedTables.length > 0) {
-      const first = connectedTables[0];
-      const firstIdentifier =
-        first?.connectionId ??
-        first?.databasePath ??
-        first?.attachAs ??
-        DEFAULT_WASM_DB_IDENTIFIER;
-      setSelectedDb(firstIdentifier);
-    }
-  }, [connectedTables, selectedDb]);
 
   // Load saved SQL queries on mount
   useEffect(() => {

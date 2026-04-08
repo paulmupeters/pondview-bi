@@ -1,73 +1,28 @@
 import { tool } from "ai";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { runQuery } from "@/lib/sql/run-query";
-import {
-  resolveDbIdentifierForSqlBackend,
-  resolveSqlBackend,
-  type SqlBackend,
-} from "@/lib/sql/sql-runtime";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { generateCardConfig } from "./generate-card-config-tool";
 import { generateChartConfig } from "./generate-chart-config-tool";
+import { deriveColumns, executeSqlForRuntime } from "./sql-tool-shared";
 
-function normalizeRows(rows: Record<string, unknown>[]): Result[] {
-  const normalizeValue = (value: unknown): string | number | boolean | Date => {
-    if (value instanceof Date) return value;
-    if (
-      typeof value === "string" ||
-      typeof value === "number" ||
-      typeof value === "boolean"
-    ) {
-      return value;
-    }
-    if (value === null || value === undefined) return "";
-    return JSON.stringify(value);
-  };
-
-  return rows.map((row) => {
-    const normalized: Result = {};
-    for (const [key, value] of Object.entries(row)) {
-      normalized[key] = normalizeValue(value);
-    }
-    return normalized;
-  });
-}
-
-async function executeSqlForRuntime(
-  sql: string,
-  databasePath?: string,
-): Promise<{
-  rows: Result[];
-  durationMs: number;
-  backend: SqlBackend;
-  dbIdentifier?: string;
-}> {
-  const backend = resolveSqlBackend({ dbIdentifier: databasePath });
-  const dbIdentifier = resolveDbIdentifierForSqlBackend(databasePath, backend);
-  const response = await runQuery({ sql, dbIdentifier });
-  return {
-    rows: normalizeRows(response.rows),
-    durationMs: response.durationMs,
-    backend: response.backend,
-    dbIdentifier,
-  };
-}
-
-export const executeSqlTool = tool({
+export const executeFinalSqlTool = tool({
   description:
-    "Execute a SQL query and return the results, returns a maximum of 50 rows.",
+    "Execute the exact SQL that should become the committed result for the current notebook cell. Use this only after the SQL draft is verified and ready to render.",
   inputSchema: z.object({
-    sql: z.string().describe("The SQL query to execute"),
+    sql: z
+      .string()
+      .describe("The exact final SQL query to execute for the notebook cell."),
     databasePath: z
       .string()
       .optional()
       .describe(
         "Optional database identifier/path to run the SQL against. Omit to use the selected Query Runtime.",
       ),
-    userQuery: z.string().optional().describe(
-      "The original user query/question that led to this SQL",
-    ),
+    userQuery: z
+      .string()
+      .optional()
+      .describe("The original user question that led to this SQL"),
     generateChart: z
       .boolean()
       .optional()
@@ -77,16 +32,13 @@ export const executeSqlTool = tool({
   execute: async ({ sql, userQuery, generateChart, databasePath }) => {
     const artifactId = nanoid();
     const createdAt = Date.now();
-
-    const debugContext = {
-      artifactId,
-      databasePath,
-    };
+    const debugContext = { artifactId, databasePath };
 
     let parsedResults: Result[] = [];
     let executionTime = 0;
-    let sqlBackend: SqlBackend | undefined;
     let resolvedDatabasePath: string | undefined;
+    let sqlBackend: string | undefined;
+
     try {
       const queryResult = await executeSqlForRuntime(sql, databasePath);
       parsedResults = queryResult.rows;
@@ -99,16 +51,7 @@ export const executeSqlTool = tool({
       throw new Error(errorMessage);
     }
 
-    // Extract columns from first row if available
-    const columns =
-      parsedResults.length > 0
-        ? Object.keys(parsedResults[0]).map((key) => ({
-            name: key,
-            type: "string",
-          }))
-        : [];
-
-    // Generate insights
+    const columns = deriveColumns(parsedResults);
     const insights: string[] = [];
     const rowCount = parsedResults.length;
 
@@ -123,7 +66,6 @@ export const executeSqlTool = tool({
         );
       }
 
-      // Analyze numeric columns for basic statistics
       const numericColumns = columns.filter((col) => {
         const sampleValue = parsedResults[0]?.[col.name];
         return (
@@ -142,16 +84,12 @@ export const executeSqlTool = tool({
       insights.push("Query executed successfully but returned no results");
     }
 
-    // Determine query type
-    const queryType = sql.trim().split(/\s+/)[0].toUpperCase();
-    // Determine if data is suitable for charting and generate chart config
+    const queryType = sql.trim().split(/\s+/)[0]?.toUpperCase() || "SELECT";
     let chartConfig: Config | undefined;
     let cardConfig: CardConfig | undefined;
     let visualType: "table" | "chart" | "card" = "table";
 
-    // Check if result is a single value (1 row, 1 column) - suitable for card display
     const isSingleValue = rowCount === 1 && columns.length === 1;
-
     const isChartWorthy =
       rowCount > 0 && rowCount <= 500 && queryType === "SELECT";
     const hasNumericData = columns.some((col) => {
@@ -162,7 +100,7 @@ export const executeSqlTool = tool({
     });
 
     console.debug(
-      "[executeSqlTool] Step 4 (visualizing) started",
+      "[executeFinalSqlTool] Step 4 (visualizing) started",
       debugContext,
     );
 
@@ -198,21 +136,18 @@ export const executeSqlTool = tool({
         "Table view enabled, no chart or card visualization generated",
       );
       console.debug(
-        "[executeSqlTool] Table view enabled, no chart or card visualization generated",
-        {
-          ...debugContext,
-        },
+        "[executeFinalSqlTool] Table view enabled, no chart or card visualization generated",
+        debugContext,
       );
     }
 
-    console.debug("[executeSqlTool] Step 4 (visualizing) finished", {
+    console.debug("[executeFinalSqlTool] Step 4 (visualizing) finished", {
       ...debugContext,
       chartConfig,
       cardConfig,
       visualType,
     });
 
-    // Step 4: Complete with results
     const finalData = {
       title: "SQL Query Results",
       stage: "complete" as const,
@@ -235,7 +170,7 @@ export const executeSqlTool = tool({
       },
     };
 
-    console.debug("[executeSqlTool] Step 5 (complete) finished", {
+    console.debug("[executeFinalSqlTool] Step 5 (complete) finished", {
       ...debugContext,
       executionTimeMs: executionTime,
       rowCount,
@@ -257,7 +192,6 @@ export const executeSqlTool = tool({
       },
     };
 
-    // Return the text summary for the AI model
     return {
       text: `Executed ${queryType} query successfully${
         resolvedDatabasePath ? ` on ${resolvedDatabasePath}` : ""
@@ -268,3 +202,6 @@ export const executeSqlTool = tool({
     };
   },
 });
+
+// Legacy export kept for transitional imports and historical tests.
+export const executeSqlTool = executeFinalSqlTool;

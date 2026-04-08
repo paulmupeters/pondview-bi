@@ -98,7 +98,7 @@ describe("resolveGatewayModel", () => {
   });
 
   test("throws when model is missing", () => {
-    const storage = configureProvider("gateway", { model: "" });
+    const storage = configureProvider("openai", { model: "" });
     setBrowserStorage(storage);
 
     expect(() => resolveGatewayModel("fallback-model")).toThrow(

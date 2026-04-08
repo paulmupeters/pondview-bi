@@ -13,6 +13,7 @@ import type { SqlConsoleApi } from "@/components/sql-console";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { getDefaultPromptModePreference } from "@/lib/default-prompt-mode";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
+import { ensureSampleDataForEmptyRuntime } from "@/lib/sql/sample-data";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import { cn } from "@/lib/utils";
@@ -42,10 +43,26 @@ function deriveManualQueryTitle(sql: string): string {
     : firstMeaningfulLine;
 }
 
+export async function runHomepageExampleCommand(params: {
+  command: string;
+  backendPreference: "bridge" | "duckdb-http" | "duckdb-wasm";
+  ensureSampleData?: typeof ensureSampleDataForEmptyRuntime;
+  submit: (command: string) => void;
+}) {
+  const ensureSampleData =
+    params.ensureSampleData ?? ensureSampleDataForEmptyRuntime;
+
+  await ensureSampleData({
+    backendPreference: params.backendPreference,
+  });
+  params.submit(params.command);
+}
+
 export default function Home() {
   const [mode, setMode] = useState<PromptMode>(() =>
     getDefaultPromptModePreference(),
   );
+  const [areSuggestionsVisible, setAreSuggestionsVisible] = useState(false);
   const [selectedDb, setSelectedDb] = useState<string | undefined>(
     DEFAULT_WASM_DB_IDENTIFIER,
   );
@@ -57,6 +74,8 @@ export default function Home() {
   const [pendingSqlToInsert, setPendingSqlToInsert] = useState<string | null>(
     null,
   );
+  const [isPreparingExample, setIsPreparingExample] = useState(false);
+  const [exampleError, setExampleError] = useState<string | null>(null);
   const connectedTables = useConnectedTables();
   const effectiveSqlBackend = useResolvedSqlBackend();
   const router = useRouter();
@@ -110,6 +129,18 @@ export default function Home() {
     setPendingSqlToInsert(null);
   }, [manualConsoleApi, pendingSqlToInsert]);
 
+  useEffect(() => {
+    setAreSuggestionsVisible(false);
+
+    const frame = window.requestAnimationFrame(() => {
+      setAreSuggestionsVisible(true);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   const handleSubmit = useCallback(
     (message: PromptInputMessage) => {
       const chatId = nanoid();
@@ -125,11 +156,11 @@ export default function Home() {
 
       if (mode === "ai") {
         const queryParam = text ? `&q=${encodeURIComponent(text)}` : "";
-        router.push(`/chat?id=${chatId}&mode=ai${queryParam}`);
+        router.push(`/analysis?id=${chatId}&mode=ai${queryParam}`);
         return;
       }
 
-      router.push(`/chat?id=${chatId}&mode=manual`);
+      router.push(`/analysis?id=${chatId}&mode=manual`);
     },
     [mode, router],
   );
@@ -151,7 +182,7 @@ export default function Home() {
         autorun: "1",
       });
 
-      router.push(`/chat?${params.toString()}`);
+      router.push(`/analysis?${params.toString()}`);
     },
     [router],
   );
@@ -185,10 +216,29 @@ export default function Home() {
   );
 
   const handleExampleClick = useCallback(
-    (command: string) => {
-      handleSubmit({ text: command });
+    async (command: string) => {
+      if (isPreparingExample) {
+        return;
+      }
+
+      setIsPreparingExample(true);
+      setExampleError(null);
+
+      try {
+        await runHomepageExampleCommand({
+          command,
+          backendPreference: effectiveSqlBackend,
+          submit: (nextCommand) => handleSubmit({ text: nextCommand }),
+        });
+      } catch (error) {
+        setExampleError(
+          error instanceof Error ? error.message : "Failed to add sample data.",
+        );
+      } finally {
+        setIsPreparingExample(false);
+      }
     },
-    [handleSubmit],
+    [effectiveSqlBackend, handleSubmit, isPreparingExample],
   );
 
   return (
@@ -197,15 +247,12 @@ export default function Home() {
         <div className="flex py-2 justify-center">
           <div className="flex items-center justify-center">
             <div className="relative flex items-center justify-center">
+              <PondviewLogo className="h-44 w-44" />
               <div className="flex justify-center pointer-events-none z-10">
-                <span className="text-primary font-bold text-4xl font-mono mr-4">
-                  POND
-                </span>
-                <span className="text-4xl font-mono font-semibold text-sidebar-foreground">
-                  VIEW
+                <span className="font-mono text-3xl font-semibold uppercase tracking-[0.28em]">
+                  Pondview
                 </span>
               </div>
-              <PondviewLogo className="h-44 w-44" />
             </div>
           </div>
         </div>
@@ -216,7 +263,7 @@ export default function Home() {
             <div className="flex w-full max-w-7xl items-stretch gap-4 overflow-hidden transition-all duration-300 ease-out">
               <div
                 className={cn(
-                  "flex min-h-0 overflow-hidden transition-all duration-300 ease-out",
+                  "hidden md:flex min-h-0 overflow-hidden transition-all duration-300 ease-out",
                   isManualMode
                     ? "w-80 min-w-80 translate-x-0 opacity-100"
                     : "pointer-events-none w-0 min-w-0 -translate-x-4 opacity-0",
@@ -242,7 +289,28 @@ export default function Home() {
                 )}
               >
                 <PromptInputWrapper
-                  onSubmit={handleSubmit}
+                  chatComposer={{
+                    submitPrompt: async (message) => {
+                      handleSubmit(message);
+                    },
+                    status: "ready",
+                    pendingMode: null,
+                  }}
+                  sqlRepl={{
+                    result: null,
+                    setConsoleApi: setManualConsoleApi,
+                    saveQuery: async () => {},
+                    isSavingQuery: false,
+                    persistManualResultToChat: async () => {},
+                  }}
+                  manualVisualization={{
+                    chartConfig: null,
+                    cardConfig: null,
+                    visualType: null,
+                    handleReplResultChange: () => {},
+                    focusManualVisualization: () => {},
+                    createPayload: () => null,
+                  }}
                   className="transition delay-150 duration-300 ease-in-out"
                   onHomePage={true}
                   mode={mode}
@@ -251,7 +319,6 @@ export default function Home() {
                   manualShellVariant={manualShellVariant}
                   selectedDb={selectedDb}
                   selectedCatalogContext={selectedCatalogContext}
-                  onConsoleApiChange={setManualConsoleApi}
                 />
                 <div
                   className={cn(
@@ -262,24 +329,50 @@ export default function Home() {
                   )}
                 >
                   <div className="min-h-0 overflow-hidden">
-                    <div className="animate-in fade-in duration-500 fill-mode-both">
-                      <p className="mb-3 text-center text-xs text-muted-foreground">
+                    <div>
+                      <p
+                        className={cn(
+                          "mb-3 text-center text-xs text-muted-foreground transition-all duration-500 ease-out motion-reduce:transition-none",
+                          areSuggestionsVisible
+                            ? "opacity-100 translate-y-0"
+                            : "opacity-0 translate-y-2",
+                        )}
+                      >
                         Try asking...
                       </p>
+                      {exampleError ? (
+                        <p className="mb-3 text-center text-xs text-destructive">
+                          {exampleError}
+                        </p>
+                      ) : null}
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         {EXAMPLE_COMMANDS.map((command, i) => (
                           <button
                             key={command}
                             type="button"
                             onClick={() => handleExampleClick(command)}
-                            className="group cursor-pointer rounded-md border border-border/30 bg-card/40 px-4 py-3 text-left text-sm text-foreground/80 transition-all duration-200 hover:border-primary/50 hover:bg-primary/5 hover:text-foreground animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
+                            disabled={isPreparingExample}
+                            className={cn(
+                              "group rounded-md border border-border/30 bg-card/40 px-4 py-3 text-left text-sm text-foreground/80 transition-all duration-500 ease-out hover:border-primary/50 hover:bg-primary/5 hover:text-foreground motion-reduce:transition-none",
+                              isPreparingExample
+                                ? "cursor-wait opacity-70"
+                                : "cursor-pointer",
+                              areSuggestionsVisible
+                                ? "opacity-100 translate-y-0"
+                                : "opacity-0 translate-y-2",
+                            )}
                             style={{
-                              animationDelay: `${150 + i * 75}ms`,
-                              animationDuration: "400ms",
+                              transitionDelay: areSuggestionsVisible
+                                ? `${150 + i * 75}ms`
+                                : "0ms",
                             }}
                           >
                             <span className="flex items-center justify-between gap-3">
-                              <span>{command}</span>
+                              <span>
+                                {isPreparingExample
+                                  ? "Adding sample data..."
+                                  : command}
+                              </span>
                               <ArrowRightIcon className="h-3.5 w-3.5 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-primary group-hover:opacity-100" />
                             </span>
                           </button>

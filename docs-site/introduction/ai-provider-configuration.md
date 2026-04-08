@@ -42,7 +42,7 @@ Validation is enforced by `getMissingRequiredSetting()` before saving and when m
 
 ### Defaults
 
-- Default provider: `gateway`
+- Default provider: `openai`
 - Default model fallback: `CHAT_MODEL` from `src/ai/models.ts` (`openai/gpt-5.4`)
 - If `AI_MODEL` is empty, the fallback model is used
 
