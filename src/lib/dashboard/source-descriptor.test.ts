@@ -40,8 +40,10 @@ describe("dashboard source descriptors", () => {
       catalogContext: "warehouse",
     });
 
-    expect(parseDashboardSourceDescriptorJson(serializeDashboardSourceDescriptor(descriptor))).toEqual(
-      descriptor,
-    );
+    expect(
+      parseDashboardSourceDescriptorJson(
+        serializeDashboardSourceDescriptor(descriptor),
+      ),
+    ).toEqual(descriptor);
   });
 });

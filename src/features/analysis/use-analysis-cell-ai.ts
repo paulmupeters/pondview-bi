@@ -1,19 +1,19 @@
-import { useChat, type UIMessage } from "@ai-sdk/react";
-import { DirectChatTransport, type ChatTransport } from "ai";
+import { type UIMessage, useChat } from "@ai-sdk/react";
+import { type ChatTransport, DirectChatTransport } from "ai";
 import { nanoid } from "nanoid";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPondviewAgent } from "@/ai/client/agent";
+import { toPromptErrorMessage } from "@/components/chat/hooks/chat-session-utils";
 import {
   analysisCellEntryToUiMessage,
   parseStoredPayload,
 } from "@/components/chat/notebook-cell-utils";
-import { toPromptErrorMessage } from "@/components/chat/hooks/chat-session-utils";
-import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import {
   buildAiCellPrompt,
   buildAiCellUpdatePatch,
   getLatestAssistantText,
 } from "@/features/analysis/ai-cell-message-utils";
+import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
 import type { WorkspaceAnalysisCellEntry } from "@/lib/workspace/workspace-db";

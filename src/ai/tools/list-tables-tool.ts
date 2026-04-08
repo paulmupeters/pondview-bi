@@ -29,7 +29,10 @@ export const listTablesTool = tool({
     `;
 
     const backend = resolveSqlBackend({ dbIdentifier: databasePath });
-    const dbIdentifier = resolveDbIdentifierForSqlBackend(databasePath, backend);
+    const dbIdentifier = resolveDbIdentifierForSqlBackend(
+      databasePath,
+      backend,
+    );
     const result = await runQuery({ sql, dbIdentifier });
 
     const tables = result.rows.map((row) => ({

@@ -3,8 +3,8 @@ import {
   assertWasmCompatibleDbIdentifier,
   classifyDbIdentifier,
   DEFAULT_WASM_DB_IDENTIFIER,
-  resolveDbIdentifierForSqlBackend,
   type RuntimeDeps,
+  resolveDbIdentifierForSqlBackend,
   resolveSelectedSqlBackend,
   resolveSqlBackend,
 } from "@/lib/sql/sql-runtime";
@@ -274,9 +274,9 @@ describe("assertWasmCompatibleDbIdentifier", () => {
 
 describe("resolveDbIdentifierForSqlBackend", () => {
   test("uses runtime defaults for placeholder identifiers", () => {
-    expect(
-      resolveDbIdentifierForSqlBackend(undefined, "duckdb-wasm"),
-    ).toBe(DEFAULT_WASM_DB_IDENTIFIER);
+    expect(resolveDbIdentifierForSqlBackend(undefined, "duckdb-wasm")).toBe(
+      DEFAULT_WASM_DB_IDENTIFIER,
+    );
     expect(
       resolveDbIdentifierForSqlBackend(
         DEFAULT_WASM_DB_IDENTIFIER,

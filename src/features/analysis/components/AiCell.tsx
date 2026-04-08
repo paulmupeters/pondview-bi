@@ -1,8 +1,7 @@
 import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
-import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { useEffect, useRef, useState } from "react";
-import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
 import { Response } from "@/components/ai-elements/response";
+import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -11,6 +10,7 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group";
 import { getMessageText } from "@/features/analysis/ai-cell-message-utils";
+import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { useAnalysisCellAi } from "@/features/analysis/use-analysis-cell-ai";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
 import type { WorkspaceAnalysisCellEntry } from "@/lib/workspace/workspace-db";

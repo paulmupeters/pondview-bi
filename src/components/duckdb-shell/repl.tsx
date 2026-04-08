@@ -34,15 +34,15 @@ import {
 } from "@/lib/connected-tables";
 import { runWithCatalogContext } from "@/lib/duckdb/catalog-context";
 import {
-  getDuckDbHttpHealthStatus,
-  hasDuckDbHttpConfig,
-  hasDuckDbHttpSessionAuth,
-} from "@/lib/duckdb/duckdb-http-browser";
-import {
   buildAttachmentPlan,
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
-import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
+import {
+  getDuckDbHttpHealthStatus,
+  hasDuckDbHttpConfig,
+  hasDuckDbHttpSessionAuth,
+  runDuckDbHttpQuery,
+} from "@/lib/duckdb/duckdb-http-browser";
 import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import type { SourceConnectionConfig } from "@/lib/sources/source-config";
@@ -672,7 +672,10 @@ export function DuckdbRepl({
       <div className="relative flex-1 min-w-0 h-full p-4">
         {/* Toolbar Buttons */}
         <div
-          className={cn("absolute z-20 flex gap-2 text-xs", toolbarInsetClassName)}
+          className={cn(
+            "absolute z-20 flex gap-2 text-xs",
+            toolbarInsetClassName,
+          )}
         >
           {lastResult && showClearButton && (
             <Tooltip>

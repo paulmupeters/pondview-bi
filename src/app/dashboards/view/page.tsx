@@ -44,7 +44,6 @@ import {
   formatFirstRowMeasureValue,
   type MeasurePrimitive,
 } from "@/lib/dashboard/measures";
-import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import type {
   CardConfig,
   Config,

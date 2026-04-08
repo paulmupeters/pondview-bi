@@ -370,9 +370,7 @@ describe("browser-filter-engine", () => {
 
     expect(
       runtimeSqlCalls.filter((sql) =>
-        sql.includes(
-          'CREATE OR REPLACE VIEW "pondview_exec"."orders"',
-        ),
+        sql.includes('CREATE OR REPLACE VIEW "pondview_exec"."orders"'),
       ).length,
     ).toBe(2);
   });
@@ -437,9 +435,7 @@ describe("browser-filter-engine", () => {
 
     expect(
       runtimeSqlCalls.filter((sql) =>
-        sql.includes(
-          'CREATE OR REPLACE VIEW "pondview_exec"."orders"',
-        ),
+        sql.includes('CREATE OR REPLACE VIEW "pondview_exec"."orders"'),
       ).length,
     ).toBe(1);
   });
@@ -536,8 +532,7 @@ describe("browser-filter-engine", () => {
         (call) =>
           call.sql.includes(
             'CREATE OR REPLACE VIEW "pondview_exec"."events"',
-          ) &&
-          call.catalogContext === "warehouse",
+          ) && call.catalogContext === "warehouse",
       ),
     ).toBe(true);
     expect(
@@ -598,9 +593,7 @@ describe("browser-filter-engine", () => {
 
     expect(materializationCall).toBeDefined();
     expect(materializationCall?.sql).toContain("SELECT * FROM duck.astronomy");
-    expect(materializationCall?.sql).not.toContain(
-      '".duck.astronomy',
-    );
+    expect(materializationCall?.sql).not.toContain('".duck.astronomy');
     expect(materializationCall?.catalogContext).toMatch(
       /^pondview_exec_source_astronomy_/,
     );

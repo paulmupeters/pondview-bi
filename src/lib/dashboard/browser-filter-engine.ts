@@ -1,25 +1,25 @@
-import { applyFiltersToSql } from "@/lib/filters/apply-filters";
-import {
-  buildAttachmentPlan,
-  buildDetachStatement,
-} from "@/lib/duckdb/duckdb-attachments";
-import { extractTableReferencesFromSql } from "@/lib/filters/parse-tables";
 import {
   buildDashboardExecutionTableRefs,
+  type DashboardExecutionTableRef,
   EXECUTION_ALIAS_SCHEMA,
   getExecutionAliasRef,
+  type PlannedDashboardExecutionTableRef,
   planDashboardExecutionTableRefs,
   quoteExecutionIdentifier,
-  resolveChartSourceDescriptor,
-  type DashboardExecutionTableRef,
-  type PlannedDashboardExecutionTableRef,
   type RealizedExecutionAliasKind,
+  resolveChartSourceDescriptor,
 } from "@/lib/dashboard/execution-plan";
 import {
   buildDashboardSourceDescriptor,
   type DashboardSourceDescriptor,
 } from "@/lib/dashboard/source-descriptor";
+import {
+  buildAttachmentPlan,
+  buildDetachStatement,
+} from "@/lib/duckdb/duckdb-attachments";
 import { detectExternalConnection } from "@/lib/duckdb/path";
+import { applyFiltersToSql } from "@/lib/filters/apply-filters";
+import { extractTableReferencesFromSql } from "@/lib/filters/parse-tables";
 import { canonicalTable, type JoinDefinition } from "@/lib/joins/graph";
 import { runQuery } from "@/lib/sql/run-query";
 import { resolveSqlRuntimeFingerprint } from "@/lib/sql/runtime-fingerprint";
@@ -37,7 +37,8 @@ import {
 } from "@/lib/workspace/dashboard-repo";
 
 export type MaterializedTableRef = DashboardExecutionTableRef;
-export type MaterializationStrategy = PlannedDashboardExecutionTableRef["strategy"];
+export type MaterializationStrategy =
+  PlannedDashboardExecutionTableRef["strategy"];
 export type MaterializedAliasKind = RealizedExecutionAliasKind;
 export type PlannedMaterializedTableRef = PlannedDashboardExecutionTableRef;
 
@@ -102,7 +103,9 @@ function resolveCatalogContextForReference(
   reference: string,
   catalogContext?: string | null,
 ): string | null {
-  return referencesExecutionAliasSchema(reference) ? null : (catalogContext ?? null);
+  return referencesExecutionAliasSchema(reference)
+    ? null
+    : (catalogContext ?? null);
 }
 
 function isMissingCatalogContextError(error: unknown): boolean {
@@ -213,10 +216,7 @@ function buildMaterializationSourceReference(
       return `${attachedCatalogRef}.${parts.slice(1).join(".")}`;
     }
 
-    if (
-      parts.length === 2 &&
-      (first === "main" || first === "public")
-    ) {
+    if (parts.length === 2 && (first === "main" || first === "public")) {
       return `${attachedCatalogRef}.${parts[1]}`;
     }
 
@@ -486,13 +486,14 @@ export async function executeDashboardChartsWithFilters(
                 sourceDescriptor.catalogContext ?? null,
               )
             : (sourceDescriptor.catalogContext ?? null);
-        const rows = shouldExecuteFilteredSql || shouldExecutePlannedSql
-          ? ((await deps.runRuntimeSql(
-              sqlToExecute,
-              backend,
-              executionCatalogContext,
-            )) as Result[])
-          : await deps.runChartSql(chart, backend);
+        const rows =
+          shouldExecuteFilteredSql || shouldExecutePlannedSql
+            ? ((await deps.runRuntimeSql(
+                sqlToExecute,
+                backend,
+                executionCatalogContext,
+              )) as Result[])
+            : await deps.runChartSql(chart, backend);
 
         rowsByChartId[chart.id] = rows;
         metadataByChartId[chart.id] = {
@@ -738,11 +739,10 @@ export async function loadDashboardDimensionValues(
     materialization.resolvedRefByTable.get(parsedField.tableName) ??
     sourceRefByTable.get(parsedField.tableName) ??
     quoteExecutionIdentifier(parsedField.tableName);
-  const preferredCatalogContext =
-    resolveCatalogContextForReference(
-      preferredBaseRef,
-      sourceCatalogContextByTable.get(parsedField.tableName) ?? null,
-    );
+  const preferredCatalogContext = resolveCatalogContextForReference(
+    preferredBaseRef,
+    sourceCatalogContextByTable.get(parsedField.tableName) ?? null,
+  );
   const filteredBaseSql =
     `SELECT ${quoteIdent(parsedField.columnName)} AS "value"\n` +
     `FROM ${preferredBaseRef}`;
@@ -1105,7 +1105,10 @@ async function runChartSql(
   backend: SqlBackend,
 ): Promise<Result[]> {
   const backendPreference = chart.sqlBackend ?? backend;
-  const sourceDescriptor = resolveChartSourceDescriptor(chart, backendPreference);
+  const sourceDescriptor = resolveChartSourceDescriptor(
+    chart,
+    backendPreference,
+  );
   const dbIdentifier = sourceDescriptor.dbIdentifier ?? undefined;
 
   try {
@@ -1144,8 +1147,10 @@ function resolveDashboardBackend(
   const explicitBackends = Array.from(
     new Set(
       charts
-        .map((chart) =>
-          resolveChartSourceDescriptor(chart, deps.resolveBackend()).runtimeBackend,
+        .map(
+          (chart) =>
+            resolveChartSourceDescriptor(chart, deps.resolveBackend())
+              .runtimeBackend,
         )
         .filter((backend): backend is SqlBackend => Boolean(backend)),
     ),

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { MouseEvent } from "react";
 import { useEffect, useState } from "react";
+import { PondviewLogo } from "@/components/pondview-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +16,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { PondviewLogo } from "@/components/pondview-logo";
 import { useChatHistory } from "@/hooks/use-chat-history";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,6 @@ import {
 
 const railButtonClassName =
   "h-auto w-full flex-col gap-0 sm:gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-tight";
-
 
 interface AppSidebarProps {
   initialChats?: ChatHistoryEntry[];

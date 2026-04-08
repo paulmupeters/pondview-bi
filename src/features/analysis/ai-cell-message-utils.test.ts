@@ -3,8 +3,8 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   buildAiCellPrompt,
   buildAiCellUpdatePatch,
-  getMessageText,
   getLatestAssistantText,
+  getMessageText,
 } from "@/features/analysis/ai-cell-message-utils";
 
 describe("ai cell message utils", () => {

@@ -2,17 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRightPanelResize } from "@/components/chat/hooks/use-right-panel-resize";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
-import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { SqlConsoleApi } from "@/components/sql-console";
 import type { VisualizationEntry } from "@/components/visualization-entry";
 import { VisualizationPanel } from "@/components/visualization-panel";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
-import {
-  DEFAULT_WASM_DB_IDENTIFIER,
-  type SqlBackend,
-} from "@/lib/sql/sql-runtime";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -42,7 +38,9 @@ export default function SqlEditorPage() {
     string | null
   >(null);
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false);
-  const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(null);
+  const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(
+    null,
+  );
   const [sqlResult, setSqlResult] = useState<{
     sql: string;
     rows: Record<string, unknown>[];
@@ -135,15 +133,14 @@ export default function SqlEditorPage() {
           dbIdentifier: sqlResult.dbIdentifier,
           catalogContext: sqlResult.catalogContext ?? selectedCatalogContext,
           sqlBackend: sqlResult.backend,
-          sourceDescriptor:
-            sqlResult.backend
-              ? buildDashboardSourceDescriptor({
-                  runtimeBackend: sqlResult.backend,
-                  dbIdentifier: sqlResult.dbIdentifier,
-                  catalogContext:
-                    sqlResult.catalogContext ?? selectedCatalogContext ?? null,
-                })
-              : null,
+          sourceDescriptor: sqlResult.backend
+            ? buildDashboardSourceDescriptor({
+                runtimeBackend: sqlResult.backend,
+                dbIdentifier: sqlResult.dbIdentifier,
+                catalogContext:
+                  sqlResult.catalogContext ?? selectedCatalogContext ?? null,
+              })
+            : null,
           executionTime: sqlResult.durationMs,
           rowCount: sqlResult.rows.length,
           columns: sqlResult.columns,
@@ -175,7 +172,8 @@ export default function SqlEditorPage() {
     sqlResult,
   ]);
 
-  const activeVisualizationId = visualizations.length > 0 ? VISUALIZATION_ID : null;
+  const activeVisualizationId =
+    visualizations.length > 0 ? VISUALIZATION_ID : null;
 
   const handleInsertTableIntoSql = useCallback(
     (payload: ExplorerInsertPayload) => {

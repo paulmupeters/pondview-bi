@@ -34,7 +34,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -44,14 +43,14 @@ import {
 } from "@/components/ui/select";
 import type { ArtifactData } from "@/hooks/types";
 import { useArtifacts } from "@/hooks/use-artifacts";
-import { readJoinDefsFromStorage } from "@/lib/joins/browser-storage";
 import {
   buildDashboardSourceDescriptor,
+  type DashboardSourceDescriptor,
   getDashboardSourceDescriptorCatalogContext,
   getDashboardSourceDescriptorDbIdentifier,
   getDashboardSourceDescriptorRuntimeBackend,
-  type DashboardSourceDescriptor,
 } from "@/lib/dashboard/source-descriptor";
+import { readJoinDefsFromStorage } from "@/lib/joins/browser-storage";
 import type { JoinKind } from "@/lib/joins/graph";
 import { runQuery } from "@/lib/sql/run-query";
 import {

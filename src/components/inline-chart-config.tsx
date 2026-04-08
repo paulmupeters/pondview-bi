@@ -1,10 +1,5 @@
+import { AreaChart, BarChart3, LineChart, PieChart } from "lucide-react";
 import { useMemo } from "react";
-import {
-  BarChart3,
-  LineChart,
-  AreaChart,
-  PieChart,
-} from "lucide-react";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Separator } from "./ui/separator";
@@ -692,16 +687,18 @@ export function InlineChartConfig({
     <div className="border-b border-border bg-popover">
       <div className="p-4 py-8 grid grid-cols-2 xxl:grid-cols-4 gap-4">
         <div>
-          <label className="block text-[10px] text-muted-foreground mb-1 tracking-wider font-bold uppercase">
+          <div className="block text-[10px] text-muted-foreground mb-1 tracking-wider font-bold uppercase">
             Visualization
-          </label>
+          </div>
           <div className="flex gap-1 items-center h-[26px]">
-            {([
-              { type: "line" as const, icon: LineChart, label: "Line" },
-              { type: "bar" as const, icon: BarChart3, label: "Bar" },
-              { type: "area" as const, icon: AreaChart, label: "Area" },
-              { type: "pie" as const, icon: PieChart, label: "Pie" },
-            ] as const).map(({ type, icon: Icon, label }) => (
+            {(
+              [
+                { type: "line" as const, icon: LineChart, label: "Line" },
+                { type: "bar" as const, icon: BarChart3, label: "Bar" },
+                { type: "area" as const, icon: AreaChart, label: "Area" },
+                { type: "pie" as const, icon: PieChart, label: "Pie" },
+              ] as const
+            ).map(({ type, icon: Icon, label }) => (
               <button
                 key={type}
                 type="button"

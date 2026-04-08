@@ -1,18 +1,14 @@
 import { nanoid } from "nanoid";
-import { readConnectedTablesFromStorage } from "@/lib/connected-tables";
-import {
-  quoteIdentifier,
-  quoteString,
-} from "@/lib/duckdb/duckdb-attachments";
 import {
   buildDashboardSourceDescriptor,
+  type DashboardSourceDescriptor,
   getDashboardSourceDescriptorCatalogContext,
   getDashboardSourceDescriptorDbIdentifier,
   getDashboardSourceDescriptorRuntimeBackend,
   parseDashboardSourceDescriptorJson,
   serializeDashboardSourceDescriptor,
-  type DashboardSourceDescriptor,
 } from "@/lib/dashboard/source-descriptor";
+import { quoteIdentifier, quoteString } from "@/lib/duckdb/duckdb-attachments";
 import { extractTableReferencesFromSql } from "@/lib/filters/parse-tables";
 import { readJoinDefsFromStorage } from "@/lib/joins/browser-storage";
 import {
@@ -199,7 +195,7 @@ function createRuntimeDefaultTarget(
   };
 }
 
-function createMotherDuckTarget(
+function _createMotherDuckTarget(
   dbIdentifier: string,
   sqlBackend: Extract<SqlBackend, "bridge" | "duckdb-http">,
 ): DashboardStorageTarget {
@@ -221,12 +217,12 @@ function storedDbIdentifierForTarget(
   return target.dbIdentifier;
 }
 
-function dashboardSnapshotSchema(dashboardId: string): string {
+function _dashboardSnapshotSchema(dashboardId: string): string {
   const suffix = dashboardId.replace(/[^A-Za-z0-9_]/g, "_");
   return `pondview_snapshot_${suffix}`;
 }
 
-function buildMaterializationTableRefs(
+function _buildMaterializationTableRefs(
   sqlStatements: string[],
   joinDefs: JoinDefinition[],
 ): MaterializedTableRef[] {
@@ -264,7 +260,7 @@ function buildMaterializationTableRefs(
     .sort((left, right) => left.tableName.localeCompare(right.tableName));
 }
 
-function rewriteSqlToSnapshotTables(
+function _rewriteSqlToSnapshotTables(
   sql: string,
   tableRefs: MaterializedTableRef[],
   snapshotSchema: string,
@@ -301,7 +297,9 @@ export function resolveDashboardExternalConnection(input: {
   }
 
   const sourceDbIdentifier = toNullableString(input.sourceDbIdentifier);
-  return sourceDbIdentifier ? detectExternalConnection(sourceDbIdentifier) : null;
+  return sourceDbIdentifier
+    ? detectExternalConnection(sourceDbIdentifier)
+    : null;
 }
 
 export type DashboardSourceMode = "runtime-direct" | "external-materialize";
@@ -437,7 +435,8 @@ function normalizeChartRow(row: Record<string, unknown>): ChartRecord | null {
       serializeDashboardSourceDescriptor(sourceDescriptor) ?? null,
     snapshotId: toNullableString(row.snapshot_id),
     dbIdentifier: getDashboardSourceDescriptorDbIdentifier(sourceDescriptor),
-    catalogContext: getDashboardSourceDescriptorCatalogContext(sourceDescriptor),
+    catalogContext:
+      getDashboardSourceDescriptorCatalogContext(sourceDescriptor),
     sqlBackend: getDashboardSourceDescriptorRuntimeBackend(sourceDescriptor),
     chartConfigJson,
     semanticQueryJson: toNullableString(row.semantic_query_json),
@@ -446,7 +445,8 @@ function normalizeChartRow(row: Record<string, unknown>): ChartRecord | null {
     createdAt: toNumber(row.created_at, Date.now()),
     updatedAt: toNumber(row.updated_at, Date.now()),
     sourceSql: sql,
-    sourceDbIdentifier: getDashboardSourceDescriptorDbIdentifier(sourceDescriptor),
+    sourceDbIdentifier:
+      getDashboardSourceDescriptorDbIdentifier(sourceDescriptor),
     sourceCatalogContext:
       getDashboardSourceDescriptorCatalogContext(sourceDescriptor),
     sourceSqlBackend:
@@ -487,12 +487,14 @@ function normalizeMeasureRow(
       serializeDashboardSourceDescriptor(sourceDescriptor) ?? null,
     snapshotId: toNullableString(row.snapshot_id),
     dbIdentifier: getDashboardSourceDescriptorDbIdentifier(sourceDescriptor),
-    catalogContext: getDashboardSourceDescriptorCatalogContext(sourceDescriptor),
+    catalogContext:
+      getDashboardSourceDescriptorCatalogContext(sourceDescriptor),
     sqlBackend: getDashboardSourceDescriptorRuntimeBackend(sourceDescriptor),
     createdAt: toNumber(row.created_at, Date.now()),
     updatedAt: toNumber(row.updated_at, Date.now()),
     sourceSql: sql,
-    sourceDbIdentifier: getDashboardSourceDescriptorDbIdentifier(sourceDescriptor),
+    sourceDbIdentifier:
+      getDashboardSourceDescriptorDbIdentifier(sourceDescriptor),
     sourceCatalogContext:
       getDashboardSourceDescriptorCatalogContext(sourceDescriptor),
     sourceSqlBackend:
@@ -565,7 +567,7 @@ function buildRuntimeProbeSql(sql: string): string | null {
   return normalizedSql.length > 0 ? `EXPLAIN ${normalizedSql};` : null;
 }
 
-async function canExecuteSqlInTargetRuntime(
+async function _canExecuteSqlInTargetRuntime(
   target: DashboardStorageTarget,
   sql: string,
   catalogContext?: string | null,
@@ -1253,7 +1255,8 @@ async function buildPreparedSqlPayload(
       serializeDashboardSourceDescriptor(sourceDescriptor) ?? null,
     snapshotId: null,
     dbIdentifier: getDashboardSourceDescriptorDbIdentifier(sourceDescriptor),
-    catalogContext: getDashboardSourceDescriptorCatalogContext(sourceDescriptor),
+    catalogContext:
+      getDashboardSourceDescriptorCatalogContext(sourceDescriptor),
     sqlBackend:
       getDashboardSourceDescriptorRuntimeBackend(sourceDescriptor) ??
       target.sqlBackend,
@@ -1480,11 +1483,11 @@ export class DashboardStorageService {
     }
 
     const now = input.now ?? Date.now();
-    const prepared = await buildPreparedSqlPayload(
-      resolved.target,
-      input,
+    const prepared = await buildPreparedSqlPayload(resolved.target, input);
+    assertDashboardSourceCompatible(
+      resolved.dashboard,
+      prepared.sourceDescriptor,
     );
-    assertDashboardSourceCompatible(resolved.dashboard, prepared.sourceDescriptor);
 
     await upsertMeasureRecord(resolved.target, {
       id: nanoid(),
@@ -1546,30 +1549,25 @@ export class DashboardStorageService {
       input.dbIdentifier !== undefined ||
       input.catalogContext !== undefined ||
       input.sqlBackend !== undefined
-        ? await buildPreparedSqlPayload(
-            resolved.target,
-            {
-              sql: input.sql ?? resolved.measure.sql,
-              sourceDescriptor:
-                input.sourceDescriptor ??
-                resolved.measure.sourceDescriptor ??
-                buildDashboardSourceDescriptor({
-                  runtimeBackend:
-                    resolved.measure.sqlBackend ?? resolved.target.sqlBackend,
-                  dbIdentifier: resolved.measure.dbIdentifier,
-                  catalogContext: resolved.measure.catalogContext ?? null,
-                }),
-              dbIdentifier: input.dbIdentifier,
-              catalogContext: input.catalogContext,
-              sqlBackend: input.sqlBackend,
-            },
-          )
+        ? await buildPreparedSqlPayload(resolved.target, {
+            sql: input.sql ?? resolved.measure.sql,
+            sourceDescriptor:
+              input.sourceDescriptor ??
+              resolved.measure.sourceDescriptor ??
+              buildDashboardSourceDescriptor({
+                runtimeBackend:
+                  resolved.measure.sqlBackend ?? resolved.target.sqlBackend,
+                dbIdentifier: resolved.measure.dbIdentifier,
+                catalogContext: resolved.measure.catalogContext ?? null,
+              }),
+            dbIdentifier: input.dbIdentifier,
+            catalogContext: input.catalogContext,
+            sqlBackend: input.sqlBackend,
+          })
         : null;
     assertDashboardSourceCompatible(
       dashboardResolved.dashboard,
-      prepared?.sourceDescriptor ??
-        resolved.measure.sourceDescriptor ??
-        null,
+      prepared?.sourceDescriptor ?? resolved.measure.sourceDescriptor ?? null,
     );
 
     await upsertMeasureRecord(resolved.target, {
@@ -1623,8 +1621,7 @@ export class DashboardStorageService {
           prepared?.sourceDescriptorJson ?? chart.sourceDescriptorJson,
         snapshotId: prepared?.snapshotId ?? chart.snapshotId,
         sourceSql: prepared?.sql ?? chart.sourceSql,
-        sourceDbIdentifier:
-          prepared?.dbIdentifier ?? chart.sourceDbIdentifier,
+        sourceDbIdentifier: prepared?.dbIdentifier ?? chart.sourceDbIdentifier,
         sourceCatalogContext:
           prepared?.catalogContext ?? chart.sourceCatalogContext,
         sourceSqlBackend: prepared?.sqlBackend ?? chart.sourceSqlBackend,
@@ -1660,11 +1657,11 @@ export class DashboardStorageService {
       resolved.target,
       input.dashboardId,
     );
-    const prepared = await buildPreparedSqlPayload(
-      resolved.target,
-      input,
+    const prepared = await buildPreparedSqlPayload(resolved.target, input);
+    assertDashboardSourceCompatible(
+      resolved.dashboard,
+      prepared.sourceDescriptor,
     );
-    assertDashboardSourceCompatible(resolved.dashboard, prepared.sourceDescriptor);
 
     const id = nanoid();
     const maxPosition = charts.reduce(
