@@ -18,7 +18,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",
     "@ai-sdk/open-responses": "^1.0.6",
-    "@ai-sdk/openai": "^3.0.41",
+    "@ai-sdk/openai": "^3.0.52",
     "@ai-sdk/react": "^3.0.155",
     "@codemirror/lang-sql": "^6.10.0",
     "@codemirror/state": "^6.6.0",
