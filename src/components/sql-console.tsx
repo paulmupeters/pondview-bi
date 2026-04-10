@@ -398,18 +398,30 @@ export function SqlConsole({
     };
   }, [handleRunQuery]);
 
+  // Use refs for callbacks so these effects only fire when the actual state
+  // changes, not when a parent re-creates a callback reference. Without this,
+  // changing `cell.sqlDraft` (which recreates `handleQueryChange` in SqlCell)
+  // would cause SqlConsole to call onQueryChangeAction with stale editor
+  // content, overwriting the new sqlDraft and creating a toggle loop.
+  const onQueryChangeActionRef = useRef(onQueryChangeAction);
+  const onNoticeActionRef = useRef(onNoticeAction);
+  const onRunStateChangeActionRef = useRef(onRunStateChangeAction);
+  onQueryChangeActionRef.current = onQueryChangeAction;
+  onNoticeActionRef.current = onNoticeAction;
+  onRunStateChangeActionRef.current = onRunStateChangeAction;
+
   useEffect(() => {
     latestSqlRef.current = sql;
-    onQueryChangeAction?.(sql);
-  }, [onQueryChangeAction, sql]);
+    onQueryChangeActionRef.current?.(sql);
+  }, [sql]);
 
   useEffect(() => {
-    onNoticeAction?.(notice);
-  }, [notice, onNoticeAction]);
+    onNoticeActionRef.current?.(notice);
+  }, [notice]);
 
   useEffect(() => {
-    onRunStateChangeAction?.(isRunning);
-  }, [isRunning, onRunStateChangeAction]);
+    onRunStateChangeActionRef.current?.(isRunning);
+  }, [isRunning]);
 
   const apiRef = useRef<SqlConsoleApi | null>(null);
   if (apiRef.current === null) {
