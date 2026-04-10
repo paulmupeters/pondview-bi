@@ -3,16 +3,8 @@ import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
-import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
-import type { ConnectedTable } from "@/lib/connected-tables";
-import { removeConnectedTable } from "@/lib/connected-tables";
-import { buildDetachStatement } from "@/lib/duckdb/duckdb-attachments";
-import {
-  refreshDuckDbHttpHealth,
-  runDuckDbHttpQuery,
-} from "@/lib/duckdb/duckdb-http-browser";
+import { refreshDuckDbHttpHealth } from "@/lib/duckdb/duckdb-http-browser";
 import {
   clearJoinDefsInStorage,
   readJoinDefsRawFromStorage,
@@ -26,56 +18,22 @@ import {
   useResolvedSqlBackend,
   useSelectedSqlBackend,
 } from "@/lib/sql/use-sql-backend";
-import { useTheme } from "@/lib/theme-provider";
-
-import Image from "@/vite/next-image";
-
-function isHiddenMetadataTableReference(value: string | undefined): boolean {
-  const trimmedValue = value?.trim();
-  if (!trimmedValue) {
-    return false;
-  }
-
-  const [schemaCandidate] = trimmedValue.split(".");
-  return isHiddenRuntimeSchema(schemaCandidate ?? "");
-}
-
-function isVisibleConnectedEntry(entry: ConnectedTable): boolean {
-  if (entry.schema && isHiddenRuntimeSchema(entry.schema)) {
-    return false;
-  }
-
-  if (entry.table && isHiddenMetadataTableReference(entry.table)) {
-    return false;
-  }
-
-  if (
-    entry.tables?.some((tableName) => isHiddenMetadataTableReference(tableName))
-  ) {
-    return false;
-  }
-
-  return true;
-}
 
 export default function ViewDataPage() {
-  const tables = useConnectedTables();
-
   const bridgeRuntimeState = useBridgeRuntimeState();
   const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
   const duckDbHttpConfig = useDuckDbHttpConfig();
   const selectedSqlBackend = useSelectedSqlBackend();
   const effectiveSqlBackend = useResolvedSqlBackend();
+  const [runtimeRefreshToken, setRuntimeRefreshToken] = useState(0);
   const {
     tables: duckdbTables,
     isLoading: isDuckdbTablesLoading,
     error: duckdbTablesError,
     isConfigured: isDuckdbHttpConfigured,
     connectionInfo: duckdbHttpConnectionInfo,
-  } = useDuckdbHttpTables(effectiveSqlBackend);
+  } = useDuckdbHttpTables(effectiveSqlBackend, runtimeRefreshToken);
 
-  const { theme } = useTheme();
-  const isDarkMode = theme === "dark";
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [joinDefsRaw, setJoinDefsRaw] = useState("[]");
   const [joinDefsError, setJoinDefsError] = useState<string | null>(null);
@@ -152,43 +110,6 @@ export default function ViewDataPage() {
       }))
       .sort((a, b) => a.schema.localeCompare(b.schema));
   }, [duckdbTables]);
-
-  const groupedConnectedSources = useMemo(() => {
-    const grouped = new Map<string, ConnectedTable[]>();
-    for (const table of tables.filter(isVisibleConnectedEntry)) {
-      const key =
-        table.connectionId ?? table.databasePath ?? table.attachAs ?? "source";
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.push(table);
-      } else {
-        grouped.set(key, [table]);
-      }
-    }
-
-    return Array.from(grouped.entries()).map(([key, entries]) => ({
-      key,
-      entries,
-    }));
-  }, [tables]);
-
-  const getDatabaseLogo = (dbType: string): string | null => {
-    if (dbType === "duckdb") {
-      return isDarkMode
-        ? "/DuckDB_icon-darkmode.svg"
-        : "/DuckDB_icon-lightmode.svg";
-    }
-    if (dbType === "postgres") {
-      return "/Postgresql_elephant.png";
-    }
-    if (dbType === "mysql") {
-      return isDarkMode ? "/mysql-icon-dark.svg" : "/mysql-icon-light.svg";
-    }
-    if (dbType === "motherduck") {
-      return "/sources/motherduck.png";
-    }
-    return null;
-  };
 
   const remoteRuntimeLabel =
     effectiveSqlBackend === "bridge" ? "Bridge" : "DuckDB over HTTP";
@@ -386,117 +307,6 @@ export default function ViewDataPage() {
                 </CardContent>
               </Card>
             </section>
-
-            <section className="space-y-3">
-              <h2 className="text-base font-semibold text-foreground">
-                External Connected Sources
-              </h2>
-              {groupedConnectedSources.length === 0 ? (
-                <Card>
-                  <CardContent className="pt-6 text-sm text-muted-foreground">
-                    No locally connected sources yet.
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid gap-3">
-                  {groupedConnectedSources.map((group) => {
-                    const first = group.entries[0];
-                    const logo = getDatabaseLogo(first.type ?? "");
-                    return (
-                      <Card key={group.key}>
-                        <CardHeader>
-                          <CardTitle className="flex items-center gap-2 text-sm">
-                            {logo ? (
-                              <Image
-                                src={logo}
-                                alt={first.type ?? "source"}
-                                width={20}
-                                height={20}
-                              />
-                            ) : null}
-                            <span>
-                              {first.databaseName ??
-                                first.databasePath ??
-                                "Source"}
-                            </span>
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          {group.entries.map((entry) => (
-                            <div
-                              key={`${entry.type}-${entry.databasePath}-${entry.schema ?? ""}-${entry.table ?? ""}`}
-                              className="rounded-md border p-3"
-                            >
-                              <p className="text-xs text-muted-foreground">
-                                {entry.type}
-                              </p>
-                              <p className="text-sm font-medium">
-                                {entry.schema ||
-                                  entry.table ||
-                                  entry.attachAs ||
-                                  "(unspecified)"}
-                              </p>
-                              {entry.tables && entry.tables.length > 0 ? (
-                                <p className="text-xs text-muted-foreground">
-                                  Tables: {entry.tables.join(", ")}
-                                </p>
-                              ) : null}
-                              {entry.description ? (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {entry.description}
-                                </p>
-                              ) : null}
-                              <div className="mt-2 flex justify-end">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={async () => {
-                                    if (
-                                      confirm(
-                                        "Remove this connected source entry?",
-                                      )
-                                    ) {
-                                      // Best-effort remote detach before removing local metadata
-                                      if (
-                                        entry.attachAs &&
-                                        effectiveSqlBackend !== "duckdb-wasm"
-                                      ) {
-                                        try {
-                                          const detachSql =
-                                            buildDetachStatement(
-                                              entry.attachAs,
-                                              { ifExists: true },
-                                            );
-                                          if (
-                                            effectiveSqlBackend === "bridge"
-                                          ) {
-                                            await runBridgeQuery(detachSql);
-                                          } else if (
-                                            effectiveSqlBackend ===
-                                            "duckdb-http"
-                                          ) {
-                                            await runDuckDbHttpQuery(detachSql);
-                                          }
-                                        } catch {
-                                          // Best-effort only; removal proceeds regardless
-                                        }
-                                      }
-                                      await removeConnectedTable(entry);
-                                    }
-                                  }}
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
           </div>
         </div>
       </div>
@@ -504,6 +314,9 @@ export default function ViewDataPage() {
       <ConnectDataDialog
         open={isConnectDialogOpen}
         onOpenChange={setIsConnectDialogOpen}
+        onConnected={() =>
+          setRuntimeRefreshToken((currentValue) => currentValue + 1)
+        }
         effectiveSqlBackend={effectiveSqlBackend}
       />
     </div>

@@ -8,7 +8,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
-import { appendConnectedTable } from "@/lib/connected-tables";
 import {
   buildAttachmentPlan,
   buildDetachStatement,
@@ -22,6 +21,7 @@ import {
   buildPostgresConnectionString,
   type PostgresUrlComponents,
 } from "@/lib/duckdb/path";
+import { sanitizeSqlErrorMessage } from "@/lib/sql/error-sanitizer";
 import { isHiddenRuntimeSchema } from "@/lib/sql/runtime-table-schemas";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
@@ -104,6 +104,7 @@ const resolveDuckdbExtension = (dbType: DatabaseType): string | undefined => {
 type ConnectDataDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onConnected?: () => void;
   initialSelectedDatabase?: DatabaseType;
   initialDatabasePath?: string;
   effectiveSqlBackend?: SqlBackend;
@@ -159,6 +160,7 @@ async function runRemoteSql(
 export function ConnectDataDialog({
   open,
   onOpenChange,
+  onConnected,
   initialSelectedDatabase,
   initialDatabasePath,
   effectiveSqlBackend = "duckdb-wasm",
@@ -190,10 +192,8 @@ export function ConnectDataDialog({
   const [schemas, setSchemas] = useState<string[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>("");
   const [schemaTablesPreview, setSchemaTablesPreview] = useState<string[]>([]);
-  const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
   const [isLoadingSchemas, setIsLoadingSchemas] = useState(false);
   const [isLoadingTables, setIsLoadingTables] = useState(false);
-  const [tableDescription, setTableDescription] = useState("");
   const [hasConnected, setHasConnected] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const motherDuckAttachPromiseRef = useRef<Promise<void> | null>(null);
@@ -223,8 +223,6 @@ export function ConnectDataDialog({
     setSchemas([]);
     setSelectedSchema("");
     setSchemaTablesPreview([]);
-    setSelectedTables(new Set());
-    setTableDescription("");
     setHasConnected(false);
     setErrorMessage(null);
     motherDuckAttachPromiseRef.current = null;
@@ -305,27 +303,6 @@ export function ConnectDataDialog({
     return `mysql://${authPart}${host}:${port}/${database}`;
   }, [mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase]);
 
-  const extractDatabaseName = useCallback(
-    (dbType: DatabaseType, dbPath: string): string => {
-      if (dbType === "postgres") {
-        return postgresDatabase.trim() || "postgres";
-      }
-      if (dbType === "mysql") {
-        return mysqlDatabase.trim() || "mysql";
-      }
-      if (dbType === "extension") {
-        return (
-          customAttachAlias.trim() || customExtensionName.trim() || "extension"
-        );
-      }
-      if (dbType === "motherduck") {
-        return extractMotherDuckDatabaseName(dbPath) || "motherduck";
-      }
-      return dbPath.trim() || dbType || "database";
-    },
-    [postgresDatabase, mysqlDatabase, customAttachAlias, customExtensionName],
-  );
-
   const runMotherDuckAttachSequence = useCallback(
     async (databaseName = databasePath): Promise<void> => {
       const connection = buildMotherDuckConnection(databaseName);
@@ -366,11 +343,12 @@ export function ConnectDataDialog({
       );
       const tableNames = extractMotherDuckTableNames(rows);
       setSchemaTablesPreview(tableNames);
-      setSelectedTables(new Set());
       setHasConnected(true);
       setMotherDuckConnectionState("confirmed");
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e ?? "");
+      const msg = sanitizeSqlErrorMessage(
+        e instanceof Error ? e.message : String(e ?? ""),
+      );
       setErrorMessage(
         msg || "Failed to confirm MotherDuck authentication or load tables.",
       );
@@ -442,7 +420,6 @@ export function ConnectDataDialog({
         setSchemas([]);
         setSelectedSchema("");
         setSchemaTablesPreview([]);
-        setSelectedTables(new Set());
         setHasConnected(false);
         setMotherDuckConnectionState("auth_pending");
 
@@ -450,7 +427,9 @@ export function ConnectDataDialog({
         motherDuckAttachPromiseRef.current = attachPromise;
         void attachPromise
           .catch((e: unknown) => {
-            const msg = e instanceof Error ? e.message : String(e ?? "");
+            const msg = sanitizeSqlErrorMessage(
+              e instanceof Error ? e.message : String(e ?? ""),
+            );
             setMotherDuckConnectionState("idle");
             setErrorMessage(
               msg || "Failed to initialize MotherDuck authentication flow.",
@@ -512,7 +491,9 @@ export function ConnectDataDialog({
         // Best-effort detach; ignore errors
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e ?? "");
+      const msg = sanitizeSqlErrorMessage(
+        e instanceof Error ? e.message : String(e ?? ""),
+      );
       setErrorMessage(msg || "Failed to connect or fetch schemas.");
     } finally {
       setIsLoadingSchemas(false);
@@ -542,7 +523,6 @@ export function ConnectDataDialog({
     async (schema: string) => {
       if (isWasmActive) return;
       setSelectedSchema(schema);
-      setSelectedTables(new Set());
       try {
         setIsLoadingTables(true);
 
@@ -597,7 +577,9 @@ export function ConnectDataDialog({
         }
       } catch (e: unknown) {
         setSchemaTablesPreview([]);
-        const msg = e instanceof Error ? e.message : String(e ?? "");
+        const msg = sanitizeSqlErrorMessage(
+          e instanceof Error ? e.message : String(e ?? ""),
+        );
         setErrorMessage(`Failed to load tables: ${msg}`);
       } finally {
         setIsLoadingTables(false);
@@ -619,188 +601,86 @@ export function ConnectDataDialog({
 
   const handleAddTable = useCallback(async () => {
     if (isWasmActive) return;
-
-    const requiresSchema = requiresSchemaSelection(selectedDatabase);
-
-    if (selectedDatabase === "postgres") {
-      if (
-        !postgresHost.trim() ||
-        !postgresUser.trim() ||
-        !postgresDatabase.trim() ||
-        (requiresSchema && !selectedSchema.trim())
-      ) {
-        return;
-      }
-    } else if (selectedDatabase === "mysql") {
-      if (
-        !mysqlHost.trim() ||
-        !mysqlUser.trim() ||
-        !mysqlDatabase.trim() ||
-        (requiresSchema && !selectedSchema.trim())
-      ) {
-        return;
-      }
-    } else if (selectedDatabase === "sqlite") {
-      if (!sqlitePath.trim() || !sqliteAlias.trim()) return;
-    } else if (selectedDatabase === "extension") {
-      if (
-        !customExtensionName.trim() ||
-        !customAttachStatement.trim() ||
-        !customAttachAlias.trim()
-      )
-        return;
-    } else if (
-      !selectedDatabase ||
-      (requiresSchema && !selectedSchema.trim()) ||
-      !databasePath.trim()
-    ) {
+    if (!hasConnected || !selectedDatabase) {
       return;
     }
 
     try {
-      let dbPath: string;
-      if (selectedDatabase === "postgres") {
-        dbPath = buildPostgresConnectionStringFromFields();
-      } else if (selectedDatabase === "mysql") {
-        dbPath = buildMysqlConnectionStringFromFields();
-      } else if (selectedDatabase === "sqlite") {
-        dbPath = `sqlite:${sqlitePath.trim()}`;
-      } else if (selectedDatabase === "extension") {
-        dbPath = customAttachStatement.trim();
-      } else if (selectedDatabase === "motherduck") {
-        dbPath = buildMotherDuckDbIdentifier();
-      } else {
-        dbPath = databasePath.trim();
+      if (selectedDatabase !== "motherduck") {
+        let dbPath: string;
+        if (selectedDatabase === "postgres") {
+          dbPath = buildPostgresConnectionStringFromFields();
+        } else if (selectedDatabase === "mysql") {
+          dbPath = buildMysqlConnectionStringFromFields();
+        } else if (selectedDatabase === "sqlite") {
+          dbPath = `sqlite:${sqlitePath.trim()}`;
+        } else if (selectedDatabase === "extension") {
+          dbPath = customAttachStatement.trim();
+        } else {
+          dbPath = databasePath.trim();
+        }
+
+        const extension = resolveDuckdbExtension(selectedDatabase);
+        const connection = {
+          type: selectedDatabase ?? "duckdb",
+          identifier: dbPath,
+          alias:
+            selectedDatabase === "postgres"
+              ? postgresDatabase.trim() || "source"
+              : selectedDatabase === "mysql"
+                ? mysqlDatabase.trim() || "source"
+                : selectedDatabase === "sqlite"
+                  ? sqliteAlias.trim() || "source"
+                  : "source",
+          readOnly: true,
+          duckdbExtension: extension,
+        };
+
+        const plan = buildAttachmentPlan(connection);
+        try {
+          await runRemoteSql(
+            effectiveSqlBackend,
+            buildDetachStatement(plan.alias, { ifExists: true }),
+          );
+        } catch {
+          // Best-effort cleanup before the final attach.
+        }
+
+        for (const stmt of plan.statements) {
+          await runRemoteSql(effectiveSqlBackend, stmt);
+        }
       }
 
-      const attachAs =
-        selectedDatabase === "extension"
-          ? customAttachAlias.trim()
-          : selectedDatabase === "sqlite"
-            ? sqliteAlias.trim()
-            : selectedDatabase === "motherduck"
-              ? MOTHERDUCK_ALIAS
-              : selectedDatabase === "postgres"
-                ? postgresDatabase.trim() || "postgres"
-                : selectedDatabase === "mysql"
-                  ? mysqlDatabase.trim() || "mysql"
-                  : databasePath.trim() || "source";
-
-      const sanitizedAlias =
-        attachAs && !/^[0-9]/.test(attachAs)
-          ? attachAs
-          : attachAs
-            ? `_${attachAs}`
-            : "source";
-
-      const connectionType = selectedDatabase ?? "motherduck";
-      const duckdbExtension =
-        connectionType === "extension"
-          ? customExtensionName.trim()
-          : connectionType === "motherduck"
-            ? "motherduck"
-            : resolveDuckdbExtension(connectionType);
-
-      const databaseName = extractDatabaseName(selectedDatabase, dbPath);
-      const entrySchema =
-        connectionType === "extension" || !requiresSchema ? "" : selectedSchema;
-      const entryTables =
-        connectionType === "extension" || !requiresSchema
-          ? []
-          : Array.from(selectedTables);
-
-      const newEntry = {
-        type: connectionType,
-        databasePath: dbPath,
-        databaseName,
-        schema: entrySchema,
-        tables: entryTables,
-        description: tableDescription.trim(),
-        attachAs: sanitizedAlias || "source",
-        readOnly: connectionType !== "motherduck",
-        duckdbExtension,
-      };
-
-      await appendConnectedTable(newEntry);
+      onConnected?.();
       onOpenChange(false);
     } catch (error) {
-      console.error("Failed to write to localStorage", error);
-      setErrorMessage("Failed to store table selection. Please try again.");
+      console.error("Failed to attach data source", error);
+      setErrorMessage(
+        sanitizeSqlErrorMessage(
+          error instanceof Error ? error.message : String(error ?? ""),
+        ) || "Failed to attach data source. Please try again.",
+      );
     }
   }, [
+    hasConnected,
     isWasmActive,
     databasePath,
+    onConnected,
     onOpenChange,
     selectedDatabase,
-    selectedSchema,
-    selectedTables,
-    tableDescription,
-    postgresHost,
-    postgresUser,
     postgresDatabase,
     buildPostgresConnectionStringFromFields,
-    extractDatabaseName,
     buildMysqlConnectionStringFromFields,
-    mysqlHost,
-    mysqlUser,
     mysqlDatabase,
-    customExtensionName,
     customAttachStatement,
-    customAttachAlias,
     sqlitePath,
     sqliteAlias,
-    buildMotherDuckDbIdentifier,
+    effectiveSqlBackend,
   ]);
 
   const isAddDisabled = useMemo(() => {
-    if (isWasmActive) return true;
-    const requiresSchema = requiresSchemaSelection(selectedDatabase);
-
-    if (!selectedDatabase || !tableDescription.trim()) return true;
-    if (requiresSchema && !selectedSchema.trim()) return true;
-    if (selectedDatabase === "motherduck") {
-      return selectedTables.size === 0 || !tableDescription.trim();
-    }
-
-    if (selectedDatabase === "postgres") {
-      return (
-        !postgresHost.trim() || !postgresUser.trim() || !postgresDatabase.trim()
-      );
-    }
-    if (selectedDatabase === "mysql") {
-      return !mysqlHost.trim() || !mysqlUser.trim() || !mysqlDatabase.trim();
-    }
-    if (selectedDatabase === "sqlite") {
-      return !sqlitePath.trim() || !sqliteAlias.trim();
-    }
-    if (selectedDatabase === "extension") {
-      return (
-        !customExtensionName.trim() ||
-        !customAttachStatement.trim() ||
-        !customAttachAlias.trim() ||
-        !tableDescription.trim()
-      );
-    }
-    return !databasePath.trim();
-  }, [
-    isWasmActive,
-    databasePath,
-    selectedDatabase,
-    selectedSchema,
-    selectedTables,
-    tableDescription,
-    postgresHost,
-    postgresUser,
-    postgresDatabase,
-    mysqlHost,
-    mysqlUser,
-    mysqlDatabase,
-    customExtensionName,
-    customAttachStatement,
-    customAttachAlias,
-    sqlitePath,
-    sqliteAlias,
-  ]);
+    return isWasmActive || !hasConnected;
+  }, [hasConnected, isWasmActive]);
 
   const isConnectDisabled = useMemo(() => {
     if (isWasmActive) return true;
@@ -856,7 +736,6 @@ export function ConnectDataDialog({
               setSchemas([]);
               setSelectedSchema("");
               setSchemaTablesPreview([]);
-              setSelectedTables(new Set());
               setErrorMessage(null);
               motherDuckAttachPromiseRef.current = null;
             }}
@@ -1092,83 +971,21 @@ export function ConnectDataDialog({
                   Tables in &ldquo;{MOTHERDUCK_ALIAS}&rdquo;
                 </h3>
                 {schemaTablesPreview.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
-                    {schemaTablesPreview.map((t) => {
-                      const isChecked = selectedTables.has(t);
-                      return (
-                        <label
-                          key={t}
-                          className={cn(
-                            "flex cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-xs transition-colors",
-                            isChecked
-                              ? "border-primary bg-primary/10 text-foreground"
-                              : "border-border bg-muted/20 text-muted-foreground hover:bg-accent/30",
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            className="h-3 w-3"
-                            checked={isChecked}
-                            onChange={() => {
-                              setSelectedTables((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(t)) {
-                                  next.delete(t);
-                                } else {
-                                  next.add(t);
-                                }
-                                return next;
-                              });
-                            }}
-                          />
-                          {t}
-                        </label>
-                      );
-                    })}
+                  <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto rounded border border-border bg-muted/20 p-2 text-xs">
+                    {schemaTablesPreview.map((t) => (
+                      <div
+                        key={t}
+                        className="rounded border border-border px-2 py-1.5 text-foreground"
+                      >
+                        {t}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <p className="text-xs text-muted-foreground">
                     No tables found in this MotherDuck database.
                   </p>
                 )}
-              </div>
-
-              {schemaTablesPreview.length > 1 && (
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="text-xs text-primary hover:underline"
-                    onClick={() =>
-                      setSelectedTables(new Set(schemaTablesPreview))
-                    }
-                  >
-                    Select all
-                  </button>
-                  <span className="text-xs text-muted-foreground">·</span>
-                  <button
-                    type="button"
-                    className="text-xs text-primary hover:underline"
-                    onClick={() => setSelectedTables(new Set())}
-                  >
-                    Deselect all
-                  </button>
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <label
-                  className="block text-sm font-medium"
-                  htmlFor="table-description"
-                >
-                  Description{" "}
-                  <span className="text-muted-foreground">(required)</span>
-                </label>
-                <Input
-                  id="table-description"
-                  placeholder="Brief description of this data source"
-                  value={tableDescription}
-                  onChange={(e) => setTableDescription(e.target.value)}
-                />
               </div>
             </>
           )}
@@ -1224,39 +1041,15 @@ export function ConnectDataDialog({
               )}
             </h3>
             {schemaTablesPreview.length > 0 ? (
-              <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
-                {schemaTablesPreview.map((t) => {
-                  const isChecked = selectedTables.has(t);
-                  return (
-                    <label
-                      key={t}
-                      className={cn(
-                        "flex cursor-pointer items-center gap-2 rounded border px-2 py-1.5 text-xs transition-colors",
-                        isChecked
-                          ? "border-primary bg-primary/10 text-foreground"
-                          : "border-border bg-muted/20 text-muted-foreground hover:bg-accent/30",
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-3 w-3"
-                        checked={isChecked}
-                        onChange={() => {
-                          setSelectedTables((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(t)) {
-                              next.delete(t);
-                            } else {
-                              next.add(t);
-                            }
-                            return next;
-                          });
-                        }}
-                      />
-                      {t}
-                    </label>
-                  );
-                })}
+              <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto rounded border border-border bg-muted/20 p-2 text-xs">
+                {schemaTablesPreview.map((t) => (
+                  <div
+                    key={t}
+                    className="rounded border border-border px-2 py-1.5 text-foreground"
+                  >
+                    {t}
+                  </div>
+                ))}
               </div>
             ) : !isLoadingTables ? (
               <p className="text-xs text-muted-foreground">
@@ -1265,43 +1058,6 @@ export function ConnectDataDialog({
             ) : null}
           </div>
         )}
-
-        {/* Select all / deselect all */}
-        {schemaTablesPreview.length > 1 && (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => setSelectedTables(new Set(schemaTablesPreview))}
-            >
-              Select all
-            </button>
-            <span className="text-xs text-muted-foreground">·</span>
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => setSelectedTables(new Set())}
-            >
-              Deselect all
-            </button>
-          </div>
-        )}
-
-        <div className="space-y-1">
-          <label
-            className="block text-sm font-medium"
-            htmlFor="table-description"
-          >
-            Description{" "}
-            <span className="text-muted-foreground">(required)</span>
-          </label>
-          <Input
-            id="table-description"
-            placeholder="Brief description of this data source"
-            value={tableDescription}
-            onChange={(e) => setTableDescription(e.target.value)}
-          />
-        </div>
       </div>
     );
   };
@@ -1395,7 +1151,6 @@ export function ConnectDataDialog({
                         setSchemas([]);
                         setSelectedSchema("");
                         setSchemaTablesPreview([]);
-                        setSelectedTables(new Set());
                         setErrorMessage(null);
                         motherDuckAttachPromiseRef.current = null;
                       }}
@@ -1457,7 +1212,7 @@ export function ConnectDataDialog({
                 disabled={isAddDisabled}
                 onClick={handleAddTable}
               >
-                Add Source
+                Attach Source
               </Button>
             </div>
           )}

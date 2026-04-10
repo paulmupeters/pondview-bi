@@ -3,6 +3,7 @@ import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import { quoteString } from "@/lib/duckdb/duckdb-attachments";
+import { sanitizeSqlErrorMessage } from "@/lib/sql/error-sanitizer";
 import { runQuery } from "@/lib/sql/run-query";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
@@ -36,13 +37,13 @@ function toQueryNotice(error: unknown): QueryNotice {
   if (error instanceof Error && error.message.trim().length > 0) {
     return {
       kind: error.name === "QueryWarning" ? "warning" : "error",
-      message: error.message,
+      message: sanitizeSqlErrorMessage(error.message),
     };
   }
 
   return {
     kind: "error",
-    message: String(error),
+    message: sanitizeSqlErrorMessage(String(error)),
   };
 }
 

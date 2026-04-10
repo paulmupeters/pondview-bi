@@ -267,8 +267,24 @@ describe("assertWasmCompatibleDbIdentifier", () => {
 
   test("rejects unknown identifiers with actionable message", () => {
     expect(() => assertWasmCompatibleDbIdentifier("prod-analytics")).toThrow(
-      "cannot resolve database identifier",
+      "cannot resolve this database identifier",
     );
+  });
+
+  test("does not echo raw connection strings in wasm compatibility errors", () => {
+    const identifier =
+      "host=db.example.test port=5432 user=admin password=secret dbname=analytics";
+
+    let message = "";
+    try {
+      assertWasmCompatibleDbIdentifier(identifier);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message).toContain("DuckDB WASM");
+    expect(message).not.toContain(identifier);
+    expect(message).not.toContain("password=secret");
   });
 });
 
