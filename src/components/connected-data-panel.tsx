@@ -19,8 +19,15 @@ import {
 } from "@/components/ui/tooltip";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
 import { useWasmTables } from "@/hooks/use-wasm-tables";
+import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import type { ConnectedTable } from "@/lib/connected-tables";
-import { resolveAttachmentAlias } from "@/lib/duckdb/duckdb-attachments";
+import {
+  buildAttachmentPlan,
+  buildDetachStatement,
+  quoteIdentifier,
+  resolveAttachmentAlias,
+} from "@/lib/duckdb/duckdb-attachments";
+import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
 import {
   buildExplorerInsertPayload,
   buildExplorerTableReference,
