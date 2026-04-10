@@ -10,7 +10,6 @@ import {
   type PromptMode,
 } from "@/components/prompt-input-wrapper";
 import type { SqlConsoleApi } from "@/components/sql-console";
-import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { getDefaultPromptModePreference } from "@/lib/default-prompt-mode";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import { ensureSampleDataForEmptyRuntime } from "@/lib/sql/sample-data";
@@ -76,7 +75,6 @@ export default function Home() {
   );
   const [isPreparingExample, setIsPreparingExample] = useState(false);
   const [exampleError, setExampleError] = useState<string | null>(null);
-  const connectedTables = useConnectedTables();
   const effectiveSqlBackend = useResolvedSqlBackend();
   const router = useRouter();
   const manualShellVariant: ManualShellVariant = "minimal";
@@ -94,25 +92,6 @@ export default function Home() {
       setSelectedDb(undefined);
     }
   }, [effectiveSqlBackend, selectedDb]);
-
-  useEffect(() => {
-    if (
-      selectedDb ||
-      connectedTables.length === 0 ||
-      effectiveSqlBackend !== "duckdb-wasm"
-    ) {
-      return;
-    }
-
-    const first = connectedTables[0];
-    const firstIdentifier =
-      first?.connectionId ??
-      first?.databasePath ??
-      first?.attachAs ??
-      DEFAULT_WASM_DB_IDENTIFIER;
-
-    setSelectedDb(firstIdentifier);
-  }, [connectedTables, effectiveSqlBackend, selectedDb]);
 
   useEffect(() => {
     if (!pendingSqlToInsert || !manualConsoleApi) {

@@ -6,6 +6,7 @@ import {
   getDuckDbHttpConfigFromStorage,
   runDuckDbHttpQuery,
 } from "@/lib/duckdb/duckdb-http-browser";
+import { sanitizeSqlErrorMessage } from "@/lib/sql/error-sanitizer";
 import {
   isHiddenRuntimeSchema,
   RUNTIME_SCHEMA_EXCLUSION_SQL,
@@ -171,7 +172,9 @@ export function useDuckdbHttpTables(
       }
     } catch (err) {
       if (!isStale()) {
-        const message = err instanceof Error ? err.message : String(err ?? "");
+        const message = sanitizeSqlErrorMessage(
+          err instanceof Error ? err.message : String(err ?? ""),
+        );
         setError(message);
         setTables([]);
         setCurrentCatalog(null);

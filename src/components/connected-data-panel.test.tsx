@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   getConnectedEntryCatalog,
   getConnectedEntryDisplayName,
+  getExplorerTableDisplayLabel,
   getSampleDataActionState,
   getVisibleConnectedEntryTables,
+  resolveActiveRuntimeExplorer,
   shouldShowConnectedEntry,
   validateConnectedEntry,
 } from "@/components/connected-data-panel";
@@ -11,6 +13,62 @@ import type { ConnectedTable } from "@/lib/connected-tables";
 import { buildExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 
 describe("connected source explorer helpers", () => {
+  test("uses only live remote runtime tables when a remote backend is active", () => {
+    expect(
+      resolveActiveRuntimeExplorer({
+        sqlBackend: "bridge",
+        groupedRemoteTables: [
+          { catalog: "warehouse", schema: "public", tables: ["orders"] },
+        ],
+        groupedWasmTables: [{ catalog: "", schema: "main", tables: ["local"] }],
+      }),
+    ).toEqual({
+      target: "remote",
+      groups: [{ catalog: "warehouse", schema: "public", tables: ["orders"] }],
+    });
+  });
+
+  test("uses only live wasm tables when wasm is active", () => {
+    expect(
+      resolveActiveRuntimeExplorer({
+        sqlBackend: "duckdb-wasm",
+        groupedRemoteTables: [
+          { catalog: "warehouse", schema: "public", tables: ["orders"] },
+        ],
+        groupedWasmTables: [{ catalog: "", schema: "main", tables: ["local"] }],
+      }),
+    ).toEqual({
+      target: "wasm",
+      groups: [{ catalog: "", schema: "main", tables: ["local"] }],
+    });
+  });
+
+  test("renders runtime rows as direct table references without separate catalog headings", () => {
+    expect(
+      getExplorerTableDisplayLabel({
+        catalog: "motherduck",
+        schema: "main",
+        table: "unicorns",
+      }),
+    ).toBe("motherduck.unicorns");
+
+    expect(
+      getExplorerTableDisplayLabel({
+        catalog: "warehouse",
+        schema: "analytics",
+        table: "orders",
+      }),
+    ).toBe("warehouse.analytics.orders");
+
+    expect(
+      getExplorerTableDisplayLabel({
+        catalog: "",
+        schema: "main",
+        table: "local_table",
+      }),
+    ).toBe("local_table");
+  });
+
   test("uses the canonical DuckDB alias for reserved postgres names", () => {
     const entry: ConnectedTable = {
       type: "postgres",

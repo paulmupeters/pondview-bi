@@ -12,7 +12,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useConnectedTables } from "@/hooks/use-connected-tables";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
 import { useWasmTables } from "@/hooks/use-wasm-tables";
 import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
@@ -221,6 +220,44 @@ export type SampleDataState = {
   error: string | null;
 };
 
+export function resolveActiveRuntimeExplorer(params: {
+  sqlBackend: SqlBackend;
+  groupedRemoteTables: ExplorerTableGroup[];
+  groupedWasmTables: ExplorerTableGroup[];
+}): {
+  target: "remote" | "wasm";
+  groups: ExplorerTableGroup[];
+} {
+  if (params.sqlBackend === "duckdb-wasm") {
+    return {
+      target: "wasm",
+      groups: params.groupedWasmTables,
+    };
+  }
+
+  return {
+    target: "remote",
+    groups: params.groupedRemoteTables,
+  };
+}
+
+export function getExplorerTableDisplayLabel({
+  catalog,
+  schema,
+  table,
+}: {
+  catalog?: string;
+  schema?: string;
+  table: string;
+}): string {
+  return buildExplorerTableReference({
+    catalog,
+    schema,
+    table,
+    includeCatalog: Boolean(catalog?.trim()),
+  });
+}
+
 export function getSampleDataActionState({
   hasTables,
   isLoading,
@@ -277,7 +314,6 @@ export function ConnectedDataPanel({
   onRenameStoredSqlQuery,
   showStoredSqlQueries = false,
 }: ConnectedDataPanelProps) {
-  const connectedTables = useConnectedTables();
   const {
     tables: wasmTables,
     currentCatalog: wasmCurrentCatalog,
@@ -294,10 +330,6 @@ export function ConnectedDataPanel({
     refresh: refreshRemoteTables,
   } = useDuckdbHttpTables(sqlBackend, refreshToken);
   const [isOpen, setIsOpen] = useState(false);
-  const [connectedEntryStatus, setConnectedEntryStatus] = useState<
-    Record<string, ConnectedEntryStatus>
-  >({});
-  const [validatingEntryKeys, setValidatingEntryKeys] = useState<string[]>([]);
   const [sampleDataLoadingTarget, setSampleDataLoadingTarget] = useState<
     "remote" | "wasm" | null
   >(null);
@@ -409,8 +441,6 @@ export function ConnectedDataPanel({
     [groupExplorerTables, remoteTables],
   );
 
-  const isRemoteBackend =
-    sqlBackend === "bridge" || sqlBackend === "duckdb-http";
   const remoteLabel =
     sqlBackend === "bridge"
       ? remoteConnectionInfo
@@ -419,109 +449,20 @@ export function ConnectedDataPanel({
       : remoteConnectionInfo
         ? `DuckDB HTTP (${remoteConnectionInfo.host}:${remoteConnectionInfo.port})`
         : "DuckDB HTTP";
-  const showWasmSection = sqlBackend === "duckdb-wasm";
-  const visibleRemoteCatalogs = useMemo(
+  const activeRuntimeExplorer = useMemo(
     () =>
-      new Set(
-        groupedRemoteTables
-          .map((group) => group.catalog.trim().toLowerCase())
-          .filter((catalog) => catalog.length > 0),
-      ),
-    [groupedRemoteTables],
+      resolveActiveRuntimeExplorer({
+        sqlBackend,
+        groupedRemoteTables,
+        groupedWasmTables,
+      }),
+    [groupedRemoteTables, groupedWasmTables, sqlBackend],
   );
-  const visibleConnectedTables = useMemo(
-    () =>
-      connectedTables.filter((entry) =>
-        shouldShowConnectedEntry(
-          entry,
-          isRemoteBackend ? visibleRemoteCatalogs : new Set(),
-        ),
-      ),
-    [connectedTables, isRemoteBackend, visibleRemoteCatalogs],
-  );
-
-  const getDbIdentifier = useCallback(
-    (entry: (typeof connectedTables)[0]): string => {
-      // Prefer connectionId (new) over databasePath (legacy) for identification
-      // databasePath may be absent when credentials are stored server-side
-      return entry.connectionId ?? entry.databasePath ?? entry.attachAs ?? "";
-    },
-    [],
-  );
-
-  const getDbKey = useCallback((entry: (typeof connectedTables)[0]): string => {
-    const dbId =
-      entry.connectionId ?? entry.databasePath ?? entry.attachAs ?? "";
-    return `${entry.type}-${dbId}-${entry.schema || entry.table || ""}`;
-  }, []);
-
-  useEffect(() => {
-    if (visibleConnectedTables.length === 0) {
-      setConnectedEntryStatus({});
-      setValidatingEntryKeys([]);
-      return;
-    }
-
-    let isCancelled = false;
-    const entryKeys = visibleConnectedTables.map((entry) => getDbKey(entry));
-    setValidatingEntryKeys(entryKeys);
-
-    void Promise.all(
-      visibleConnectedTables.map(
-        async (entry): Promise<[string, { status: ConnectedEntryStatus }]> => [
-          getDbKey(entry),
-          await validateConnectedEntry(entry, { sqlBackend }),
-        ],
-      ),
-    ).then((results) => {
-      if (isCancelled) {
-        return;
-      }
-
-      setConnectedEntryStatus(
-        Object.fromEntries(
-          results.map(([entryKey, result]) => [entryKey, result.status]),
-        ),
-      );
-      setValidatingEntryKeys([]);
-    });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [getDbKey, sqlBackend, visibleConnectedTables]);
 
   const databaseRowClass =
     "flex items-center gap-2 rounded-sm border border-transparent px-2 py-1.5 text-[13px] text-card-foreground font-mono transition-colors";
   const databaseRowInteractiveClass =
     mode === "sidebar" ? "hover:border-sidebar-border/70" : "";
-
-  const handleInsertTable = (
-    entry: (typeof connectedTables)[0],
-    tableName: string,
-  ) => {
-    const dbIdentifier = getDbIdentifier(entry);
-    const catalog = getConnectedEntryCatalog(entry);
-    const payload = buildExplorerInsertPayload({
-      catalog,
-      schema: entry.schema,
-      table: tableName,
-      source: "connected-entry",
-      dbIdentifier,
-    });
-    onSelect(dbIdentifier);
-    onInsertTable?.(payload);
-    if (mode === "popover") {
-      setIsOpen(false);
-    }
-  };
-
-  const handleSelect = (dbIdentifier: string) => {
-    onSelect(dbIdentifier);
-    if (mode === "popover") {
-      setIsOpen(false);
-    }
-  };
 
   const handleSelectWasm = () => {
     onSelect(DEFAULT_WASM_DB_IDENTIFIER);
@@ -552,16 +493,6 @@ export function ConnectedDataPanel({
           key={`${group.catalog || "default"}.${group.schema}`}
           className="space-y-0"
         >
-          {group.catalog && (
-            <p className="text-[10px] uppercase tracking-wide text-foreground/70">
-              {group.catalog}
-              {options.currentCatalog &&
-              group.catalog.toLowerCase() ===
-                options.currentCatalog.toLowerCase()
-                ? " · current"
-                : "oo"}
-            </p>
-          )}
           {!isDefaultExplorerSchema(group.schema) && (
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
               {group.schema}
@@ -577,12 +508,10 @@ export function ConnectedDataPanel({
               table: tableName,
               source: "runtime",
             });
-            const displayReference = buildExplorerTableReference({
+            const displayReference = getExplorerTableDisplayLabel({
               catalog: group.catalog,
               schema: group.schema,
               table: tableName,
-              includeCatalog: Boolean(group.catalog),
-              includeDefaultSchema: true,
             });
 
             return (
@@ -594,7 +523,7 @@ export function ConnectedDataPanel({
                 title={displayReference}
               >
                 <span className={cn("w-1.5 h-1.5 rounded-full", color)} />
-                <span className="truncate">{tableName}</span>
+                <span className="truncate">{displayReference}</span>
               </button>
             );
           })}
@@ -695,14 +624,13 @@ export function ConnectedDataPanel({
   };
 
   const renderDatabaseList = () => {
-    const hasConnectedTables = visibleConnectedTables.length > 0;
-    const hasWasmTables = groupedWasmTables.length > 0;
+    const activeGroups = activeRuntimeExplorer.groups;
+    const hasRuntimeTables = activeGroups.length > 0;
     const isWasmSelected = !selectedDb || isWasmLocalIdentifier(selectedDb);
 
     return (
       <div className="flex flex-col gap-2">
-        {/* Remote backend section (bridge / duckdb-http) */}
-        {isRemoteBackend && (
+        {activeRuntimeExplorer.target === "remote" ? (
           <div className="space-y-1">
             <div
               className={cn(
@@ -721,8 +649,8 @@ export function ConnectedDataPanel({
                 </p>
               ) : remoteTablesError ? (
                 <p className="text-xs text-destructive">{remoteTablesError}</p>
-              ) : groupedRemoteTables.length > 0 ? (
-                renderExplorerTableGroups(groupedRemoteTables, {
+              ) : hasRuntimeTables ? (
+                renderExplorerTableGroups(activeGroups, {
                   currentCatalog: remoteCurrentCatalog,
                   palette: ["bg-emerald-400", "bg-teal-400", "bg-cyan-400"],
                   onTableClick: (_group, payload) => {
@@ -737,13 +665,7 @@ export function ConnectedDataPanel({
               )}
             </div>
           </div>
-        )}
-
-        {isRemoteBackend && (showWasmSection || hasConnectedTables) && (
-          <Separator />
-        )}
-
-        {showWasmSection && (
+        ) : (
           <div className="space-y-1">
             <div
               className={cn(
@@ -771,8 +693,8 @@ export function ConnectedDataPanel({
                 <p className="text-xs text-destructive">
                   Failed to load local tables.
                 </p>
-              ) : hasWasmTables ? (
-                renderExplorerTableGroups(groupedWasmTables, {
+              ) : hasRuntimeTables ? (
+                renderExplorerTableGroups(activeGroups, {
                   currentCatalog: wasmCurrentCatalog,
                   palette: ["bg-blue-400", "bg-purple-400", "bg-amber-400"],
                   onTableClick: (_group, payload) => {
@@ -788,100 +710,6 @@ export function ConnectedDataPanel({
             </div>
           </div>
         )}
-
-        {/* Connected Tables Section */}
-        {hasConnectedTables && <Separator />}
-        {hasConnectedTables &&
-          visibleConnectedTables.map((entry) => {
-            const dbKey = getDbKey(entry);
-            const dbIdentifier = getDbIdentifier(entry);
-            const dbDisplayName = getConnectedEntryDisplayName(entry);
-            const catalog = getConnectedEntryCatalog(entry);
-            const visibleTables = getVisibleConnectedEntryTables(entry);
-            const entryStatus = connectedEntryStatus[dbKey];
-            const isValidating = validatingEntryKeys.includes(dbKey);
-            const isDisconnected = entryStatus === "disconnected";
-            const canInteract = !isValidating && !isDisconnected;
-            // Check both databasePath and attachAs for backward compatibility
-            const isSelected =
-              selectedDb === dbIdentifier || selectedDb === entry.attachAs;
-            const hasTables = visibleTables.length > 0;
-
-            return (
-              <div key={dbKey} className="space-y-1">
-                <div
-                  className={cn(
-                    databaseRowClass,
-                    isSelected &&
-                      "border-sidebar-ring ring-1 ring-sidebar-ring/40",
-                    canInteract ? databaseRowInteractiveClass : "",
-                    isDisconnected && "text-muted-foreground",
-                  )}
-                >
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex flex-1 items-center gap-2 text-left",
-                      canInteract ? "cursor-pointer" : "cursor-default",
-                    )}
-                    disabled={!canInteract}
-                    onClick={() => handleSelect(dbIdentifier)}
-                    title={
-                      isDisconnected
-                        ? "Connection unavailable"
-                        : isValidating
-                          ? "Checking connection"
-                          : undefined
-                    }
-                  >
-                    <Database className="h-3.5 w-3.5 shrink-0 text-[#A8BCA1]" />
-                    <span className="truncate">{dbDisplayName}</span>
-                  </button>
-                  {isDisconnected ? (
-                    <span className="shrink-0 whitespace-nowrap text-[10px] uppercase tracking-wide text-amber-500">
-                      disconnected
-                    </span>
-                  ) : isValidating ? (
-                    <span className="shrink-0 whitespace-nowrap text-[10px] uppercase tracking-wide text-muted-foreground">
-                      checking
-                    </span>
-                  ) : null}
-                </div>
-                {hasTables && canInteract && (
-                  <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
-                    {visibleTables.map((tableName, idx) => {
-                      const colors = [
-                        "bg-blue-400",
-                        "bg-purple-400",
-                        "bg-amber-400",
-                      ];
-                      const color = colors[idx % colors.length];
-                      return (
-                        <button
-                          key={tableName}
-                          type="button"
-                          className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-                          onClick={() => handleInsertTable(entry, tableName)}
-                          title={buildExplorerTableReference({
-                            catalog,
-                            schema: entry.schema,
-                            table: tableName,
-                            includeCatalog: entry.type !== "duckdb",
-                            includeDefaultSchema: true,
-                          })}
-                        >
-                          <span
-                            className={cn("w-1.5 h-1.5 rounded-full", color)}
-                          ></span>
-                          <span className="truncate">{tableName}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
       </div>
     );
   };
@@ -938,7 +766,7 @@ export function ConnectedDataPanel({
   }
 
   // Popover mode: existing hover card behavior
-  if (connectedTables.length === 0 && wasmTables.length === 0) {
+  if (activeRuntimeExplorer.groups.length === 0) {
     return (
       <PromptInputHoverCard open={isOpen} onOpenChange={setIsOpen}>
         <Tooltip>
@@ -950,7 +778,7 @@ export function ConnectedDataPanel({
             </PromptInputHoverCardTrigger>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Connected databases</p>
+            <p>Queryable tables</p>
           </TooltipContent>
         </Tooltip>
         <PromptInputHoverCardContent className="w-72">
@@ -973,7 +801,7 @@ export function ConnectedDataPanel({
           </PromptInputHoverCardTrigger>
         </TooltipTrigger>
         <TooltipContent>
-          <p>Connected databases</p>
+          <p>Queryable tables</p>
         </TooltipContent>
       </Tooltip>
       <PromptInputHoverCardContent className="w-72 max-h-[400px] overflow-y-auto">

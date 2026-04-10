@@ -89,6 +89,16 @@ function normalizeIdentifier(dbIdentifier?: string): string {
   return (dbIdentifier ?? "").trim();
 }
 
+function isKeyValueRemoteIdentifier(dbIdentifier?: string): boolean {
+  const normalized = normalizeIdentifier(dbIdentifier).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  const remoteKeys = ["host=", "port=", "user=", "password=", "dbname="];
+  return remoteKeys.some((key) => normalized.includes(key));
+}
+
 export function isRuntimeDefaultDbIdentifier(dbIdentifier?: string): boolean {
   const normalized = normalizeIdentifier(dbIdentifier).toLowerCase();
   return normalized.length === 0 || normalized === DEFAULT_WASM_DB_IDENTIFIER;
@@ -248,7 +258,8 @@ export function classifyDbIdentifier(dbIdentifier?: string): DbIdentifierKind {
     REMOTE_IDENTIFIER_PREFIXES.some((prefix) =>
       normalized.startsWith(prefix),
     ) ||
-    normalized.includes("://")
+    normalized.includes("://") ||
+    isKeyValueRemoteIdentifier(normalized)
   ) {
     return "bridge-remote";
   }
@@ -266,15 +277,14 @@ export function assertWasmCompatibleDbIdentifier(dbIdentifier?: string): void {
     return;
   }
 
-  const identifier = normalizeIdentifier(dbIdentifier);
   if (identifierKind === "bridge-remote") {
     throw new Error(
-      `DuckDB WASM only supports local browser data. Switch runtime to Bridge to query external identifier \`${identifier}\`.`,
+      "DuckDB WASM only supports local browser data. Switch runtime to Bridge to query external data sources.",
     );
   }
 
   throw new Error(
-    `DuckDB WASM cannot resolve database identifier \`${identifier}\`. Select a local WASM source (\`${DEFAULT_WASM_DB_IDENTIFIER}\`) or switch runtime to Bridge.`,
+    `DuckDB WASM cannot resolve this database identifier. Select a local WASM source (\`${DEFAULT_WASM_DB_IDENTIFIER}\`) or switch runtime to Bridge.`,
   );
 }
 

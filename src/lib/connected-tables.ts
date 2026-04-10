@@ -26,6 +26,35 @@ export type ConnectedTable = {
 
 const isClient = typeof window !== "undefined";
 
+export function sanitizeConnectedTableForStorage(
+  entry: ConnectedTable,
+): ConnectedTable | null {
+  if (!entry.connectionId?.trim()) {
+    return null;
+  }
+
+  return {
+    type: entry.type,
+    connectionId: entry.connectionId.trim(),
+    databaseName: entry.databaseName,
+    table: entry.table,
+    schema: entry.schema,
+    tables: entry.tables,
+    description: entry.description,
+    attachAs: entry.attachAs,
+    readOnly: entry.readOnly,
+    duckdbExtension: entry.duckdbExtension,
+  };
+}
+
+export function sanitizeConnectedTablesForStorage(
+  tables: ConnectedTable[],
+): ConnectedTable[] {
+  return tables
+    .map(sanitizeConnectedTableForStorage)
+    .filter((entry): entry is ConnectedTable => entry !== null);
+}
+
 export function readConnectedTablesFromStorage(): ConnectedTable[] {
   if (!isClient) {
     return [];
@@ -42,43 +71,44 @@ export function readConnectedTablesFromStorage(): ConnectedTable[] {
       return [];
     }
 
-    return parsed.filter((entry): entry is ConnectedTable => {
-      if (typeof entry !== "object" || entry === null) return false;
-      const e = entry as Record<string, unknown>;
-      if (typeof e.type !== "string") return false;
-      // Accept entries with either databasePath (legacy) or connectionId (new)
-      const hasDatabasePath = typeof e.databasePath === "string";
-      const hasConnectionId = typeof e.connectionId === "string";
-      if (!hasDatabasePath && !hasConnectionId) return false;
-      // Accept either table or schema for compatibility
-      const hasTable = typeof e.table === "string";
-      const hasSchema = typeof e.schema === "string";
-      const maybeTables = e.tables;
-      const tablesValid =
-        maybeTables === undefined ||
-        (Array.isArray(maybeTables) &&
-          maybeTables.every((t) => typeof t === "string"));
-      const databaseName = e.databaseName;
-      const attachAs = e.attachAs;
-      const readOnly = e.readOnly;
-      const duckdbExtension = e.duckdbExtension;
-      const databaseNameValid =
-        databaseName === undefined || typeof databaseName === "string";
-      const attachValid =
-        attachAs === undefined || typeof attachAs === "string";
-      const readOnlyValid =
-        readOnly === undefined || typeof readOnly === "boolean";
-      const duckdbExtensionValid =
-        duckdbExtension === undefined || typeof duckdbExtension === "string";
-      return (
-        tablesValid &&
-        (hasTable || hasSchema) &&
-        databaseNameValid &&
-        attachValid &&
-        readOnlyValid &&
-        duckdbExtensionValid
-      );
-    });
+    return parsed
+      .filter((entry): entry is ConnectedTable => {
+        if (typeof entry !== "object" || entry === null) return false;
+        const e = entry as Record<string, unknown>;
+        if (typeof e.type !== "string") return false;
+        const hasConnectionId = typeof e.connectionId === "string";
+        if (!hasConnectionId) return false;
+        // Accept either table or schema for compatibility
+        const hasTable = typeof e.table === "string";
+        const hasSchema = typeof e.schema === "string";
+        const maybeTables = e.tables;
+        const tablesValid =
+          maybeTables === undefined ||
+          (Array.isArray(maybeTables) &&
+            maybeTables.every((t) => typeof t === "string"));
+        const databaseName = e.databaseName;
+        const attachAs = e.attachAs;
+        const readOnly = e.readOnly;
+        const duckdbExtension = e.duckdbExtension;
+        const databaseNameValid =
+          databaseName === undefined || typeof databaseName === "string";
+        const attachValid =
+          attachAs === undefined || typeof attachAs === "string";
+        const readOnlyValid =
+          readOnly === undefined || typeof readOnly === "boolean";
+        const duckdbExtensionValid =
+          duckdbExtension === undefined || typeof duckdbExtension === "string";
+        return (
+          tablesValid &&
+          (hasTable || hasSchema) &&
+          databaseNameValid &&
+          attachValid &&
+          readOnlyValid &&
+          duckdbExtensionValid
+        );
+      })
+      .map(sanitizeConnectedTableForStorage)
+      .filter((entry): entry is ConnectedTable => entry !== null);
   } catch (error) {
     console.error("Failed to read connected tables from storage", error);
     return [];
@@ -91,9 +121,10 @@ export function writeConnectedTablesToStorage(tables: ConnectedTable[]) {
   }
 
   try {
+    const sanitizedTables = sanitizeConnectedTablesForStorage(tables);
     window.localStorage.setItem(
       CONNECTED_TABLES_STORAGE_KEY,
-      JSON.stringify(tables),
+      JSON.stringify(sanitizedTables),
     );
     window.dispatchEvent(new Event(CONNECTED_TABLES_UPDATED_EVENT));
   } catch (error) {
@@ -109,19 +140,10 @@ export async function appendConnectedTable(
   }
 
   // Store in localStorage; browser mode does not sync connected sources to YAML.
-  const storageEntry: ConnectedTable = {
-    type: entry.type,
-    connectionId: entry.connectionId,
-    databaseName: entry.databaseName,
-    table: entry.table,
-    schema: entry.schema,
-    tables: entry.tables,
-    description: entry.description,
-    attachAs: entry.attachAs,
-    readOnly: entry.readOnly,
-    duckdbExtension: entry.duckdbExtension,
-    databasePath: entry.databasePath,
-  };
+  const storageEntry = sanitizeConnectedTableForStorage(entry);
+  if (!storageEntry) {
+    return;
+  }
 
   const existing = readConnectedTablesFromStorage();
   writeConnectedTablesToStorage([...existing, storageEntry]);
@@ -178,14 +200,11 @@ export async function removeConnectedTable(
     // Match by type first
     if (table.type !== entry.type) return true;
 
-    // Match by connectionId (new path) or databasePath (legacy)
+    // Match only opaque connection ids. Raw database paths are no longer persisted.
     const connectionMatch =
-      (table.connectionId &&
-        entry.connectionId &&
-        table.connectionId === entry.connectionId) ||
-      (table.databasePath &&
-        entry.databasePath &&
-        table.databasePath === entry.databasePath);
+      table.connectionId &&
+      entry.connectionId &&
+      table.connectionId === entry.connectionId;
     if (!connectionMatch) return true;
     // Match by schema if both have schema
     if (table.schema && entry.schema) {
