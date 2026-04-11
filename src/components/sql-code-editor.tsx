@@ -208,8 +208,8 @@ export function createSqlCodeEditorKeyBindings(options: {
 }
 
 function useIsDarkMode(): boolean {
-  const [isDark, setIsDark] = useState(
-    () => document.documentElement.classList.contains("dark"),
+  const [isDark, setIsDark] = useState(() =>
+    document.documentElement.classList.contains("dark"),
   );
 
   useEffect(() => {

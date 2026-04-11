@@ -1,9 +1,4 @@
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  PencilSquareIcon,
-  TrashIcon,
-} from "@heroicons/react/24/outline";
+import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { Database } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -309,8 +304,8 @@ export function ConnectedDataPanel({
   mode = "popover",
   collapsed = false,
   collapsedBehavior = "inline",
-  onToggleCollapse,
-  showCollapseToggle = true,
+  onToggleCollapse: _onToggleCollapse,
+  showCollapseToggle: _showCollapseToggle = true,
   refreshToken,
   sqlBackend = "duckdb-wasm",
   storedSqlQueries = [],
@@ -639,11 +634,12 @@ export function ConnectedDataPanel({
           <div className="space-y-1">
             <div
               className={cn(
-                "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
-                mode === "sidebar" && "hover:bg-sidebar-accent/50",
+                databaseRowClass,
+                "text-muted-foreground",
+                databaseRowInteractiveClass,
               )}
             >
-              <Database className="h-4 w-4 shrink-0 text-emerald-500" />
+              <Database className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
               <span className="truncate">{remoteLabel}</span>
             </div>
             <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">
@@ -673,10 +669,10 @@ export function ConnectedDataPanel({
           <div className="space-y-1">
             <div
               className={cn(
-                "flex items-center gap-2 px-3 py-2 bg-card border border-sidebar-border shadow-sm rounded text-sm text-card-foreground font-mono transition-colors",
+                databaseRowClass,
                 isWasmSelected &&
-                  "ring-1 ring-sidebar-ring ring-offset-1 bg-card",
-                mode === "sidebar" && "hover:bg-sidebar-accent/50",
+                  "border-sidebar-ring ring-1 ring-sidebar-ring/40",
+                databaseRowInteractiveClass,
               )}
             >
               <button
@@ -684,7 +680,7 @@ export function ConnectedDataPanel({
                 className="flex items-center gap-2 flex-1 text-left cursor-pointer"
                 onClick={handleSelectWasm}
               >
-                <Database className="h-4 w-4 shrink-0 text-[#A8BCA1]" />
+                <Database className="h-3.5 w-3.5 shrink-0 text-[#A8BCA1]" />
                 <span className="truncate">DuckDB WASM (local)</span>
               </button>
             </div>

@@ -26,13 +26,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  buildDashboardSourceDescriptor,
-  type DashboardSourceDescriptor,
-} from "@/lib/dashboard/source-descriptor";
-import {
   formatFirstRowMeasureValue,
   type MeasureOption,
 } from "@/lib/dashboard/measures";
+import {
+  buildDashboardSourceDescriptor,
+  type DashboardSourceDescriptor,
+} from "@/lib/dashboard/source-descriptor";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,

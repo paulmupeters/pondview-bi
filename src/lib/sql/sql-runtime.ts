@@ -101,9 +101,7 @@ function isKeyValueRemoteIdentifier(dbIdentifier?: string): boolean {
 
 export function isRuntimeDefaultDbIdentifier(dbIdentifier?: string): boolean {
   const normalized = normalizeIdentifier(dbIdentifier).toLowerCase();
-  return (
-    normalized.length === 0 || normalized === DEFAULT_WASM_DB_IDENTIFIER
-  );
+  return normalized.length === 0 || normalized === DEFAULT_WASM_DB_IDENTIFIER;
 }
 
 function parseSqlBackendPreference(raw: string | null): SqlBackendPreference {

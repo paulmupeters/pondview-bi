@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -14,11 +13,9 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
+import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import { runQuery } from "@/lib/sql/run-query";
-import type {
-  SqlBackend,
-  SqlBackendPreference,
-} from "@/lib/sql/sql-runtime";
+import type { SqlBackend, SqlBackendPreference } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 
 export type SqlPreviewRunResult = {

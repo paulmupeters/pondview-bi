@@ -1,4 +1,10 @@
-import { Navigate, Route, Routes, useParams, useSearchParams } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import AnalysisPage from "@/app/analysis/page";
 import DashboardsPage from "@/app/dashboards/page";
 import DashboardViewPage from "@/app/dashboards/view/page";
@@ -16,9 +22,7 @@ import { ThemeProvider } from "@/lib/theme-provider";
 function ChatRedirect() {
   const [searchParams] = useSearchParams();
   const id = searchParams.get("id");
-  const destination = id
-    ? `/analysis?${searchParams.toString()}`
-    : "/analysis";
+  const destination = id ? `/analysis?${searchParams.toString()}` : "/analysis";
   return <Navigate to={destination} replace />;
 }
 

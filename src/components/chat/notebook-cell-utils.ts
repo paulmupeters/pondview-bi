@@ -1,6 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
-import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import { parsePartsOrFallback } from "@/components/chat/hooks/chat-session-utils";
+import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { WorkspaceAnalysisCellEntry } from "@/lib/workspace/workspace-db";
 
 export function parseStoredPayload(
@@ -52,7 +52,9 @@ export function analysisCellEntryToUiMessage(
   };
 }
 
-export function getTrailingAssistantMessages(messages: UIMessage[]): UIMessage[] {
+export function getTrailingAssistantMessages(
+  messages: UIMessage[],
+): UIMessage[] {
   const trailingAssistantMessages: UIMessage[] = [];
 
   for (

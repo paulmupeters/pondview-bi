@@ -1,6 +1,6 @@
 import type { UIMessage } from "@ai-sdk/react";
-import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import { extractSqlArtifactParts } from "@/components/chat/sql-artifact-utils";
+import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 
 const EXECUTE_SQL_ARTIFACT_TYPE = "data-execute-sql";
 const EXPLORATORY_SQL_TOOL_TYPE = "tool-execute_exploratory_sql";

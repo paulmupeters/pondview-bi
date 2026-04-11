@@ -47,7 +47,10 @@ export const runPreviewTool = tool({
   }),
   execute: async ({ table, databasePath }) => {
     const backend = resolveSqlBackend({ dbIdentifier: databasePath });
-    const dbIdentifier = resolveDbIdentifierForSqlBackend(databasePath, backend);
+    const dbIdentifier = resolveDbIdentifierForSqlBackend(
+      databasePath,
+      backend,
+    );
     const result = await runQuery({
       sql: `SELECT * FROM ${table} LIMIT 5`,
       dbIdentifier,

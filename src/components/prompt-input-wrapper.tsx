@@ -36,8 +36,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUploadedFiles } from "@/hooks/use-uploaded-files";
-import type { CardConfig, Config } from "@/lib/types";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
+import type { CardConfig, Config } from "@/lib/types";
 import { getUploadedFileBlob, persistUploadedFile } from "@/lib/uploaded-files";
 import { cn } from "@/lib/utils";
 
@@ -418,12 +418,7 @@ export function PromptInputWrapper({
     }
 
     manualConsoleApi?.runQuery();
-  }, [
-    manualQuery,
-    onHomePage,
-    onManualRun,
-    onManualRunRequest,
-  ]);
+  }, [manualQuery, onHomePage, onManualRun, onManualRunRequest]);
 
   const handleManualSend = useCallback(() => {
     if (!sqlRepl || !manualVisualization || !sqlResult) {

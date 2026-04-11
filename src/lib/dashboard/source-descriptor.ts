@@ -1,5 +1,5 @@
-import { detectExternalConnection } from "@/lib/duckdb/path";
 import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
+import { detectExternalConnection } from "@/lib/duckdb/path";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
@@ -35,7 +35,7 @@ export function normalizeDashboardSourceDescriptor(
       runtimeBackend: descriptor.runtimeBackend,
       dbIdentifier:
         descriptor.runtimeBackend === "duckdb-wasm"
-          ? dbIdentifier ?? DEFAULT_WASM_DB_IDENTIFIER
+          ? (dbIdentifier ?? DEFAULT_WASM_DB_IDENTIFIER)
           : dbIdentifier,
       catalogContext,
     };

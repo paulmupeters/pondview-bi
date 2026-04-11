@@ -36,7 +36,11 @@ export function getExecutionAliasRef(tableName: string): string {
 export function resolveChartSourceDescriptor(
   chart: Pick<
     DbDashboardChart,
-    "sourceDescriptor" | "sqlBackend" | "dbIdentifier" | "catalogContext" | "snapshotId"
+    | "sourceDescriptor"
+    | "sqlBackend"
+    | "dbIdentifier"
+    | "catalogContext"
+    | "snapshotId"
   >,
   dashboardBackend: SqlBackend,
 ): DashboardSourceDescriptor {
@@ -58,7 +62,10 @@ export function buildDashboardExecutionTableRefs(
   const tableRefByName = new Map<string, DashboardExecutionTableRef>();
 
   for (const chart of charts) {
-    const sourceDescriptor = resolveChartSourceDescriptor(chart, dashboardBackend);
+    const sourceDescriptor = resolveChartSourceDescriptor(
+      chart,
+      dashboardBackend,
+    );
     const refs = extractTableReferencesFromSql(chart.sql);
     for (const ref of refs) {
       if (!ref.tableName || tableRefByName.has(ref.tableName)) {

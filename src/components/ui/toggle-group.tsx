@@ -20,32 +20,27 @@ const ToggleGroup = React.forwardRef<
     VariantProps<typeof toggleVariants> & {
       spacing?: number;
     }
->(
-  (
-    { className, variant, size, spacing = 0, children, ...props },
-    ref,
-  ) => {
-    return (
-      <ToggleGroupPrimitive.Root
-        ref={ref}
-        data-slot="toggle-group"
-        data-variant={variant}
-        data-size={size}
-        data-spacing={spacing}
-        style={{ "--gap": spacing } as React.CSSProperties}
-        className={cn(
-          "group/toggle-group flex w-fit items-center gap-[--spacing(var(--gap))] rounded-md data-[spacing=default]:data-[variant=outline]:shadow-xs",
-          className,
-        )}
-        {...props}
-      >
-        <ToggleGroupContext.Provider value={{ variant, size, spacing }}>
-          {children}
-        </ToggleGroupContext.Provider>
-      </ToggleGroupPrimitive.Root>
-    );
-  },
-);
+>(({ className, variant, size, spacing = 0, children, ...props }, ref) => {
+  return (
+    <ToggleGroupPrimitive.Root
+      ref={ref}
+      data-slot="toggle-group"
+      data-variant={variant}
+      data-size={size}
+      data-spacing={spacing}
+      style={{ "--gap": spacing } as React.CSSProperties}
+      className={cn(
+        "group/toggle-group flex w-fit items-center gap-[--spacing(var(--gap))] rounded-md data-[spacing=default]:data-[variant=outline]:shadow-xs",
+        className,
+      )}
+      {...props}
+    >
+      <ToggleGroupContext.Provider value={{ variant, size, spacing }}>
+        {children}
+      </ToggleGroupContext.Provider>
+    </ToggleGroupPrimitive.Root>
+  );
+});
 
 ToggleGroup.displayName = ToggleGroupPrimitive.Root.displayName;
 

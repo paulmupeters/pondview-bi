@@ -48,7 +48,8 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
   const isSqlEditorRoute = pathname === "/sql-editor";
   const isDataRoute = pathname === "/data";
   const isSettingsRoute = pathname === "/settings";
-  const isChatRoute = pathname === "/analysis" || pathname === "/chat" || pathname === "/";
+  const isChatRoute =
+    pathname === "/analysis" || pathname === "/chat" || pathname === "/";
 
   useEffect(() => {
     if (isHistoryOpen) {
@@ -221,8 +222,7 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
             className={cn(
               navButtonClassName,
               "w-full",
-              isDataRoute &&
-                "bg-sidebar-accent text-sidebar-accent-foreground",
+              isDataRoute && "bg-sidebar-accent text-sidebar-accent-foreground",
             )}
           >
             <Database className="h-5 w-5" />
