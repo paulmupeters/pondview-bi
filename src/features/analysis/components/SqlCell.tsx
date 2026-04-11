@@ -1,5 +1,17 @@
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { Play, Sparkles, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "@/components/ui/input-group";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import {
   createSqlAutocompleteAction,
@@ -8,6 +20,7 @@ import {
   type SqlConsoleApi,
 } from "@/components/sql-console";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
+import type { AiCellState } from "@/features/analysis/components/AiCell";
 import {
   createSqlCellPayload,
   parseSqlCellPayload,
@@ -24,23 +37,26 @@ import {
 } from "@/features/analysis/sql-cell-sync";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
 import { runQuery } from "@/lib/sql/run-query";
+import { cn } from "@/lib/utils";
 
 type SqlCellProps = {
   cell: AnalysisCellState;
   bootstrapSql?: { sql: string; autorun: boolean } | null;
   notebookSession: NotebookSession;
-  sqlEditorVisible: boolean;
-  onToggleSqlEditor: () => void;
   onBootstrapConsumed?: () => void;
+  aiEnabled: boolean;
+  onToggleAi: () => void;
+  ai: AiCellState;
 };
 
 export function SqlCell({
   cell,
   bootstrapSql = null,
   notebookSession,
-  sqlEditorVisible,
-  onToggleSqlEditor,
   onBootstrapConsumed,
+  aiEnabled,
+  onToggleAi,
+  ai,
 }: SqlCellProps) {
   const consoleApiRef = useRef<SqlConsoleApi | null>(null);
   const syncTimeoutRef = useRef<number | null>(null);
@@ -254,10 +270,14 @@ export function SqlCell({
         return;
       }
 
+      const persistedType: "table" | "chart" | "card" | undefined =
+        storedPayload.visualType === "text"
+          ? undefined
+          : storedPayload.visualType;
       if (
         !shouldPersistVisualTypeChange({
           nextVisualType: visualType,
-          persistedVisualType: storedPayload.visualType,
+          persistedVisualType: persistedType,
         })
       ) {
         return;
@@ -276,21 +296,115 @@ export function SqlCell({
 
   return (
     <div className="space-y-4">
-      <div className="border bg-background">
-        <button
-          type="button"
-          className="flex w-full items-center gap-1.5 border-b rounded-lg px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          aria-label={sqlEditorVisible ? "Collapse editor" : "Expand editor"}
-          onClick={onToggleSqlEditor}
-        >
-          {sqlEditorVisible ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
-          SQL Editor
-        </button>
-        {sqlEditorVisible ? (
+      <div className="overflow-hidden rounded-lg border bg-background">
+        {/* Toolbar row */}
+        <div className="flex items-center gap-1.5 border-b px-2 py-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant={aiEnabled ? "default" : "ghost"}
+                size="sm"
+                className={cn(
+                  "h-7 gap-1.5 px-2 text-xs",
+                  !aiEnabled && "text-muted-foreground",
+                )}
+                onClick={onToggleAi}
+              >
+                <Sparkles className="size-3.5" />
+                AI
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {aiEnabled ? "Switch to SQL editor" : "Ask AI for help"}
+            </TooltipContent>
+          </Tooltip>
+
+          <div className="ml-auto flex items-center gap-1.5">
+            {!aiEnabled && (
+              <>
+                <span className="text-[11px] text-muted-foreground">
+                  Shift+Enter to run
+                </span>
+                {!isSqlRunning ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1 px-2.5 text-xs font-mono"
+                    onClick={() => consoleApiRef.current?.runQuery()}
+                  >
+                    <Play className="size-3" />
+                    Run
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1 px-2.5 text-xs font-mono bg-primary text-primary-foreground"
+                    onClick={() => consoleApiRef.current?.cancelQuery()}
+                  >
+                    <Square className="size-3" />
+                    Stop
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* AI prompt input — shown when AI mode is active */}
+        {aiEnabled && (
+          <form
+            className="p-0"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (ai) {
+                void ai.submitPrompt();
+              }
+            }}
+          >
+            <InputGroup className="border-0 shadow-none bg-transparent dark:bg-background items-end rounded-none">
+              <InputGroupTextarea
+                value={ai?.promptDraft ?? ""}
+                onChange={(event) => ai?.setPromptDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing
+                  ) {
+                    event.preventDefault();
+                    if (ai?.promptDraft?.trim() && !ai?.isAssistantThinking) {
+                      void ai.submitPrompt();
+                    }
+                  }
+                }}
+                placeholder="Ask AI to refine this cell..."
+                rows={4}
+                disabled={ai?.isAssistantThinking ?? false}
+                autoFocus
+              />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  type="submit"
+                  size="sm"
+                  className="dark:bg-background"
+                  disabled={
+                    (ai?.isAssistantThinking ?? false) ||
+                    !(ai?.promptDraft?.trim())
+                  }
+                >
+                  {ai?.isAssistantThinking ? "Running..." : "Ask AI"}
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
+          </form>
+        )}
+
+        {/* SQL editor — always mounted, hidden when AI mode is active */}
+        <div className={aiEnabled ? "hidden" : undefined}>
           <SqlConsole
             className="py-0"
             historyKey={`analysis-sql-history:${cell.id}`}
@@ -298,6 +412,8 @@ export function SqlCell({
             executeQueryAction={executeQueryAction}
             autocompleteAction={autocompleteAction}
             showInlineResults={false}
+            showRunControls={false}
+            showKeyboardHint={false}
             onApiChangeAction={(api) => {
               consoleApiRef.current = api;
             }}
@@ -306,7 +422,7 @@ export function SqlCell({
             onNoticeAction={handleNotice}
             onRunStateChangeAction={handleRunStateChange}
           />
-        ) : null}
+        </div>
       </div>
 
       {hasFreshStoredPayload || isSqlRunning ? (

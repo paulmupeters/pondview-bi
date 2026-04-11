@@ -1,6 +1,12 @@
 import type { DashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
-import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
+import type {
+  CardConfig,
+  Config,
+  Result,
+  TableConfig,
+  TextConfig,
+} from "@/lib/types";
 
 export type SqlAnalysisStage =
   | "initial"
@@ -22,11 +28,12 @@ export type SqlAnalysisData = {
   rowCount?: number;
   columns?: { name: string; type?: string }[];
   rows?: Result[];
-  visualType?: "table" | "chart" | "card";
+  visualType?: "table" | "chart" | "card" | "text";
   isSqlExpandedInitial?: boolean;
   chartConfig?: Config;
   cardConfig?: CardConfig;
   tableConfig?: TableConfig;
+  textConfig?: TextConfig;
   summary?: {
     totalRows: number;
     executionTimeMs?: number;

@@ -15,6 +15,7 @@ import {
   type JoinDraftGroup,
   seedJoinDraftGroups,
 } from "@/components/dashboard-builder-panel.joins";
+import { MarkdownRenderer } from "@/components/markdown-renderer";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import { SqlChart } from "@/components/sql-chart";
 import { SqlResultsTable } from "@/components/sql-results-table";
@@ -58,7 +59,13 @@ import {
   isWasmLocalIdentifier,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
-import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
+import type {
+  CardConfig,
+  Config,
+  Result,
+  TableConfig,
+  TextConfig,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   addChartToDashboard,
@@ -80,7 +87,7 @@ type VisualSnapshot = {
   artifact: ArtifactData<SqlAnalysisData>;
   payload: SqlAnalysisData;
   rows: Result[];
-  type: "chart" | "card" | "table";
+  type: "chart" | "card" | "table" | "text";
 };
 
 type JoinColumnState = {
@@ -249,6 +256,18 @@ function normalizeVisualArtifact(
       },
       rows,
       type: "table",
+    };
+  }
+
+  // Handle text artifacts
+  if (visualType === "text") {
+    return {
+      id: artifact.id,
+      createdAt: artifact.createdAt,
+      artifact,
+      payload,
+      rows: [],
+      type: "text",
     };
   }
 
@@ -816,10 +835,13 @@ export function DashboardBuilderPanel({
         const { payload, type } = snapshot;
 
         // Determine the config based on visual type
-        let config: CardConfig | TableConfig | Config | undefined;
+        let config: CardConfig | TableConfig | Config | TextConfig | undefined;
         let title: string | undefined;
 
-        if (type === "card") {
+        if (type === "text") {
+          config = payload.textConfig;
+          title = payload.textConfig?.title ?? "Text card";
+        } else if (type === "card") {
           config = payload.cardConfig;
           title = config?.title ?? "Untitled card";
         } else if (type === "table") {
@@ -830,7 +852,8 @@ export function DashboardBuilderPanel({
           title = config?.title ?? "Untitled chart";
         }
 
-        const description = config?.description ?? null;
+        const description =
+          config && "description" in config ? (config.description ?? null) : null;
         const sourceDescriptor =
           payload.sourceDescriptor ??
           (payload.sqlBackend || selectedSqlBackend
@@ -1236,14 +1259,17 @@ export function DashboardBuilderPanel({
                       <div className="flex min-w-0 items-center justify-between gap-3 px-3 py-2">
                         <div className="flex min-w-0 flex-col">
                           <span className="text-sm font-medium">
-                            {snapshot.type === "card"
-                              ? snapshot.payload.cardConfig?.title ||
-                                "Untitled card"
-                              : snapshot.type === "table"
-                                ? snapshot.payload.tableConfig?.title ||
-                                  "Untitled table"
-                                : snapshot.payload.chartConfig?.title ||
-                                  "Untitled visual"}
+                            {snapshot.type === "text"
+                              ? snapshot.payload.textConfig?.title ||
+                                "Text card"
+                              : snapshot.type === "card"
+                                ? snapshot.payload.cardConfig?.title ||
+                                  "Untitled card"
+                                : snapshot.type === "table"
+                                  ? snapshot.payload.tableConfig?.title ||
+                                    "Untitled table"
+                                  : snapshot.payload.chartConfig?.title ||
+                                    "Untitled visual"}
                           </span>
                           {snapshot.payload.query && (
                             <span className="text-xs text-muted-foreground truncate max-w-[280px]">
@@ -1264,7 +1290,15 @@ export function DashboardBuilderPanel({
                           </span>
                         </Button>
                       </div>
-                      {snapshot.type === "card" ? (
+                      {snapshot.type === "text" ? (
+                        <div className="min-w-0 p-4">
+                          <div className="rounded-md border bg-background p-3 text-sm">
+                            <MarkdownRenderer>
+                              {snapshot.payload.textConfig?.content ?? ""}
+                            </MarkdownRenderer>
+                          </div>
+                        </div>
+                      ) : snapshot.type === "card" ? (
                         <div className="flex min-w-0 justify-center p-4">
                           <Card className="w-full max-w-sm border-0 shadow-none">
                             <CardHeader>

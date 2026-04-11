@@ -40,7 +40,7 @@ export default function ViewDataPage() {
   const [joinDefsSuccess, setJoinDefsSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!duckDbHttpConfig) {
+    if (!duckDbHttpConfig || selectedSqlBackend !== "duckdb-http") {
       return;
     }
 
@@ -52,7 +52,7 @@ export default function ViewDataPage() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [duckDbHttpConfig]);
+  }, [duckDbHttpConfig, selectedSqlBackend]);
 
   useEffect(() => {
     setJoinDefsRaw(readJoinDefsRawFromStorage());

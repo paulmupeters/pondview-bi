@@ -188,6 +188,10 @@ export type SqlConsoleApi = {
    * Runs the current query programmatically.
    */
   runQuery: () => void;
+  /**
+   * Cancels the currently running query, if any.
+   */
+  cancelQuery: () => void;
 };
 
 export type SqlConsoleProps = {
@@ -217,6 +221,7 @@ export type SqlConsoleProps = {
   onCancelQueryAction?: () => Promise<void> | void;
   showInlineResults?: boolean;
   showRunControls?: boolean;
+  showKeyboardHint?: boolean;
 };
 
 const DEFAULT_PLACEHOLDER = "ENTER SQL QUERY...";
@@ -243,6 +248,7 @@ export function SqlConsole({
   onCancelQueryAction,
   showInlineResults = true,
   showRunControls = true,
+  showKeyboardHint = true,
 }: SqlConsoleProps) {
   const editorRef = useRef<SqlCodeEditorApi | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -393,11 +399,15 @@ export function SqlConsole({
   };
 
   const runQueryRef = useRef<() => void>(() => {});
+  const cancelRunRef = useRef<() => void>(() => {});
   useEffect(() => {
     runQueryRef.current = () => {
       void handleRunQuery();
     };
   }, [handleRunQuery]);
+  useEffect(() => {
+    cancelRunRef.current = cancelRun;
+  });
 
   // Use refs for callbacks so these effects only fire when the actual state
   // changes, not when a parent re-creates a callback reference. Without this,
@@ -443,6 +453,7 @@ export function SqlConsole({
         setNotice(null);
       },
       runQuery: () => runQueryRef.current(),
+      cancelQuery: () => cancelRunRef.current(),
     };
   }
 
@@ -489,9 +500,11 @@ export function SqlConsole({
               onHistoryNext={handleHistoryNext}
               className="flex-1 bg-background"
             />
-            <div className="text-[11px] p-2 text-muted-foreground">
-              Shift + Enter to run
-            </div>
+            {showKeyboardHint && (
+              <div className="text-[11px] p-2 text-muted-foreground">
+                Shift + Enter to run
+              </div>
+            )}
           </div>
           {showRunControls && (
             <div className="flex flex-row justify-end gap-2 sm:flex-col sm:items-center sm:px-1 absolute top-2 right-1">

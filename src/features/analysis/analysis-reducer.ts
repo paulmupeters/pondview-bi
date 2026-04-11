@@ -1,9 +1,12 @@
-import type { WorkspaceAnalysisCell } from "@/lib/workspace/workspace-db";
+import type {
+  WorkspaceAnalysisCell,
+  WorkspaceAnalysisCellKind,
+} from "@/lib/workspace/workspace-db";
 
 export type AnalysisCellState = WorkspaceAnalysisCell & {
   aiEnabled: boolean;
   sqlEnabled: boolean;
-  activeMode: "ai" | "sql" | null;
+  activeMode: "ai" | "sql" | "text" | null;
 };
 
 export type AnalysisState = {
@@ -49,6 +52,10 @@ function inferPaneVisibility(cell: WorkspaceAnalysisCell): {
   aiEnabled: boolean;
   sqlEnabled: boolean;
 } {
+  if (cell.kind === "text") {
+    return { aiEnabled: false, sqlEnabled: false };
+  }
+
   if (
     typeof cell.aiEnabled === "boolean" &&
     typeof cell.sqlEnabled === "boolean"
@@ -64,7 +71,7 @@ function inferPaneVisibility(cell: WorkspaceAnalysisCell): {
   }
 
   if (cell.kind === "ai") {
-    return { aiEnabled: true, sqlEnabled: false };
+    return { aiEnabled: true, sqlEnabled: true };
   }
 
   if (
@@ -75,15 +82,20 @@ function inferPaneVisibility(cell: WorkspaceAnalysisCell): {
     return { aiEnabled: false, sqlEnabled: true };
   }
 
-  return { aiEnabled: true, sqlEnabled: false };
+  return { aiEnabled: false, sqlEnabled: true };
 }
 
 function resolveActiveMode(params: {
   aiEnabled: boolean;
   sqlEnabled: boolean;
-  currentActiveMode?: "ai" | "sql" | null;
-}): "ai" | "sql" | null {
-  const { aiEnabled, sqlEnabled, currentActiveMode = null } = params;
+  kind?: WorkspaceAnalysisCellKind;
+  currentActiveMode?: "ai" | "sql" | "text" | null;
+}): "ai" | "sql" | "text" | null {
+  const { aiEnabled, sqlEnabled, kind, currentActiveMode = null } = params;
+
+  if (kind === "text") {
+    return "text";
+  }
 
   if (currentActiveMode === "ai" && aiEnabled) {
     return "ai";
@@ -126,6 +138,7 @@ function updateCellPaneState(
     activeMode: resolveActiveMode({
       aiEnabled,
       sqlEnabled,
+      kind: cell.kind,
       currentActiveMode: cell.activeMode,
     }),
   };
@@ -153,6 +166,7 @@ export function toAnalysisCellState(
     activeMode: resolveActiveMode({
       aiEnabled,
       sqlEnabled,
+      kind: cell.kind,
     }),
   };
 }

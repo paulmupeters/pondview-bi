@@ -1,11 +1,13 @@
 import {
+  ChevronDown,
+  ChevronRight,
   Circle,
   CircleAlert,
   CircleCheck,
   Loader2,
   Trash2,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,26 +27,6 @@ type CellFrameProps = {
   onDelete: () => void;
   children: ReactNode;
 };
-
-function getCellPreview(cell: AnalysisCellState): string {
-  if (cell.sqlDraft?.trim()) {
-    return cell.sqlDraft?.trim() || "Empty SQL cell";
-  }
-
-  if (cell.promptText.trim()) {
-    return cell.promptText.trim();
-  }
-
-  if (cell.aiEnabled && !cell.sqlEnabled) {
-    return "Empty AI cell";
-  }
-
-  if (cell.sqlEnabled && !cell.aiEnabled) {
-    return "Empty SQL cell";
-  }
-
-  return "Empty analysis cell";
-}
 
 function getStatusMeta(status: AnalysisCellState["status"]): {
   icon: typeof Circle;
@@ -83,41 +65,53 @@ export function CellFrame({
 }: CellFrameProps) {
   const statusMeta = getStatusMeta(cell.status);
   const StatusIcon = statusMeta.icon;
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <Card
       className={cn(
-        "gap-4 py-4 transition-colors",
+        "gap-0 py-0 transition-colors",
         isSelected && "border-primary/30 ring-primary/15 ring-2",
       )}
     >
-      <CardHeader className="grid-rows-[auto] items-center gap-3 px-4 pb-0">
-        <button
-          type="button"
-          className="flex min-w-0 w-full items-center gap-3 text-left"
-          aria-pressed={isSelected}
-          onClick={onSelect}
-        >
-          <span className="sr-only">Status: {cell.status}</span>
-          <span
-            data-status-icon={cell.status}
-            className={cn("shrink-0", statusMeta.className)}
-            aria-hidden="true"
+      <CardHeader className="grid-rows-[auto] items-center gap-0 px-4 py-1 pb-0">
+        <div className="flex min-w-0 w-full items-center gap-2">
+          <button
+            type="button"
+            className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+            aria-label={isCollapsed ? "Expand cell" : "Collapse cell"}
+            onClick={() => setIsCollapsed((previous) => !previous)}
           >
-            <StatusIcon
-              className={cn(
-                "size-4",
-                cell.status === "running" && "animate-spin",
-              )}
-            />
-          </span>
-          <CardTitle className="shrink-0 font-thin text-sm">
-            Cell {cell.position + 1}
-          </CardTitle>
-          <CardDescription className="min-w-0 truncate">
-            {getCellPreview(cell)}
-          </CardDescription>
-        </button>
+            {isCollapsed ? (
+              <ChevronRight className="size-3.5" />
+            ) : (
+              <ChevronDown className="size-3.5" />
+            )}
+          </button>
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            aria-pressed={isSelected}
+            onClick={onSelect}
+          >
+            <span className="sr-only">Status: {cell.status}</span>
+            <span
+              data-status-icon={cell.status}
+              className={cn("shrink-0", statusMeta.className)}
+              aria-hidden="true"
+            >
+              <StatusIcon
+                className={cn(
+                  "size-4",
+                  cell.status === "running" && "animate-spin",
+                )}
+              />
+            </span>
+            <CardTitle className="shrink-0 font-thin text-sm">
+              {cell.kind === "text" ? "Text" : "Cell"} {cell.position + 1}
+            </CardTitle>
+          </button>
+        </div>
         <CardAction className="row-span-1 flex items-center gap-2">
           <Button
             type="button"
@@ -130,7 +124,9 @@ export function CellFrame({
           </Button>
         </CardAction>
       </CardHeader>
-      <CardContent className="px-4 pt-0">{children}</CardContent>
+      {!isCollapsed && (
+        <CardContent className="px-4 pt-1 pb-4">{children}</CardContent>
+      )}
     </Card>
   );
 }

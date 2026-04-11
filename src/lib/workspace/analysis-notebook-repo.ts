@@ -246,8 +246,8 @@ function createCellRow(input: {
     notebookId: input.notebookId,
     position: input.position,
     kind,
-    aiEnabled: input.aiEnabled ?? kind !== "sql",
-    sqlEnabled: input.sqlEnabled ?? kind === "sql",
+    aiEnabled: input.aiEnabled ?? (kind === "ai"),
+    sqlEnabled: input.sqlEnabled ?? (kind === "sql" || kind === "ai"),
     promptText: input.promptText,
     sqlDraft: null,
     selectedDbIdentifier: null,
@@ -263,7 +263,7 @@ function createCellRow(input: {
 function resolveAnalysisCellKind(
   cell: WorkspaceAnalysisCell,
 ): WorkspaceAnalysisCellKind {
-  if (cell.kind === "ai" || cell.kind === "sql") {
+  if (cell.kind === "ai" || cell.kind === "sql" || cell.kind === "text") {
     return cell.kind;
   }
 

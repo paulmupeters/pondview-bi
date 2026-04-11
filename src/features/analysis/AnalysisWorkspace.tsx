@@ -23,6 +23,7 @@ import type { NotebookSession } from "@/hooks/use-notebook-session";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
+import type { WorkspaceAnalysisCellKind } from "@/lib/workspace/workspace-db";
 import { useRouter, useSearchParams } from "@/vite/next-navigation";
 
 type AnalysisWorkspaceProps = {
@@ -215,16 +216,13 @@ export function AnalysisWorkspace({
     );
   }
 
-  async function handleAddCell(panes: {
-    aiEnabled: boolean;
-    sqlEnabled: boolean;
-  }) {
+  async function handleAddCell(kind: WorkspaceAnalysisCellKind) {
     setIsMutating(true);
     try {
       const createdCell = await notebookSession.addCell({
-        kind: panes.sqlEnabled && !panes.aiEnabled ? "sql" : "ai",
-        aiEnabled: panes.aiEnabled,
-        sqlEnabled: panes.sqlEnabled,
+        kind,
+        aiEnabled: kind === "ai",
+        sqlEnabled: kind === "sql" || kind === "ai",
       });
       dispatch({
         type: "cellAdded",
@@ -255,15 +253,7 @@ export function AnalysisWorkspace({
     }
   }
 
-  async function handleToggleSqlPane(cellId: string, enabled: boolean) {
-    setIsMutating(true);
-    try {
-      await notebookSession.updateCell(cellId, { sqlEnabled: enabled });
-      dispatch({ type: "cellSqlPaneToggled", cellId, enabled });
-    } finally {
-      setIsMutating(false);
-    }
-  }
+
 
   async function handleInsertExplorerTable(payload: ExplorerInsertPayload) {
     if (payload.dbIdentifier) {
@@ -332,12 +322,6 @@ export function AnalysisWorkspace({
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <AnalysisToolbar
-          onAddCell={(mode) =>
-            void handleAddCell({
-              aiEnabled: mode === "ai",
-              sqlEnabled: mode === "manual",
-            })
-          }
           isBusy={isMutating}
           title={notebookSession.notebook?.title ?? null}
           onTitleChange={(newTitle) =>
@@ -381,15 +365,7 @@ export function AnalysisWorkspace({
             onToggleAiPane={(cellId, enabled) =>
               void handleToggleAiPane(cellId, enabled)
             }
-            onToggleSqlPane={(cellId, enabled) =>
-              void handleToggleSqlPane(cellId, enabled)
-            }
-            onAddCell={(mode) =>
-              void handleAddCell({
-                aiEnabled: mode === "ai",
-                sqlEnabled: mode === "manual",
-              })
-            }
+            onAddCell={(kind) => void handleAddCell(kind)}
             isBusy={isMutating}
           />
         </div>

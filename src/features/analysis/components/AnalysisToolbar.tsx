@@ -1,4 +1,4 @@
-import { Check, LayoutDashboard, Loader2, PanelLeft, Plus } from "lucide-react";
+import { Check, LayoutDashboard, Loader2, PanelLeft } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,13 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getAnalysisExplorerToggleLabel } from "@/features/analysis/analysis-explorer";
-import {
-  type DefaultPromptMode,
-  useDefaultPromptModePreference,
-} from "@/lib/default-prompt-mode";
-
 type AnalysisToolbarProps = {
-  onAddCell: (mode: DefaultPromptMode) => void;
   isBusy: boolean;
   title: string | null;
   onTitleChange: (title: string | null) => void;
@@ -39,7 +33,6 @@ const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigat
 const modKey = isMac ? "\u2318" : "Ctrl+";
 
 export function AnalysisToolbar({
-  onAddCell,
   isBusy,
   title,
   onTitleChange,
@@ -48,7 +41,6 @@ export function AnalysisToolbar({
   onToggleExplorer,
   lastSavedAt,
 }: AnalysisToolbarProps) {
-  const defaultMode = useDefaultPromptModePreference();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState<string>("");
 
@@ -89,20 +81,6 @@ export function AnalysisToolbar({
           {getAnalysisExplorerToggleLabel(isExplorerCollapsed)}{" "}
           <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
             {modKey}B
-          </kbd>
-        </TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button onClick={() => onAddCell(defaultMode)} disabled={isBusy}>
-            <Plus />
-            Add cell
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          Add cell{" "}
-          <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
-            {modKey}J
           </kbd>
         </TooltipContent>
       </Tooltip>

@@ -33,7 +33,7 @@ export type WorkspaceAnalysisCellStatus =
   | "complete"
   | "error";
 
-export type WorkspaceAnalysisCellKind = "ai" | "sql";
+export type WorkspaceAnalysisCellKind = "ai" | "sql" | "text";
 
 export interface WorkspaceAnalysisCell {
   id: string;
