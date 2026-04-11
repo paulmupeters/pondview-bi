@@ -348,6 +348,7 @@ export function AnalysisWorkspace({
           onToggleExplorer={() =>
             setIsExplorerCollapsed((previous) => !previous)
           }
+          lastSavedAt={notebookSession.notebook?.updatedAt ?? null}
         />
         <Dialog
           open={isDashboardPanelOpen}
@@ -383,6 +384,13 @@ export function AnalysisWorkspace({
             onToggleSqlPane={(cellId, enabled) =>
               void handleToggleSqlPane(cellId, enabled)
             }
+            onAddCell={(mode) =>
+              void handleAddCell({
+                aiEnabled: mode === "ai",
+                sqlEnabled: mode === "manual",
+              })
+            }
+            isBusy={isMutating}
           />
         </div>
       </div>

@@ -70,7 +70,7 @@ export function loadAiSettingsFromStorage(): AiSettings {
 
   if (typeof window === "undefined") {
     return {
-      provider: "gateway",
+      provider: "openai",
       model: fallbackModel,
       apiKey: "",
       openResponsesName: "",
@@ -81,7 +81,7 @@ export function loadAiSettingsFromStorage(): AiSettings {
   const rawProvider = window.localStorage.getItem(AI_PROVIDER_STORAGE_KEY);
   const provider: AiProvider = isAiProvider(rawProvider)
     ? rawProvider
-    : "gateway";
+    : "openai";
   const rawModel = window.localStorage.getItem(AI_MODEL_STORAGE_KEY);
   const model = rawModel === null ? fallbackModel : normalizeText(rawModel);
 
