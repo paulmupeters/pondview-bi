@@ -41,13 +41,15 @@ function renderCellFrame(cell: AnalysisCellState): string {
 }
 
 describe("CellFrame", () => {
-  test("renders the cell number and preview in the compact header without a badge", () => {
+  test("renders the compact shell chrome without a badge or inline preview", () => {
     const markup = renderCellFrame(createCell());
 
     expect(markup).toContain("Cell 2");
-    expect(markup).toContain("select 5;");
+    expect(markup).toContain("Cell body");
+    expect(markup).not.toContain("select 5;");
     expect(markup).not.toContain('data-slot="badge"');
     expect(markup).toContain('data-status-icon="complete"');
+    expect(markup).toContain('aria-label="Collapse cell"');
   });
 
   test("renders a status icon for each supported cell status", () => {
@@ -63,69 +65,28 @@ describe("CellFrame", () => {
     expect(runningMarkup).toContain("animate-spin");
   });
 
-  test("keeps the delete action separate from the selectable header button", () => {
+  test("keeps the collapse, select, and delete actions separate", () => {
     const markup = renderCellFrame(createCell());
 
-    expect(markup.match(/<button/g)?.length).toBe(2);
+    expect(markup.match(/<button/g)?.length).toBe(3);
+    expect(markup).toContain('aria-label="Collapse cell"');
     expect(markup).toContain('aria-pressed="false"');
     expect(markup).toContain('aria-label="Delete cell"');
     expect(markup).toMatch(
-      /aria-pressed="false"[\s\S]*<\/button>[\s\S]*aria-label="Delete cell"/,
+      /aria-label="Collapse cell"[\s\S]*aria-pressed="false"[\s\S]*aria-label="Delete cell"/,
     );
   });
 
-  test("uses the right preview fallback in each cell state", () => {
-    expect(renderCellFrame(createCell())).toContain("select 5;");
-    expect(
-      renderCellFrame(
-        createCell({
-          promptText: "Explain the outliers",
-          sqlDraft: "select * from orders",
-          aiEnabled: true,
-          sqlEnabled: true,
-        }),
-      ),
-    ).toContain("select * from orders");
-    expect(
-      renderCellFrame(
-        createCell({
-          promptText: "Explain the outliers",
-          sqlDraft: null,
-        }),
-      ),
-    ).toContain("Explain the outliers");
-    expect(
-      renderCellFrame(
-        createCell({
-          promptText: "",
-          sqlDraft: null,
-          aiEnabled: true,
-          sqlEnabled: false,
-        }),
-      ),
-    ).toContain("Empty AI cell");
-    expect(
-      renderCellFrame(
-        createCell({
-          promptText: "",
-          sqlDraft: null,
-          aiEnabled: false,
-          sqlEnabled: true,
-          kind: "sql",
-          activeMode: "sql",
-        }),
-      ),
-    ).toContain("Empty SQL cell");
-    expect(
-      renderCellFrame(
-        createCell({
-          promptText: "",
-          sqlDraft: null,
-          aiEnabled: true,
-          sqlEnabled: true,
-          activeMode: "sql",
-        }),
-      ),
-    ).toContain("Empty analysis cell");
+  test("labels text cells distinctly from analysis cells", () => {
+    const analysisMarkup = renderCellFrame(createCell());
+    const textMarkup = renderCellFrame(
+      createCell({
+        kind: "text",
+        activeMode: "text",
+      }),
+    );
+
+    expect(analysisMarkup).toContain("Cell 2");
+    expect(textMarkup).toContain("Text 2");
   });
 });

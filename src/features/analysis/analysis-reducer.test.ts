@@ -54,8 +54,8 @@ describe("analysis reducer", () => {
       ),
     ).toMatchObject({
       aiEnabled: true,
-      sqlEnabled: false,
-      activeMode: "ai",
+      sqlEnabled: true,
+      activeMode: "sql",
     });
   });
 
