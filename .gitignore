@@ -79,3 +79,5 @@ notes.md
 # local app state
 /state/
 .worktrees/
+.claude/
+.cursor/

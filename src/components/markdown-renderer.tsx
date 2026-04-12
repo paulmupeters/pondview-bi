@@ -5,6 +5,8 @@ import {
   isValidElement,
   type ReactElement,
   type ReactNode,
+  useEffect,
+  useRef,
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -26,15 +28,6 @@ type ExtractedCode = {
   className?: string;
   isSql: boolean;
 };
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
 
 function extractCodeFromPre(children: ReactNode): ExtractedCode | null {
   const nodes = Children.toArray(children);
@@ -64,13 +57,33 @@ function extractCodeFromPre(children: ReactNode): ExtractedCode | null {
   };
 }
 
-function highlightSql(code: string): string {
-  try {
-    return hljs.highlight(code, { language: "sql", ignoreIllegals: true })
-      .value;
-  } catch {
-    return escapeHtml(code);
-  }
+function SqlHighlightedCode({
+  code,
+  className,
+}: {
+  code: string;
+  className?: string;
+}) {
+  const codeRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const element = codeRef.current;
+    if (!element) {
+      return;
+    }
+
+    element.textContent = code;
+    hljs.highlightElement(element);
+  }, [code]);
+
+  return (
+    <code
+      ref={codeRef}
+      className={cn("hljs language-sql font-mono text-sm", className)}
+    >
+      {code}
+    </code>
+  );
 }
 
 export function MarkdownRenderer({
@@ -216,14 +229,9 @@ export function MarkdownRenderer({
                   )}
                   {...props}
                 >
-                  <code
-                    className={cn(
-                      "hljs language-sql font-mono text-sm",
-                      extractedCode.className,
-                    )}
-                    dangerouslySetInnerHTML={{
-                      __html: highlightSql(extractedCode.code),
-                    }}
+                  <SqlHighlightedCode
+                    code={extractedCode.code}
+                    className={extractedCode.className}
                   />
                 </pre>
               );

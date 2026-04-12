@@ -246,7 +246,7 @@ function createCellRow(input: {
     notebookId: input.notebookId,
     position: input.position,
     kind,
-    aiEnabled: input.aiEnabled ?? (kind === "ai"),
+    aiEnabled: input.aiEnabled ?? kind === "ai",
     sqlEnabled: input.sqlEnabled ?? (kind === "sql" || kind === "ai"),
     promptText: input.promptText,
     sqlDraft: null,

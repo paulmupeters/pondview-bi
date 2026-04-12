@@ -42,7 +42,7 @@ function LegacyDashboardDeepLinkRedirect() {
 
 export function App() {
   return (
-    <ThemeProvider defaultTheme="system" storageKey="bi-chat-theme">
+    <ThemeProvider defaultTheme="system" storageKey="pondview-theme">
       <TooltipProvider>
         <CustomCssLoader />
         <SqlRuntimeBootstrap />

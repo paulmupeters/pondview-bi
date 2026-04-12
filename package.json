@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paulmupeters/pondview-ui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/paulmupeters/pondview-ui/issues"
+  },
+  "homepage": "https://github.com/paulmupeters/pondview-ui",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

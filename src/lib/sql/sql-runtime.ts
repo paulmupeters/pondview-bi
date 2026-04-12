@@ -324,6 +324,16 @@ function getBackendFallbackOrder(
   return ["bridge", "duckdb-http", "duckdb-wasm"];
 }
 
+function pickAvailableBackend(
+  backends: SqlBackend[],
+  deps: RuntimeDeps,
+): SqlBackend {
+  const backend = backends.find((candidate) =>
+    isBackendAvailable(candidate, deps),
+  );
+  return backend ?? backends[0];
+}
+
 function isBackendAvailable(backend: SqlBackend, deps: RuntimeDeps): boolean {
   if (backend === "bridge") {
     return isBridgeAvailable(deps);
@@ -358,9 +368,7 @@ export function resolveSelectedSqlBackend(
     return preference;
   }
 
-  return getBackendFallbackOrder("auto").find((backend) =>
-    isBackendAvailable(backend, deps),
-  )!;
+  return pickAvailableBackend(getBackendFallbackOrder("auto"), deps);
 }
 
 export function resolveSqlBackend(
@@ -368,7 +376,5 @@ export function resolveSqlBackend(
   deps: RuntimeDeps = defaultDeps,
 ): SqlBackend {
   const preference = resolvePreference(options.backendPreference);
-  return getBackendFallbackOrder(preference).find((backend) =>
-    isBackendAvailable(backend, deps),
-  )!;
+  return pickAvailableBackend(getBackendFallbackOrder(preference), deps);
 }

@@ -91,5 +91,9 @@ export function buildDashboardBuilderMessages(params: {
     ];
   });
 
-  return [...cellEntryMessages, ...syntheticSqlMessages, ...syntheticTextMessages];
+  return [
+    ...cellEntryMessages,
+    ...syntheticSqlMessages,
+    ...syntheticTextMessages,
+  ];
 }

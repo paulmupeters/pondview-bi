@@ -1,17 +1,5 @@
 import { Play, Sparkles, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupTextarea,
-} from "@/components/ui/input-group";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import {
   createSqlAutocompleteAction,
@@ -19,6 +7,18 @@ import {
   SqlConsole,
   type SqlConsoleApi,
 } from "@/components/sql-console";
+import { Button } from "@/components/ui/button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "@/components/ui/input-group";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
 import {
@@ -393,7 +393,7 @@ export function SqlCell({
                   className="dark:bg-background"
                   disabled={
                     (ai?.isAssistantThinking ?? false) ||
-                    !(ai?.promptDraft?.trim())
+                    !ai?.promptDraft?.trim()
                   }
                 >
                   {ai?.isAssistantThinking ? "Running..." : "Ask AI"}

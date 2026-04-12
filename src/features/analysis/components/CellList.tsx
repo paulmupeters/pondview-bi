@@ -1,15 +1,15 @@
 import { Bot, Code, Plus, Type } from "lucide-react";
-import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
-import { CellContent } from "@/features/analysis/components/CellContent";
-import { CellFrame } from "@/features/analysis/components/CellFrame";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { WorkspaceAnalysisCellKind } from "@/lib/workspace/workspace-db";
+import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
+import { CellContent } from "@/features/analysis/components/CellContent";
+import { CellFrame } from "@/features/analysis/components/CellFrame";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
+import type { WorkspaceAnalysisCellKind } from "@/lib/workspace/workspace-db";
 
 type CellListProps = {
   cells: AnalysisCellState[];

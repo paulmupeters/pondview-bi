@@ -8,6 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getAnalysisExplorerToggleLabel } from "@/features/analysis/analysis-explorer";
+
 type AnalysisToolbarProps = {
   isBusy: boolean;
   title: string | null;
@@ -29,7 +30,9 @@ function formatRelativeTime(timestamp: number): string {
   return `${Math.floor(hoursAgo / 24)}d ago`;
 }
 
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
+const isMac =
+  typeof navigator !== "undefined" &&
+  /Mac|iPhone|iPad/.test(navigator.userAgent);
 const modKey = isMac ? "\u2318" : "Ctrl+";
 
 export function AnalysisToolbar({

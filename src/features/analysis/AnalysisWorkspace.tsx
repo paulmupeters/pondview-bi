@@ -253,8 +253,6 @@ export function AnalysisWorkspace({
     }
   }
 
-
-
   async function handleInsertExplorerTable(payload: ExplorerInsertPayload) {
     if (payload.dbIdentifier) {
       setSelectedExplorerDb(payload.dbIdentifier);

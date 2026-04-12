@@ -41,7 +41,7 @@ Queries can run on three backends:
 
 - `duckdb wasm`: browser-local execution
 - `duckdb-http`: remote DuckDB `httpserver` using the community extension
-- `bridge`: remote Pondview bridge runtime through a DuckDB extension (coming soon)
+- `bridge`: remote Pondview bridge runtime through a DuckDB extension
 
 Backend selection is user-configurable in Settings and resolved at query time.
 
@@ -89,8 +89,8 @@ See:
 ### Install and run
 
 ```bash
-git clone <repository-url>
-cd bi-chat
+git clone https://github.com/paulmupeters/pondview-ui.git
+cd pondview-ui
 bun install
 cp env.local.example .env.local
 bun dev
@@ -173,11 +173,11 @@ bun run test
 
 ## contributing
 
-1. Create a branch.
-2. Make the code change.
-3. Run the relevant checks.
-4. Update docs when behavior changes.
-5. Open a pull request.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow and local checks.
+
+## security
+
+See [SECURITY.md](./SECURITY.md) for how to report vulnerabilities privately.
 
 ## license
 

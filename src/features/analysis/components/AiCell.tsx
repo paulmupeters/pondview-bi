@@ -1,9 +1,9 @@
+import type { UIMessage } from "ai";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Response } from "@/components/ai-elements/response";
 import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
 import { Button } from "@/components/ui/button";
-import type { UIMessage } from "ai";
 import { getMessageText } from "@/features/analysis/ai-cell-message-utils";
 
 export type AiCellState = {

@@ -9,7 +9,6 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="input-group"
-      role="group"
       className={cn(
         "overflow-hidden group/input-group bg-card border shadow-sm dark:bg-card relative flex w-full rounded-lg items-center transition-[color,box-shadow] outline-none",
         "h-9 min-w-0 has-[>textarea]:h-auto",
@@ -34,7 +33,7 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 const inputGroupAddonVariants = cva(
-  "text-muted-foreground flex h-auto cursor-text items-center justify-center gap-2 py-1.5 text-sm font-medium select-none [&>svg:not([class*='size-'])]:size-4 [&>kbd]:rounded-[calc(var(--radius)-5px)] group-data-[disabled=true]/input-group:opacity-50",
+  "text-muted-foreground flex h-auto min-w-0 cursor-text items-center justify-center gap-2 border-0 bg-transparent p-0 py-1.5 text-sm font-medium select-none [&>svg:not([class*='size-'])]:size-4 [&>kbd]:rounded-[calc(var(--radius)-5px)] group-data-[disabled=true]/input-group:opacity-50",
   {
     variants: {
       align: {
@@ -57,19 +56,40 @@ const inputGroupAddonVariants = cva(
 function InputGroupAddon({
   className,
   align = "inline-start",
+  onClick,
+  onKeyDown,
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof inputGroupAddonVariants>) {
+}: React.HTMLAttributes<HTMLElement> &
+  VariantProps<typeof inputGroupAddonVariants>) {
+  function focusAssociatedInput(element: HTMLElement) {
+    element.parentElement?.querySelector("input")?.focus();
+  }
+
   return (
-    <div
-      role="group"
+    <fieldset
       data-slot="input-group-addon"
       data-align={align}
       className={cn(inputGroupAddonVariants({ align }), className)}
       onClick={(e) => {
+        onClick?.(e);
+        if (e.defaultPrevented) {
+          return;
+        }
+
         if ((e.target as HTMLElement).closest("button")) {
           return;
         }
-        e.currentTarget.parentElement?.querySelector("input")?.focus();
+
+        focusAssociatedInput(e.currentTarget);
+      }}
+      onKeyDown={(e) => {
+        onKeyDown?.(e);
+        if (e.defaultPrevented || (e.key !== "Enter" && e.key !== " ")) {
+          return;
+        }
+
+        e.preventDefault();
+        focusAssociatedInput(e.currentTarget);
       }}
       {...props}
     />

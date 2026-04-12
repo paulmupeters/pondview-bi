@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -8,6 +9,19 @@ const ignoredFileSuffixes = [".test.ts", ".test.tsx", ".d.ts"];
 const entryFiles = new Set([path.join(srcDir, "vite", "main.tsx")]);
 
 const projectFiles = [];
+
+function getTrackedSourceFiles() {
+  const output = execFileSync("git", ["ls-files", "--", "src"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+
+  return output
+    .split("\n")
+    .map((file) => file.trim())
+    .filter(Boolean)
+    .map((file) => path.join(root, file));
+}
 
 function shouldTrackFile(name) {
   if (!sourceExtensions.has(path.extname(name))) {
@@ -60,16 +74,24 @@ function resolveImport(fromFile, specifier, knownFiles) {
   return null;
 }
 
+const trackedSourceFiles = new Set(
+  getTrackedSourceFiles().map((file) => path.normalize(file)),
+);
+
 walk(srcDir);
 
-const knownFiles = new Set(projectFiles);
+const trackedProjectFiles = projectFiles.filter((file) =>
+  trackedSourceFiles.has(file),
+);
+
+const knownFiles = new Set(trackedProjectFiles);
 const inboundReferences = new Map(
-  projectFiles.map((file) => [file, new Set()]),
+  trackedProjectFiles.map((file) => [file, new Set()]),
 );
 const importPattern =
   /(?:import|export)\s+(?:[^'"`]+?from\s*)?["']([^"']+)["']|import\(\s*["']([^"']+)["']\s*\)/g;
 
-for (const file of projectFiles) {
+for (const file of trackedProjectFiles) {
   const source = fs.readFileSync(file, "utf8");
 
   for (const match of source.matchAll(importPattern)) {
@@ -83,7 +105,7 @@ for (const file of projectFiles) {
   }
 }
 
-const deadFiles = projectFiles
+const deadFiles = trackedProjectFiles
   .filter(
     (file) => !entryFiles.has(file) && inboundReferences.get(file)?.size === 0,
   )

@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "bi-chat",
+      "name": "pondview-ui",
       "dependencies": {
         "@ai-sdk/anthropic": "^3.0.58",
         "@ai-sdk/open-responses": "^1.0.6",

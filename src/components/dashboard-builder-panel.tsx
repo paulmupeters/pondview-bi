@@ -853,7 +853,9 @@ export function DashboardBuilderPanel({
         }
 
         const description =
-          config && "description" in config ? (config.description ?? null) : null;
+          config && "description" in config
+            ? (config.description ?? null)
+            : null;
         const sourceDescriptor =
           payload.sourceDescriptor ??
           (payload.sqlBackend || selectedSqlBackend
