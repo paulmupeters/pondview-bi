@@ -14,7 +14,11 @@ type CellContentProps = {
     | null;
   notebookSession: NotebookSession;
   onBootstrapConsumed: (cellId: string) => void;
-  onToggleAiPane: (cellId: string, enabled: boolean) => void;
+  onSelectCellMode: (cellId: string, mode: "ai" | "sql" | "text") => void;
+  onStatusMessageChange?: (
+    cellId: string,
+    statusMessage: string | null,
+  ) => void;
 };
 
 export function CellContent({
@@ -22,7 +26,8 @@ export function CellContent({
   pendingBootstrap,
   notebookSession,
   onBootstrapConsumed,
-  onToggleAiPane,
+  onSelectCellMode,
+  onStatusMessageChange,
 }: CellContentProps) {
   if (cell.activeMode === "text") {
     return <TextCell cell={cell} notebookSession={notebookSession} />;
@@ -34,7 +39,8 @@ export function CellContent({
       pendingBootstrap={pendingBootstrap}
       notebookSession={notebookSession}
       onBootstrapConsumed={onBootstrapConsumed}
-      onToggleAiPane={onToggleAiPane}
+      onSelectCellMode={onSelectCellMode}
+      onStatusMessageChange={onStatusMessageChange}
     />
   );
 }
@@ -44,13 +50,21 @@ function CellContentAiSql({
   pendingBootstrap,
   notebookSession,
   onBootstrapConsumed,
-  onToggleAiPane,
+  onSelectCellMode,
+  onStatusMessageChange,
 }: CellContentProps) {
   const ai = useAnalysisCellAi({
     cell,
     entries: notebookSession.cellEntriesByCellId.get(cell.id) ?? [],
     notebookSession,
   });
+  const bootstrapSql =
+    pendingBootstrap?.kind === "sql" && pendingBootstrap.cellId === cell.id
+      ? {
+          sql: pendingBootstrap.sql,
+          autorun: pendingBootstrap.autorun,
+        }
+      : null;
 
   // Handle AI bootstrap prompt
   const consumedBootstrapKeyRef = useRef<string | null>(null);
@@ -65,6 +79,10 @@ function CellContentAiSql({
       return;
     }
 
+    if (cell.activeMode !== "ai") {
+      onSelectCellMode(cell.id, "ai");
+    }
+
     const bootstrapKey = `${cell.id}:${bootstrapPrompt}`;
     if (consumedBootstrapKeyRef.current === bootstrapKey) {
       return;
@@ -74,26 +92,47 @@ function CellContentAiSql({
     void ai.submitPrompt(bootstrapPrompt).finally(() => {
       onBootstrapConsumed(cell.id);
     });
-  }, [bootstrapPrompt, cell.id, onBootstrapConsumed, ai.submitPrompt]);
+  }, [
+    ai.submitPrompt,
+    bootstrapPrompt,
+    cell.activeMode,
+    cell.id,
+    onBootstrapConsumed,
+    onSelectCellMode,
+  ]);
+
+  useEffect(() => {
+    onStatusMessageChange?.(
+      cell.id,
+      cell.activeMode === "ai" ? ai.promptError : null,
+    );
+
+    return () => {
+      onStatusMessageChange?.(cell.id, null);
+    };
+  }, [ai.promptError, cell.activeMode, cell.id, onStatusMessageChange]);
+
+  useEffect(() => {
+    if (!bootstrapSql || cell.activeMode === "sql") {
+      return;
+    }
+
+    onSelectCellMode(cell.id, "sql");
+  }, [bootstrapSql, cell.activeMode, cell.id, onSelectCellMode]);
 
   return (
     <div className="space-y-3">
-      <AiResponseBanner ai={ai} />
+      {cell.activeMode === "ai" ? <AiResponseBanner ai={ai} /> : null}
       <SqlCell
         cell={cell}
-        bootstrapSql={
-          pendingBootstrap?.kind === "sql" &&
-          pendingBootstrap.cellId === cell.id
-            ? {
-                sql: pendingBootstrap.sql,
-                autorun: pendingBootstrap.autorun,
-              }
-            : null
-        }
+        bootstrapSql={bootstrapSql}
         notebookSession={notebookSession}
         onBootstrapConsumed={() => onBootstrapConsumed(cell.id)}
-        aiEnabled={cell.aiEnabled}
-        onToggleAi={() => onToggleAiPane(cell.id, !cell.aiEnabled)}
+        aiEnabled={cell.activeMode === "ai"}
+        onToggleAi={() =>
+          onSelectCellMode(cell.id, cell.activeMode === "ai" ? "sql" : "ai")
+        }
+        onSelectMode={(mode) => onSelectCellMode(cell.id, mode)}
         ai={ai}
       />
     </div>

@@ -38,6 +38,11 @@ export type AnalysisAction =
       cellId: string | null;
     }
   | {
+      type: "cellModeSelected";
+      cellId: string;
+      mode: "ai" | "sql" | "text";
+    }
+  | {
       type: "cellAiPaneToggled";
       cellId: string;
       enabled: boolean;
@@ -56,33 +61,7 @@ function inferPaneVisibility(cell: WorkspaceAnalysisCell): {
     return { aiEnabled: false, sqlEnabled: false };
   }
 
-  if (
-    typeof cell.aiEnabled === "boolean" &&
-    typeof cell.sqlEnabled === "boolean"
-  ) {
-    return {
-      aiEnabled: cell.aiEnabled,
-      sqlEnabled: cell.sqlEnabled,
-    };
-  }
-
-  if (cell.kind === "sql") {
-    return { aiEnabled: false, sqlEnabled: true };
-  }
-
-  if (cell.kind === "ai") {
-    return { aiEnabled: true, sqlEnabled: true };
-  }
-
-  if (
-    (typeof cell.sqlDraft === "string" && cell.sqlDraft.trim().length > 0) ||
-    (typeof cell.resultPayloadJson === "string" &&
-      cell.resultPayloadJson.trim().length > 0)
-  ) {
-    return { aiEnabled: false, sqlEnabled: true };
-  }
-
-  return { aiEnabled: false, sqlEnabled: true };
+  return { aiEnabled: true, sqlEnabled: true };
 }
 
 function resolveActiveMode(params: {
@@ -90,8 +69,15 @@ function resolveActiveMode(params: {
   sqlEnabled: boolean;
   kind?: WorkspaceAnalysisCellKind;
   currentActiveMode?: "ai" | "sql" | "text" | null;
+  hasPersistedSql?: boolean;
 }): "ai" | "sql" | "text" | null {
-  const { aiEnabled, sqlEnabled, kind, currentActiveMode = null } = params;
+  const {
+    aiEnabled,
+    sqlEnabled,
+    kind,
+    currentActiveMode = null,
+    hasPersistedSql = false,
+  } = params;
 
   if (kind === "text") {
     return "text";
@@ -113,12 +99,20 @@ function resolveActiveMode(params: {
     return "sql";
   }
 
-  if (sqlEnabled) {
+  if (kind === "ai") {
+    return "ai";
+  }
+
+  if (kind === "sql" || hasPersistedSql) {
     return "sql";
   }
 
   if (aiEnabled) {
     return "ai";
+  }
+
+  if (sqlEnabled) {
+    return "sql";
   }
 
   return null;
@@ -155,10 +149,46 @@ function resolveSelectedCellId(
   return cells[0]?.id ?? null;
 }
 
+function canSelectMode(
+  cell: AnalysisCellState,
+  mode: "ai" | "sql" | "text",
+): boolean {
+  if (mode === "text") {
+    return cell.kind === "text";
+  }
+
+  if (cell.kind === "text") {
+    return false;
+  }
+
+  return mode === "ai" ? cell.aiEnabled : cell.sqlEnabled;
+}
+
+function preserveLoadedCellMode(
+  currentCell: AnalysisCellState | undefined,
+  loadedCell: AnalysisCellState,
+): AnalysisCellState {
+  if (
+    !currentCell?.activeMode ||
+    !canSelectMode(loadedCell, currentCell.activeMode)
+  ) {
+    return loadedCell;
+  }
+
+  return {
+    ...loadedCell,
+    activeMode: currentCell.activeMode,
+  };
+}
+
 export function toAnalysisCellState(
   cell: WorkspaceAnalysisCell,
 ): AnalysisCellState {
   const { aiEnabled, sqlEnabled } = inferPaneVisibility(cell);
+  const hasPersistedSql =
+    (typeof cell.sqlDraft === "string" && cell.sqlDraft.trim().length > 0) ||
+    (typeof cell.resultPayloadJson === "string" &&
+      cell.resultPayloadJson.trim().length > 0);
   return {
     ...cell,
     aiEnabled,
@@ -167,6 +197,7 @@ export function toAnalysisCellState(
       aiEnabled,
       sqlEnabled,
       kind: cell.kind,
+      hasPersistedSql,
     }),
   };
 }
@@ -187,14 +218,18 @@ export function analysisReducer(
 ): AnalysisState {
   switch (action.type) {
     case "workspaceLoaded": {
+      const cells = action.cells.map((loadedCell) =>
+        preserveLoadedCellMode(
+          state.cells.find((cell) => cell.id === loadedCell.id),
+          loadedCell,
+        ),
+      );
+
       return {
         ...state,
         hydration: "ready",
-        cells: action.cells,
-        selectedCellId: resolveSelectedCellId(
-          action.cells,
-          state.selectedCellId,
-        ),
+        cells,
+        selectedCellId: resolveSelectedCellId(cells, state.selectedCellId),
         bootstrapApplied: true,
       };
     }
@@ -244,6 +279,16 @@ export function analysisReducer(
       return {
         ...state,
         selectedCellId: resolveSelectedCellId(state.cells, action.cellId),
+      };
+    }
+    case "cellModeSelected": {
+      return {
+        ...state,
+        cells: state.cells.map((cell) =>
+          cell.id === action.cellId && canSelectMode(cell, action.mode)
+            ? { ...cell, activeMode: action.mode }
+            : cell,
+        ),
       };
     }
     case "cellAiPaneToggled": {

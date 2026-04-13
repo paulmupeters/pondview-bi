@@ -5,6 +5,7 @@ import { Response } from "@/components/ai-elements/response";
 import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
 import { Button } from "@/components/ui/button";
 import { getMessageText } from "@/features/analysis/ai-cell-message-utils";
+import { animations, getAnimationFrame } from "@/lib/animations";
 
 export type AiCellState = {
   promptDraft: string;
@@ -20,9 +21,14 @@ type AiResponseBannerProps = {
   ai: AiCellState;
 };
 
+const STREAMING_ANIMATION = "bars";
+
 export function AiResponseBanner({ ai }: AiResponseBannerProps) {
   const [isResponseExpanded, setIsResponseExpanded] = useState(true);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
+  const [streamingAnimationFrame, setStreamingAnimationFrame] = useState(() =>
+    getAnimationFrame(STREAMING_ANIMATION, 0),
+  );
 
   const transcriptTextEntries: Array<{
     id: string;
@@ -49,6 +55,25 @@ export function AiResponseBanner({ ai }: AiResponseBannerProps) {
       setIsResponseExpanded(true);
     }
   }, [hasResponse]);
+
+  useEffect(() => {
+    if (!ai.isAssistantThinking || ai.latestAssistantText) {
+      setStreamingAnimationFrame(getAnimationFrame(STREAMING_ANIMATION, 0));
+      return;
+    }
+
+    let frameIndex = 0;
+    const intervalId = window.setInterval(() => {
+      frameIndex += 1;
+      setStreamingAnimationFrame(
+        getAnimationFrame(STREAMING_ANIMATION, frameIndex),
+      );
+    }, animations[STREAMING_ANIMATION].interval);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [ai.isAssistantThinking, ai.latestAssistantText]);
 
   if (!hasResponse && !ai.promptError && !hasTranscript) {
     return null;
@@ -82,8 +107,15 @@ export function AiResponseBanner({ ai }: AiResponseBannerProps) {
                   {ai.latestAssistantText}
                 </Response>
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  Assistant is working...
+                <p
+                  role="status"
+                  aria-label="Assistant is working"
+                  className="flex items-center gap-2 text-sm text-muted-foreground"
+                >
+                  <span className="font-mono text-foreground">
+                    {streamingAnimationFrame}
+                  </span>
+                  <span>Streaming response</span>
                 </p>
               )}
             </div>

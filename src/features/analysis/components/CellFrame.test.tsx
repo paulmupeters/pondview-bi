@@ -27,13 +27,17 @@ function createCell(
   };
 }
 
-function renderCellFrame(cell: AnalysisCellState): string {
+function renderCellFrame(
+  cell: AnalysisCellState,
+  options: { statusMessage?: string | null } = {},
+): string {
   return renderToStaticMarkup(
     <CellFrame
       cell={cell}
       isSelected={false}
       onSelect={() => {}}
       onDelete={() => {}}
+      statusMessage={options.statusMessage}
     >
       <div>Cell body</div>
     </CellFrame>,
@@ -63,6 +67,23 @@ describe("CellFrame", () => {
     expect(completeMarkup).toContain('data-status-icon="complete"');
     expect(errorMarkup).toContain('data-status-icon="error"');
     expect(runningMarkup).toContain("animate-spin");
+  });
+
+  test("renders a popover trigger when an error status message is available", () => {
+    const markup = renderCellFrame(createCell({ status: "error" }), {
+      statusMessage: "Provider request failed.",
+    });
+
+    expect(markup).toContain('data-status-icon="error"');
+    expect(markup).toContain('data-state="closed"');
+    expect(markup).toContain('aria-haspopup="dialog"');
+  });
+
+  test("does not render a popover trigger without an error status message", () => {
+    const markup = renderCellFrame(createCell({ status: "error" }));
+
+    expect(markup).toContain('data-status-icon="error"');
+    expect(markup).not.toContain('aria-haspopup="dialog"');
   });
 
   test("keeps the collapse, select, and delete actions separate", () => {

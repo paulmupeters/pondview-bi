@@ -221,8 +221,8 @@ export function AnalysisWorkspace({
     try {
       const createdCell = await notebookSession.addCell({
         kind,
-        aiEnabled: kind === "ai",
-        sqlEnabled: kind === "sql" || kind === "ai",
+        aiEnabled: kind !== "text",
+        sqlEnabled: kind !== "text",
       });
       dispatch({
         type: "cellAdded",
@@ -238,16 +238,6 @@ export function AnalysisWorkspace({
     try {
       await notebookSession.deleteCell(cellId);
       dispatch({ type: "cellDeleted", cellId });
-    } finally {
-      setIsMutating(false);
-    }
-  }
-
-  async function handleToggleAiPane(cellId: string, enabled: boolean) {
-    setIsMutating(true);
-    try {
-      await notebookSession.updateCell(cellId, { aiEnabled: enabled });
-      dispatch({ type: "cellAiPaneToggled", cellId, enabled });
     } finally {
       setIsMutating(false);
     }
@@ -360,8 +350,8 @@ export function AnalysisWorkspace({
             }
             onBootstrapConsumed={handleBootstrapConsumed}
             onDeleteCell={(cellId) => void handleDeleteCell(cellId)}
-            onToggleAiPane={(cellId, enabled) =>
-              void handleToggleAiPane(cellId, enabled)
+            onSelectCellMode={(cellId, mode) =>
+              dispatch({ type: "cellModeSelected", cellId, mode })
             }
             onAddCell={(kind) => void handleAddCell(kind)}
             isBusy={isMutating}

@@ -14,11 +14,6 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
 import {
@@ -46,6 +41,7 @@ type SqlCellProps = {
   onBootstrapConsumed?: () => void;
   aiEnabled: boolean;
   onToggleAi: () => void;
+  onSelectMode?: (mode: "ai" | "sql") => void;
   ai: AiCellState;
 };
 
@@ -56,6 +52,7 @@ export function SqlCell({
   onBootstrapConsumed,
   aiEnabled,
   onToggleAi,
+  onSelectMode,
   ai,
 }: SqlCellProps) {
   const consoleApiRef = useRef<SqlConsoleApi | null>(null);
@@ -293,35 +290,62 @@ export function SqlCell({
     },
     [cell.id, notebookSession, storedPayload],
   );
+  const isChatMode = aiEnabled;
+  const handleSelectMode = useCallback(
+    (mode: "ai" | "sql") => {
+      if (onSelectMode) {
+        onSelectMode(mode);
+        return;
+      }
+
+      if ((mode === "ai") !== isChatMode) {
+        onToggleAi();
+      }
+    },
+    [isChatMode, onSelectMode, onToggleAi],
+  );
 
   return (
     <div className="space-y-4">
       <div className="overflow-hidden rounded-lg border bg-background">
         {/* Toolbar row */}
-        <div className="flex items-center gap-1.5 border-b px-2 py-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant={aiEnabled ? "default" : "ghost"}
-                size="sm"
-                className={cn(
-                  "h-7 gap-1.5 px-2 text-xs",
-                  !aiEnabled && "text-muted-foreground",
-                )}
-                onClick={onToggleAi}
-              >
-                <Sparkles className="size-3.5" />
-                AI
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {aiEnabled ? "Switch to SQL editor" : "Ask AI for help"}
-            </TooltipContent>
-          </Tooltip>
+        <div className="flex items-center gap-2 border-b px-2 py-1.5">
+          <div className="inline-flex items-center gap-1 rounded-full border bg-muted/50 p-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={isChatMode}
+              className={cn(
+                "h-7 gap-1.5 rounded-full px-3 text-xs",
+                isChatMode
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => handleSelectMode("ai")}
+            >
+              <Sparkles className="size-3.5" />
+              Chat
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={!isChatMode}
+              className={cn(
+                "h-7 rounded-full px-3 text-xs",
+                !isChatMode
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => handleSelectMode("sql")}
+            >
+              SQL
+            </Button>
+          </div>
 
           <div className="ml-auto flex items-center gap-1.5">
-            {!aiEnabled && (
+            {!isChatMode && (
               <>
                 <span className="text-[11px] text-muted-foreground">
                   Shift+Enter to run
@@ -355,7 +379,7 @@ export function SqlCell({
         </div>
 
         {/* AI prompt input — shown when AI mode is active */}
-        {aiEnabled && (
+        {isChatMode && (
           <form
             className="p-0"
             onSubmit={(event) => {
@@ -404,7 +428,7 @@ export function SqlCell({
         )}
 
         {/* SQL editor — always mounted, hidden when AI mode is active */}
-        <div className={aiEnabled ? "hidden" : undefined}>
+        <div className={isChatMode ? "hidden" : undefined}>
           <SqlConsole
             className="py-0"
             historyKey={`analysis-sql-history:${cell.id}`}

@@ -43,4 +43,10 @@ You have access to the following tools. Use them in the order described in the w
 - Apply a 'LIMIT' to all queries unless the user specifically asks for all records.
 - Do not use 'execute_final_sql' for exploratory probing or half-finished drafts.
 - Always explain the business logic used (based on 'skills.md') in your final response.
+
+# No data
+- When no data available, you can ask the user if they want you to add a sample dataset.
+- You can add a sample dataset by executing the following SQL: "CREATE TABLE unicorns AS SELECT * FROM read_csv_auto('https://data.pondview.app/unicorns.csv');"
+- User might ask for analysing this data because examples are available that use this data.
+
 `;

@@ -39,7 +39,7 @@ describe("analysis reducer", () => {
         }),
       ),
     ).toMatchObject({
-      aiEnabled: false,
+      aiEnabled: true,
       sqlEnabled: true,
       activeMode: "sql",
     });
@@ -55,7 +55,7 @@ describe("analysis reducer", () => {
     ).toMatchObject({
       aiEnabled: true,
       sqlEnabled: true,
-      activeMode: "sql",
+      activeMode: "ai",
     });
   });
 
@@ -127,5 +127,43 @@ describe("analysis reducer", () => {
 
     expect(deleted.cells.map((cell) => cell.id)).toEqual(["cell-1"]);
     expect(deleted.selectedCellId).toBe("cell-1");
+  });
+
+  test("preserves selected sql mode across workspace reloads", () => {
+    const initialCell = toAnalysisCellState(
+      makeCell({
+        id: "cell-1",
+        kind: "ai",
+        aiEnabled: true,
+        sqlEnabled: true,
+      }),
+    );
+    const loaded = analysisReducer(createInitialAnalysisState("notebook-1"), {
+      type: "workspaceLoaded",
+      cells: [initialCell],
+    });
+
+    const sqlSelected = analysisReducer(loaded, {
+      type: "cellModeSelected",
+      cellId: "cell-1",
+      mode: "sql",
+    });
+
+    const reloaded = analysisReducer(sqlSelected, {
+      type: "workspaceLoaded",
+      cells: [
+        toAnalysisCellState(
+          makeCell({
+            id: "cell-1",
+            kind: "ai",
+            aiEnabled: true,
+            sqlEnabled: true,
+            sqlDraft: "select * from orders",
+          }),
+        ),
+      ],
+    });
+
+    expect(reloaded.cells[0]?.activeMode).toBe("sql");
   });
 });

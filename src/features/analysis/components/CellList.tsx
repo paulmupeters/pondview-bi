@@ -1,4 +1,5 @@
-import { Bot, Code, Plus, Type } from "lucide-react";
+import { Bot, Plus, Type } from "lucide-react";
+import { useCallback, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +32,7 @@ type CellListProps = {
   onSelectCell: (cellId: string) => void;
   onBootstrapConsumed: (cellId: string) => void;
   onDeleteCell: (cellId: string) => void;
-  onToggleAiPane: (cellId: string, enabled: boolean) => void;
+  onSelectCellMode: (cellId: string, mode: "ai" | "sql" | "text") => void;
   onAddCell: (kind: WorkspaceAnalysisCellKind) => void;
   isBusy: boolean;
 };
@@ -57,11 +58,7 @@ function InsertCellDivider({
         <DropdownMenuContent align="center">
           <DropdownMenuItem onClick={() => onAddCell("ai")}>
             <Bot className="size-4" />
-            AI cell
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onAddCell("sql")}>
-            <Code className="size-4" />
-            SQL cell
+            Analysis cell
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => onAddCell("text")}>
             <Type className="size-4" />
@@ -81,14 +78,46 @@ export function CellList({
   onSelectCell,
   onBootstrapConsumed,
   onDeleteCell,
-  onToggleAiPane,
+  onSelectCellMode,
   onAddCell,
   isBusy,
 }: CellListProps) {
+  const [statusMessagesByCellId, setStatusMessagesByCellId] = useState<
+    Record<string, string | null>
+  >({});
+
+  const handleStatusMessageChange = useCallback(
+    (cellId: string, statusMessage: string | null) => {
+      setStatusMessagesByCellId((previousStatusMessages) => {
+        if (previousStatusMessages[cellId] === statusMessage) {
+          return previousStatusMessages;
+        }
+
+        if (statusMessage == null) {
+          if (!Object.hasOwn(previousStatusMessages, cellId)) {
+            return previousStatusMessages;
+          }
+
+          const {
+            [cellId]: _removedStatusMessage,
+            ...remainingStatusMessages
+          } = previousStatusMessages;
+          return remainingStatusMessages;
+        }
+
+        return {
+          ...previousStatusMessages,
+          [cellId]: statusMessage,
+        };
+      });
+    },
+    [],
+  );
+
   if (cells.length === 0) {
     return (
       <div className="rounded-xl border border-dashed bg-muted/10 px-6 py-12 text-center text-sm text-muted-foreground">
-        This notebook is empty. Add an AI, SQL, or text cell to get started.
+        This notebook is empty. Add an analysis or text cell to get started.
       </div>
     );
   }
@@ -105,13 +134,15 @@ export function CellList({
             isSelected={cell.id === selectedCellId}
             onSelect={() => onSelectCell(cell.id)}
             onDelete={() => onDeleteCell(cell.id)}
+            statusMessage={statusMessagesByCellId[cell.id] ?? null}
           >
             <CellContent
               cell={cell}
               pendingBootstrap={pendingBootstrap}
               notebookSession={notebookSession}
               onBootstrapConsumed={onBootstrapConsumed}
-              onToggleAiPane={onToggleAiPane}
+              onSelectCellMode={onSelectCellMode}
+              onStatusMessageChange={handleStatusMessageChange}
             />
           </CellFrame>
         </div>

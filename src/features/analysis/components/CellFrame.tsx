@@ -16,6 +16,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +29,14 @@ type CellFrameProps = {
   isSelected: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  statusMessage?: string | null;
   children: ReactNode;
+};
+
+type StatusIconProps = {
+  cell: AnalysisCellState;
+  className: string;
+  statusMessage?: string | null;
 };
 
 function getStatusMeta(status: AnalysisCellState["status"]): {
@@ -60,10 +72,10 @@ export function CellFrame({
   isSelected,
   onSelect,
   onDelete,
+  statusMessage,
   children,
 }: CellFrameProps) {
   const statusMeta = getStatusMeta(cell.status);
-  const StatusIcon = statusMeta.icon;
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
@@ -87,29 +99,24 @@ export function CellFrame({
               <ChevronDown className="size-3.5" />
             )}
           </button>
-          <button
-            type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
-            aria-pressed={isSelected}
-            onClick={onSelect}
-          >
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <span className="sr-only">Status: {cell.status}</span>
-            <span
-              data-status-icon={cell.status}
-              className={cn("shrink-0", statusMeta.className)}
-              aria-hidden="true"
+            <StatusIcon
+              cell={cell}
+              className={statusMeta.className}
+              statusMessage={statusMessage}
+            />
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              aria-pressed={isSelected}
+              onClick={onSelect}
             >
-              <StatusIcon
-                className={cn(
-                  "size-4",
-                  cell.status === "running" && "animate-spin",
-                )}
-              />
-            </span>
-            <CardTitle className="shrink-0 font-thin text-sm">
-              {cell.kind === "text" ? "Text" : "Cell"} {cell.position + 1}
-            </CardTitle>
-          </button>
+              <CardTitle className="shrink-0 font-thin text-sm">
+                {cell.kind === "text" ? "Text" : "Cell"} {cell.position + 1}
+              </CardTitle>
+            </button>
+          </div>
         </div>
         <CardAction className="row-span-1 flex items-center gap-2">
           <Button
@@ -127,5 +134,54 @@ export function CellFrame({
         <CardContent className="px-4 pt-1 pb-4">{children}</CardContent>
       )}
     </Card>
+  );
+}
+
+function StatusIcon({ cell, className, statusMessage }: StatusIconProps) {
+  const statusMeta = getStatusMeta(cell.status);
+  const IconComponent = statusMeta.icon;
+  const iconMarkup = (
+    <span
+      data-status-icon={cell.status}
+      className={cn("shrink-0", className)}
+      aria-hidden="true"
+    >
+      <IconComponent
+        className={cn("size-4", cell.status === "running" && "animate-spin")}
+      />
+    </span>
+  );
+
+  if (cell.status !== "error" || !statusMessage) {
+    return iconMarkup;
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <span
+          role="button"
+          tabIndex={0}
+          className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label="Show error details"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }}
+        >
+          {iconMarkup}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-80 px-3 py-2 text-sm"
+        side="bottom"
+        align="start"
+      >
+        {statusMessage}
+      </PopoverContent>
+    </Popover>
   );
 }

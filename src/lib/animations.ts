@@ -30,4 +30,17 @@ export const animations = {
     interval: 100,
     frames: ["█░░", "█░░", "██░", "██░", "███", "███"],
   },
-};
+} as const;
+
+export type AnimationName = keyof typeof animations;
+
+export function getAnimationFrame(
+  animationName: AnimationName,
+  frameIndex: number,
+): string {
+  const frames = animations[animationName].frames;
+  const normalizedIndex =
+    ((frameIndex % frames.length) + frames.length) % frames.length;
+
+  return frames[normalizedIndex];
+}
