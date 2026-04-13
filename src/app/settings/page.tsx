@@ -948,8 +948,9 @@ export default function SettingsPage() {
                 <div>
                   <p className="text-sm font-medium">Show tool calls</p>
                   <p className="text-xs text-muted-foreground">
-                    When disabled, chat hides `tool-*` cards entirely while
-                    keeping SQL result blocks and visuals visible.
+                    In notebook AI transcripts, show `tool-*` cards. When
+                    disabled, transcript tool cards are hidden while SQL result
+                    blocks and visuals remain visible.
                   </p>
                 </div>
                 <input
@@ -972,10 +973,10 @@ export default function SettingsPage() {
                     Show raw SQL tool output JSON
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    When enabled, the tool card shows raw
+                    In notebook AI transcripts, include raw
                     `tool-execute_final_sql` and `tool-execute_exploratory_sql`
-                    output in addition to the SQL result block. This only
-                    applies when tool calls are visible.
+                    output in the tool card, in addition to the SQL result
+                    block. This only applies when tool calls are visible.
                   </p>
                 </div>
                 <input
@@ -989,6 +990,11 @@ export default function SettingsPage() {
                   className="h-4 w-4 rounded border-border"
                 />
               </label>
+
+              <p className="text-xs text-muted-foreground">
+                These display settings only affect the expandable transcript
+                shown in analysis cells.
+              </p>
             </div>
           </Card>
 

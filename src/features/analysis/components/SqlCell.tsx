@@ -14,6 +14,11 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
 import {
@@ -25,11 +30,15 @@ import {
 } from "@/features/analysis/sql-cell-payload";
 import {
   isSqlResultStale,
-  normalizeSqlDraft,
   resolveCellStatusFromRunState,
   shouldPersistSqlDraftChange,
   shouldPersistVisualTypeChange,
 } from "@/features/analysis/sql-cell-sync";
+import {
+  createSqlIntentSwitchPatch,
+  getSqlIntentDraftSignature,
+  shouldShowSqlIntentPopover,
+} from "@/features/analysis/sql-intent";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
 import { runQuery } from "@/lib/sql/run-query";
 import { cn } from "@/lib/utils";
@@ -63,6 +72,9 @@ export function SqlCell({
   const previousRunStateRef = useRef<boolean | null>(null);
   const appliedBootstrapKeyRef = useRef<string | null>(null);
   const [isSqlRunning, setIsSqlRunning] = useState(false);
+  const [dismissedSqlIntentDraft, setDismissedSqlIntentDraft] = useState<
+    string | null
+  >(null);
   const storedPayload = useMemo(
     () => parseSqlCellPayload(cell.resultPayloadJson),
     [cell.resultPayloadJson],
@@ -291,6 +303,32 @@ export function SqlCell({
     [cell.id, notebookSession, storedPayload],
   );
   const isChatMode = aiEnabled;
+  const sqlIntentDraftSignature = useMemo(
+    () => getSqlIntentDraftSignature(ai.promptDraft),
+    [ai.promptDraft],
+  );
+  const showSqlIntentPopover = useMemo(
+    () =>
+      shouldShowSqlIntentPopover({
+        promptDraft: ai.promptDraft,
+        isChatMode,
+        isAssistantThinking: ai.isAssistantThinking,
+        dismissedDraftSignature: dismissedSqlIntentDraft,
+      }),
+    [
+      ai.isAssistantThinking,
+      ai.promptDraft,
+      dismissedSqlIntentDraft,
+      isChatMode,
+    ],
+  );
+
+  useEffect(() => {
+    if (!sqlIntentDraftSignature) {
+      setDismissedSqlIntentDraft(null);
+    }
+  }, [sqlIntentDraftSignature]);
+
   const handleSelectMode = useCallback(
     (mode: "ai" | "sql") => {
       if (onSelectMode) {
@@ -304,6 +342,25 @@ export function SqlCell({
     },
     [isChatMode, onSelectMode, onToggleAi],
   );
+  const handleKeepInChat = useCallback(() => {
+    if (!sqlIntentDraftSignature) {
+      return;
+    }
+
+    setDismissedSqlIntentDraft(sqlIntentDraftSignature);
+  }, [sqlIntentDraftSignature]);
+
+  const handleSwitchToSql = useCallback(async () => {
+    const nextPatch = createSqlIntentSwitchPatch(ai.promptDraft);
+    if (!nextPatch) {
+      return;
+    }
+
+    setDismissedSqlIntentDraft(sqlIntentDraftSignature);
+    ai.setPromptDraft("");
+    await notebookSession.updateCell(cell.id, nextPatch);
+    handleSelectMode("sql");
+  }, [ai, cell.id, handleSelectMode, notebookSession, sqlIntentDraftSignature]);
 
   return (
     <div className="space-y-4">
@@ -411,17 +468,53 @@ export function SqlCell({
                 autoFocus
               />
               <InputGroupAddon align="inline-end">
-                <InputGroupButton
-                  type="submit"
-                  size="sm"
-                  className="dark:bg-background"
-                  disabled={
-                    (ai?.isAssistantThinking ?? false) ||
-                    !ai?.promptDraft?.trim()
-                  }
-                >
-                  {ai?.isAssistantThinking ? "Running..." : "Ask AI"}
-                </InputGroupButton>
+                <Popover open={showSqlIntentPopover}>
+                  <PopoverTrigger asChild>
+                    <span className="inline-flex">
+                      <InputGroupButton
+                        type="submit"
+                        size="sm"
+                        className="dark:bg-background"
+                        disabled={
+                          (ai?.isAssistantThinking ?? false) ||
+                          !ai?.promptDraft?.trim()
+                        }
+                      >
+                        {ai?.isAssistantThinking ? "Running..." : "Ask AI"}
+                      </InputGroupButton>
+                    </span>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    side="top"
+                    className="w-80 space-y-3 px-3 py-3"
+                  >
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">This looks like SQL</p>
+                      <p className="text-xs text-muted-foreground">
+                        Switch to SQL mode and move this query into the SQL
+                        editor?
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleKeepInChat}
+                      >
+                        Keep in Chat
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => void handleSwitchToSql()}
+                      >
+                        Switch to SQL
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </InputGroupAddon>
             </InputGroup>
           </form>

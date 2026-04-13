@@ -1,9 +1,35 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { extractSqlArtifactParts } from "@/components/chat/sql-artifact-utils";
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
+import type { Result } from "@/lib/types";
 
 const EXECUTE_SQL_ARTIFACT_TYPE = "data-execute-sql";
 const EXPLORATORY_SQL_TOOL_TYPE = "tool-execute_exploratory_sql";
+const FINAL_SQL_TOOL_TYPES = new Set([
+  "tool-execute_final_sql",
+  "tool-execute_sql",
+]);
+
+export type TranscriptMessageBlock =
+  | {
+      key: string;
+      kind: "text";
+      text: string;
+    }
+  | {
+      key: string;
+      kind: "tool-call";
+      toolName: string;
+      summaryText: string | null;
+      errorText: string | null;
+      sql: string | null;
+      rawOutputJson: string | null;
+    }
+  | {
+      key: string;
+      kind: "sql-result";
+      data: SqlAnalysisData;
+    };
 
 function hasToolError(message: UIMessage): boolean {
   return (message.parts ?? []).some((part) => {
@@ -50,6 +76,230 @@ function extractToolOutput(part: UIMessage["parts"][number]): unknown {
     : "result" in part
       ? part.result
       : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object");
+}
+
+function extractToolErrorText(part: UIMessage["parts"][number]): string | null {
+  if ("errorText" in part && typeof part.errorText === "string") {
+    const trimmedError = part.errorText.trim();
+    if (trimmedError.length > 0) {
+      return trimmedError;
+    }
+  }
+
+  if ("error" in part && typeof part.error === "string") {
+    const trimmedError = part.error.trim();
+    if (trimmedError.length > 0) {
+      return trimmedError;
+    }
+  }
+
+  return null;
+}
+
+function extractToolSummaryText(output: unknown): string | null {
+  if (typeof output === "string") {
+    const trimmedOutput = output.trim();
+    return trimmedOutput.length > 0 ? trimmedOutput : null;
+  }
+
+  if (!isRecord(output) || typeof output.text !== "string") {
+    return null;
+  }
+
+  const trimmedText = output.text.trim();
+  return trimmedText.length > 0 ? trimmedText : null;
+}
+
+function extractToolSql(
+  part: UIMessage["parts"][number],
+  output: unknown,
+): string | null {
+  if (
+    "input" in part &&
+    isRecord(part.input) &&
+    typeof part.input.sql === "string"
+  ) {
+    const trimmedSql = part.input.sql.trim();
+    if (trimmedSql.length > 0) {
+      return trimmedSql;
+    }
+  }
+
+  if (!isRecord(output) || typeof output.sql !== "string") {
+    return null;
+  }
+
+  const trimmedSql = output.sql.trim();
+  return trimmedSql.length > 0 ? trimmedSql : null;
+}
+
+function buildExploratorySqlResult(output: unknown): SqlAnalysisData | null {
+  if (!isRecord(output) || typeof output.sql !== "string") {
+    return null;
+  }
+
+  const sql = output.sql.trim();
+  if (!sql) {
+    return null;
+  }
+
+  const columns = Array.isArray(output.columns)
+    ? output.columns.filter(
+        (column): column is { name: string; type?: string } => {
+          return (
+            isRecord(column) &&
+            typeof column.name === "string" &&
+            (!("type" in column) || typeof column.type === "string")
+          );
+        },
+      )
+    : [];
+  const rows = Array.isArray(output.rows)
+    ? output.rows.filter((row): row is Result => {
+        if (!isRecord(row)) {
+          return false;
+        }
+
+        return Object.values(row).every((value) => {
+          return (
+            typeof value === "string" ||
+            typeof value === "number" ||
+            typeof value === "boolean" ||
+            value instanceof Date
+          );
+        });
+      })
+    : [];
+  const rowCount =
+    typeof output.rowCount === "number" ? output.rowCount : rows.length;
+  const summary = isRecord(output.summary) ? output.summary : null;
+
+  return {
+    stage: "complete",
+    progress: 1,
+    query: sql,
+    dbIdentifier:
+      typeof output.dbIdentifier === "string" ? output.dbIdentifier : undefined,
+    sqlBackend:
+      typeof output.sqlBackend === "string"
+        ? (output.sqlBackend as SqlAnalysisData["sqlBackend"])
+        : undefined,
+    rowCount,
+    columns,
+    rows,
+    visualType: "table",
+    summary: {
+      totalRows: rowCount,
+      executionTimeMs:
+        typeof summary?.executionTimeMs === "number"
+          ? summary.executionTimeMs
+          : undefined,
+      queryType:
+        typeof summary?.queryType === "string" ? summary.queryType : undefined,
+      insights:
+        typeof output.text === "string" && output.text.trim().length > 0
+          ? [output.text.trim()]
+          : [],
+    },
+  };
+}
+
+function stringifyTranscriptOutput(output: unknown): string | null {
+  if (typeof output === "undefined") {
+    return null;
+  }
+
+  try {
+    return JSON.stringify(output, null, 2);
+  } catch {
+    return null;
+  }
+}
+
+export function buildTranscriptMessageBlocks(
+  message: UIMessage,
+  options: {
+    showToolCalls: boolean;
+    showExecuteSqlRawOutput: boolean;
+  },
+): TranscriptMessageBlock[] {
+  const blocks: TranscriptMessageBlock[] = [];
+
+  (message.parts ?? []).forEach((part, partIndex) => {
+    if (part.type === "text" && typeof part.text === "string") {
+      const trimmedText = part.text.trim();
+      if (trimmedText.length > 0) {
+        blocks.push({
+          key: `${message.id}-text-${partIndex}`,
+          kind: "text",
+          text: trimmedText,
+        });
+      }
+      return;
+    }
+
+    if (!part.type.startsWith("tool-")) {
+      return;
+    }
+
+    const output = extractToolOutput(part);
+    const toolName = part.type.slice("tool-".length);
+
+    if (options.showToolCalls) {
+      blocks.push({
+        key: `${message.id}-tool-${partIndex}`,
+        kind: "tool-call",
+        toolName,
+        summaryText: extractToolSummaryText(output),
+        errorText: extractToolErrorText(part),
+        sql: extractToolSql(part, output),
+        rawOutputJson:
+          options.showExecuteSqlRawOutput &&
+          (FINAL_SQL_TOOL_TYPES.has(part.type) ||
+            part.type === EXPLORATORY_SQL_TOOL_TYPE)
+            ? stringifyTranscriptOutput(output)
+            : null,
+      });
+    }
+
+    if (FINAL_SQL_TOOL_TYPES.has(part.type)) {
+      extractSqlArtifactParts([part], EXECUTE_SQL_ARTIFACT_TYPE).forEach(
+        (artifactPart, artifactIndex) => {
+          if (!artifactPart.artifactData.payload) {
+            return;
+          }
+
+          blocks.push({
+            key: `${message.id}-sql-result-${partIndex}-${artifactIndex}`,
+            kind: "sql-result",
+            data: artifactPart.artifactData.payload,
+          });
+        },
+      );
+      return;
+    }
+
+    if (part.type !== EXPLORATORY_SQL_TOOL_TYPE) {
+      return;
+    }
+
+    const exploratoryResult = buildExploratorySqlResult(output);
+    if (!exploratoryResult) {
+      return;
+    }
+
+    blocks.push({
+      key: `${message.id}-sql-preview-${partIndex}`,
+      kind: "sql-result",
+      data: exploratoryResult,
+    });
+  });
+
+  return blocks;
 }
 
 function extractLatestExploratoryDraft(parts: UIMessage["parts"] | undefined): {

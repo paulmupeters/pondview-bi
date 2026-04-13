@@ -3,9 +3,22 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Response } from "@/components/ai-elements/response";
 import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
+import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import { Button } from "@/components/ui/button";
-import { getMessageText } from "@/features/analysis/ai-cell-message-utils";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  buildTranscriptMessageBlocks,
+  type TranscriptMessageBlock,
+} from "@/features/analysis/ai-cell-message-utils";
 import { animations, getAnimationFrame } from "@/lib/animations";
+import {
+  useExecuteSqlRawOutputPreference,
+  useShowToolCallsPreference,
+} from "@/lib/chat-display-preferences";
 
 export type AiCellState = {
   promptDraft: string;
@@ -29,24 +42,29 @@ export function AiResponseBanner({ ai }: AiResponseBannerProps) {
   const [streamingAnimationFrame, setStreamingAnimationFrame] = useState(() =>
     getAnimationFrame(STREAMING_ANIMATION, 0),
   );
+  const showToolCalls = useShowToolCallsPreference();
+  const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
 
-  const transcriptTextEntries: Array<{
+  const transcriptEntries: Array<{
     id: string;
     role: "assistant" | "system" | "user";
-    text: string;
+    blocks: TranscriptMessageBlock[];
   }> = [];
   for (const message of ai.transcriptMessages) {
-    const text = getMessageText(message);
-    if (!text) {
+    const blocks = buildTranscriptMessageBlocks(message, {
+      showToolCalls,
+      showExecuteSqlRawOutput,
+    });
+    if (blocks.length === 0) {
       continue;
     }
-    transcriptTextEntries.push({
+    transcriptEntries.push({
       id: message.id,
       role: message.role,
-      text,
+      blocks,
     });
   }
-  const hasTranscript = transcriptTextEntries.length > 0;
+  const hasTranscript = transcriptEntries.length > 0;
   const hasResponse = !!(ai.latestAssistantText || ai.isAssistantThinking);
 
   // Auto-expand when a new response arrives
@@ -107,8 +125,7 @@ export function AiResponseBanner({ ai }: AiResponseBannerProps) {
                   {ai.latestAssistantText}
                 </Response>
               ) : (
-                <p
-                  role="status"
+                <output
                   aria-label="Assistant is working"
                   className="flex items-center gap-2 text-sm text-muted-foreground"
                 >
@@ -116,7 +133,7 @@ export function AiResponseBanner({ ai }: AiResponseBannerProps) {
                     {streamingAnimationFrame}
                   </span>
                   <span>Streaming response</span>
-                </p>
+                </output>
               )}
             </div>
           )}
@@ -140,11 +157,11 @@ export function AiResponseBanner({ ai }: AiResponseBannerProps) {
           >
             {isTranscriptExpanded
               ? "Hide transcript"
-              : `Show transcript (${transcriptTextEntries.length})`}
+              : `Show transcript (${transcriptEntries.length})`}
           </Button>
           {isTranscriptExpanded && (
             <div className="mt-2 space-y-2 rounded-lg border bg-background/80 p-2">
-              {transcriptTextEntries.map((entry) => (
+              {transcriptEntries.map((entry) => (
                 <div
                   key={entry.id}
                   className="rounded-md border bg-background px-3 py-2"
@@ -152,12 +169,87 @@ export function AiResponseBanner({ ai }: AiResponseBannerProps) {
                   <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     {entry.role}
                   </p>
-                  <Response className="text-sm">{entry.text}</Response>
+                  <div className="space-y-2">
+                    {entry.blocks.map((block) => (
+                      <TranscriptBlockView key={block.key} block={block} />
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TranscriptBlockView({ block }: { block: TranscriptMessageBlock }) {
+  if (block.kind === "text") {
+    return <Response className="text-sm">{block.text}</Response>;
+  }
+
+  if (block.kind === "sql-result") {
+    return (
+      <div className="overflow-hidden rounded-md border bg-background">
+        <SqlAnalysisDisplay data={block.data} showStageIndicator={false} />
+      </div>
+    );
+  }
+
+  return <TranscriptToolCall block={block} />;
+}
+
+function TranscriptToolCall({
+  block,
+}: {
+  block: Extract<TranscriptMessageBlock, { kind: "tool-call" }>;
+}) {
+  return (
+    <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <span>Tool call</span>
+        <code className="rounded bg-background px-1.5 py-0.5 font-mono text-[11px] normal-case text-foreground">
+          {block.toolName}
+        </code>
+      </div>
+
+      {block.summaryText ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {block.summaryText}
+        </p>
+      ) : null}
+
+      {block.sql ? (
+        <pre className="mt-2 overflow-x-auto rounded-md border bg-background px-3 py-2 text-xs font-mono text-foreground">
+          <code>{block.sql}</code>
+        </pre>
+      ) : null}
+
+      {block.errorText ? (
+        <div className="mt-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
+          {block.errorText}
+        </div>
+      ) : null}
+
+      {block.rawOutputJson ? (
+        <Collapsible className="mt-2">
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-xs text-muted-foreground"
+            >
+              Show raw JSON
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2">
+            <pre className="overflow-x-auto rounded-md border bg-background px-3 py-2 text-xs font-mono text-foreground">
+              <code>{block.rawOutputJson}</code>
+            </pre>
+          </CollapsibleContent>
+        </Collapsible>
       ) : null}
     </div>
   );
