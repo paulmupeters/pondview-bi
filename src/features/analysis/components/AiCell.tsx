@@ -32,11 +32,15 @@ export type AiCellState = {
 
 type AiResponseBannerProps = {
   ai: AiCellState;
+  showPromptError?: boolean;
 };
 
 const STREAMING_ANIMATION = "bars";
 
-export function AiResponseBanner({ ai }: AiResponseBannerProps) {
+export function AiResponseBanner({
+  ai,
+  showPromptError = true,
+}: AiResponseBannerProps) {
   const [isResponseExpanded, setIsResponseExpanded] = useState(true);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
   const [streamingAnimationFrame, setStreamingAnimationFrame] = useState(() =>
@@ -66,6 +70,7 @@ export function AiResponseBanner({ ai }: AiResponseBannerProps) {
   }
   const hasTranscript = transcriptEntries.length > 0;
   const hasResponse = !!(ai.latestAssistantText || ai.isAssistantThinking);
+  const shouldShowPromptError = showPromptError && Boolean(ai.promptError);
 
   // Auto-expand when a new response arrives
   useEffect(() => {
@@ -93,7 +98,7 @@ export function AiResponseBanner({ ai }: AiResponseBannerProps) {
     };
   }, [ai.isAssistantThinking, ai.latestAssistantText]);
 
-  if (!hasResponse && !ai.promptError && !hasTranscript) {
+  if (!hasResponse && !shouldShowPromptError && !hasTranscript) {
     return null;
   }
 
@@ -140,7 +145,7 @@ export function AiResponseBanner({ ai }: AiResponseBannerProps) {
         </>
       )}
 
-      {ai.promptError ? (
+      {shouldShowPromptError ? (
         <div className="border-t">
           <PromptErrorBanner message={ai.promptError} />
         </div>

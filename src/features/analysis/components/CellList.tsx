@@ -1,5 +1,9 @@
 import { Bot, Plus, Type } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  AI_SETTINGS_UPDATED_EVENT,
+  hasRequiredAiConfigurationInStorage,
+} from "@/ai/settings";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +40,28 @@ type CellListProps = {
   onAddCell: (kind: WorkspaceAnalysisCellKind) => void;
   isBusy: boolean;
 };
+
+export function resolveDisplayedCellForMissingAiConfig(params: {
+  cell: AnalysisCellState;
+  hasAiConfiguration: boolean;
+  honorChatMode: boolean;
+}): AnalysisCellState {
+  const { cell, hasAiConfiguration, honorChatMode } = params;
+
+  if (
+    hasAiConfiguration ||
+    honorChatMode ||
+    cell.kind === "text" ||
+    cell.activeMode !== "ai"
+  ) {
+    return cell;
+  }
+
+  return {
+    ...cell,
+    activeMode: "sql",
+  };
+}
 
 function InsertCellDivider({
   onAddCell,
@@ -85,6 +111,55 @@ export function CellList({
   const [statusMessagesByCellId, setStatusMessagesByCellId] = useState<
     Record<string, string | null>
   >({});
+  const [explicitChatModeByCellId, setExplicitChatModeByCellId] = useState<
+    Record<string, true>
+  >({});
+  const [hasAiConfiguration, setHasAiConfiguration] = useState(() =>
+    hasRequiredAiConfigurationInStorage(),
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const syncAiConfiguration = () => {
+      setHasAiConfiguration(hasRequiredAiConfigurationInStorage());
+    };
+
+    syncAiConfiguration();
+    window.addEventListener("storage", syncAiConfiguration);
+    window.addEventListener(AI_SETTINGS_UPDATED_EVENT, syncAiConfiguration);
+
+    return () => {
+      window.removeEventListener("storage", syncAiConfiguration);
+      window.removeEventListener(
+        AI_SETTINGS_UPDATED_EVENT,
+        syncAiConfiguration,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    setExplicitChatModeByCellId((previousExplicitChatModeByCellId) => {
+      const knownCellIds = new Set(cells.map((cell) => cell.id));
+      let hasChanges = false;
+      const nextExplicitChatModeByCellId: Record<string, true> = {};
+
+      for (const cellId of Object.keys(previousExplicitChatModeByCellId)) {
+        if (!knownCellIds.has(cellId)) {
+          hasChanges = true;
+          continue;
+        }
+
+        nextExplicitChatModeByCellId[cellId] = true;
+      }
+
+      return hasChanges
+        ? nextExplicitChatModeByCellId
+        : previousExplicitChatModeByCellId;
+    });
+  }, [cells]);
 
   const handleStatusMessageChange = useCallback(
     (cellId: string, statusMessage: string | null) => {
@@ -114,6 +189,38 @@ export function CellList({
     [],
   );
 
+  const handleSelectCellMode = useCallback(
+    (cellId: string, mode: "ai" | "sql" | "text") => {
+      setExplicitChatModeByCellId((previousExplicitChatModeByCellId) => {
+        const hadExplicitChatMode = previousExplicitChatModeByCellId[cellId];
+
+        if (mode === "ai") {
+          if (hadExplicitChatMode) {
+            return previousExplicitChatModeByCellId;
+          }
+
+          return {
+            ...previousExplicitChatModeByCellId,
+            [cellId]: true,
+          };
+        }
+
+        if (!hadExplicitChatMode) {
+          return previousExplicitChatModeByCellId;
+        }
+
+        const {
+          [cellId]: _removedExplicitChatMode,
+          ...remainingExplicitChatModes
+        } = previousExplicitChatModeByCellId;
+        return remainingExplicitChatModes;
+      });
+
+      onSelectCellMode(cellId, mode);
+    },
+    [onSelectCellMode],
+  );
+
   if (cells.length === 0) {
     return (
       <div className="rounded-xl border border-dashed bg-muted/10 px-6 py-12 text-center text-sm text-muted-foreground">
@@ -124,29 +231,41 @@ export function CellList({
 
   return (
     <div className="pb-8">
-      {cells.map((cell, index) => (
-        <div key={cell.id}>
-          {index > 0 && (
-            <InsertCellDivider onAddCell={onAddCell} disabled={isBusy} />
-          )}
-          <CellFrame
-            cell={cell}
-            isSelected={cell.id === selectedCellId}
-            onSelect={() => onSelectCell(cell.id)}
-            onDelete={() => onDeleteCell(cell.id)}
-            statusMessage={statusMessagesByCellId[cell.id] ?? null}
-          >
-            <CellContent
-              cell={cell}
-              pendingBootstrap={pendingBootstrap}
-              notebookSession={notebookSession}
-              onBootstrapConsumed={onBootstrapConsumed}
-              onSelectCellMode={onSelectCellMode}
-              onStatusMessageChange={handleStatusMessageChange}
-            />
-          </CellFrame>
-        </div>
-      ))}
+      {cells.map((cell, index) => {
+        const honorChatMode =
+          Boolean(explicitChatModeByCellId[cell.id]) ||
+          (pendingBootstrap?.kind === "ai" &&
+            pendingBootstrap.cellId === cell.id);
+        const displayedCell = resolveDisplayedCellForMissingAiConfig({
+          cell,
+          hasAiConfiguration,
+          honorChatMode,
+        });
+
+        return (
+          <div key={cell.id}>
+            {index > 0 && (
+              <InsertCellDivider onAddCell={onAddCell} disabled={isBusy} />
+            )}
+            <CellFrame
+              cell={displayedCell}
+              isSelected={displayedCell.id === selectedCellId}
+              onSelect={() => onSelectCell(displayedCell.id)}
+              onDelete={() => onDeleteCell(displayedCell.id)}
+              statusMessage={statusMessagesByCellId[displayedCell.id] ?? null}
+            >
+              <CellContent
+                cell={displayedCell}
+                pendingBootstrap={pendingBootstrap}
+                notebookSession={notebookSession}
+                onBootstrapConsumed={onBootstrapConsumed}
+                onSelectCellMode={handleSelectCellMode}
+                onStatusMessageChange={handleStatusMessageChange}
+              />
+            </CellFrame>
+          </div>
+        );
+      })}
       <InsertCellDivider onAddCell={onAddCell} disabled={isBusy} />
     </div>
   );

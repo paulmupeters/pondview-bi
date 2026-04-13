@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
@@ -75,6 +75,14 @@ function createNotebookSession(): NotebookSession {
   };
 }
 
+afterEach(() => {
+  aiState.promptDraft = "";
+  aiState.promptError = null;
+  aiState.latestAssistantText = "AI says to keep this result visible.";
+  aiState.transcriptMessages = [];
+  aiState.isAssistantThinking = false;
+});
+
 describe("CellContent", () => {
   test("keeps the AI response visible while the SQL mode is selected", () => {
     const markup = renderToStaticMarkup(
@@ -91,5 +99,24 @@ describe("CellContent", () => {
     expect(markup).toContain("AI says to keep this result visible.");
     expect(markup).toContain("SQL cell");
     expect(markup).toContain('data-ai-enabled="false"');
+  });
+
+  test("hides prompt errors while the SQL mode is selected", () => {
+    aiState.promptError =
+      "Missing AI configuration. Open Settings and configure provider, API key, and model.";
+    aiState.latestAssistantText = null;
+
+    const markup = renderToStaticMarkup(
+      <CellContent
+        cell={createCell({ activeMode: "sql" })}
+        pendingBootstrap={null}
+        notebookSession={createNotebookSession()}
+        onBootstrapConsumed={() => {}}
+        onSelectCellMode={() => {}}
+      />,
+    );
+
+    expect(markup).not.toContain("Missing AI configuration");
+    expect(markup).toContain("SQL cell");
   });
 });

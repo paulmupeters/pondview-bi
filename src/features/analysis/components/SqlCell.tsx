@@ -29,6 +29,7 @@ import {
   updateSqlCellPayloadVisualType,
 } from "@/features/analysis/sql-cell-payload";
 import {
+  normalizeSqlDraft,
   isSqlResultStale,
   resolveCellStatusFromRunState,
   shouldPersistSqlDraftChange,

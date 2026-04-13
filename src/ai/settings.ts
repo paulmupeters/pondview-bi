@@ -15,6 +15,7 @@ export const AI_MODEL_STORAGE_KEY = "AI_MODEL";
 export const OPEN_RESPONSES_URL_STORAGE_KEY = "OPEN_RESPONSES_URL";
 export const OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY =
   "OPEN_RESPONSES_PROVIDER_NAME";
+export const AI_SETTINGS_UPDATED_EVENT = "ai:settings-updated";
 
 const AI_PROVIDER_API_KEY_STORAGE_KEYS: Record<AiProvider, string> = {
   gateway: "AI_GATEWAY_API_KEY",
@@ -118,6 +119,7 @@ export function saveAiSettingsToStorage(settings: AiSettings): void {
     OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY,
     (settings.openResponsesName ?? "").trim(),
   );
+  window.dispatchEvent(new Event(AI_SETTINGS_UPDATED_EVENT));
 }
 
 export function getMissingRequiredSetting(settings: AiSettings): string | null {
@@ -140,4 +142,8 @@ export function getMissingRequiredSetting(settings: AiSettings): string | null {
   }
 
   return null;
+}
+
+export function hasRequiredAiConfigurationInStorage(): boolean {
+  return getMissingRequiredSetting(loadAiSettingsFromStorage()) === null;
 }

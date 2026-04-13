@@ -122,7 +122,7 @@ function CellContentAiSql({
 
   return (
     <div className="space-y-3">
-      <AiResponseBanner ai={ai} />
+      <AiResponseBanner ai={ai} showPromptError={cell.activeMode === "ai"} />
       <SqlCell
         cell={cell}
         bootstrapSql={bootstrapSql}
