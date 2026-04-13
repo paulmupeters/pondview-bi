@@ -1,0 +1,48 @@
+import { describe, expect, test } from "bun:test";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { AiCellState } from "@/features/analysis/components/AiCell";
+import { AiResponseBanner } from "@/features/analysis/components/AiCell";
+import { animations } from "@/lib/animations";
+
+function createAiState(overrides: Partial<AiCellState> = {}): AiCellState {
+  return {
+    promptDraft: "",
+    setPromptDraft: () => {},
+    promptError: null,
+    latestAssistantText: null,
+    transcriptMessages: [],
+    isAssistantThinking: false,
+    submitPrompt: async () => {},
+    ...overrides,
+  };
+}
+
+describe("AiResponseBanner", () => {
+  test("renders the streaming animation while the assistant is thinking", () => {
+    const markup = renderToStaticMarkup(
+      <AiResponseBanner
+        ai={createAiState({
+          isAssistantThinking: true,
+        })}
+      />,
+    );
+
+    expect(markup).toContain("AI Response");
+    expect(markup).toContain(animations.bars.frames[0]);
+    expect(markup).not.toContain("Assistant is working...");
+  });
+
+  test("prefers the latest assistant text once it is available", () => {
+    const markup = renderToStaticMarkup(
+      <AiResponseBanner
+        ai={createAiState({
+          isAssistantThinking: true,
+          latestAssistantText: "The streamed response is ready.",
+        })}
+      />,
+    );
+
+    expect(markup).toContain("The streamed response is ready.");
+    expect(markup).not.toContain(animations.bars.frames[0]);
+  });
+});
