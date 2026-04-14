@@ -5,6 +5,8 @@ import {
   AI_PROVIDER_STORAGE_KEY,
   type AiProvider,
   getApiKeyStorageKeyForProvider,
+  OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY,
+  OPENAI_COMPATIBLE_URL_STORAGE_KEY,
   OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY,
   OPEN_RESPONSES_URL_STORAGE_KEY,
 } from "@/ai/settings";
@@ -57,12 +59,12 @@ function configureProvider(provider: AiProvider, options?: { model?: string }) {
   storage.setItem(AI_MODEL_STORAGE_KEY, options?.model ?? "test-model");
   storage.setItem(getApiKeyStorageKeyForProvider(provider), "test-key");
 
-  if (provider === "open-responses") {
+  if (provider === "openai-compatible") {
     storage.setItem(
-      OPEN_RESPONSES_URL_STORAGE_KEY,
+      OPENAI_COMPATIBLE_URL_STORAGE_KEY,
       "https://api.example.com/v1",
     );
-    storage.setItem(OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY, "example");
+    storage.setItem(OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY, "example");
   }
 
   return storage;
@@ -74,7 +76,8 @@ describe("resolveGatewayModel", () => {
       "gateway",
       "openai",
       "anthropic",
-      "open-responses",
+      "openai-compatible",
+      "xai",
     ];
 
     for (const provider of providers) {
@@ -106,19 +109,19 @@ describe("resolveGatewayModel", () => {
     );
   });
 
-  test("throws when open responses URL is missing", () => {
+  test("throws when openai compatible URL is missing", () => {
     const storage = createStorage();
-    storage.setItem(AI_PROVIDER_STORAGE_KEY, "open-responses");
+    storage.setItem(AI_PROVIDER_STORAGE_KEY, "openai-compatible");
     storage.setItem(AI_MODEL_STORAGE_KEY, "gpt-4.1");
     storage.setItem(
-      getApiKeyStorageKeyForProvider("open-responses"),
+      getApiKeyStorageKeyForProvider("openai-compatible"),
       "test-key",
     );
-    storage.setItem(OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY, "example");
+    storage.setItem(OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY, "example");
     setBrowserStorage(storage);
 
     expect(() => resolveGatewayModel("fallback-model")).toThrow(
-      "Missing Open Responses URL",
+      "Missing OpenAI Compatible URL",
     );
   });
 

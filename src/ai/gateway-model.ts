@@ -1,7 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenResponses } from "@ai-sdk/open-responses";
 import { createOpenAI } from "@ai-sdk/openai";
-// import { createXai } from "@ai-sdk/xai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createGateway, gateway, type LanguageModel } from "ai";
 import { createBrowserGatewayFetch } from "@/ai/browser-gateway-fetch";
 import {
@@ -9,6 +8,8 @@ import {
   getAiProviderDisplayName,
   getMissingRequiredSetting,
   loadAiSettingsFromStorage,
+  XAI_BASE_URL,
+  XAI_PROVIDER_NAME,
 } from "@/ai/settings";
 
 function resolveBrowserModel(
@@ -32,24 +33,28 @@ function resolveBrowserModel(
       return browserGateway(modelId);
     }
     case "openai": {
-      const provider = createOpenAI({ apiKey: settings.apiKey });
-      return provider(modelId);
+      const openAiProvider = createOpenAI({ apiKey: settings.apiKey });
+      return openAiProvider(modelId);
     }
     case "anthropic": {
-      const provider = createAnthropic({ apiKey: settings.apiKey });
-      return provider(modelId);
+      const anthropicProvider = createAnthropic({ apiKey: settings.apiKey });
+      return anthropicProvider(modelId);
     }
-    // case "xai": {
-    //   const provider = createXai({ apiKey: settings.apiKey });
-    //   return provider(modelId);
-    // }
-    case "open-responses": {
-      const provider = createOpenResponses({
+    case "xai": {
+      const xaiProvider = createOpenAICompatible({
         apiKey: settings.apiKey,
-        url: settings.openResponsesUrl ?? "",
-        name: settings.openResponsesName ?? "",
+        baseURL: XAI_BASE_URL,
+        name: XAI_PROVIDER_NAME,
       });
-      return provider(modelId);
+      return xaiProvider(modelId);
+    }
+    case "openai-compatible": {
+      const compatibleProvider = createOpenAICompatible({
+        apiKey: settings.apiKey,
+        baseURL: settings.openAiCompatibleUrl ?? "",
+        name: settings.openAiCompatibleName ?? "",
+      });
+      return compatibleProvider(modelId);
     }
   }
 }

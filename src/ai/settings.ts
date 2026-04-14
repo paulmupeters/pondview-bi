@@ -1,41 +1,51 @@
 import { CHAT_MODEL } from "@/ai/models";
 
-export type AiProvider = "openai" | "gateway" | "anthropic" | "open-responses";
+export type AiProvider =
+  | "openai"
+  | "gateway"
+  | "anthropic"
+  | "openai-compatible"
+  | "xai";
 
 export interface AiSettings {
   provider: AiProvider;
   model: string;
   apiKey: string;
-  openResponsesUrl?: string;
-  openResponsesName?: string;
+  openAiCompatibleUrl?: string;
+  openAiCompatibleName?: string;
 }
 
 export const AI_PROVIDER_STORAGE_KEY = "AI_PROVIDER";
 export const AI_MODEL_STORAGE_KEY = "AI_MODEL";
-export const OPEN_RESPONSES_URL_STORAGE_KEY = "OPEN_RESPONSES_URL";
-export const OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY =
-  "OPEN_RESPONSES_PROVIDER_NAME";
-export const AI_SETTINGS_UPDATED_EVENT = "ai:settings-updated";
+export const OPENAI_COMPATIBLE_URL_STORAGE_KEY = "OPENAI_COMPATIBLE_URL";
+export const OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY =
+  "OPENAI_COMPATIBLE_PROVIDER_NAME";
+
+export const XAI_BASE_URL = "https://api.x.ai/v1";
+export const XAI_PROVIDER_NAME = "xai";
 
 const AI_PROVIDER_API_KEY_STORAGE_KEYS: Record<AiProvider, string> = {
   gateway: "AI_GATEWAY_API_KEY",
   openai: "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
-  "open-responses": "OPEN_RESPONSES_API_KEY",
+  "openai-compatible": "OPENAI_COMPATIBLE_API_KEY",
+  xai: "XAI_API_KEY",
 };
 
 const AI_PROVIDER_DISPLAY_NAMES: Record<AiProvider, string> = {
   gateway: "Gateway",
   openai: "OpenAI",
   anthropic: "Anthropic",
-  "open-responses": "Open Responses",
+  "openai-compatible": "OpenAI Compatible",
+  xai: "xAI",
 };
 
 const AI_PROVIDERS: AiProvider[] = [
   "gateway",
   "openai",
   "anthropic",
-  "open-responses",
+  "openai-compatible",
+  "xai",
 ];
 
 function normalizeText(value: string | null | undefined): string {
@@ -74,8 +84,8 @@ export function loadAiSettingsFromStorage(): AiSettings {
       provider: "openai",
       model: fallbackModel,
       apiKey: "",
-      openResponsesName: "",
-      openResponsesUrl: "",
+      openAiCompatibleName: "",
+      openAiCompatibleUrl: "",
     };
   }
 
@@ -90,11 +100,11 @@ export function loadAiSettingsFromStorage(): AiSettings {
     provider,
     model,
     apiKey: getProviderApiKeyFromStorage(provider),
-    openResponsesUrl: normalizeText(
-      window.localStorage.getItem(OPEN_RESPONSES_URL_STORAGE_KEY),
+    openAiCompatibleUrl: normalizeText(
+      window.localStorage.getItem(OPENAI_COMPATIBLE_URL_STORAGE_KEY),
     ),
-    openResponsesName: normalizeText(
-      window.localStorage.getItem(OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY),
+    openAiCompatibleName: normalizeText(
+      window.localStorage.getItem(OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY),
     ),
   };
 }
@@ -112,14 +122,13 @@ export function saveAiSettingsToStorage(settings: AiSettings): void {
   );
 
   window.localStorage.setItem(
-    OPEN_RESPONSES_URL_STORAGE_KEY,
-    (settings.openResponsesUrl ?? "").trim(),
+    OPENAI_COMPATIBLE_URL_STORAGE_KEY,
+    (settings.openAiCompatibleUrl ?? "").trim(),
   );
   window.localStorage.setItem(
-    OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY,
-    (settings.openResponsesName ?? "").trim(),
+    OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY,
+    (settings.openAiCompatibleName ?? "").trim(),
   );
-  window.dispatchEvent(new Event(AI_SETTINGS_UPDATED_EVENT));
 }
 
 export function getMissingRequiredSetting(settings: AiSettings): string | null {
@@ -131,19 +140,15 @@ export function getMissingRequiredSetting(settings: AiSettings): string | null {
     return `${getAiProviderDisplayName(settings.provider)} API key`;
   }
 
-  if (settings.provider === "open-responses") {
-    if (!normalizeText(settings.openResponsesUrl)) {
-      return "Open Responses URL";
+  if (settings.provider === "openai-compatible") {
+    if (!normalizeText(settings.openAiCompatibleUrl)) {
+      return "OpenAI Compatible URL";
     }
 
-    if (!normalizeText(settings.openResponsesName)) {
-      return "Open Responses provider name";
+    if (!normalizeText(settings.openAiCompatibleName)) {
+      return "OpenAI Compatible provider name";
     }
   }
 
   return null;
-}
-
-export function hasRequiredAiConfigurationInStorage(): boolean {
-  return getMissingRequiredSetting(loadAiSettingsFromStorage()) === null;
 }

@@ -98,8 +98,8 @@ export default function SettingsPage() {
   const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [openResponsesUrl, setOpenResponsesUrl] = useState("");
-  const [openResponsesName, setOpenResponsesName] = useState("");
+  const [openAiCompatibleUrl, setOpenAiCompatibleUrl] = useState("");
+  const [openAiCompatibleName, setOpenAiCompatibleName] = useState("");
   const [cssCode, setCssCode] = useState("");
   const [selectedTheme, setSelectedTheme] =
     useState<string>(CUSTOM_THEME_VALUE);
@@ -149,8 +149,8 @@ export default function SettingsPage() {
     setAiProvider(aiSettings.provider);
     setModel(aiSettings.model);
     setApiKey(aiSettings.apiKey);
-    setOpenResponsesUrl(aiSettings.openResponsesUrl ?? "");
-    setOpenResponsesName(aiSettings.openResponsesName ?? "");
+    setOpenAiCompatibleUrl(aiSettings.openAiCompatibleUrl ?? "");
+    setOpenAiCompatibleName(aiSettings.openAiCompatibleName ?? "");
     setCssCode(savedCss);
     // Set selected theme, or "custom" if no theme is selected but custom CSS exists
     setSelectedTheme(savedTheme || (savedCss ? CUSTOM_THEME_VALUE : "default"));
@@ -405,8 +405,8 @@ export default function SettingsPage() {
       provider: aiProvider,
       model,
       apiKey,
-      openResponsesUrl,
-      openResponsesName,
+      openAiCompatibleUrl,
+      openAiCompatibleName,
     };
     const missingSetting = getMissingRequiredSetting(settings);
     if (missingSetting) {
@@ -542,8 +542,9 @@ export default function SettingsPage() {
                   <SelectContent>
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="anthropic">Anthropic</SelectItem>
-                    <SelectItem value="open-responses">
-                      Open Responses
+                    <SelectItem value="xai">xAI</SelectItem>
+                    <SelectItem value="openai-compatible">
+                      OpenAI Compatible
                     </SelectItem>
                     <SelectItem value="gateway">AI Gateway</SelectItem>
                   </SelectContent>
@@ -585,39 +586,39 @@ export default function SettingsPage() {
                   placeholder="Enter your API key"
                   className="mb-4"
                 />
-                {aiProvider === "open-responses" && (
+                {aiProvider === "openai-compatible" && (
                   <>
                     <label
-                      htmlFor="open-responses-url"
+                      htmlFor="openai-compatible-url"
                       className="text-sm font-medium mb-2 block"
                     >
-                      Open Responses URL
+                      Base URL
                     </label>
                     <Input
-                      id="open-responses-url"
+                      id="openai-compatible-url"
                       type="text"
-                      name="open-responses-url"
+                      name="openai-compatible-url"
                       autoComplete="off"
-                      value={openResponsesUrl}
-                      onChange={(e) => setOpenResponsesUrl(e.target.value)}
+                      value={openAiCompatibleUrl}
+                      onChange={(e) => setOpenAiCompatibleUrl(e.target.value)}
                       placeholder="https://api.example.com/v1"
                       className="mb-4"
                     />
 
                     <label
-                      htmlFor="open-responses-name"
+                      htmlFor="openai-compatible-name"
                       className="text-sm font-medium mb-2 block"
                     >
-                      Open Responses Provider Name
+                      Provider Name
                     </label>
                     <Input
-                      id="open-responses-name"
+                      id="openai-compatible-name"
                       type="text"
-                      name="open-responses-provider-name"
+                      name="openai-compatible-provider-name"
                       autoComplete="off"
-                      value={openResponsesName}
-                      onChange={(e) => setOpenResponsesName(e.target.value)}
-                      placeholder="openresponses"
+                      value={openAiCompatibleName}
+                      onChange={(e) => setOpenAiCompatibleName(e.target.value)}
+                      placeholder="my-provider"
                       className="mb-4"
                     />
                   </>
@@ -1080,7 +1081,7 @@ export default function SettingsPage() {
                       value={cssCode}
                       onChange={(e) => setCssCode(e.target.value)}
                       placeholder={CSS_PLACEHOLDER}
-                      className="font-mono text-sm min-h-[400px]"
+                      className="font-mono text-sm min-h-100"
                     />
                   </div>
 
