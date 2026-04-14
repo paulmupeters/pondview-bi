@@ -24,6 +24,8 @@ export const OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY =
 export const XAI_BASE_URL = "https://api.x.ai/v1";
 export const XAI_PROVIDER_NAME = "xai";
 
+export const AI_SETTINGS_UPDATED_EVENT = "bi-chat:ai-settings-updated";
+
 const AI_PROVIDER_API_KEY_STORAGE_KEYS: Record<AiProvider, string> = {
   gateway: "AI_GATEWAY_API_KEY",
   openai: "OPENAI_API_KEY",
@@ -129,6 +131,16 @@ export function saveAiSettingsToStorage(settings: AiSettings): void {
     OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY,
     (settings.openAiCompatibleName ?? "").trim(),
   );
+
+  window.dispatchEvent(new Event(AI_SETTINGS_UPDATED_EVENT));
+}
+
+export function hasRequiredAiConfigurationInStorage(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return getMissingRequiredSetting(loadAiSettingsFromStorage()) === null;
 }
 
 export function getMissingRequiredSetting(settings: AiSettings): string | null {
