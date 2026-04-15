@@ -17,7 +17,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useChatHistory } from "@/hooks/use-chat-history";
-import type { ChatHistoryEntry } from "@/lib/chat-history";
+import {
+  getChatHistoryDisplayTitle,
+  type ChatHistoryEntry,
+} from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 import { deleteAnalysisNotebook } from "@/lib/workspace/analysis-notebook-repo";
 import { deleteChat } from "@/lib/workspace/chat-repo";
@@ -231,7 +234,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
                       className="flex min-w-0 flex-1 cursor-pointer items-start justify-between gap-2 text-left"
                     >
                       <p className="min-w-0 flex-1 truncate text-sm">
-                        {chat.title || chat.id}
+                        {getChatHistoryDisplayTitle(chat)}
                       </p>
                       <p className="whitespace-nowrap text-xs text-muted-foreground">
                         {formatDate(chat.updatedAt)}

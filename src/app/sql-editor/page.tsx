@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRightPanelResize } from "@/components/chat/hooks/use-right-panel-resize";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import type { SqlConsoleApi } from "@/components/sql-console";
@@ -22,6 +28,10 @@ import {
 } from "@/lib/workspace/saved-sql-queries-repo";
 
 const VISUALIZATION_ID = "sql-editor-repl";
+const SQL_EDITOR_RESULTS_HEIGHT_STORAGE_KEY = "sql-editor-results-height";
+const DEFAULT_EDITOR_HEIGHT = 50;
+const MIN_EDITOR_HEIGHT = 25;
+const MAX_EDITOR_HEIGHT = 75;
 
 export function getInitialSqlEditorDb(
   selectedDb: string | undefined,
@@ -62,15 +72,32 @@ export default function SqlEditorPage() {
   const [manualVisualType, setManualVisualType] = useState<
     "table" | "chart" | "card" | null
   >(null);
+  const [editorHeight, setEditorHeight] = useState<number>(() => {
+    if (typeof window === "undefined") {
+      return DEFAULT_EDITOR_HEIGHT;
+    }
+    const saved = window.localStorage.getItem(
+      SQL_EDITOR_RESULTS_HEIGHT_STORAGE_KEY,
+    );
+    const parsed = saved ? parseFloat(saved) : DEFAULT_EDITOR_HEIGHT;
+    return Number.isFinite(parsed) ? parsed : DEFAULT_EDITOR_HEIGHT;
+  });
+  const [isResizingPanels, setIsResizingPanels] = useState(false);
   const prevSqlRef = useRef<string | null>(null);
+  const editorResultsContainerRef = useRef<HTMLDivElement>(null);
+  const resizeHandleRef = useRef<HTMLDivElement>(null);
+  const resizePointerIdRef = useRef<number | null>(null);
+  const resizeStartYRef = useRef(0);
+  const resizeStartEditorHeightRef = useRef(0);
 
-  const {
-    rightPanelWidth,
-    isResizing,
-    resizeHandleRef,
-    containerRef,
-    handleResizeStart,
-  } = useRightPanelResize();
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        SQL_EDITOR_RESULTS_HEIGHT_STORAGE_KEY,
+        editorHeight.toString(),
+      );
+    }
+  }, [editorHeight]);
 
   // Load saved SQL queries on mount
   useEffect(() => {
@@ -340,46 +367,111 @@ export default function SqlEditorPage() {
     </div>
   );
 
+  const handlePanelResizeStart = useCallback((event: ReactPointerEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!editorResultsContainerRef.current) {
+      return;
+    }
+
+    const containerHeight =
+      editorResultsContainerRef.current.getBoundingClientRect().height;
+    resizeStartYRef.current = event.clientY;
+    resizeStartEditorHeightRef.current = (editorHeight / 100) * containerHeight;
+    resizePointerIdRef.current = event.pointerId;
+    setIsResizingPanels(true);
+    resizeHandleRef.current?.setPointerCapture(event.pointerId);
+  }, [editorHeight]);
+
+  useEffect(() => {
+    if (!isResizingPanels) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!editorResultsContainerRef.current) {
+        return;
+      }
+
+      const containerHeight =
+        editorResultsContainerRef.current.getBoundingClientRect().height;
+      const deltaY = event.clientY - resizeStartYRef.current;
+      const nextEditorHeight =
+        resizeStartEditorHeightRef.current + deltaY;
+      const nextEditorHeightPercent =
+        (nextEditorHeight / containerHeight) * 100;
+
+      setEditorHeight(
+        Math.max(
+          MIN_EDITOR_HEIGHT,
+          Math.min(MAX_EDITOR_HEIGHT, nextEditorHeightPercent),
+        ),
+      );
+    };
+
+    const handlePointerUp = () => {
+      setIsResizingPanels(false);
+      if (resizeHandleRef.current && resizePointerIdRef.current !== null) {
+        resizeHandleRef.current.releasePointerCapture(resizePointerIdRef.current);
+      }
+      resizePointerIdRef.current = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isResizingPanels]);
+
   return (
     <div className="relative flex h-screen flex-col">
       <div className="relative flex flex-1 min-h-0 w-full flex-col">
         <div className="flex-1 overflow-hidden bg-card">
           <div
-            ref={containerRef}
-            className={cn("flex h-full", isResizing && "select-none")}
+            className={cn(
+              "flex h-full",
+              isResizingPanels && "select-none",
+            )}
           >
-            <div
-              className="flex flex-col min-w-0 h-full overflow-hidden"
-              style={{ width: `${100 - rightPanelWidth}%` }}
-            >
-              <div className="flex-1 min-h-0 flex overflow-hidden">
-                <ConnectedDataPanel
-                  selectedDb={selectedDb}
-                  onSelect={(db) => {
-                    setSelectedDb(db);
-                    setSelectedCatalogContext(null);
-                  }}
-                  mode="sidebar"
-                  onInsertTable={handleInsertTableIntoSql}
-                  refreshToken={explorerRefreshToken}
-                  collapsed={isExplorerCollapsed}
-                  collapsedBehavior="overlay"
-                  onToggleCollapse={() =>
-                    setIsExplorerCollapsed((prev) => !prev)
-                  }
-                  className="shrink-0 bg-background"
-                  sqlBackend={effectiveSqlBackend}
-                  storedSqlQueries={storedSqlQueries}
-                  onSelectStoredSqlQuery={handleSelectStoredSqlQuery}
-                  onDeleteStoredSqlQuery={(queryId) => {
-                    void handleDeleteStoredSqlQuery(queryId);
-                  }}
-                  onRenameStoredSqlQuery={(queryId) => {
-                    void handleRenameStoredSqlQuery(queryId);
-                  }}
-                  showStoredSqlQueries
-                />
-                <div className="relative flex-1 min-h-0 min-w-0 flex flex-col">
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+              <ConnectedDataPanel
+                selectedDb={selectedDb}
+                onSelect={(db) => {
+                  setSelectedDb(db);
+                  setSelectedCatalogContext(null);
+                }}
+                mode="sidebar"
+                onInsertTable={handleInsertTableIntoSql}
+                refreshToken={explorerRefreshToken}
+                collapsed={isExplorerCollapsed}
+                collapsedBehavior="overlay"
+                onToggleCollapse={() => setIsExplorerCollapsed((prev) => !prev)}
+                className="shrink-0 bg-background"
+                sqlBackend={effectiveSqlBackend}
+                storedSqlQueries={storedSqlQueries}
+                onSelectStoredSqlQuery={handleSelectStoredSqlQuery}
+                onDeleteStoredSqlQuery={(queryId) => {
+                  void handleDeleteStoredSqlQuery(queryId);
+                }}
+                onRenameStoredSqlQuery={(queryId) => {
+                  void handleRenameStoredSqlQuery(queryId);
+                }}
+                showStoredSqlQueries
+              />
+              <div
+                ref={editorResultsContainerRef}
+                className="relative flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden"
+              >
+                <div
+                  className={cn(
+                    "min-h-0 min-w-0",
+                    sqlResult ? "border-b border-border" : "flex-1",
+                  )}
+                  style={sqlResult ? { height: `${editorHeight}%` } : undefined}
+                >
                   <DuckdbRepl
                     className="h-full w-full border-0"
                     layoutVariant="page"
@@ -400,35 +492,32 @@ export default function SqlEditorPage() {
                     editorMaxHeight="100%"
                   />
                 </div>
+                {sqlResult ? (
+                  <>
+                    <div
+                      ref={resizeHandleRef}
+                      onPointerDown={handlePanelResizeStart}
+                      className={cn(
+                        "group/resize z-10 flex h-2 shrink-0 cursor-row-resize items-center justify-center bg-card transition-colors hover:bg-border/40",
+                        isResizingPanels && "bg-border/60",
+                      )}
+                      aria-label="Resize SQL editor and results panels"
+                      role="separator"
+                      aria-orientation="horizontal"
+                    >
+                      <div
+                        className={cn(
+                          "h-0.5 w-10 rounded-full bg-border/60 transition-all group-hover/resize:w-16 group-hover/resize:bg-primary/40",
+                          isResizingPanels && "w-16 bg-primary/50",
+                        )}
+                      />
+                    </div>
+                    <div className="min-h-0 flex-1">{rightPanelContent}</div>
+                  </>
+                ) : null}
               </div>
             </div>
-
-            <div
-              ref={resizeHandleRef}
-              onPointerDown={handleResizeStart}
-              className={cn(
-                "group/resize hidden lg:flex w-2 shrink-0 cursor-col-resize items-center justify-center transition-colors hover:bg-border/40",
-                isResizing && "bg-border/60",
-              )}
-            >
-              <div
-                className={cn(
-                  "h-8 w-0.5 rounded-full bg-border/60 transition-all group-hover/resize:h-12 group-hover/resize:bg-primary/40",
-                  isResizing && "h-12 bg-primary/50",
-                )}
-              />
-            </div>
-            <div
-              className="hidden lg:flex flex-col min-w-0 h-full border-l border-border"
-              style={{ width: `${rightPanelWidth}%` }}
-            >
-              {rightPanelContent}
-            </div>
           </div>
-        </div>
-
-        <div className="lg:hidden border-t border-border/50 bg-card">
-          <div className="h-[400px]">{rightPanelContent}</div>
         </div>
       </div>
     </div>

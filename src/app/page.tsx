@@ -1,7 +1,12 @@
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useState } from "react";
+import {
+  AI_SETTINGS_UPDATED_EVENT,
+  hasRequiredAiConfigurationInStorage,
+} from "@/ai/settings";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
+import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { PondviewLogo } from "@/components/pondview-logo";
 import {
@@ -25,6 +30,9 @@ const EXAMPLE_COMMANDS = [
   "Create a dashboard for financial metrics",
   "Analyze customer demographics by region",
 ];
+
+const MISSING_AI_CONFIGURATION_MESSAGE =
+  "Missing AI configuration. Open Settings and configure provider, API key, and model.";
 
 function deriveManualQueryTitle(sql: string): string {
   const firstMeaningfulLine =
@@ -57,6 +65,17 @@ export async function runHomepageExampleCommand(params: {
   params.submit(params.command);
 }
 
+export function getHomepageAiWarningMessage(params: {
+  mode: PromptMode;
+  hasAiConfiguration: boolean;
+}): string | null {
+  if (params.mode !== "ai" || params.hasAiConfiguration) {
+    return null;
+  }
+
+  return MISSING_AI_CONFIGURATION_MESSAGE;
+}
+
 export default function Home() {
   const [mode, setMode] = useState<PromptMode>(() =>
     getDefaultPromptModePreference(),
@@ -75,10 +94,39 @@ export default function Home() {
   );
   const [isPreparingExample, setIsPreparingExample] = useState(false);
   const [exampleError, setExampleError] = useState<string | null>(null);
+  const [hasAiConfiguration, setHasAiConfiguration] = useState(() =>
+    hasRequiredAiConfigurationInStorage(),
+  );
   const effectiveSqlBackend = useResolvedSqlBackend();
   const router = useRouter();
   const manualShellVariant: ManualShellVariant = "minimal";
   const isManualMode = mode === "manual";
+  const homePageAiWarningMessage = getHomepageAiWarningMessage({
+    mode,
+    hasAiConfiguration,
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const syncAiConfiguration = () => {
+      setHasAiConfiguration(hasRequiredAiConfigurationInStorage());
+    };
+
+    syncAiConfiguration();
+    window.addEventListener("storage", syncAiConfiguration);
+    window.addEventListener(AI_SETTINGS_UPDATED_EVENT, syncAiConfiguration);
+
+    return () => {
+      window.removeEventListener("storage", syncAiConfiguration);
+      window.removeEventListener(
+        AI_SETTINGS_UPDATED_EVENT,
+        syncAiConfiguration,
+      );
+    };
+  }, []);
 
   useEffect(() => {
     if (effectiveSqlBackend === "duckdb-wasm") {
@@ -299,6 +347,7 @@ export default function Home() {
                   selectedDb={selectedDb}
                   selectedCatalogContext={selectedCatalogContext}
                 />
+                <PromptErrorBanner message={homePageAiWarningMessage} />
                 <div
                   className={cn(
                     "grid transition-[grid-template-rows,opacity,transform,margin] duration-300 ease-out",

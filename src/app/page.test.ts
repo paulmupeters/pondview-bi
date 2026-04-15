@@ -1,5 +1,33 @@
 import { describe, expect, test } from "bun:test";
-import { runHomepageExampleCommand } from "@/app/page";
+import { getHomepageAiWarningMessage, runHomepageExampleCommand } from "@/app/page";
+
+describe("getHomepageAiWarningMessage", () => {
+  test("shows the missing AI configuration warning on AI landing", () => {
+    expect(
+      getHomepageAiWarningMessage({
+        mode: "ai",
+        hasAiConfiguration: false,
+      }),
+    ).toBe(
+      "Missing AI configuration. Open Settings and configure provider, API key, and model.",
+    );
+  });
+
+  test("hides the warning when AI is configured or manual mode is active", () => {
+    expect(
+      getHomepageAiWarningMessage({
+        mode: "ai",
+        hasAiConfiguration: true,
+      }),
+    ).toBeNull();
+    expect(
+      getHomepageAiWarningMessage({
+        mode: "manual",
+        hasAiConfiguration: false,
+      }),
+    ).toBeNull();
+  });
+});
 
 describe("runHomepageExampleCommand", () => {
   test("seeds sample data before submitting the example prompt", async () => {
