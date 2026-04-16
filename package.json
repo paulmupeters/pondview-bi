@@ -67,7 +67,7 @@
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "react-markdown": "^10.1.0",
-    "react-native-purchases": "^9.15.2",
+    "react-native-purchases": "^10.0.0",
     "react-native-purchases-ui": "^9.15.2",
     "react-router-dom": "^7.13.1",
     "recharts": "3.8.0",
