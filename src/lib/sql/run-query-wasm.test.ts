@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { shouldCheckpointAfterSql } from "@/lib/duckdb/duckdb-wasm-client";
 import { createRunQueryWasm } from "@/lib/sql/run-query-wasm";
 
 describe("runQueryWasm", () => {
@@ -65,5 +66,23 @@ describe("runQueryWasm", () => {
     expect(result.rows).toEqual([]);
     expect(result.columns).toEqual([]);
     expect(result.durationMs).toBe(0);
+  });
+
+  test("identifies mutating SQL that should be checkpointed", () => {
+    expect(shouldCheckpointAfterSql("CREATE TABLE orders AS SELECT 1")).toBe(
+      true,
+    );
+    expect(shouldCheckpointAfterSql(" insert into orders values (1) ")).toBe(
+      true,
+    );
+    expect(
+      shouldCheckpointAfterSql(
+        "WITH src AS (SELECT 1) CREATE TABLE x AS SELECT * FROM src",
+      ),
+    ).toBe(true);
+    expect(shouldCheckpointAfterSql("SELECT * FROM orders")).toBe(false);
+    expect(
+      shouldCheckpointAfterSql("WITH src AS (SELECT 1) SELECT * FROM src"),
+    ).toBe(false);
   });
 });

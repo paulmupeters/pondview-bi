@@ -21,6 +21,13 @@ interface ImportBrowserFileOptions {
 
 type QueryResult = Awaited<ReturnType<AsyncDuckDBConnection["query"]>>;
 
+const MUTATING_SQL_PATTERN =
+  /^\s*(?:WITH\b[\s\S]+?\)\s*)?(?:CREATE|INSERT|UPDATE|DELETE|ALTER|DROP|TRUNCATE|COPY|ATTACH|DETACH|CHECKPOINT|VACUUM|MERGE|REPLACE)\b/i;
+
+export function shouldCheckpointAfterSql(sql: string): boolean {
+  return MUTATING_SQL_PATTERN.test(sql);
+}
+
 export class DuckdbWasmClient {
   private readonly provider: DuckdbWasmProvider;
   private readonly queue: RequestQueue;
@@ -64,6 +71,9 @@ export class DuckdbWasmClient {
 
       try {
         const result = await connection.query(options.sql);
+        if (shouldCheckpointAfterSql(options.sql)) {
+          await this.checkpoint(connection);
+        }
         return result;
       } finally {
         if (options.signal) {
@@ -148,6 +158,7 @@ export class DuckdbWasmClient {
 
       const createTableSql = `CREATE OR REPLACE TABLE ${this.quoteIdentifier(options.schema)}.${this.quoteIdentifier(options.tableName)} AS SELECT * FROM ${sourceSql}`;
       await con.query(createTableSql);
+      await this.checkpoint(con);
     };
 
     return this.queue.add(task);
@@ -184,6 +195,7 @@ export class DuckdbWasmClient {
         schema: schema,
         name: tableName,
       });
+      await this.checkpoint(con);
     };
 
     return this.queue.add(task);
@@ -194,9 +206,14 @@ export class DuckdbWasmClient {
       const { con } = await this.provider.getCurrentWasm();
       const dropSql = `DROP TABLE IF EXISTS ${this.quoteIdentifier(schema)}.${this.quoteIdentifier(tableName)}`;
       await con.query(dropSql);
+      await this.checkpoint(con);
     };
 
     return this.queue.add(task);
+  }
+
+  private async checkpoint(connection: AsyncDuckDBConnection): Promise<void> {
+    await connection.query("CHECKPOINT");
   }
 
   private quoteIdentifier(identifier: string): string {
