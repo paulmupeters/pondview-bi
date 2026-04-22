@@ -1,4 +1,6 @@
+import { PanelLeft } from "lucide-react";
 import {
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -9,6 +11,12 @@ import {
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
 import type { SqlConsoleApi } from "@/components/sql-console";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { VisualizationEntry } from "@/components/visualization-entry";
 import { VisualizationPanel } from "@/components/visualization-panel";
 import type { ConnectedTable } from "@/lib/connected-tables";
@@ -38,6 +46,10 @@ export function getInitialSqlEditorDb(
   _connectedTables: ConnectedTable[],
 ): string | undefined {
   return selectedDb;
+}
+
+function getSqlEditorExplorerToggleLabel(isCollapsed: boolean): string {
+  return isCollapsed ? "Show explorer" : "Hide explorer";
 }
 
 export default function SqlEditorPage() {
@@ -201,6 +213,8 @@ export default function SqlEditorPage() {
 
   const activeVisualizationId =
     visualizations.length > 0 ? VISUALIZATION_ID : null;
+  const explorerToggleLabel =
+    getSqlEditorExplorerToggleLabel(isExplorerCollapsed);
 
   const handleInsertTableIntoSql = useCallback(
     (payload: ExplorerInsertPayload) => {
@@ -367,21 +381,46 @@ export default function SqlEditorPage() {
     </div>
   );
 
-  const handlePanelResizeStart = useCallback((event: ReactPointerEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!editorResultsContainerRef.current) {
-      return;
-    }
+  const handlePanelResizeStart = useCallback(
+    (event: ReactPointerEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!editorResultsContainerRef.current) {
+        return;
+      }
 
-    const containerHeight =
-      editorResultsContainerRef.current.getBoundingClientRect().height;
-    resizeStartYRef.current = event.clientY;
-    resizeStartEditorHeightRef.current = (editorHeight / 100) * containerHeight;
-    resizePointerIdRef.current = event.pointerId;
-    setIsResizingPanels(true);
-    resizeHandleRef.current?.setPointerCapture(event.pointerId);
-  }, [editorHeight]);
+      const containerHeight =
+        editorResultsContainerRef.current.getBoundingClientRect().height;
+      resizeStartYRef.current = event.clientY;
+      resizeStartEditorHeightRef.current =
+        (editorHeight / 100) * containerHeight;
+      resizePointerIdRef.current = event.pointerId;
+      setIsResizingPanels(true);
+      resizeHandleRef.current?.setPointerCapture(event.pointerId);
+    },
+    [editorHeight],
+  );
+
+  const handlePanelResizeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const step = event.shiftKey ? 10 : 5;
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setEditorHeight((prev) => Math.max(MIN_EDITOR_HEIGHT, prev - step));
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setEditorHeight((prev) => Math.min(MAX_EDITOR_HEIGHT, prev + step));
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        setEditorHeight(MIN_EDITOR_HEIGHT);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        setEditorHeight(MAX_EDITOR_HEIGHT);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!isResizingPanels) {
@@ -396,8 +435,7 @@ export default function SqlEditorPage() {
       const containerHeight =
         editorResultsContainerRef.current.getBoundingClientRect().height;
       const deltaY = event.clientY - resizeStartYRef.current;
-      const nextEditorHeight =
-        resizeStartEditorHeightRef.current + deltaY;
+      const nextEditorHeight = resizeStartEditorHeightRef.current + deltaY;
       const nextEditorHeightPercent =
         (nextEditorHeight / containerHeight) * 100;
 
@@ -412,7 +450,9 @@ export default function SqlEditorPage() {
     const handlePointerUp = () => {
       setIsResizingPanels(false);
       if (resizeHandleRef.current && resizePointerIdRef.current !== null) {
-        resizeHandleRef.current.releasePointerCapture(resizePointerIdRef.current);
+        resizeHandleRef.current.releasePointerCapture(
+          resizePointerIdRef.current,
+        );
       }
       resizePointerIdRef.current = null;
     };
@@ -428,14 +468,24 @@ export default function SqlEditorPage() {
 
   return (
     <div className="relative flex h-screen flex-col">
+      <div className="flex items-center gap-3 border-b px-6 py-4">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsExplorerCollapsed((prev) => !prev)}
+              aria-label={explorerToggleLabel}
+            >
+              <PanelLeft />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{explorerToggleLabel}</TooltipContent>
+        </Tooltip>
+      </div>
       <div className="relative flex flex-1 min-h-0 w-full flex-col">
         <div className="flex-1 overflow-hidden bg-card">
-          <div
-            className={cn(
-              "flex h-full",
-              isResizingPanels && "select-none",
-            )}
-          >
+          <div className={cn("flex h-full", isResizingPanels && "select-none")}>
             <div className="flex flex-1 min-h-0 overflow-hidden">
               <ConnectedDataPanel
                 selectedDb={selectedDb}
@@ -497,13 +547,18 @@ export default function SqlEditorPage() {
                     <div
                       ref={resizeHandleRef}
                       onPointerDown={handlePanelResizeStart}
+                      onKeyDown={handlePanelResizeKeyDown}
                       className={cn(
                         "group/resize z-10 flex h-2 shrink-0 cursor-row-resize items-center justify-center bg-card transition-colors hover:bg-border/40",
                         isResizingPanels && "bg-border/60",
                       )}
                       aria-label="Resize SQL editor and results panels"
+                      aria-valuemax={MAX_EDITOR_HEIGHT}
+                      aria-valuemin={MIN_EDITOR_HEIGHT}
+                      aria-valuenow={Math.round(editorHeight)}
                       role="separator"
                       aria-orientation="horizontal"
+                      tabIndex={0}
                     >
                       <div
                         className={cn(

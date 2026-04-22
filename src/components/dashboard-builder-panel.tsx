@@ -930,12 +930,12 @@ export function DashboardBuilderPanel({
           </div>
 
           {shouldShowJoinBuilder && (
-            <Card className="bg-secondary/60">
+            <Card className="bg-secondary/20">
               <CardHeader>
                 <CardTitle className="text-sm">Table joins</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-foreground">
                   Add joins now so dashboard filters can move cleanly across
                   tables after creation.
                 </p>

@@ -7,6 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getAnalysisShortcutLabel } from "@/features/analysis/analysis-shortcuts";
 import { getAnalysisExplorerToggleLabel } from "@/features/analysis/analysis-explorer";
 
 type AnalysisToolbarProps = {
@@ -30,11 +31,6 @@ function formatRelativeTime(timestamp: number): string {
   return `${Math.floor(hoursAgo / 24)}d ago`;
 }
 
-const isMac =
-  typeof navigator !== "undefined" &&
-  /Mac|iPhone|iPad/.test(navigator.userAgent);
-const modKey = isMac ? "\u2318" : "Ctrl+";
-
 export function AnalysisToolbar({
   isBusy,
   title,
@@ -46,6 +42,8 @@ export function AnalysisToolbar({
 }: AnalysisToolbarProps) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState<string>("");
+  const explorerShortcutLabel = getAnalysisShortcutLabel("toggleExplorer");
+  const dashboardShortcutLabel = getAnalysisShortcutLabel("createDashboard");
 
   function handleTitleClick() {
     setTitleDraft(title ?? "");
@@ -77,13 +75,13 @@ export function AnalysisToolbar({
             aria-label={getAnalysisExplorerToggleLabel(isExplorerCollapsed)}
           >
             <PanelLeft />
-            {getAnalysisExplorerToggleLabel(isExplorerCollapsed)}
+            {/*{getAnalysisExplorerToggleLabel(isExplorerCollapsed)}*/}
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">
           {getAnalysisExplorerToggleLabel(isExplorerCollapsed)}{" "}
           <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
-            {modKey}B
+            {explorerShortcutLabel}
           </kbd>
         </TooltipContent>
       </Tooltip>
@@ -130,7 +128,7 @@ export function AnalysisToolbar({
           <TooltipContent side="bottom">
             Create dashboard{" "}
             <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
-              {modKey}D
+              {dashboardShortcutLabel}
             </kbd>
           </TooltipContent>
         </Tooltip>

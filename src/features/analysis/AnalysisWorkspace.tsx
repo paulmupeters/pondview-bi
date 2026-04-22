@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DashboardBuilderPanel } from "@/components/dashboard-builder-panel";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -12,6 +19,7 @@ import {
   createInitialAnalysisState,
   toAnalysisCellState,
 } from "@/features/analysis/analysis-reducer";
+import { matchAnalysisShortcut } from "@/features/analysis/analysis-shortcuts";
 import { AnalysisToolbar } from "@/features/analysis/components/AnalysisToolbar";
 import { CellList } from "@/features/analysis/components/CellList";
 import {
@@ -278,6 +286,33 @@ export function AnalysisWorkspace({
   const firstCellWithDb = notebookSession.cells.find(
     (cell) => cell.selectedDbIdentifier,
   );
+  const handleCreateDashboard = useCallback(() => {
+    setIsDashboardPanelOpen(true);
+  }, []);
+  const handleToggleExplorer = useCallback(() => {
+    setIsExplorerCollapsed((previous) => !previous);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const action = matchAnalysisShortcut(event);
+      if (!action) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (action === "toggleExplorer") {
+        handleToggleExplorer();
+        return;
+      }
+
+      handleCreateDashboard();
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [handleCreateDashboard, handleToggleExplorer]);
 
   if (notebookSession.isLoading && !notebookSession.hasLoaded) {
     return (
@@ -304,7 +339,7 @@ export function AnalysisWorkspace({
         onInsertTable={(payload) => void handleInsertExplorerTable(payload)}
         collapsed={isExplorerCollapsed}
         collapsedBehavior="overlay"
-        onToggleCollapse={() => setIsExplorerCollapsed((previous) => !previous)}
+        onToggleCollapse={handleToggleExplorer}
         className="shrink-0 bg-background"
         sqlBackend={effectiveSqlBackend}
       />
@@ -315,11 +350,9 @@ export function AnalysisWorkspace({
           onTitleChange={(newTitle) =>
             void notebookSession.updateTitle(newTitle)
           }
-          onCreateDashboard={() => setIsDashboardPanelOpen(true)}
+          onCreateDashboard={handleCreateDashboard}
           isExplorerCollapsed={isExplorerCollapsed}
-          onToggleExplorer={() =>
-            setIsExplorerCollapsed((previous) => !previous)
-          }
+          onToggleExplorer={handleToggleExplorer}
           lastSavedAt={notebookSession.notebook?.updatedAt ?? null}
         />
         <Dialog
