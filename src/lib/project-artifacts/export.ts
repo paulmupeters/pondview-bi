@@ -1,7 +1,10 @@
 import {
+  type DashboardSourceDescriptor,
+  getDashboardSourceDescriptorCatalogContext,
+  getDashboardSourceDescriptorDbIdentifier,
+  getDashboardSourceDescriptorRuntimeBackend,
   parseDashboardSourceDescriptor,
   parseDashboardSourceDescriptorJson,
-  type DashboardSourceDescriptor,
 } from "@/lib/dashboard/source-descriptor";
 import { canonicalTable, type JoinDefinition } from "@/lib/joins/graph";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
@@ -21,12 +24,6 @@ import type {
   WorkspaceDashboardSlicer,
 } from "@/lib/workspace/workspace-db";
 import {
-  projectDashboardJoinsFileSchema,
-  projectDashboardManifestSchema,
-  projectDashboardMeasureMetadataSchema,
-  projectDashboardVisualMetadataSchema,
-  projectPublishedNotebookManifestSchema,
-  projectSharedQueryMetadataSchema,
   type ProjectDashboardJoinsFile,
   type ProjectDashboardManifest,
   type ProjectDashboardMeasureMetadata,
@@ -34,9 +31,15 @@ import {
   type ProjectPublishedNotebookManifest,
   type ProjectSharedQueryMetadata,
   type ProjectVisualConfig,
+  projectDashboardJoinsFileSchema,
+  projectDashboardManifestSchema,
+  projectDashboardMeasureMetadataSchema,
+  projectDashboardVisualMetadataSchema,
+  projectPublishedNotebookManifestSchema,
+  projectSharedQueryMetadataSchema,
 } from "./types";
 
-type SourceRefResolutionInput = {
+export type ProjectArtifactSourceRefResolutionInput = {
   sourceDescriptor?: DashboardSourceDescriptor | null;
   dbIdentifier?: string | null;
   catalogContext?: string | null;
@@ -45,8 +48,15 @@ type SourceRefResolutionInput = {
 };
 
 export type ProjectArtifactSourceRefResolver = (
-  input: SourceRefResolutionInput,
+  input: ProjectArtifactSourceRefResolutionInput,
 ) => string | null;
+
+export type ProjectArtifactSourceMapping = {
+  sourceRef: string;
+  dbIdentifier?: string | null;
+  catalogContext?: string | null;
+  sqlBackend?: SqlBackend | null;
+};
 
 export type ProjectArtifactTextFile = {
   path: string;
@@ -88,6 +98,7 @@ export type ExportSavedQueryArtifactInput = {
   catalogContext?: string | null;
   description?: string | null;
   tags?: string[];
+  requireSourceRef?: boolean;
 };
 
 export type ExportedSharedQueryArtifact = {
@@ -105,6 +116,7 @@ export type ExportNotebookArtifactInput = {
   description?: string | null;
   resolveSourceRef?: ProjectArtifactSourceRefResolver;
   fallbackSourceRef?: string | null;
+  requireSourceRefs?: boolean;
 };
 
 export type ExportedNotebookCellContentFile = {
@@ -147,7 +159,9 @@ type NotebookPayload = {
   cardConfig?: unknown;
 };
 
-function normalizeOptionalString(value: string | null | undefined): string | null {
+function normalizeOptionalString(
+  value: string | null | undefined,
+): string | null {
   const normalized = typeof value === "string" ? value.trim() : "";
   return normalized.length > 0 ? normalized : null;
 }
@@ -156,6 +170,10 @@ function normalizeOptionalDescription(
   value: string | null | undefined,
 ): string | undefined {
   return normalizeOptionalString(value) ?? undefined;
+}
+
+function normalizeMatchValue(value: string | null | undefined): string | null {
+  return normalizeOptionalString(value)?.toLowerCase() ?? null;
 }
 
 export function toProjectArtifactId(
@@ -207,16 +225,93 @@ function getSourceDescriptor(
 }
 
 function resolveSourceRef(
-  input: SourceRefResolutionInput,
+  input: ProjectArtifactSourceRefResolutionInput,
   resolver?: ProjectArtifactSourceRefResolver,
+  options: {
+    required?: boolean;
+    label?: string;
+  } = {},
 ): string | undefined {
   const resolved = normalizeOptionalString(
     resolver?.(input) ?? input.fallbackSourceRef ?? null,
   );
+  if (!resolved && options.required && hasMappableSourceIdentity(input)) {
+    const label = options.label ? ` for ${options.label}` : "";
+    throw new Error(`Missing project sourceRef mapping${label}.`);
+  }
   return resolved ?? undefined;
 }
 
-function normalizeCatalogContext(value: string | null | undefined): string | undefined {
+function hasMappableSourceIdentity(
+  input: ProjectArtifactSourceRefResolutionInput,
+): boolean {
+  return (
+    (input.sourceDescriptor !== null &&
+      input.sourceDescriptor !== undefined &&
+      getDashboardSourceDescriptorDbIdentifier(input.sourceDescriptor) !==
+        null) ||
+    normalizeOptionalString(input.dbIdentifier) !== null ||
+    normalizeOptionalString(input.catalogContext) !== null
+  );
+}
+
+export function createProjectArtifactSourceRefResolver(
+  mappings: ProjectArtifactSourceMapping[],
+): ProjectArtifactSourceRefResolver {
+  const normalizedMappings = mappings
+    .map((mapping) => ({
+      sourceRef: normalizeOptionalString(mapping.sourceRef),
+      dbIdentifier: normalizeMatchValue(mapping.dbIdentifier),
+      catalogContext: normalizeMatchValue(mapping.catalogContext),
+      sqlBackend: mapping.sqlBackend ?? null,
+    }))
+    .filter(
+      (
+        mapping,
+      ): mapping is {
+        sourceRef: string;
+        dbIdentifier: string | null;
+        catalogContext: string | null;
+        sqlBackend: SqlBackend | null;
+      } => mapping.sourceRef !== null,
+    );
+
+  return (input) => {
+    const inputDbIdentifier = normalizeMatchValue(
+      input.dbIdentifier ??
+        getDashboardSourceDescriptorDbIdentifier(input.sourceDescriptor),
+    );
+    const inputCatalogContext = normalizeMatchValue(
+      input.catalogContext ??
+        getDashboardSourceDescriptorCatalogContext(input.sourceDescriptor),
+    );
+    const inputSqlBackend =
+      input.sqlBackend ??
+      getDashboardSourceDescriptorRuntimeBackend(input.sourceDescriptor);
+
+    const match = normalizedMappings.find((mapping) => {
+      if (mapping.dbIdentifier && mapping.dbIdentifier !== inputDbIdentifier) {
+        return false;
+      }
+      if (
+        mapping.catalogContext &&
+        mapping.catalogContext !== inputCatalogContext
+      ) {
+        return false;
+      }
+      if (mapping.sqlBackend && mapping.sqlBackend !== inputSqlBackend) {
+        return false;
+      }
+      return mapping.dbIdentifier !== null || mapping.catalogContext !== null;
+    });
+
+    return match?.sourceRef ?? null;
+  };
+}
+
+function normalizeCatalogContext(
+  value: string | null | undefined,
+): string | undefined {
   return normalizeOptionalString(value) ?? undefined;
 }
 
@@ -252,7 +347,10 @@ function stripUndefinedValues<T>(value: T): T {
   ) as T;
 }
 
-function serializeJsonFile(path: string, value: unknown): ProjectArtifactTextFile {
+function serializeJsonFile(
+  path: string,
+  value: unknown,
+): ProjectArtifactTextFile {
   return {
     path,
     content: `${JSON.stringify(sortJsonValue(value), null, 2)}\n`,
@@ -266,7 +364,10 @@ function serializeSqlFile(path: string, sql: string): ProjectArtifactTextFile {
   };
 }
 
-function serializeMarkdownFile(path: string, content: string): ProjectArtifactTextFile {
+function serializeMarkdownFile(
+  path: string,
+  content: string,
+): ProjectArtifactTextFile {
   return {
     path,
     content: `${content.trim()}\n`,
@@ -318,7 +419,9 @@ function sortJoins(joins: JoinDefinition[]): JoinDefinition[] {
   });
 }
 
-function buildNotebookPayload(cell: WorkspaceAnalysisCell): NotebookPayload | null {
+function buildNotebookPayload(
+  cell: WorkspaceAnalysisCell,
+): NotebookPayload | null {
   const parsed = parseJson(cell.resultPayloadJson);
   return parsed && typeof parsed === "object"
     ? (parsed as NotebookPayload)
@@ -366,7 +469,7 @@ function getNotebookVisualConfig(
 
 function getNotebookCellSourceInput(
   cell: WorkspaceAnalysisCell,
-): SourceRefResolutionInput {
+): ProjectArtifactSourceRefResolutionInput {
   const payload = buildNotebookPayload(cell);
   return {
     sourceDescriptor: parseDashboardSourceDescriptor(payload?.sourceDescriptor),
@@ -400,6 +503,7 @@ export function exportDashboardArtifact(input: {
   artifactId?: string;
   resolveSourceRef?: ProjectArtifactSourceRefResolver;
   fallbackSourceRef?: string | null;
+  requireSourceRefs?: boolean;
 }): ExportedDashboardArtifact {
   const dashboardId =
     input.artifactId ?? toProjectArtifactId(input.dashboard.title, "dashboard");
@@ -417,6 +521,10 @@ export function exportDashboardArtifact(input: {
       fallbackSourceRef: input.fallbackSourceRef ?? null,
     },
     input.resolveSourceRef,
+    {
+      required: input.requireSourceRefs,
+      label: `dashboard "${input.dashboard.title}"`,
+    },
   );
 
   const sortedMeasures = [...(input.measures ?? [])].sort((left, right) => {
@@ -438,6 +546,10 @@ export function exportDashboardArtifact(input: {
           fallbackSourceRef: dashboardSourceRef ?? null,
         },
         input.resolveSourceRef,
+        {
+          required: input.requireSourceRefs,
+          label: `dashboard measure "${measure.label}"`,
+        },
       );
 
       const metadata = projectDashboardMeasureMetadataSchema.parse(
@@ -450,7 +562,9 @@ export function exportDashboardArtifact(input: {
             sourceRef && sourceRef !== dashboardSourceRef
               ? sourceRef
               : undefined,
-          catalogContext: normalizeCatalogContext(measure.catalogContext ?? null),
+          catalogContext: normalizeCatalogContext(
+            measure.catalogContext ?? null,
+          ),
         }),
       );
 
@@ -484,6 +598,10 @@ export function exportDashboardArtifact(input: {
           fallbackSourceRef: dashboardSourceRef ?? null,
         },
         input.resolveSourceRef,
+        {
+          required: input.requireSourceRefs,
+          label: `dashboard visual "${labelSource}"`,
+        },
       );
 
       const metadata = projectDashboardVisualMetadataSchema.parse(
@@ -595,20 +713,38 @@ export function exportSavedQueryArtifact(
   const rootPath = `pondview/queries/${group}`;
   const metadataPath = `${rootPath}/${id}.query.json`;
   const sqlPath = `${rootPath}/${id}.sql`;
-  const tags = (input.tags ?? [])
-    .map((tag) => normalizeOptionalString(tag))
-    .filter((tag): tag is string => tag !== null)
-    .sort((left, right) => left.localeCompare(right));
+  const tags = Array.from(
+    new Set(
+      (input.tags ?? [])
+        .concat(input.query.tags ?? [])
+        .map((tag) => normalizeOptionalString(tag))
+        .filter((tag): tag is string => tag !== null),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
+
+  const sourceRef =
+    normalizeOptionalString(input.sourceRef) ??
+    normalizeOptionalString(input.query.sourceRef) ??
+    undefined;
+  if (input.requireSourceRef && !sourceRef) {
+    throw new Error(
+      `Missing project sourceRef mapping for query "${input.query.name}".`,
+    );
+  }
 
   const metadata = projectSharedQueryMetadataSchema.parse(
     stripUndefinedValues({
       schemaVersion: 1,
       id,
       name: input.query.name,
-      kind: input.kind ?? "query",
-      description: normalizeOptionalDescription(input.description),
-      sourceRef: normalizeOptionalString(input.sourceRef) ?? undefined,
-      catalogContext: normalizeCatalogContext(input.catalogContext ?? null),
+      kind: input.kind ?? input.query.kind ?? "query",
+      description: normalizeOptionalDescription(
+        input.description ?? input.query.description,
+      ),
+      sourceRef,
+      catalogContext: normalizeCatalogContext(
+        input.catalogContext ?? input.query.catalogContext ?? null,
+      ),
       tags: tags.length > 0 ? tags : undefined,
     }),
   );
@@ -655,50 +791,56 @@ export function exportPublishedNotebookArtifact(
             cell.promptText || cell.kind || `cell-${index + 1}`,
             `${cell.kind ?? "cell"}-${index + 1}`,
           );
-        const sourceInput = getNotebookCellSourceInput(cell);
-        const sourceRef = resolveSourceRef(
-          {
-            ...sourceInput,
-            fallbackSourceRef: input.fallbackSourceRef ?? null,
-          },
-          input.resolveSourceRef,
-        );
+          const sourceInput = getNotebookCellSourceInput(cell);
+          const sourceRef = resolveSourceRef(
+            {
+              ...sourceInput,
+              fallbackSourceRef: input.fallbackSourceRef ?? null,
+            },
+            input.resolveSourceRef,
+            {
+              required: input.requireSourceRefs,
+              label: `notebook cell "${cellId}"`,
+            },
+          );
 
-        if (cell.kind === "sql") {
-          const sqlPath = `${rootPath}/cells/${cellId}.sql`;
-          contentFiles.push({
-            cellId,
-            path: sqlPath,
-            content: getNotebookSql(cell),
-          });
-
-          const visualConfig = getNotebookVisualConfig(cell);
-          if (visualConfig) {
-            visualFiles.push({
+          if (cell.kind === "sql") {
+            const sqlPath = `${rootPath}/cells/${cellId}.sql`;
+            contentFiles.push({
               cellId,
-              path: `${rootPath}/cells/${cellId}.visual.json`,
-              config: visualConfig,
+              path: sqlPath,
+              content: getNotebookSql(cell),
+            });
+
+            const visualConfig = getNotebookVisualConfig(cell);
+            if (visualConfig) {
+              visualFiles.push({
+                cellId,
+                path: `${rootPath}/cells/${cellId}.visual.json`,
+                config: visualConfig,
+              });
+            }
+
+            return stripUndefinedValues({
+              id: cellId,
+              kind: "sql",
+              file: `cells/${cellId}.sql`,
+              visualFile: visualConfig
+                ? `cells/${cellId}.visual.json`
+                : undefined,
+              sourceRef,
+              catalogContext: normalizeCatalogContext(
+                sourceInput.catalogContext ?? null,
+              ),
             });
           }
 
-          return stripUndefinedValues({
-            id: cellId,
-            kind: "sql",
-            file: `cells/${cellId}.sql`,
-            visualFile: visualConfig ? `cells/${cellId}.visual.json` : undefined,
-            sourceRef,
-            catalogContext: normalizeCatalogContext(
-              sourceInput.catalogContext ?? null,
-            ),
+          const markdownPath = `${rootPath}/cells/${cellId}.md`;
+          contentFiles.push({
+            cellId,
+            path: markdownPath,
+            content: cell.promptText,
           });
-        }
-
-        const markdownPath = `${rootPath}/cells/${cellId}.md`;
-        contentFiles.push({
-          cellId,
-          path: markdownPath,
-          content: cell.promptText,
-        });
 
           return stripUndefinedValues({
             id: cellId,

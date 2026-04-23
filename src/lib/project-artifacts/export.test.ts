@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
+import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 import type {
   WorkspaceAnalysisCell,
   WorkspaceAnalysisNotebook,
@@ -8,7 +9,6 @@ import type {
   WorkspaceDashboardMeasure,
   WorkspaceDashboardSlicer,
 } from "@/lib/workspace/workspace-db";
-import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 import {
   exportDashboardArtifact,
   exportPublishedNotebookArtifact,
@@ -68,7 +68,7 @@ describe("dashboard artifact export", () => {
           legend: false,
           multipleLines: false,
         }),
-        semanticQueryJson: "{\"runtimeOnly\":true}",
+        semanticQueryJson: '{"runtimeOnly":true}',
         exploreName: "revenue_explore",
         position: 1,
         createdAt: 3,
@@ -224,13 +224,17 @@ describe("dashboard artifact export", () => {
     });
 
     const files = serializeDashboardArtifact(artifact);
-    const manifestFile = files.find((file) => file.path.endsWith("dashboard.json"));
-    expect(manifestFile?.content).toContain("\"schemaVersion\": 1");
+    const manifestFile = files.find((file) =>
+      file.path.endsWith("dashboard.json"),
+    );
+    expect(manifestFile?.content).toContain('"schemaVersion": 1');
     expect(manifestFile?.content).not.toContain("storageStatus");
-    expect(files.some((file) => file.content.includes("snapshot_1"))).toBe(false);
-    expect(files.some((file) => file.content.includes("semanticQueryJson"))).toBe(
+    expect(files.some((file) => file.content.includes("snapshot_1"))).toBe(
       false,
     );
+    expect(
+      files.some((file) => file.content.includes("semanticQueryJson")),
+    ).toBe(false);
   });
 });
 
@@ -265,8 +269,12 @@ describe("shared query artifact export", () => {
     });
 
     const files = serializeSharedQueryArtifact(artifact);
-    expect(files[0]?.path).toBe("pondview/queries/finance/monthly-revenue.query.json");
-    expect(files[1]?.content).toBe("select month, revenue from monthly_revenue\n");
+    expect(files[0]?.path).toBe(
+      "pondview/queries/finance/monthly-revenue.query.json",
+    );
+    expect(files[1]?.content).toBe(
+      "select month, revenue from monthly_revenue\n",
+    );
   });
 
   test("can represent reusable views under query artifacts", () => {
@@ -390,11 +398,13 @@ describe("published notebook artifact export", () => {
 
     const files = serializePublishedNotebookArtifact(artifact);
     const visualFile = files.find((file) => file.path.endsWith(".visual.json"));
-    expect(visualFile?.content).toContain("\"visualType\": \"chart\"");
-    expect(visualFile?.content).not.toContain("\"rows\"");
-    expect(visualFile?.content).not.toContain("\"executionTime\"");
+    expect(visualFile?.content).toContain('"visualType": "chart"');
+    expect(visualFile?.content).not.toContain('"rows"');
+    expect(visualFile?.content).not.toContain('"executionTime"');
 
     const sqlFile = files.find((file) => file.path.endsWith(".sql"));
-    expect(sqlFile?.content).toBe("select month, revenue from monthly_revenue\n");
+    expect(sqlFile?.content).toBe(
+      "select month, revenue from monthly_revenue\n",
+    );
   });
 });

@@ -31,6 +31,14 @@ export function createDashboard(
   return dashboardStorageService.createDashboard(title, input);
 }
 
+export const replaceDashboardFromProject = (input: {
+  dashboard: WorkspaceDashboard;
+  charts: WorkspaceChart[];
+  measures: WorkspaceDashboardMeasure[];
+  slicers: WorkspaceDashboardSlicer[];
+  joinDefs: JoinDefinition[];
+}) => dashboardStorageService.replaceDashboardFromProject(input);
+
 export const updateDashboardTitle = (
   dashboardId: string,
   title: string,

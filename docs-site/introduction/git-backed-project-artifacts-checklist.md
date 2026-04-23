@@ -15,41 +15,43 @@ implementation phases.
 - [x] Add deterministic export helpers for published notebooks
 - [x] Add tests for serialization and exclusion rules
 
-## Phase 2: Project model promotion flow
+## Phase 2: Project model export flow
 
-- [ ] Add a dashboard-to-project exporter that loads dashboard entities from the
+- [x] Add a dashboard-to-project exporter that loads dashboard entities from the
   live workspace
-- [ ] Resolve runtime source descriptors to logical `sourceRef` values during
+- [x] Resolve runtime source descriptors to logical `sourceRef` values during
   export
-- [ ] Export dashboard visuals, measures, joins, and slicers into the project
+- [x] Export dashboard visuals, measures, joins, and slicers into the project
   file layout
-- [ ] Add validation errors for missing source mappings and invalid visual
+- [x] Add validation errors for missing source mappings and invalid visual
   config JSON
-- [ ] Add a UI action to promote a live dashboard into project artifacts
+- [ ] Treat dashboards as project assets by default in the product model
 
-## Phase 3: Shared query and view promotion flow
+## Phase 3: Shared query and view project flow
 
-- [ ] Add a query-to-project exporter for shared SQL query artifacts
-- [ ] Add support for query grouping, tags, and optional descriptions
-- [ ] Represent reusable SQL views under `queries/` with `kind: "view"`
-- [ ] Add a UI action to promote saved SQL queries into project artifacts
-- [ ] Keep personal local saved queries separate from repo-backed shared queries
+- [x] Add a query-to-project exporter for shared SQL query artifacts
+- [x] Add support for query grouping, tags, and optional descriptions
+- [x] Represent reusable SQL views under `queries/` with `kind: "view"`
+- [ ] Treat saved/named SQL queries as project assets by default
+- [ ] Keep scratch SQL editor sessions separate from saved project queries
 
-## Phase 4: Published notebook promotion flow
+## Phase 4: Published notebook project flow
 
-- [ ] Add a notebook-to-project exporter for curated notebook artifacts
-- [ ] Strip notebook execution state from exports
-- [ ] Export authored prompts, SQL drafts, and selected visual config only
-- [ ] Add a UI action to promote a notebook into project artifacts
+- [x] Add a notebook-to-project exporter for curated notebook artifacts
+- [x] Strip notebook execution state from exports
+- [x] Export authored prompts, SQL drafts, and selected visual config only
+- [ ] Treat notebooks as project assets by default in the product model
 
 ## Phase 5: Import path and source bindings
 
-- [ ] Add parsers and validators for committed project artifact files
-- [ ] Add support for local `pondview.sources.local.json` source bindings
-- [ ] Add import flows for dashboards, shared queries, and published notebooks
-- [ ] Create or update live workspace entities from imported artifacts
+- [x] Add parsers and validators for committed project artifact files
+- [x] Add support for local `pondview.sources.local.json` source bindings
+- [x] Add hydration mappers for dashboards, shared queries, and published
+  notebooks
+- [x] Add import flows for dashboards, shared queries, and published notebooks
+- [x] Create or update live workspace entities from imported artifacts
 - [ ] Hydrate runtime DuckDB/browser state from project artifacts
-- [ ] Ensure `pondview.dashboard_snapshots` is treated as runtime/snapshot
+- [x] Ensure `pondview.dashboard_snapshots` is treated as runtime/snapshot
   metadata, not project source
 
 ## Phase 6: Snapshot artifact flow
@@ -63,9 +65,10 @@ implementation phases.
 
 ## Phase 7: Canonical project integration
 
-- [ ] Add a `Promote to Project` flow in the product UI
 - [ ] Add an `Import from Project` flow in the product UI
 - [ ] Add `Open Project` and `Save Project` semantics
+- [ ] Add automatic project file writes for authored assets when a project is
+  open
 - [ ] Add conflict handling for existing dashboards, queries, and notebooks
 - [ ] Add docs for source binding setup and round-trip workflows
 - [ ] Decide how project files are written from browser environments

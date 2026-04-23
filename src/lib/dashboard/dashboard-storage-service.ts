@@ -1372,6 +1372,88 @@ export class DashboardStorageService {
     return { id };
   }
 
+  async replaceDashboardFromProject(input: {
+    dashboard: WorkspaceDashboard;
+    charts: WorkspaceChart[];
+    measures: WorkspaceDashboardMeasure[];
+    slicers: WorkspaceDashboardSlicer[];
+    joinDefs: JoinDefinition[];
+  }): Promise<{ id: string }> {
+    const target = resolveTargetForSource({
+      dbIdentifier: input.dashboard.homeDbIdentifier ?? null,
+      sqlBackend:
+        input.dashboard.homeSqlBackend ??
+        input.dashboard.runtimeBackend ??
+        null,
+    });
+    const runtimeBackend =
+      input.dashboard.runtimeBackend ??
+      input.dashboard.homeSqlBackend ??
+      target.sqlBackend;
+    const now = input.dashboard.updatedAt || Date.now();
+
+    await ensureMetadataSchema(target);
+    await runStorageStatements(target, [
+      `DELETE FROM ${quoteIdentifier(METADATA_SCHEMA)}.chart_slicers
+       WHERE chart_id IN (
+         SELECT id
+         FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
+         WHERE dashboard_id = ${quoteString(input.dashboard.id)}
+       );`,
+      `DELETE FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
+       WHERE dashboard_id = ${quoteString(input.dashboard.id)};`,
+      `DELETE FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_measures
+       WHERE dashboard_id = ${quoteString(input.dashboard.id)};`,
+      `DELETE FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_slicers
+       WHERE dashboard_id = ${quoteString(input.dashboard.id)};`,
+      `DELETE FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_join_defs
+       WHERE dashboard_id = ${quoteString(input.dashboard.id)};`,
+      `DELETE FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_cache_tables
+       WHERE dashboard_id = ${quoteString(input.dashboard.id)};`,
+      `DELETE FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_source_caches
+       WHERE dashboard_id = ${quoteString(input.dashboard.id)};`,
+      `DELETE FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_snapshots
+       WHERE dashboard_id = ${quoteString(input.dashboard.id)};`,
+    ]);
+
+    await upsertDashboardRecord(target, {
+      ...input.dashboard,
+      createdAt: input.dashboard.createdAt || now,
+      updatedAt: now,
+      columns: input.dashboard.columns ?? 3,
+      autoFitRows: input.dashboard.autoFitRows ?? false,
+      runtimeBackend,
+      activeSnapshotId: null,
+      homeDbIdentifier: storedDbIdentifierForTarget(target),
+      homeSqlBackend: runtimeBackend,
+      storageStatus: target.storageStatus,
+    });
+    await replaceJoinDefsInTarget(target, input.dashboard.id, input.joinDefs);
+
+    for (const measure of input.measures) {
+      await upsertMeasureRecord(target, {
+        ...measure,
+        dashboardId: input.dashboard.id,
+        snapshotId: null,
+      });
+    }
+    for (const chart of input.charts) {
+      await upsertChartRecord(target, {
+        ...chart,
+        dashboardId: input.dashboard.id,
+        snapshotId: null,
+      });
+    }
+    for (const slicer of input.slicers) {
+      await upsertDashboardSlicerRecord(target, {
+        ...slicer,
+        dashboardId: input.dashboard.id,
+      });
+    }
+
+    return { id: input.dashboard.id };
+  }
+
   async updateDashboardTitle(
     dashboardId: string,
     title: string,

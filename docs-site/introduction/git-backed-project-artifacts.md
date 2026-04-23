@@ -38,10 +38,12 @@ model:
 - notebooks, chats, and preferences live in browser storage
 - data lives in DuckDB and other connected sources
 
-In v1, the Git-backed layer starts as a promotion and publication layer for
-durable, reviewable project assets. Over time, project artifacts should become
-the canonical authored representation that the runtime model can hydrate from
-or rebuild.
+In v1, authored dashboards, queries, views, and notebooks should be treated as
+project assets by default. During the transition, the runtime and browser
+workspace models may still be the immediate write surface, but the product
+should not make users choose whether an authored asset is part of the project.
+Over time, project artifacts should become the canonical authored
+representation that the runtime model can hydrate from or rebuild.
 
 See also:
 
@@ -51,7 +53,8 @@ See also:
 
 - Store reusable analytics definitions as text files that diff cleanly.
 - Separate logical source references from environment-specific bindings.
-- Support a clear `Save locally` then `Promote to Project` workflow.
+- Treat authored dashboards, queries, views, and notebooks as project assets by
+  default.
 - Make dashboards, shared queries, and curated notebooks portable across
   environments.
 - Keep the format close to the existing runtime model where practical.
@@ -603,6 +606,8 @@ When importing a dashboard from Git into the live workspace:
 - create or update dashboard, measures, slicers, joins, and visuals
 - preserve dashboard visual order from `dashboard.json`
 - preserve canonical SQL and visualization config
+- clear stale dashboard cache and `pondview.dashboard_snapshots` rows for the
+  imported dashboard so runtime snapshots remain rebuildable metadata
 
 ## Shared Query And View Artifact Spec
 
@@ -611,8 +616,9 @@ Shared queries are the Git-backed form of reusable saved SQL queries.
 Shared views also live under `queries/` in v1. A view is represented as a query
 artifact whose SQL is intended to create or define a reusable relation.
 
-Queries and views are intended for team-level assets, not every personal draft
-query.
+Queries and views are intended for reusable project assets. One-off scratch SQL
+may stay inside the SQL editor session, but saved/named queries should be
+project assets by default.
 
 ### Query directory layout
 
@@ -667,12 +673,13 @@ Query and view exports must not include:
 ### Query and view import/export rules
 
 - Exported SQL must be trimmed canonical SQL.
-- Queries promoted from local saved-query storage should receive a stable
+- Queries imported from existing saved-query storage should receive a stable
   slug-based `id`.
 - Views should initially use the same metadata shape and directory layout as
   queries, with `kind: "view"`.
-- Import should create a shared project query or view entry, not overwrite
-  personal local query drafts unless explicitly requested.
+- Import should create or update the project query or view entry with stable
+  project metadata such as `kind`, `sourceRef`, `catalogContext`, tags, and the
+  original project path.
 
 ## Published Notebook Artifact Spec
 
@@ -847,15 +854,23 @@ not project source. A project artifact may reference the idea of a snapshot in a
 future feature, but it must not store snapshot ids or snapshot-specific runtime
 schemas in Git.
 
-## Promote To Project Workflow
+## Automatic Project Asset Workflow
 
 The v1 product workflow is:
 
-1. Work locally in the existing workspace model.
-2. Save dashboards, queries, and notebooks locally while iterating.
-3. Promote selected assets to project artifacts.
-4. Review the resulting files in Git.
-5. Import project artifacts into another workspace using local source bindings.
+1. Create or edit dashboards, saved queries, views, and notebooks in the normal
+   product surfaces.
+2. Treat those authored assets as project assets automatically.
+3. Persist project files through the active project backing store when project
+   file writing is available.
+4. Use runtime/browser storage only as the live editing and execution cache
+   during the transition.
+5. Import project assets into another workspace using local source bindings.
+
+The v1 UI should avoid manual promotion controls. Users should not need to
+decide whether a notebook, dashboard, saved query, or view is a project asset.
+Project artifact terminology should mostly remain in project settings,
+validation, import/export, and developer-facing docs.
 
 The target product workflow is:
 
@@ -867,8 +882,8 @@ The target product workflow is:
 
 This workflow intentionally separates:
 
-- local exploration state
-- published project definitions
+- scratch exploration state
+- authored project definitions
 - runtime/snapshot state
 - data and backup storage
 

@@ -1,9 +1,5 @@
 import { z } from "zod";
-import {
-  cardConfigSchema,
-  configSchema,
-  tableConfigSchema,
-} from "@/lib/types";
+import { cardConfigSchema, configSchema, tableConfigSchema } from "@/lib/types";
 
 const schemaVersionSchema = z.literal(1);
 const nonEmptyStringSchema = z.string().trim().min(1);

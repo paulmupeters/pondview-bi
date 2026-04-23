@@ -8,6 +8,12 @@ export type SavedSqlQuery = {
   id: string;
   name: string;
   sql: string;
+  kind?: "query" | "view";
+  sourceRef?: string | null;
+  catalogContext?: string | null;
+  description?: string | null;
+  tags?: string[];
+  projectPath?: string | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -69,6 +75,20 @@ function normalizeRow(value: unknown): SavedSqlQuery | null {
     id: candidate.id,
     name: candidate.name,
     sql: candidate.sql,
+    kind: candidate.kind === "view" ? "view" : "query",
+    sourceRef:
+      typeof candidate.sourceRef === "string" ? candidate.sourceRef : null,
+    catalogContext:
+      typeof candidate.catalogContext === "string"
+        ? candidate.catalogContext
+        : null,
+    description:
+      typeof candidate.description === "string" ? candidate.description : null,
+    tags: Array.isArray(candidate.tags)
+      ? candidate.tags.filter((tag): tag is string => typeof tag === "string")
+      : undefined,
+    projectPath:
+      typeof candidate.projectPath === "string" ? candidate.projectPath : null,
     createdAt: candidate.createdAt,
     updatedAt: candidate.updatedAt,
   };
@@ -94,6 +114,12 @@ export async function listSavedSqlQueries(): Promise<SavedSqlQuery[]> {
 export async function saveSqlQuery(input: {
   sql: string;
   name: string;
+  kind?: "query" | "view";
+  sourceRef?: string | null;
+  catalogContext?: string | null;
+  description?: string | null;
+  tags?: string[];
+  projectPath?: string | null;
 }): Promise<SavedSqlQuery[]> {
   const normalizedSql = input.sql.trim();
   const normalizedName = input.name.trim();
@@ -114,6 +140,12 @@ export async function saveSqlQuery(input: {
     const updated: SavedSqlQuery = {
       ...duplicate,
       name: normalizedName,
+      kind: input.kind ?? duplicate.kind,
+      sourceRef: input.sourceRef ?? duplicate.sourceRef,
+      catalogContext: input.catalogContext ?? duplicate.catalogContext,
+      description: input.description ?? duplicate.description,
+      tags: input.tags ?? duplicate.tags,
+      projectPath: input.projectPath ?? duplicate.projectPath,
       updatedAt: now,
     };
     next = [
@@ -128,6 +160,12 @@ export async function saveSqlQuery(input: {
     const replaced: SavedSqlQuery = {
       ...duplicateByName,
       sql: normalizedSql,
+      kind: input.kind ?? duplicateByName.kind,
+      sourceRef: input.sourceRef ?? duplicateByName.sourceRef,
+      catalogContext: input.catalogContext ?? duplicateByName.catalogContext,
+      description: input.description ?? duplicateByName.description,
+      tags: input.tags ?? duplicateByName.tags,
+      projectPath: input.projectPath ?? duplicateByName.projectPath,
       updatedAt: now,
     };
     next = [
@@ -139,6 +177,12 @@ export async function saveSqlQuery(input: {
       id: `saved-sql-${nanoid()}`,
       name: normalizedName,
       sql: normalizedSql,
+      kind: input.kind ?? "query",
+      sourceRef: input.sourceRef ?? null,
+      catalogContext: input.catalogContext ?? null,
+      description: input.description ?? null,
+      tags: input.tags,
+      projectPath: input.projectPath ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -148,6 +192,43 @@ export async function saveSqlQuery(input: {
   const persisted = next.slice(0, MAX_SAVED_SQL_QUERIES);
   await setPreference(SAVED_SQL_QUERIES_KEY, persisted);
   return persisted;
+}
+
+export async function upsertSavedSqlQuery(
+  query: SavedSqlQuery,
+): Promise<SavedSqlQuery[]> {
+  const normalizedSql = query.sql.trim();
+  const normalizedName = query.name.trim();
+  if (!query.id.trim() || !normalizedSql || !normalizedName) {
+    return listSavedSqlQueries();
+  }
+
+  const now = query.updatedAt || Date.now();
+  const existing = await listSavedSqlQueries();
+  const createdAt =
+    query.createdAt ||
+    existing.find((entry) => entry.id === query.id)?.createdAt ||
+    now;
+  const upserted: SavedSqlQuery = {
+    ...query,
+    id: query.id.trim(),
+    name: normalizedName,
+    sql: normalizedSql,
+    kind: query.kind ?? "query",
+    sourceRef: query.sourceRef ?? null,
+    catalogContext: query.catalogContext ?? null,
+    description: query.description ?? null,
+    projectPath: query.projectPath ?? null,
+    createdAt,
+    updatedAt: now,
+  };
+  const next = [
+    upserted,
+    ...existing.filter((entry) => entry.id !== upserted.id),
+  ].slice(0, MAX_SAVED_SQL_QUERIES);
+
+  await setPreference(SAVED_SQL_QUERIES_KEY, next);
+  return next;
 }
 
 export async function renameSavedSqlQuery(
