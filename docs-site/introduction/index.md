@@ -15,6 +15,7 @@ This docs set covers setup, runtime behavior, connected data, uploads, and persi
 - [AI Provider Configuration](/introduction/ai-provider-configuration)
 - [SQL Runtime Backends](/introduction/sql-runtime-backends)
 - [Connected Data Sources](/introduction/connected-data-sources)
+- [Git-Backed Project Artifacts](/introduction/git-backed-project-artifacts)
 - [Uploads and Browser Storage](/introduction/uploads-and-browser-storage)
 - [Dashboards](/guide/dashboards)
 - [Workspace Persistence](/introduction/workspace-persistence)

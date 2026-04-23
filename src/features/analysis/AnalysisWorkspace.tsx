@@ -19,7 +19,10 @@ import {
   createInitialAnalysisState,
   toAnalysisCellState,
 } from "@/features/analysis/analysis-reducer";
-import { matchAnalysisShortcut } from "@/features/analysis/analysis-shortcuts";
+import {
+  getAnalysisShortcutLabel,
+  matchAnalysisShortcut,
+} from "@/features/analysis/analysis-shortcuts";
 import { AnalysisToolbar } from "@/features/analysis/components/AnalysisToolbar";
 import { CellList } from "@/features/analysis/components/CellList";
 import {
@@ -340,6 +343,8 @@ export function AnalysisWorkspace({
         collapsed={isExplorerCollapsed}
         collapsedBehavior="overlay"
         onToggleCollapse={handleToggleExplorer}
+        showCollapseToggle
+        toggleShortcutLabel={getAnalysisShortcutLabel("toggleExplorer")}
         className="shrink-0 bg-background"
         sqlBackend={effectiveSqlBackend}
       />
@@ -351,9 +356,8 @@ export function AnalysisWorkspace({
             void notebookSession.updateTitle(newTitle)
           }
           onCreateDashboard={handleCreateDashboard}
-          isExplorerCollapsed={isExplorerCollapsed}
-          onToggleExplorer={handleToggleExplorer}
           lastSavedAt={notebookSession.notebook?.updatedAt ?? null}
+          isExplorerCollapsed={isExplorerCollapsed}
         />
         <Dialog
           open={isDashboardPanelOpen}

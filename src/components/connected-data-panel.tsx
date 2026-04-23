@@ -1,5 +1,5 @@
 import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { Database } from "lucide-react";
+import { Database, PanelLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   PromptInputHoverCard,
@@ -45,6 +45,10 @@ type ExplorerTableGroup = {
   schema: string;
   tables: string[];
 };
+
+function getExplorerToggleLabel(isCollapsed: boolean): string {
+  return isCollapsed ? "Show explorer" : "Hide explorer";
+}
 
 export function getConnectedEntryCatalog(
   entry: ConnectedTable,
@@ -294,6 +298,7 @@ interface ConnectedDataPanelProps {
   onDeleteStoredSqlQuery?: (queryId: string) => void;
   onRenameStoredSqlQuery?: (queryId: string) => void;
   showStoredSqlQueries?: boolean;
+  toggleShortcutLabel?: string;
 }
 
 export function ConnectedDataPanel({
@@ -304,8 +309,8 @@ export function ConnectedDataPanel({
   mode = "popover",
   collapsed = false,
   collapsedBehavior = "inline",
-  onToggleCollapse: _onToggleCollapse,
-  showCollapseToggle: _showCollapseToggle = true,
+  onToggleCollapse,
+  showCollapseToggle = false,
   refreshToken,
   sqlBackend = "duckdb-wasm",
   storedSqlQueries = [],
@@ -313,6 +318,7 @@ export function ConnectedDataPanel({
   onDeleteStoredSqlQuery,
   onRenameStoredSqlQuery,
   showStoredSqlQueries = false,
+  toggleShortcutLabel,
 }: ConnectedDataPanelProps) {
   const {
     tables: wasmTables,
@@ -340,6 +346,7 @@ export function ConnectedDataPanel({
     remote: null,
     wasm: null,
   });
+  const canToggleCollapse = showCollapseToggle && Boolean(onToggleCollapse);
 
   useEffect(() => {
     if (refreshToken === undefined) {
@@ -721,11 +728,36 @@ export function ConnectedDataPanel({
         return (
           <div
             className={cn(
-              "absolute left-0 top-4 z-20 -translate-x-1/2 transition-all duration-200 ease-out",
+              "absolute left-4 top-4 z-20 transition-all duration-200 ease-out",
               className,
               "bg-transparent",
             )}
-          ></div>
+          >
+            {canToggleCollapse ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="rounded-lg bg-background/90 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80"
+                    onClick={onToggleCollapse}
+                    aria-label={getExplorerToggleLabel(true)}
+                  >
+                    <PanelLeft />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {getExplorerToggleLabel(true)}
+                  {toggleShortcutLabel ? (
+                    <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
+                      {toggleShortcutLabel}
+                    </kbd>
+                  ) : null}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+          </div>
         );
       }
 
@@ -746,10 +778,34 @@ export function ConnectedDataPanel({
           className,
         )}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 p-4">
+        <div className="flex h-14 items-center justify-between gap-2 border-b border-border px-4">
           <span className="text-xs font-bold tracking-widest text-[#5C6658] uppercase">
             Explorer
           </span>
+          {canToggleCollapse ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground hover:text-foreground"
+                  onClick={onToggleCollapse}
+                  aria-label={getExplorerToggleLabel(false)}
+                >
+                  <PanelLeft />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {getExplorerToggleLabel(false)}
+                {toggleShortcutLabel ? (
+                  <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
+                    {toggleShortcutLabel}
+                  </kbd>
+                ) : null}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto p-2">

@@ -436,10 +436,16 @@ export function SqlCell({
           </div>
         </div>
 
-        {/* AI prompt input — shown when AI mode is active */}
-        {isChatMode && (
+        {/* Chat ↔ SQL cross-fade — both stacked in the same grid cell */}
+        <div className="grid">
           <form
-            className="p-0"
+            aria-hidden={!isChatMode}
+            className={cn(
+              "p-0 [grid-area:1/1] transition-opacity duration-200 ease-out",
+              isChatMode
+                ? "opacity-100"
+                : "pointer-events-none opacity-0",
+            )}
             onSubmit={(event) => {
               event.preventDefault();
               if (ai) {
@@ -466,6 +472,7 @@ export function SqlCell({
                 placeholder="Ask AI to refine this cell..."
                 rows={4}
                 disabled={ai?.isAssistantThinking ?? false}
+                tabIndex={isChatMode ? undefined : -1}
                 autoFocus
               />
               <InputGroupAddon align="inline-end">
@@ -480,6 +487,7 @@ export function SqlCell({
                           (ai?.isAssistantThinking ?? false) ||
                           !ai?.promptDraft?.trim()
                         }
+                        tabIndex={isChatMode ? undefined : -1}
                       >
                         {ai?.isAssistantThinking ? "Running..." : "Ask AI"}
                       </InputGroupButton>
@@ -519,27 +527,34 @@ export function SqlCell({
               </InputGroupAddon>
             </InputGroup>
           </form>
-        )}
 
-        {/* SQL editor — always mounted, hidden when AI mode is active */}
-        <div className={isChatMode ? "hidden" : undefined}>
-          <SqlConsole
-            className="py-0"
-            historyKey={`analysis-sql-history:${cell.id}`}
-            editorMinHeight="10rem"
-            executeQueryAction={executeQueryAction}
-            autocompleteAction={autocompleteAction}
-            showInlineResults={false}
-            showRunControls={false}
-            showKeyboardHint={false}
-            onApiChangeAction={(api) => {
-              consoleApiRef.current = api;
-            }}
-            onQueryChangeAction={handleQueryChange}
-            onSuccessAction={handleSuccess}
-            onNoticeAction={handleNotice}
-            onRunStateChangeAction={handleRunStateChange}
-          />
+          <div
+            aria-hidden={isChatMode}
+            className={cn(
+              "[grid-area:1/1] transition-opacity duration-200 ease-out",
+              isChatMode
+                ? "pointer-events-none opacity-0"
+                : "opacity-100",
+            )}
+          >
+            <SqlConsole
+              className="py-0"
+              historyKey={`analysis-sql-history:${cell.id}`}
+              editorMinHeight="10rem"
+              executeQueryAction={executeQueryAction}
+              autocompleteAction={autocompleteAction}
+              showInlineResults={false}
+              showRunControls={false}
+              showKeyboardHint={false}
+              onApiChangeAction={(api) => {
+                consoleApiRef.current = api;
+              }}
+              onQueryChangeAction={handleQueryChange}
+              onSuccessAction={handleSuccess}
+              onNoticeAction={handleNotice}
+              onRunStateChangeAction={handleRunStateChange}
+            />
+          </div>
         </div>
       </div>
 

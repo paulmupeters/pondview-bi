@@ -1,4 +1,4 @@
-import { Check, LayoutDashboard, Loader2, PanelLeft } from "lucide-react";
+import { Check, LayoutDashboard, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,16 +8,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getAnalysisShortcutLabel } from "@/features/analysis/analysis-shortcuts";
-import { getAnalysisExplorerToggleLabel } from "@/features/analysis/analysis-explorer";
+import { cn } from "@/lib/utils";
 
 type AnalysisToolbarProps = {
   isBusy: boolean;
   title: string | null;
   onTitleChange: (title: string | null) => void;
   onCreateDashboard: () => void;
-  isExplorerCollapsed: boolean;
-  onToggleExplorer: () => void;
   lastSavedAt: number | null;
+  isExplorerCollapsed: boolean;
 };
 
 function formatRelativeTime(timestamp: number): string {
@@ -36,13 +35,11 @@ export function AnalysisToolbar({
   title,
   onTitleChange,
   onCreateDashboard,
-  isExplorerCollapsed,
-  onToggleExplorer,
   lastSavedAt,
+  isExplorerCollapsed,
 }: AnalysisToolbarProps) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState<string>("");
-  const explorerShortcutLabel = getAnalysisShortcutLabel("toggleExplorer");
   const dashboardShortcutLabel = getAnalysisShortcutLabel("createDashboard");
 
   function handleTitleClick() {
@@ -65,26 +62,12 @@ export function AnalysisToolbar({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b px-6 py-4">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onToggleExplorer}
-            aria-label={getAnalysisExplorerToggleLabel(isExplorerCollapsed)}
-          >
-            <PanelLeft />
-            {/*{getAnalysisExplorerToggleLabel(isExplorerCollapsed)}*/}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          {getAnalysisExplorerToggleLabel(isExplorerCollapsed)}{" "}
-          <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
-            {explorerShortcutLabel}
-          </kbd>
-        </TooltipContent>
-      </Tooltip>
+    <div
+      className={cn(
+        "flex h-14 items-center gap-3 border-b border-border pr-6 transition-[padding] duration-200 ease-out",
+        isExplorerCollapsed ? "pl-16" : "pl-6",
+      )}
+    >
       {editingTitle ? (
         <Input
           autoFocus

@@ -134,8 +134,10 @@ const _SQL_SAMPLE_LINES: {
     content: (
       <>
         count(
-        <span className="text-purple-600 font-bold">DISTINCT</span> user_id){" "}
-        <span className="text-purple-600 font-bold">AS</span> active_users
+        <span className="text-purple-600 font-bold">
+          DISTINCT
+        </span> user_id) <span className="text-purple-600 font-bold">AS</span>{" "}
+        active_users
       </>
     ),
   },
@@ -669,7 +671,7 @@ export function DuckdbRepl({
       )}
 
       {/* Editor + Results area */}
-      <div className="relative flex-1 min-w-0 h-full p-4">
+      <div className="relative flex-1 min-w-0 h-full p-4 pt-12 items-center justify-center">
         {/* Toolbar Buttons */}
         <div
           className={cn(

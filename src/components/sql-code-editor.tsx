@@ -348,7 +348,7 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorApi, SqlCodeEditorProps>(
           tabSize: 2,
         }}
         className={cn(
-          "sql-code-editor w-full min-w-0 overflow-hidden bg-card",
+          "sql-code-editor w-full min-w-0 overflow-hidden bg-card p-4",
           "[&_.cm-editor]:!font-mono [&_.cm-editor]:!text-sm",
           "[&_.cm-gutters]:!bg-popover [&_.cm-gutters]:!border-r [&_.cm-gutters]:!border-popover",
           "[&_.cm-lineNumbers]:!text-muted-foreground/70",
