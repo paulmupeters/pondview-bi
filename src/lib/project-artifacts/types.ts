@@ -129,6 +129,7 @@ export const projectSharedQueryMetadataSchema = z.object({
   schemaVersion: schemaVersionSchema,
   id: projectArtifactIdSchema,
   name: nonEmptyStringSchema,
+  kind: z.enum(["query", "view"]).optional(),
   description: z.string().optional(),
   sourceRef: projectArtifactIdSchema.optional(),
   catalogContext: z.string().optional(),

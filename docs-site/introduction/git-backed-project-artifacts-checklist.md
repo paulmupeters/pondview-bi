@@ -7,6 +7,7 @@ implementation phases.
 
 - [x] Write the v1 repository-backed artifact spec
 - [x] Define the v1 implementation checklist
+- [x] Document the target three-layer persistence model
 - [x] Add TypeScript schemas for project manifests, source registries,
   dashboards, queries, and published notebooks
 - [x] Add deterministic export helpers for dashboards
@@ -14,7 +15,7 @@ implementation phases.
 - [x] Add deterministic export helpers for published notebooks
 - [x] Add tests for serialization and exclusion rules
 
-## Phase 2: Dashboard promotion flow
+## Phase 2: Project model promotion flow
 
 - [ ] Add a dashboard-to-project exporter that loads dashboard entities from the
   live workspace
@@ -26,10 +27,11 @@ implementation phases.
   config JSON
 - [ ] Add a UI action to promote a live dashboard into project artifacts
 
-## Phase 3: Shared query promotion flow
+## Phase 3: Shared query and view promotion flow
 
 - [ ] Add a query-to-project exporter for shared SQL query artifacts
 - [ ] Add support for query grouping, tags, and optional descriptions
+- [ ] Represent reusable SQL views under `queries/` with `kind: "view"`
 - [ ] Add a UI action to promote saved SQL queries into project artifacts
 - [ ] Keep personal local saved queries separate from repo-backed shared queries
 
@@ -46,11 +48,25 @@ implementation phases.
 - [ ] Add support for local `pondview.sources.local.json` source bindings
 - [ ] Add import flows for dashboards, shared queries, and published notebooks
 - [ ] Create or update live workspace entities from imported artifacts
+- [ ] Hydrate runtime DuckDB/browser state from project artifacts
+- [ ] Ensure `pondview.dashboard_snapshots` is treated as runtime/snapshot
+  metadata, not project source
 
-## Phase 6: Product integration
+## Phase 6: Snapshot artifact flow
+
+- [ ] Define a non-Git `.duckdb` snapshot export/import model
+- [ ] Decide which runtime schemas and metadata belong in snapshots
+- [ ] Add `Export Snapshot` and `Import Snapshot` product flows
+- [ ] Document that snapshots are portable runtime artifacts, not canonical
+  authored project source
+- [ ] Keep snapshot files out of Git by default
+
+## Phase 7: Canonical project integration
 
 - [ ] Add a `Promote to Project` flow in the product UI
 - [ ] Add an `Import from Project` flow in the product UI
+- [ ] Add `Open Project` and `Save Project` semantics
 - [ ] Add conflict handling for existing dashboards, queries, and notebooks
 - [ ] Add docs for source binding setup and round-trip workflows
 - [ ] Decide how project files are written from browser environments
+- [ ] Move toward project files as the canonical write path for authored assets

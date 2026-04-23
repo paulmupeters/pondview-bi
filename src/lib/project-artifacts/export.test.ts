@@ -257,6 +257,7 @@ describe("shared query artifact export", () => {
       schemaVersion: 1,
       id: "monthly-revenue",
       name: "Monthly Revenue",
+      kind: "query",
       description: "Reusable monthly revenue rollup",
       sourceRef: "analytics",
       catalogContext: "main",
@@ -266,6 +267,31 @@ describe("shared query artifact export", () => {
     const files = serializeSharedQueryArtifact(artifact);
     expect(files[0]?.path).toBe("pondview/queries/finance/monthly-revenue.query.json");
     expect(files[1]?.content).toBe("select month, revenue from monthly_revenue\n");
+  });
+
+  test("can represent reusable views under query artifacts", () => {
+    const query: SavedSqlQuery = {
+      id: "saved-sql-view",
+      name: "Revenue By Month View",
+      sql: "create or replace view revenue_by_month as select 1 as revenue",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+
+    const artifact = exportSavedQueryArtifact({
+      query,
+      group: "models",
+      kind: "view",
+      sourceRef: "analytics",
+    });
+
+    expect(artifact.metadata).toMatchObject({
+      schemaVersion: 1,
+      id: "revenue-by-month-view",
+      name: "Revenue By Month View",
+      kind: "view",
+      sourceRef: "analytics",
+    });
   });
 });
 

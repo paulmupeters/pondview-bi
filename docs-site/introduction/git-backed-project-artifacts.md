@@ -1,16 +1,18 @@
 # Git-Backed Project Artifacts
 
-This document defines a repository-backed artifact format for Pondview projects.
+This document defines a repository-backed artifact format for Pondview projects
+and the target persistence architecture it supports.
 
 The goal is to make reusable BI assets reviewable in Git without storing data,
 cached query results, or environment-specific runtime state in the repository.
 
 ## Summary
 
-Git-backed project artifacts are intended for:
+Git-backed project artifacts are intended for authored project state:
 
 - reusable dashboards
 - shared SQL queries
+- shared SQL views, represented under `queries/` in v1
 - published analysis notebooks
 
 Git-backed project artifacts are not intended for:
@@ -22,14 +24,24 @@ Git-backed project artifacts are not intended for:
 - chat transcripts
 - API keys, connection secrets, or local runtime settings
 
-Live editing still happens in the current workspace model:
+The target architecture is:
+
+- Project representation is the canonical source of truth for authored assets.
+- DuckDB is a runtime store, cache, execution surface, and snapshot container.
+- Snapshot artifacts are separate portable runtime exports, not Git-tracked
+  project source.
+
+During the transition, live editing still happens in the current workspace
+model:
 
 - dashboards live in DuckDB metadata
 - notebooks, chats, and preferences live in browser storage
 - data lives in DuckDB and other connected sources
 
-The Git-backed layer is a promotion and publication layer for durable,
-reviewable project assets.
+In v1, the Git-backed layer starts as a promotion and publication layer for
+durable, reviewable project assets. Over time, project artifacts should become
+the canonical authored representation that the runtime model can hydrate from
+or rebuild.
 
 See also:
 
@@ -43,14 +55,71 @@ See also:
 - Make dashboards, shared queries, and curated notebooks portable across
   environments.
 - Keep the format close to the existing runtime model where practical.
+- Establish project files as the target canonical source for authored assets.
+- Keep DuckDB useful as a rebuildable runtime and portable snapshot container.
 
 ## Non-goals
 
 - Version raw data in Git.
-- Replace the live DuckDB or browser-backed workspace state.
+- Replace the live DuckDB or browser-backed workspace state in the first
+  implementation slice.
 - Preserve full chat or tool-call transcripts in Git.
 - Store execution metadata such as runtime aliases, cache ids, snapshot ids, or
   result rows in Git.
+
+## Three-Layer Persistence Model
+
+Pondview should move toward a three-layer persistence model.
+
+### Project model
+
+The project model is the canonical, Git-friendly, editable source for authored
+work.
+
+It includes:
+
+- dashboards
+- charts and tables
+- metric cards
+- measures
+- joins
+- slicers
+- shared queries
+- shared views under `queries/`
+- published notebooks
+- metadata and layout
+
+It excludes data rows, execution caches, runtime aliases, transient notebook
+payloads, and local connection details.
+
+### Runtime model
+
+The runtime model is the live DuckDB/browser-backed state used for interaction
+and execution.
+
+It can contain:
+
+- DuckDB metadata tables used by the current app
+- execution aliases such as `pondview_exec.*`
+- dashboard cache tables
+- dashboard source-cache metadata
+- materialized intermediate state
+- local browser workspace state
+
+Runtime state should be treated as disposable and rebuildable from the project
+model plus local source bindings whenever possible.
+
+### Snapshot artifact
+
+A snapshot artifact is a portable `.duckdb` runtime export for exact
+reproducibility, offline handoff, or debugging.
+
+Snapshot artifacts are useful because they can preserve a frozen runtime state
+in one file. They are not a replacement for project artifacts because they are
+binary, hard to diff, hard to merge, and can mix authored state with materialized
+runtime state.
+
+Snapshot artifacts are not stored in Git by default.
 
 ## Terminology
 
@@ -535,11 +604,15 @@ When importing a dashboard from Git into the live workspace:
 - preserve dashboard visual order from `dashboard.json`
 - preserve canonical SQL and visualization config
 
-## Shared Query Artifact Spec
+## Shared Query And View Artifact Spec
 
 Shared queries are the Git-backed form of reusable saved SQL queries.
 
-They are intended for team-level query assets, not every personal draft query.
+Shared views also live under `queries/` in v1. A view is represented as a query
+artifact whose SQL is intended to create or define a reusable relation.
+
+Queries and views are intended for team-level assets, not every personal draft
+query.
 
 ### Query directory layout
 
@@ -566,6 +639,7 @@ Example:
   "schemaVersion": 1,
   "id": "monthly-revenue",
   "name": "Monthly Revenue",
+  "kind": "query",
   "description": "Reusable monthly revenue rollup",
   "sourceRef": "analytics",
   "catalogContext": "main",
@@ -578,24 +652,27 @@ Fields:
 - `schemaVersion`: required integer, must be `1`
 - `id`: required stable query id
 - `name`: required display name
+- `kind`: optional, one of `query`, `view`; defaults to `query`
 - `description`: optional string
 - `sourceRef`: optional string, falls back to project default if present
 - `catalogContext`: optional string
 - `tags`: optional string array
 
-Query exports must not include:
+Query and view exports must not include:
 
 - `createdAt`
 - `updatedAt`
 - generated saved-query ids from local workspace storage
 
-### Query import/export rules
+### Query and view import/export rules
 
 - Exported SQL must be trimmed canonical SQL.
 - Queries promoted from local saved-query storage should receive a stable
   slug-based `id`.
-- Import should create a shared project query entry, not overwrite personal
-  local query drafts unless explicitly requested.
+- Views should initially use the same metadata shape and directory layout as
+  queries, with `kind: "view"`.
+- Import should create a shared project query or view entry, not overwrite
+  personal local query drafts unless explicitly requested.
 
 ## Published Notebook Artifact Spec
 
@@ -740,16 +817,39 @@ The following state is explicitly excluded from Git-backed artifacts:
 - assistant messages
 - tool-call transcripts
 - dashboard execution aliases
-- dashboard snapshot ids
+- dashboard snapshot ids and `dashboard_snapshots` runtime metadata
 - dashboard source-cache metadata
 - `createdAt` and `updatedAt` timestamps
 - local storage keys
 - API keys and secrets
 - exact runtime connection identifiers
 
+## Snapshot Artifact Workflow
+
+Snapshot artifacts are non-Git `.duckdb` exports for reproducibility and
+handoff.
+
+The intended snapshot workflow is:
+
+1. Hydrate or build live runtime state from project artifacts and local source
+   bindings.
+2. Execute or materialize the state needed for a reproducible handoff.
+3. Export a `.duckdb` snapshot as a portable runtime artifact.
+4. Import the snapshot later when exact frozen state matters more than clean
+   Git history.
+
+Snapshot artifacts may include runtime metadata, materialized tables, caches,
+and frozen execution state. They should not become the canonical source for
+authored dashboard, query, view, or notebook definitions.
+
+`pondview.dashboard_snapshots` should be treated as runtime/snapshot metadata,
+not project source. A project artifact may reference the idea of a snapshot in a
+future feature, but it must not store snapshot ids or snapshot-specific runtime
+schemas in Git.
+
 ## Promote To Project Workflow
 
-The intended product workflow is:
+The v1 product workflow is:
 
 1. Work locally in the existing workspace model.
 2. Save dashboards, queries, and notebooks locally while iterating.
@@ -757,10 +857,19 @@ The intended product workflow is:
 4. Review the resulting files in Git.
 5. Import project artifacts into another workspace using local source bindings.
 
+The target product workflow is:
+
+1. Open a project from Git-backed project artifacts.
+2. Hydrate the runtime model from the project model and local source bindings.
+3. Save authored changes back to the project model.
+4. Use DuckDB as runtime/cache state during execution.
+5. Export or import snapshots only when frozen runtime state is needed.
+
 This workflow intentionally separates:
 
 - local exploration state
 - published project definitions
+- runtime/snapshot state
 - data and backup storage
 
 ## Validation Rules
@@ -790,6 +899,7 @@ format:
 - dashboards with canonical SQL and config
 - reusable dashboard measures
 - saved SQL queries
+- reusable SQL views once they are modeled under `queries/`
 - notebook prompt text and SQL drafts
 
 The main migration work is normalization:
@@ -798,15 +908,18 @@ The main migration work is normalization:
 - strip timestamps and storage metadata
 - strip notebook result payloads and transcripts
 - assign stable slug ids where local storage uses generated ids
+- classify `pondview.dashboard_snapshots` as runtime/snapshot metadata
+- hydrate runtime DuckDB state from project artifacts during import/open
 
 ## Deferred Items
 
 These items are intentionally out of scope for v1:
 
-- Git-backed data snapshots
 - Git-backed chat transcripts
 - backend-specific SQL dialect metadata
 - full round-trip export of every personal workspace artifact
 - branch-aware merge tooling inside the app
+- treating project files as the only write path for live editing
+- first-class view directories separate from `queries/`
 
 v1 should optimize for a small, reviewable, durable artifact surface first.

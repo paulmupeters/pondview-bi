@@ -83,6 +83,7 @@ export type ExportSavedQueryArtifactInput = {
   query: SavedSqlQuery;
   group?: string;
   artifactId?: string;
+  kind?: "query" | "view";
   sourceRef?: string | null;
   catalogContext?: string | null;
   description?: string | null;
@@ -604,6 +605,7 @@ export function exportSavedQueryArtifact(
       schemaVersion: 1,
       id,
       name: input.query.name,
+      kind: input.kind ?? "query",
       description: normalizeOptionalDescription(input.description),
       sourceRef: normalizeOptionalString(input.sourceRef) ?? undefined,
       catalogContext: normalizeCatalogContext(input.catalogContext ?? null),
