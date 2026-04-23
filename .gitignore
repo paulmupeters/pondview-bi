@@ -9,6 +9,9 @@
 !.yarn/releases
 !.yarn/versions
 
+# brainstorms
+/brainstorms
+
 # testing
 /coverage
 

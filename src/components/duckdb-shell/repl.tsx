@@ -221,6 +221,7 @@ type DuckdbReplProps = {
   chartConfig?: Config | null;
   editorMinHeight?: string;
   editorMaxHeight?: string;
+  toolbarLeftSlot?: ReactNode;
 };
 
 const HISTORY_KEY = "bi.repl.history";
@@ -345,6 +346,7 @@ export function DuckdbRepl({
   chartConfig: _chartConfig,
   editorMinHeight = "8rem",
   editorMaxHeight = inlineResults ? "20rem" : "14rem",
+  toolbarLeftSlot,
 }: DuckdbReplProps) {
   const [lastResult, setLastResult] = useState<{
     sql: string;
@@ -672,6 +674,18 @@ export function DuckdbRepl({
 
       {/* Editor + Results area */}
       <div className="relative flex-1 min-w-0 h-full p-4 pt-12 items-center justify-center">
+        {toolbarLeftSlot && (
+          <div
+            className={cn(
+              "absolute z-20 flex items-center text-xs",
+              layoutVariant === "page"
+                ? "top-2 left-2 right-[240px]"
+                : "top-4 left-4 right-[240px]",
+            )}
+          >
+            {toolbarLeftSlot}
+          </div>
+        )}
         {/* Toolbar Buttons */}
         <div
           className={cn(

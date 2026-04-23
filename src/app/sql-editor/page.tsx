@@ -1,3 +1,4 @@
+import { Plus, X } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -34,6 +35,42 @@ const DEFAULT_EDITOR_HEIGHT = 50;
 const MIN_EDITOR_HEIGHT = 25;
 const MAX_EDITOR_HEIGHT = 75;
 
+type SqlResultPayload = {
+  sql: string;
+  rows: Record<string, unknown>[];
+  columns: { name: string; type?: string }[];
+  durationMs: number;
+  backend?: SqlBackend;
+  dbIdentifier?: string;
+  catalogContext?: string | null;
+};
+
+type SqlQueryTab = {
+  id: string;
+  name: string;
+  sql: string;
+  result: SqlResultPayload | null;
+  manualChartConfig: Config | null;
+  manualCardConfig: CardConfig | null;
+  manualVisualType: "table" | "chart" | "card" | null;
+};
+
+function createEmptyTab(index: number): SqlQueryTab {
+  const id =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return {
+    id,
+    name: `Query ${index}`,
+    sql: "",
+    result: null,
+    manualChartConfig: null,
+    manualCardConfig: null,
+    manualVisualType: null,
+  };
+}
+
 export function getInitialSqlEditorDb(
   selectedDb: string | undefined,
   _connectedTables: ConnectedTable[],
@@ -52,27 +89,9 @@ export default function SqlEditorPage() {
   const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(
     null,
   );
-  const [sqlResult, setSqlResult] = useState<{
-    sql: string;
-    rows: Record<string, unknown>[];
-    columns: { name: string; type?: string }[];
-    durationMs: number;
-    backend?: SqlBackend;
-    dbIdentifier?: string;
-    catalogContext?: string | null;
-  } | null>(null);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
   const [storedSqlQueries, setStoredSqlQueries] = useState<SavedSqlQuery[]>([]);
   const [isSavingStoredSqlQuery, setIsSavingStoredSqlQuery] = useState(false);
-  const [manualChartConfig, setManualChartConfig] = useState<Config | null>(
-    null,
-  );
-  const [manualCardConfig, setManualCardConfig] = useState<CardConfig | null>(
-    null,
-  );
-  const [manualVisualType, setManualVisualType] = useState<
-    "table" | "chart" | "card" | null
-  >(null);
   const [editorHeight, setEditorHeight] = useState<number>(() => {
     if (typeof window === "undefined") {
       return DEFAULT_EDITOR_HEIGHT;
@@ -84,7 +103,13 @@ export default function SqlEditorPage() {
     return Number.isFinite(parsed) ? parsed : DEFAULT_EDITOR_HEIGHT;
   });
   const [isResizingPanels, setIsResizingPanels] = useState(false);
-  const prevSqlRef = useRef<string | null>(null);
+  const [queryTabs, setQueryTabs] = useState<SqlQueryTab[]>(() => [
+    createEmptyTab(1),
+  ]);
+  const [activeQueryTabId, setActiveQueryTabId] = useState<string>(
+    () => queryTabs[0]?.id ?? "",
+  );
+  const nextQueryTabIndexRef = useRef(2);
   const editorResultsContainerRef = useRef<HTMLDivElement>(null);
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const resizePointerIdRef = useRef<number | null>(null);
@@ -121,23 +146,45 @@ export default function SqlEditorPage() {
     };
   }, []);
 
+  const activeTab = useMemo(
+    () => queryTabs.find((tab) => tab.id === activeQueryTabId) ?? null,
+    [activeQueryTabId, queryTabs],
+  );
+  const sqlResult = activeTab?.result ?? null;
+  const manualChartConfig = activeTab?.manualChartConfig ?? null;
+  const manualCardConfig = activeTab?.manualCardConfig ?? null;
+  const manualVisualType = activeTab?.manualVisualType ?? null;
+
+  const patchActiveTab = useCallback(
+    (patch: Partial<SqlQueryTab>) => {
+      setQueryTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === activeQueryTabId ? { ...tab, ...patch } : tab,
+        ),
+      );
+    },
+    [activeQueryTabId],
+  );
+
   const handleVisualizationConfigChange = useCallback(
     (config: { chartConfig?: Config; cardConfig?: CardConfig }) => {
+      const patch: Partial<SqlQueryTab> = {};
       if ("chartConfig" in config) {
-        setManualChartConfig(config.chartConfig ?? null);
+        patch.manualChartConfig = config.chartConfig ?? null;
       }
       if ("cardConfig" in config) {
-        setManualCardConfig(config.cardConfig ?? null);
+        patch.manualCardConfig = config.cardConfig ?? null;
       }
+      patchActiveTab(patch);
     },
-    [],
+    [patchActiveTab],
   );
 
   const handleVisualizationTypeChange = useCallback(
     (visualType: "table" | "chart" | "card") => {
-      setManualVisualType(visualType);
+      patchActiveTab({ manualVisualType: visualType });
     },
-    [],
+    [patchActiveTab],
   );
 
   const visualizations = useMemo<VisualizationEntry[]>(() => {
@@ -203,6 +250,95 @@ export default function SqlEditorPage() {
   const activeVisualizationId =
     visualizations.length > 0 ? VISUALIZATION_ID : null;
 
+  const handleSelectQueryTab = useCallback(
+    (tabId: string) => {
+      if (tabId === activeQueryTabId) return;
+      const target = queryTabs.find((tab) => tab.id === tabId);
+      if (!target) return;
+      const currentSql = sqlConsoleApi?.getQuery() ?? "";
+      setQueryTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === activeQueryTabId ? { ...tab, sql: currentSql } : tab,
+        ),
+      );
+      setActiveQueryTabId(tabId);
+      if (sqlConsoleApi) {
+        sqlConsoleApi.setQuery(target.sql);
+        sqlConsoleApi.focus();
+      }
+    },
+    [activeQueryTabId, queryTabs, sqlConsoleApi],
+  );
+
+  const handleAddQueryTab = useCallback(() => {
+    const nextIndex = nextQueryTabIndexRef.current;
+    nextQueryTabIndexRef.current = nextIndex + 1;
+    const newTab = createEmptyTab(nextIndex);
+    const currentSql = sqlConsoleApi?.getQuery() ?? "";
+    setQueryTabs((prev) => [
+      ...prev.map((tab) =>
+        tab.id === activeQueryTabId ? { ...tab, sql: currentSql } : tab,
+      ),
+      newTab,
+    ]);
+    setActiveQueryTabId(newTab.id);
+    if (sqlConsoleApi) {
+      sqlConsoleApi.setQuery("");
+      sqlConsoleApi.focus();
+    }
+  }, [activeQueryTabId, sqlConsoleApi]);
+
+  const handleCloseQueryTab = useCallback(
+    (tabId: string) => {
+      setQueryTabs((prev) => {
+        if (prev.length <= 1) {
+          const nextIndex = nextQueryTabIndexRef.current;
+          nextQueryTabIndexRef.current = nextIndex + 1;
+          const replacement = createEmptyTab(nextIndex);
+          setActiveQueryTabId(replacement.id);
+          if (sqlConsoleApi) {
+            sqlConsoleApi.setQuery("");
+          }
+          return [replacement];
+        }
+
+        const closingIndex = prev.findIndex((tab) => tab.id === tabId);
+        if (closingIndex === -1) return prev;
+        const remaining = prev.filter((tab) => tab.id !== tabId);
+
+        if (tabId === activeQueryTabId) {
+          const neighbor =
+            remaining[closingIndex] ??
+            remaining[closingIndex - 1] ??
+            remaining[0];
+          if (neighbor) {
+            setActiveQueryTabId(neighbor.id);
+            if (sqlConsoleApi) {
+              sqlConsoleApi.setQuery(neighbor.sql);
+            }
+          }
+        }
+        return remaining;
+      });
+    },
+    [activeQueryTabId, sqlConsoleApi],
+  );
+
+  const handleRenameQueryTab = useCallback((tabId: string) => {
+    if (typeof window === "undefined") return;
+    setQueryTabs((prev) => {
+      const target = prev.find((tab) => tab.id === tabId);
+      if (!target) return prev;
+      const requested = window.prompt("Rename tab:", target.name);
+      if (requested === null) return prev;
+      const normalized = requested.trim();
+      if (!normalized) return prev;
+      return prev.map((tab) =>
+        tab.id === tabId ? { ...tab, name: normalized } : tab,
+      );
+    });
+  }, []);
+
   const handleInsertTableIntoSql = useCallback(
     (payload: ExplorerInsertPayload) => {
       if (!sqlConsoleApi) return;
@@ -220,37 +356,33 @@ export default function SqlEditorPage() {
   );
 
   const handleResultChange = useCallback(
-    (
-      result: {
-        sql: string;
-        rows: Record<string, unknown>[];
-        columns: { name: string; type?: string }[];
-        durationMs: number;
-        backend?: SqlBackend;
-        dbIdentifier?: string;
-        catalogContext?: string | null;
-      } | null,
-    ) => {
-      setSqlResult(result);
+    (result: SqlResultPayload | null) => {
+      setQueryTabs((prev) =>
+        prev.map((tab) => {
+          if (tab.id !== activeQueryTabId) return tab;
+          const prevSql = tab.result?.sql ?? null;
+          const newSql = result?.sql ?? null;
+          if (newSql === prevSql) {
+            return { ...tab, result };
+          }
+          return {
+            ...tab,
+            result,
+            manualChartConfig: null,
+            manualCardConfig: null,
+            manualVisualType: result
+              ? result.rows.length === 1 && result.columns.length === 1
+                ? "card"
+                : "table"
+              : null,
+          };
+        }),
+      );
       if (result) {
         setExplorerRefreshToken((prev) => prev + 1);
       }
-
-      const newSql = result?.sql ?? null;
-      if (newSql !== prevSqlRef.current) {
-        setManualChartConfig(null);
-        setManualCardConfig(null);
-        setManualVisualType(
-          result && result.rows.length === 1 && result.columns.length === 1
-            ? "card"
-            : result
-              ? "table"
-              : null,
-        );
-        prevSqlRef.current = newSql;
-      }
     },
-    [],
+    [activeQueryTabId],
   );
 
   const handleSaveStoredSqlQuery = useCallback(
@@ -300,8 +432,15 @@ export default function SqlEditorPage() {
       if (!selected || !sqlConsoleApi) return;
       sqlConsoleApi.setQuery(selected.sql);
       sqlConsoleApi.focus();
+      setQueryTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === activeQueryTabId
+            ? { ...tab, sql: selected.sql, name: selected.name || tab.name }
+            : tab,
+        ),
+      );
     },
-    [sqlConsoleApi, storedSqlQueries],
+    [activeQueryTabId, sqlConsoleApi, storedSqlQueries],
   );
 
   const handleDeleteStoredSqlQuery = useCallback(async (queryId: string) => {
@@ -347,6 +486,60 @@ export default function SqlEditorPage() {
       }
     },
     [storedSqlQueries],
+  );
+
+  const queryTabsStrip = (
+    <div
+      className={cn(
+        "flex min-w-0 flex-1 items-center gap-1 overflow-x-auto",
+        isExplorerCollapsed && "pl-11",
+      )}
+    >
+      {queryTabs.map((tab) => {
+        const isActive = tab.id === activeQueryTabId;
+        return (
+          <div
+            key={tab.id}
+            className={cn(
+              "group flex h-[26px] shrink-0 items-center gap-1 rounded border px-2 text-xs transition-colors",
+              isActive
+                ? "border-border bg-background text-foreground shadow-sm"
+                : "border-transparent bg-card text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+          >
+            <button
+              type="button"
+              className="max-w-[160px] truncate font-medium"
+              onClick={() => handleSelectQueryTab(tab.id)}
+              onDoubleClick={() => handleRenameQueryTab(tab.id)}
+              title={tab.name}
+            >
+              {tab.name}
+            </button>
+            <button
+              type="button"
+              className="flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:bg-border hover:text-foreground"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleCloseQueryTab(tab.id);
+              }}
+              aria-label={`Close ${tab.name}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={handleAddQueryTab}
+        className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
+        aria-label="New query tab"
+        title="New query tab"
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+    </div>
   );
 
   const rightPanelContent = (
@@ -513,6 +706,7 @@ export default function SqlEditorPage() {
                     chartConfig={manualChartConfig}
                     editorMinHeight="100%"
                     editorMaxHeight="100%"
+                    toolbarLeftSlot={queryTabsStrip}
                   />
                 </div>
                 {sqlResult ? (

@@ -1,4 +1,5 @@
 import {
+  ArrowDownTrayIcon,
   ArrowTopRightOnSquareIcon,
   FunnelIcon,
 } from "@heroicons/react/24/outline";
@@ -28,9 +29,93 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import type { SqlBackendPreference } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
+
+const MARKDOWN_EXPORT_ROW_LIMIT = 20;
+
+function stringifyCellValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function escapeCsvValue(value: unknown): string {
+  const raw = stringifyCellValue(value);
+  if (/[",\r\n]/.test(raw)) {
+    return `"${raw.replace(/"/g, '""')}"`;
+  }
+  return raw;
+}
+
+function formatRowsAsCsv(
+  columns: { name: string }[],
+  rows: Record<string, unknown>[],
+): string {
+  const header = columns.map((c) => escapeCsvValue(c.name)).join(",");
+  const body = rows
+    .map((row) => columns.map((c) => escapeCsvValue(row[c.name])).join(","))
+    .join("\r\n");
+  return body ? `${header}\r\n${body}\r\n` : `${header}\r\n`;
+}
+
+function escapeMarkdownCell(value: unknown): string {
+  return stringifyCellValue(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\r?\n/g, " ");
+}
+
+function formatRowsAsMarkdown(
+  columns: { name: string }[],
+  rows: Record<string, unknown>[],
+  limit: number,
+): string {
+  const limited = rows.slice(0, limit);
+  const header = `| ${columns.map((c) => escapeMarkdownCell(c.name)).join(" | ")} |`;
+  const separator = `| ${columns.map(() => "---").join(" | ")} |`;
+  const body = limited
+    .map(
+      (row) =>
+        `| ${columns.map((c) => escapeMarkdownCell(row[c.name])).join(" | ")} |`,
+    )
+    .join("\n");
+  return body
+    ? `${header}\n${separator}\n${body}\n`
+    : `${header}\n${separator}\n`;
+}
+
+function downloadTextFile(filename: string, contents: string, mime: string) {
+  if (typeof window === "undefined") return;
+  const blob = new Blob([contents], { type: `${mime};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function formatDownloadTimestamp(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+}
 
 const DEFAULT_PAGE_SIZE = 10;
 const DEFAULT_COLUMN_SIZE = 180;
@@ -248,17 +333,57 @@ export function SqlResultsTable({
         ) : (
           <div />
         )}
-        {expandable && (
-          <button
-            type="button"
-            onClick={() => setIsExpanded(true)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Expand table"
-            title="Expand table"
-          >
-            <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Download results"
+                title="Download results"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={() => {
+                  const csv = formatRowsAsCsv(columns, rows);
+                  downloadTextFile(
+                    `query-results-${formatDownloadTimestamp()}.csv`,
+                    csv,
+                    "text/csv",
+                  );
+                }}
+              >
+                Download CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  const md = formatRowsAsMarkdown(
+                    columns,
+                    rows,
+                    MARKDOWN_EXPORT_ROW_LIMIT,
+                  );
+                  void navigator.clipboard.writeText(md);
+                }}
+              >
+                Copy as Markdown (max {MARKDOWN_EXPORT_ROW_LIMIT} rows)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {expandable && (
+            <button
+              type="button"
+              onClick={() => setIsExpanded(true)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Expand table"
+              title="Expand table"
+            >
+              <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table */}
