@@ -1,13 +1,10 @@
 # Pondview Docs
 
-Documentation for Pondview — getting started, runtime behavior, connected data, and architecture reference.
+Pondview is an AI-assisted analytics workspace for exploring data, asking questions, and building dashboards.
 
-- [User Guide](/user/) for people using Pondview day to day
-- [Technical Guide](/guide/) for developer-focused and runtime documentation
+Use the sidebar to navigate, or start with one of these:
 
-## Recommended starting points
-
-- Start with [What Pondview Is](/user/what-is-pondview) if you are new to the product.
-- Go to [Getting Started](/user/getting-started) for setup, data import, and first analysis.
-- Use [Main Workflows](/user/workflows) for the everyday chat and dashboard flow.
-- Use the [Technical Guide](/guide/) when you need runtime, architecture, or implementation details.
+- [What Pondview Is](/user/what-is-pondview) — a quick overview of how it works
+- [Getting Started](/user/getting-started) — connect data, set up AI, run your first analysis
+- [Main Workflows](/user/workflows) — the everyday chat and dashboard flow
+- [Troubleshooting](/user/troubleshooting) — if something is not working
