@@ -1,0 +1,55 @@
+/* -------------------------------------------------------
+   Pondview docs theme — mapped from src/themes/default.ts
+   ------------------------------------------------------- */
+
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  /* Brand — mapped from --primary and chart scale */
+  --vp-c-brand-1: oklch(0.6334 0.0745 136.8547);
+  --vp-c-brand-2: oklch(0.5413 0.0418 136.5920);
+  --vp-c-brand-3: oklch(0.7251 0.0964 134.9305);
+  --vp-c-brand-soft: oklch(0.8178 0.0290 98.1407 / 0.3);
+
+  /* Backgrounds — mapped from --background, --popover, --card */
+  --vp-c-bg: oklch(1.0000 0 0);
+  --vp-c-bg-alt: oklch(0.9851 0 0);
+  --vp-c-bg-elv: oklch(1.0000 0 0);
+  --vp-c-bg-soft: oklch(0.9851 0 0);
+
+  /* Text — mapped from --foreground and --muted-foreground */
+  --vp-c-text-1: oklch(0.2498 0.0125 135.0835);
+  --vp-c-text-2: oklch(0.3994 0.0188 136.1989);
+  --vp-c-text-3: oklch(0.5490 0.0378 139.7194);
+
+  /* Borders — mapped from --border */
+  --vp-c-border: oklch(0.8759 0.0325 99.2614);
+  --vp-c-divider: oklch(0.8759 0.0325 99.2614);
+
+  /* Fonts — mapped from --font-sans and --font-mono */
+  --vp-font-family-base: Roboto, ui-sans-serif, sans-serif, system-ui;
+  --vp-font-family-mono: 'Space Mono', 'Courier New', monospace;
+}
+
+.dark {
+  /* Brand stays the same green in dark mode */
+  --vp-c-brand-1: oklch(0.6334 0.0745 136.8547);
+  --vp-c-brand-2: oklch(0.7251 0.0964 134.9305);
+  --vp-c-brand-3: oklch(0.9079 0.2148 135.3457);
+  --vp-c-brand-soft: oklch(0.3939 0.0313 134.5951 / 0.3);
+
+  /* Backgrounds — mapped from dark --background, --card, --popover */
+  --vp-c-bg: oklch(0.2498 0.0125 135.0835);
+  --vp-c-bg-alt: oklch(0.2293 0.0139 126.3788);
+  --vp-c-bg-elv: oklch(0.2569 0.0148 136.7113);
+  --vp-c-bg-soft: oklch(0.2569 0.0148 136.7113);
+
+  /* Text — mapped from dark --foreground and --muted-foreground */
+  --vp-c-text-1: oklch(0.8549 0.0852 96.7265);
+  --vp-c-text-2: oklch(0.6884 0.0303 86.6582);
+  --vp-c-text-3: oklch(0.4770 0.0203 110.7352);
+
+  /* Borders — mapped from dark --border */
+  --vp-c-border: oklch(0.3382 0.0211 134.1154);
+  --vp-c-divider: oklch(0.3382 0.0211 134.1154);
+}
