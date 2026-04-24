@@ -11,6 +11,8 @@ import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import {
   buildAttachmentPlan,
   buildDetachStatement,
+  quoteIdentifier,
+  quoteString as quoteSqlString,
 } from "@/lib/duckdb/duckdb-attachments";
 import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
 import {
@@ -22,12 +24,17 @@ import {
   type PostgresUrlComponents,
 } from "@/lib/duckdb/path";
 import { sanitizeSqlErrorMessage } from "@/lib/sql/error-sanitizer";
+import { runQuery } from "@/lib/sql/run-query";
 import { isHiddenRuntimeSchema } from "@/lib/sql/runtime-table-schemas";
-import type { SqlBackend } from "@/lib/sql/sql-runtime";
+import {
+  DEFAULT_WASM_DB_IDENTIFIER,
+  type SqlBackend,
+} from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 
 type DatabaseType =
   | "duckdb"
+  | "duckdb_remote"
   | "motherduck"
   | "postgres"
   | "mysql"
@@ -60,6 +67,11 @@ const DATABASE_OPTIONS: Array<{
   description?: string;
 }> = [
   {
+    label: "Remote DuckDB File",
+    value: "duckdb_remote",
+    description: "Attach a read-only DuckDB file over HTTPS or S3",
+  },
+  {
     label: "Postgres",
     value: "postgres",
     description: "Connect with a Postgres database",
@@ -88,6 +100,8 @@ const DATABASE_OPTIONS: Array<{
 
 const resolveDuckdbExtension = (dbType: DatabaseType): string | undefined => {
   switch (dbType) {
+    case "duckdb_remote":
+      return "httpfs";
     case "motherduck":
       return "motherduck";
     case "postgres":
@@ -157,6 +171,73 @@ async function runRemoteSql(
   );
 }
 
+async function runRuntimeSql(
+  effectiveSqlBackend: SqlBackend,
+  sql: string,
+): Promise<Record<string, unknown>[]> {
+  if (effectiveSqlBackend === "duckdb-wasm") {
+    const result = await runQuery({
+      sql,
+      backendPreference: "duckdb-wasm",
+      dbIdentifier: DEFAULT_WASM_DB_IDENTIFIER,
+    });
+    return result.rows;
+  }
+
+  return runRemoteSql(effectiveSqlBackend, sql);
+}
+
+function isRemoteDuckdbUrl(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.startsWith("https://") ||
+    normalized.startsWith("s3://") ||
+    normalized.startsWith("r2://") ||
+    normalized.startsWith("gcs://") ||
+    normalized.startsWith("gs://")
+  );
+}
+
+function isBrowserCompatibleRemoteDuckdbUrl(value: string): boolean {
+  return value.trim().toLowerCase().startsWith("https://");
+}
+
+function buildDuckdbRemoteAlias(value: string): string {
+  const trimmed = value.trim();
+  try {
+    const parsed = new URL(trimmed);
+    const fileName = parsed.pathname.split("/").filter(Boolean).pop();
+    return (fileName ?? "remote").replace(/\.duckdb$/i, "") || "remote";
+  } catch {
+    const fileName = trimmed.split(/[/?#]/)[0]?.split("/").pop();
+    return (fileName ?? "remote").replace(/\.duckdb$/i, "") || "remote";
+  }
+}
+
+function buildSchemaIntrospectionSql(params: {
+  sourceType: DatabaseType;
+  alias: string;
+}): string {
+  if (params.sourceType === "duckdb_remote") {
+    return `SELECT DISTINCT table_schema FROM information_schema.tables WHERE table_catalog = ${quoteSqlString(params.alias)} AND table_schema NOT IN ('information_schema', 'pg_catalog') ORDER BY 1`;
+  }
+
+  return `SELECT DISTINCT table_schema FROM ${quoteIdentifier(params.alias)}.information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') ORDER BY 1`;
+}
+
+function buildTablePreviewSql(params: {
+  sourceType: DatabaseType;
+  alias: string;
+  schema: string;
+}): string {
+  const safeSchema = quoteSqlString(params.schema);
+  if (params.sourceType === "duckdb_remote") {
+    return `SELECT table_name FROM information_schema.tables WHERE table_catalog = ${quoteSqlString(params.alias)} AND table_schema = ${safeSchema} AND table_type = 'BASE TABLE' ORDER BY table_name LIMIT 20`;
+  }
+
+  return `SELECT table_name FROM ${quoteIdentifier(params.alias)}.information_schema.tables WHERE table_schema = ${safeSchema} AND table_type = 'BASE TABLE' ORDER BY table_name LIMIT 20`;
+}
+
 export function ConnectDataDialog({
   open,
   onOpenChange,
@@ -185,6 +266,15 @@ export function ConnectDataDialog({
   // SQLite-specific fields
   const [sqlitePath, setSqlitePath] = useState("");
   const [sqliteAlias, setSqliteAlias] = useState("");
+  // Remote DuckDB file fields
+  const [remoteDuckdbUrl, setRemoteDuckdbUrl] = useState("");
+  const [remoteDuckdbAlias, setRemoteDuckdbAlias] = useState("");
+  const [remoteDuckdbS3Region, setRemoteDuckdbS3Region] = useState("");
+  const [remoteDuckdbS3Endpoint, setRemoteDuckdbS3Endpoint] = useState("");
+  const [remoteDuckdbS3KeyId, setRemoteDuckdbS3KeyId] = useState("");
+  const [remoteDuckdbS3Secret, setRemoteDuckdbS3Secret] = useState("");
+  const [remoteDuckdbS3SessionToken, setRemoteDuckdbS3SessionToken] =
+    useState("");
   // Custom extension fields
   const [customExtensionName, setCustomExtensionName] = useState("");
   const [customAttachStatement, setCustomAttachStatement] = useState("");
@@ -217,6 +307,13 @@ export function ConnectDataDialog({
     setMysqlDatabase("");
     setSqlitePath("");
     setSqliteAlias("");
+    setRemoteDuckdbUrl("");
+    setRemoteDuckdbAlias("");
+    setRemoteDuckdbS3Region("");
+    setRemoteDuckdbS3Endpoint("");
+    setRemoteDuckdbS3KeyId("");
+    setRemoteDuckdbS3Secret("");
+    setRemoteDuckdbS3SessionToken("");
     setCustomExtensionName("");
     setCustomAttachStatement("");
     setCustomAttachAlias("");
@@ -303,6 +400,73 @@ export function ConnectDataDialog({
     return `mysql://${authPart}${host}:${port}/${database}`;
   }, [mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase]);
 
+  const buildRemoteDuckdbConnection = useCallback(() => {
+    const identifier = remoteDuckdbUrl.trim();
+    return {
+      type: "duckdb_remote",
+      identifier,
+      alias:
+        remoteDuckdbAlias.trim() ||
+        buildDuckdbRemoteAlias(identifier) ||
+        "remote",
+      readOnly: true,
+      duckdbExtension: "httpfs",
+    };
+  }, [remoteDuckdbUrl, remoteDuckdbAlias]);
+
+  const buildRemoteDuckdbSecretStatement = useCallback((): string | null => {
+    const url = remoteDuckdbUrl.trim().toLowerCase();
+    if (
+      !url.startsWith("s3://") &&
+      !url.startsWith("r2://") &&
+      !url.startsWith("gcs://") &&
+      !url.startsWith("gs://")
+    ) {
+      return null;
+    }
+
+    const secretType = url.startsWith("r2://")
+      ? "r2"
+      : url.startsWith("gcs://") || url.startsWith("gs://")
+        ? "gcs"
+        : "s3";
+    const parts = [`TYPE ${secretType}`];
+    const keyId = remoteDuckdbS3KeyId.trim();
+    const secret = remoteDuckdbS3Secret.trim();
+    const region = remoteDuckdbS3Region.trim();
+    const endpoint = remoteDuckdbS3Endpoint.trim();
+    const sessionToken = remoteDuckdbS3SessionToken.trim();
+
+    if (keyId || secret) {
+      if (!keyId || !secret) {
+        throw new Error("Provide both S3 key ID and secret, or neither.");
+      }
+      parts.push(`KEY_ID ${quoteSqlString(keyId)}`);
+      parts.push(`SECRET ${quoteSqlString(secret)}`);
+    } else {
+      parts.push("PROVIDER credential_chain");
+    }
+
+    if (region) {
+      parts.push(`REGION ${quoteSqlString(region)}`);
+    }
+    if (endpoint) {
+      parts.push(`ENDPOINT ${quoteSqlString(endpoint)}`);
+    }
+    if (sessionToken) {
+      parts.push(`SESSION_TOKEN ${quoteSqlString(sessionToken)}`);
+    }
+
+    return `CREATE OR REPLACE SECRET (${parts.join(", ")});`;
+  }, [
+    remoteDuckdbUrl,
+    remoteDuckdbS3KeyId,
+    remoteDuckdbS3Secret,
+    remoteDuckdbS3Region,
+    remoteDuckdbS3Endpoint,
+    remoteDuckdbS3SessionToken,
+  ]);
+
   const runMotherDuckAttachSequence = useCallback(
     async (databaseName = databasePath): Promise<void> => {
       const connection = buildMotherDuckConnection(databaseName);
@@ -358,10 +522,28 @@ export function ConnectDataDialog({
   }, [isWasmActive, effectiveSqlBackend, runMotherDuckAttachSequence]);
 
   const handleConnectClick = useCallback(async () => {
-    if (isWasmActive) return;
+    if (isWasmActive && selectedDatabase !== "duckdb_remote") return;
 
     // Field validation
-    if (selectedDatabase === "postgres") {
+    if (selectedDatabase === "duckdb_remote") {
+      if (!remoteDuckdbUrl.trim()) {
+        setErrorMessage("Enter a remote DuckDB URL.");
+        return;
+      }
+      if (!isRemoteDuckdbUrl(remoteDuckdbUrl)) {
+        setErrorMessage("Use an HTTPS or S3-compatible DuckDB URL.");
+        return;
+      }
+      if (
+        isWasmActive &&
+        !isBrowserCompatibleRemoteDuckdbUrl(remoteDuckdbUrl)
+      ) {
+        setErrorMessage(
+          "DuckDB WASM can attach remote DuckDB files only through HTTPS URLs. Use a public or presigned HTTPS URL for S3.",
+        );
+        return;
+      }
+    } else if (selectedDatabase === "postgres") {
       if (
         !postgresHost.trim() ||
         !postgresUser.trim() ||
@@ -405,7 +587,9 @@ export function ConnectDataDialog({
       setErrorMessage(null);
 
       let dbPath: string;
-      if (selectedDatabase === "postgres") {
+      if (selectedDatabase === "duckdb_remote") {
+        dbPath = remoteDuckdbUrl.trim();
+      } else if (selectedDatabase === "postgres") {
         dbPath = buildPostgresConnectionStringFromFields();
       } else if (selectedDatabase === "mysql") {
         dbPath = buildMysqlConnectionStringFromFields();
@@ -447,32 +631,47 @@ export function ConnectDataDialog({
 
       // Build a SourceConnectionConfig and use buildAttachmentPlan for INSTALL/LOAD/ATTACH
       const extension = resolveDuckdbExtension(selectedDatabase);
-      const connection = {
-        type: selectedDatabase ?? "duckdb",
-        identifier: dbPath,
-        alias:
-          selectedDatabase === "postgres"
-            ? postgresDatabase.trim() || "source"
-            : selectedDatabase === "mysql"
-              ? mysqlDatabase.trim() || "source"
-              : selectedDatabase === "sqlite"
-                ? sqliteAlias.trim() || "source"
-                : "source",
-        readOnly: true,
-        duckdbExtension: extension,
-      };
+      const connection =
+        selectedDatabase === "duckdb_remote"
+          ? buildRemoteDuckdbConnection()
+          : {
+              type: selectedDatabase ?? "duckdb",
+              identifier: dbPath,
+              alias:
+                selectedDatabase === "postgres"
+                  ? postgresDatabase.trim() || "source"
+                  : selectedDatabase === "mysql"
+                    ? mysqlDatabase.trim() || "source"
+                    : selectedDatabase === "sqlite"
+                      ? sqliteAlias.trim() || "source"
+                      : "source",
+              readOnly: true,
+              duckdbExtension: extension,
+            };
 
-      const plan = buildAttachmentPlan(connection);
+      const plan = buildAttachmentPlan(connection, {
+        skipExtensionLoad: isWasmActive,
+      });
 
       // Execute INSTALL/LOAD/ATTACH
+      const secretStatement =
+        selectedDatabase === "duckdb_remote" && !isWasmActive
+          ? buildRemoteDuckdbSecretStatement()
+          : null;
+      if (secretStatement) {
+        await runRuntimeSql(effectiveSqlBackend, secretStatement);
+      }
       for (const stmt of plan.statements) {
-        await runRemoteSql(effectiveSqlBackend, stmt);
+        await runRuntimeSql(effectiveSqlBackend, stmt);
       }
 
       // Introspect schemas from the attached alias
-      const schemaRows = await runRemoteSql(
+      const schemaRows = await runRuntimeSql(
         effectiveSqlBackend,
-        `SELECT DISTINCT table_schema FROM ${plan.alias}.information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') ORDER BY 1`,
+        buildSchemaIntrospectionSql({
+          sourceType: selectedDatabase,
+          alias: plan.alias,
+        }),
       );
       const fetchedSchemas = schemaRows
         .map((r) => String(r.table_schema ?? ""))
@@ -483,7 +682,7 @@ export function ConnectDataDialog({
 
       // Detach to keep the remote runtime clean; re-attach happens on each interaction
       try {
-        await runRemoteSql(
+        await runRuntimeSql(
           effectiveSqlBackend,
           buildDetachStatement(plan.alias, { ifExists: true }),
         );
@@ -502,6 +701,9 @@ export function ConnectDataDialog({
     isWasmActive,
     databasePath,
     selectedDatabase,
+    remoteDuckdbUrl,
+    buildRemoteDuckdbConnection,
+    buildRemoteDuckdbSecretStatement,
     postgresHost,
     postgresUser,
     postgresDatabase,
@@ -521,13 +723,15 @@ export function ConnectDataDialog({
 
   const handleSchemaSelect = useCallback(
     async (schema: string) => {
-      if (isWasmActive) return;
+      if (isWasmActive && selectedDatabase !== "duckdb_remote") return;
       setSelectedSchema(schema);
       try {
         setIsLoadingTables(true);
 
         let dbPath: string;
-        if (selectedDatabase === "postgres") {
+        if (selectedDatabase === "duckdb_remote") {
+          dbPath = remoteDuckdbUrl.trim();
+        } else if (selectedDatabase === "postgres") {
           dbPath = buildPostgresConnectionStringFromFields();
         } else if (selectedDatabase === "mysql") {
           dbPath = buildMysqlConnectionStringFromFields();
@@ -538,37 +742,52 @@ export function ConnectDataDialog({
         }
 
         const extension = resolveDuckdbExtension(selectedDatabase);
-        const connection = {
-          type: selectedDatabase ?? "duckdb",
-          identifier: dbPath,
-          alias:
-            selectedDatabase === "postgres"
-              ? postgresDatabase.trim() || "source"
-              : selectedDatabase === "mysql"
-                ? mysqlDatabase.trim() || "source"
-                : selectedDatabase === "sqlite"
-                  ? sqliteAlias.trim() || "source"
-                  : "source",
-          readOnly: true,
-          duckdbExtension: extension,
-        };
-        const plan = buildAttachmentPlan(connection);
+        const connection =
+          selectedDatabase === "duckdb_remote"
+            ? buildRemoteDuckdbConnection()
+            : {
+                type: selectedDatabase ?? "duckdb",
+                identifier: dbPath,
+                alias:
+                  selectedDatabase === "postgres"
+                    ? postgresDatabase.trim() || "source"
+                    : selectedDatabase === "mysql"
+                      ? mysqlDatabase.trim() || "source"
+                      : selectedDatabase === "sqlite"
+                        ? sqliteAlias.trim() || "source"
+                        : "source",
+                readOnly: true,
+                duckdbExtension: extension,
+              };
+        const plan = buildAttachmentPlan(connection, {
+          skipExtensionLoad: isWasmActive,
+        });
 
+        const secretStatement =
+          selectedDatabase === "duckdb_remote" && !isWasmActive
+            ? buildRemoteDuckdbSecretStatement()
+            : null;
+        if (secretStatement) {
+          await runRuntimeSql(effectiveSqlBackend, secretStatement);
+        }
         for (const stmt of plan.statements) {
-          await runRemoteSql(effectiveSqlBackend, stmt);
+          await runRuntimeSql(effectiveSqlBackend, stmt);
         }
 
-        const safeSchema = schema.replace(/'/g, "''");
-        const tableRows = await runRemoteSql(
+        const tableRows = await runRuntimeSql(
           effectiveSqlBackend,
-          `SELECT table_name FROM ${plan.alias}.information_schema.tables WHERE table_schema = '${safeSchema}' AND table_type = 'BASE TABLE' ORDER BY table_name LIMIT 20`,
+          buildTablePreviewSql({
+            sourceType: selectedDatabase,
+            alias: plan.alias,
+            schema,
+          }),
         );
         setSchemaTablesPreview(
           tableRows.map((r) => String(r.table_name ?? "")).filter(Boolean),
         );
 
         try {
-          await runRemoteSql(
+          await runRuntimeSql(
             effectiveSqlBackend,
             buildDetachStatement(plan.alias, { ifExists: true }),
           );
@@ -589,6 +808,9 @@ export function ConnectDataDialog({
       isWasmActive,
       databasePath,
       selectedDatabase,
+      remoteDuckdbUrl,
+      buildRemoteDuckdbConnection,
+      buildRemoteDuckdbSecretStatement,
       buildPostgresConnectionStringFromFields,
       buildMysqlConnectionStringFromFields,
       postgresDatabase,
@@ -600,7 +822,7 @@ export function ConnectDataDialog({
   );
 
   const handleAddTable = useCallback(async () => {
-    if (isWasmActive) return;
+    if (isWasmActive && selectedDatabase !== "duckdb_remote") return;
     if (!hasConnected || !selectedDatabase) {
       return;
     }
@@ -608,7 +830,9 @@ export function ConnectDataDialog({
     try {
       if (selectedDatabase !== "motherduck") {
         let dbPath: string;
-        if (selectedDatabase === "postgres") {
+        if (selectedDatabase === "duckdb_remote") {
+          dbPath = remoteDuckdbUrl.trim();
+        } else if (selectedDatabase === "postgres") {
           dbPath = buildPostgresConnectionStringFromFields();
         } else if (selectedDatabase === "mysql") {
           dbPath = buildMysqlConnectionStringFromFields();
@@ -621,24 +845,29 @@ export function ConnectDataDialog({
         }
 
         const extension = resolveDuckdbExtension(selectedDatabase);
-        const connection = {
-          type: selectedDatabase ?? "duckdb",
-          identifier: dbPath,
-          alias:
-            selectedDatabase === "postgres"
-              ? postgresDatabase.trim() || "source"
-              : selectedDatabase === "mysql"
-                ? mysqlDatabase.trim() || "source"
-                : selectedDatabase === "sqlite"
-                  ? sqliteAlias.trim() || "source"
-                  : "source",
-          readOnly: true,
-          duckdbExtension: extension,
-        };
+        const connection =
+          selectedDatabase === "duckdb_remote"
+            ? buildRemoteDuckdbConnection()
+            : {
+                type: selectedDatabase ?? "duckdb",
+                identifier: dbPath,
+                alias:
+                  selectedDatabase === "postgres"
+                    ? postgresDatabase.trim() || "source"
+                    : selectedDatabase === "mysql"
+                      ? mysqlDatabase.trim() || "source"
+                      : selectedDatabase === "sqlite"
+                        ? sqliteAlias.trim() || "source"
+                        : "source",
+                readOnly: true,
+                duckdbExtension: extension,
+              };
 
-        const plan = buildAttachmentPlan(connection);
+        const plan = buildAttachmentPlan(connection, {
+          skipExtensionLoad: isWasmActive,
+        });
         try {
-          await runRemoteSql(
+          await runRuntimeSql(
             effectiveSqlBackend,
             buildDetachStatement(plan.alias, { ifExists: true }),
           );
@@ -646,8 +875,15 @@ export function ConnectDataDialog({
           // Best-effort cleanup before the final attach.
         }
 
+        const secretStatement =
+          selectedDatabase === "duckdb_remote" && !isWasmActive
+            ? buildRemoteDuckdbSecretStatement()
+            : null;
+        if (secretStatement) {
+          await runRuntimeSql(effectiveSqlBackend, secretStatement);
+        }
         for (const stmt of plan.statements) {
-          await runRemoteSql(effectiveSqlBackend, stmt);
+          await runRuntimeSql(effectiveSqlBackend, stmt);
         }
       }
 
@@ -665,6 +901,9 @@ export function ConnectDataDialog({
     hasConnected,
     isWasmActive,
     databasePath,
+    remoteDuckdbUrl,
+    buildRemoteDuckdbConnection,
+    buildRemoteDuckdbSecretStatement,
     onConnected,
     onOpenChange,
     selectedDatabase,
@@ -679,13 +918,20 @@ export function ConnectDataDialog({
   ]);
 
   const isAddDisabled = useMemo(() => {
-    return isWasmActive || !hasConnected;
-  }, [hasConnected, isWasmActive]);
+    return !hasConnected;
+  }, [hasConnected]);
 
   const isConnectDisabled = useMemo(() => {
-    if (isWasmActive) return true;
     if (!selectedDatabase) return true;
+    if (isWasmActive && selectedDatabase !== "duckdb_remote") return true;
 
+    if (selectedDatabase === "duckdb_remote") {
+      if (!remoteDuckdbUrl.trim()) return true;
+      if (!isRemoteDuckdbUrl(remoteDuckdbUrl)) return true;
+      return (
+        isWasmActive && !isBrowserCompatibleRemoteDuckdbUrl(remoteDuckdbUrl)
+      );
+    }
     if (selectedDatabase === "postgres") {
       return (
         !postgresHost.trim() || !postgresUser.trim() || !postgresDatabase.trim()
@@ -708,6 +954,7 @@ export function ConnectDataDialog({
   }, [
     isWasmActive,
     selectedDatabase,
+    remoteDuckdbUrl,
     postgresHost,
     postgresUser,
     postgresDatabase,
@@ -721,9 +968,17 @@ export function ConnectDataDialog({
     databasePath,
   ]);
 
+  const availableDatabaseOptions = useMemo(
+    () =>
+      isWasmActive
+        ? DATABASE_OPTIONS.filter((option) => option.value === "duckdb_remote")
+        : DATABASE_OPTIONS,
+    [isWasmActive],
+  );
+
   const renderDatabaseSelector = () => (
     <div className="grid grid-cols-1 gap-2">
-      {DATABASE_OPTIONS.map((opt) => {
+      {availableDatabaseOptions.map((opt) => {
         const isSelected = selectedDatabase === opt.value;
         return (
           <button
@@ -763,6 +1018,87 @@ export function ConnectDataDialog({
 
   const renderConnectionForm = () => {
     if (!selectedDatabase) return null;
+
+    if (selectedDatabase === "duckdb_remote") {
+      const isS3Like = !isBrowserCompatibleRemoteDuckdbUrl(remoteDuckdbUrl);
+      return (
+        <div className="space-y-3">
+          <Input
+            placeholder={
+              isWasmActive
+                ? "Presigned HTTPS URL to .duckdb file"
+                : "HTTPS, s3://, r2://, gcs://, or gs:// URL"
+            }
+            value={remoteDuckdbUrl}
+            onChange={(e) => setRemoteDuckdbUrl(e.target.value)}
+          />
+          <Input
+            placeholder="Attach as alias (optional)"
+            value={remoteDuckdbAlias}
+            onChange={(e) => setRemoteDuckdbAlias(e.target.value)}
+          />
+          {isWasmActive ? (
+            <p className="text-xs text-muted-foreground">
+              DuckDB WASM can attach public or presigned HTTPS URLs. The bucket
+              must allow browser CORS access for GET and HEAD requests.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                HTTPS URLs attach directly. S3-compatible URLs use DuckDB
+                secrets on the active runtime.
+              </p>
+              {isS3Like && remoteDuckdbUrl.trim() ? (
+                <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                  <p className="text-xs font-medium text-foreground">
+                    S3-compatible credentials
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Region (optional)"
+                      value={remoteDuckdbS3Region}
+                      onChange={(e) => setRemoteDuckdbS3Region(e.target.value)}
+                    />
+                    <Input
+                      placeholder="Endpoint (optional)"
+                      value={remoteDuckdbS3Endpoint}
+                      onChange={(e) =>
+                        setRemoteDuckdbS3Endpoint(e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Key ID (optional)"
+                      value={remoteDuckdbS3KeyId}
+                      onChange={(e) => setRemoteDuckdbS3KeyId(e.target.value)}
+                    />
+                    <Input
+                      type="password"
+                      placeholder="Secret (optional)"
+                      value={remoteDuckdbS3Secret}
+                      onChange={(e) => setRemoteDuckdbS3Secret(e.target.value)}
+                    />
+                  </div>
+                  <Input
+                    type="password"
+                    placeholder="Session token (optional)"
+                    value={remoteDuckdbS3SessionToken}
+                    onChange={(e) =>
+                      setRemoteDuckdbS3SessionToken(e.target.value)
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave key and secret blank to use the runtime credential
+                    chain.
+                  </p>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      );
+    }
 
     if (selectedDatabase === "postgres") {
       return (
@@ -1062,13 +1398,6 @@ export function ConnectDataDialog({
     );
   };
 
-  const runtimeLabel =
-    effectiveSqlBackend === "bridge"
-      ? "Bridge"
-      : effectiveSqlBackend === "duckdb-http"
-        ? "DuckDB over HTTP"
-        : "DuckDB WASM";
-
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -1079,11 +1408,6 @@ export function ConnectDataDialog({
               <Dialog.Title className="text-lg font-semibold text-foreground">
                 Connect Data Source
               </Dialog.Title>
-              <Dialog.Description className="text-sm text-muted-foreground">
-                {isWasmActive
-                  ? "Switch to a remote runtime to enable source connections."
-                  : `Using ${runtimeLabel} — DuckDB extensions handle the connection.`}
-              </Dialog.Description>
             </div>
             <Dialog.Close asChild>
               <button
@@ -1096,109 +1420,77 @@ export function ConnectDataDialog({
             </Dialog.Close>
           </div>
 
-          {/* WASM disabled state */}
-          {isWasmActive ? (
-            <div className="space-y-3 px-6 py-5">
-              <p className="text-sm text-muted-foreground">
-                Source connections via DuckDB extensions require a remote
-                runtime (Bridge or DuckDB over HTTP). The current active runtime
-                is <strong>DuckDB WASM</strong>.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Go to <strong>Settings → Query Runtime</strong> and switch to
-                Bridge or DuckDB over HTTP to enable this flow.
-              </p>
-              <div className="flex justify-end border-t border-border pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-5">
-              {/* Step 1: Source type */}
-              {!selectedDatabase && (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    Choose a data source to connect. The selected DuckDB
-                    extension will be installed and loaded on the active
-                    runtime.
-                  </p>
-                  {renderDatabaseSelector()}
-                </div>
-              )}
+          <div className="max-h-[70vh] overflow-y-auto px-6 py-5 space-y-5">
+            {/* Step 1: Source type */}
+            {!selectedDatabase && (
+              <div className="space-y-3">{renderDatabaseSelector()}</div>
+            )}
 
-              {/* Selected source + connection form */}
-              {selectedDatabase && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold capitalize">
-                      {DATABASE_OPTIONS.find(
-                        (o) => o.value === selectedDatabase,
-                      )?.label ?? selectedDatabase}
-                    </span>
-                    <button
+            {/* Selected source + connection form */}
+            {selectedDatabase && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold capitalize">
+                    {DATABASE_OPTIONS.find((o) => o.value === selectedDatabase)
+                      ?.label ?? selectedDatabase}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setSelectedDatabase(null);
+                      setMotherDuckConnectionState("idle");
+                      setHasConnected(false);
+                      setSchemas([]);
+                      setSelectedSchema("");
+                      setSchemaTablesPreview([]);
+                      setErrorMessage(null);
+                      motherDuckAttachPromiseRef.current = null;
+                    }}
+                  >
+                    ← Back
+                  </button>
+                </div>
+
+                {renderConnectionForm()}
+
+                {errorMessage && (
+                  <p className="text-sm text-destructive">{errorMessage}</p>
+                )}
+
+                {selectedDatabase === "motherduck" &&
+                  renderSchemaAndTableSelection()}
+
+                {!hasConnected &&
+                  !(
+                    selectedDatabase === "motherduck" &&
+                    motherDuckConnectionState !== "idle"
+                  ) && (
+                    <Button
                       type="button"
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => {
-                        setSelectedDatabase(null);
-                        setMotherDuckConnectionState("idle");
-                        setHasConnected(false);
-                        setSchemas([]);
-                        setSelectedSchema("");
-                        setSchemaTablesPreview([]);
-                        setErrorMessage(null);
-                        motherDuckAttachPromiseRef.current = null;
-                      }}
+                      disabled={isConnectDisabled || isLoadingSchemas}
+                      onClick={handleConnectClick}
+                      className="w-full"
                     >
-                      ← Back
-                    </button>
-                  </div>
-
-                  {renderConnectionForm()}
-
-                  {errorMessage && (
-                    <p className="text-sm text-destructive">{errorMessage}</p>
+                      {isLoadingSchemas ? "Connecting…" : "Connect"}
+                    </Button>
                   )}
 
-                  {selectedDatabase === "motherduck" &&
-                    renderSchemaAndTableSelection()}
-
-                  {!hasConnected &&
-                    !(
-                      selectedDatabase === "motherduck" &&
-                      motherDuckConnectionState !== "idle"
-                    ) && (
-                      <Button
-                        type="button"
-                        disabled={isConnectDisabled || isLoadingSchemas}
-                        onClick={handleConnectClick}
-                        className="w-full"
-                      >
-                        {isLoadingSchemas ? "Connecting…" : "Connect"}
-                      </Button>
-                    )}
-
-                  {hasConnected && selectedDatabase !== "motherduck" && (
-                    <>
-                      <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-                        <CheckCircleIcon className="h-4 w-4" />
-                        Connected
-                      </div>
-                      {renderSchemaAndTableSelection()}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                {hasConnected && selectedDatabase !== "motherduck" && (
+                  <>
+                    <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+                      <CheckCircleIcon className="h-4 w-4" />
+                      Connected
+                    </div>
+                    {renderSchemaAndTableSelection()}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Footer (only shown in enabled state and when something is selected) */}
-          {!isWasmActive && hasConnected && (
+          {hasConnected && (
             <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
               <Button
                 type="button"

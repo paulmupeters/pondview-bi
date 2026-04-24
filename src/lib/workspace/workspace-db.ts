@@ -23,6 +23,7 @@ export interface WorkspaceMessage {
 export interface WorkspaceAnalysisNotebook {
   id: string;
   title: string | null;
+  projectId?: string | null;
   projectPath?: string | null;
   createdAt: number;
   updatedAt: number;

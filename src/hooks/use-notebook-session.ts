@@ -7,6 +7,7 @@ import {
   deleteAnalysisCellEntry,
   ensureAnalysisNotebook,
   getAnalysisNotebookSnapshot,
+  listAnalysisCellsByNotebookId,
   putAnalysisCellEntries,
   touchAnalysisNotebookUpdatedAt,
   updateAnalysisNotebookTitle,
@@ -72,6 +73,33 @@ export type NotebookSessionActions = {
 };
 
 export type NotebookSession = NotebookSessionState & NotebookSessionActions;
+
+function shouldSyncProjectArtifactAfterCellPatch(
+  previousCell: WorkspaceAnalysisCell,
+  nextCell: WorkspaceAnalysisCell,
+): boolean {
+  return (
+    nextCell.promptText !== previousCell.promptText ||
+    nextCell.kind !== previousCell.kind ||
+    nextCell.aiEnabled !== previousCell.aiEnabled ||
+    nextCell.sqlEnabled !== previousCell.sqlEnabled ||
+    nextCell.sqlDraft !== previousCell.sqlDraft ||
+    nextCell.selectedDbIdentifier !== previousCell.selectedDbIdentifier ||
+    nextCell.selectedCatalogContext !== previousCell.selectedCatalogContext
+  );
+}
+
+function sortAnalysisCells(
+  cells: WorkspaceAnalysisCell[],
+): WorkspaceAnalysisCell[] {
+  return [...cells].sort((left, right) => {
+    if (left.position !== right.position) {
+      return left.position - right.position;
+    }
+
+    return left.createdAt - right.createdAt;
+  });
+}
 
 export function useNotebookSession(notebookId: string | null): NotebookSession {
   const [isLoading, setIsLoading] = useState(false);
@@ -258,42 +286,47 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
         >
       >,
     ) => {
+      if (!notebookId) {
+        return;
+      }
+
       const now = Date.now();
-      let updatedCell: WorkspaceAnalysisCell | undefined;
-      let shouldSyncProjectArtifact = false;
-      setCells((prev) =>
-        prev.map((cell) => {
-          if (cell.id !== cellId) {
-            return cell;
-          }
-          const mergedCell = mergeAnalysisCellPatch({
-            cell,
-            patch,
-            updatedAt: now,
-          });
-          if (!mergedCell) {
-            return cell;
-          }
-          updatedCell = mergedCell;
-          shouldSyncProjectArtifact =
-            mergedCell.promptText !== cell.promptText ||
-            mergedCell.kind !== cell.kind ||
-            mergedCell.aiEnabled !== cell.aiEnabled ||
-            mergedCell.sqlEnabled !== cell.sqlEnabled ||
-            mergedCell.sqlDraft !== cell.sqlDraft ||
-            mergedCell.selectedDbIdentifier !== cell.selectedDbIdentifier ||
-            mergedCell.selectedCatalogContext !== cell.selectedCatalogContext;
-          return mergedCell;
-        }),
-      );
-      if (updatedCell) {
-        await upsertAnalysisCell(updatedCell);
-        if (shouldSyncProjectArtifact && notebookId) {
-          await syncPublishedNotebookProjectArtifact(notebookId);
+      const inMemoryCell = cells.find((cell) => cell.id === cellId);
+      const existingCell =
+        inMemoryCell ??
+        (await listAnalysisCellsByNotebookId(notebookId)).find(
+          (cell) => cell.id === cellId,
+        );
+
+      if (!existingCell) {
+        return;
+      }
+
+      const updatedCell = mergeAnalysisCellPatch({
+        cell: existingCell,
+        patch,
+        updatedAt: now,
+      });
+
+      if (!updatedCell) {
+        return;
+      }
+
+      setCells((prev) => {
+        const hasCell = prev.some((cell) => cell.id === cellId);
+        if (!hasCell) {
+          return sortAnalysisCells([...prev, updatedCell]);
         }
+
+        return prev.map((cell) => (cell.id === cellId ? updatedCell : cell));
+      });
+
+      await upsertAnalysisCell(updatedCell);
+      if (shouldSyncProjectArtifactAfterCellPatch(existingCell, updatedCell)) {
+        await syncPublishedNotebookProjectArtifact(notebookId);
       }
     },
-    [notebookId],
+    [cells, notebookId],
   );
 
   const deleteCell = useCallback(

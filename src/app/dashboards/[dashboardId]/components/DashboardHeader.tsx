@@ -129,9 +129,6 @@ export function DashboardHeader({
             <h1 className="text-2xl md:text-4xl font-semibold leading-tight">
               {dashboard.title}
             </h1>
-            {dashboard.storageStatus === "best-effort" ? (
-              <Badge variant="secondary">Best-effort storage</Badge>
-            ) : null}
           </div>
           <Button
             type="button"

@@ -11,6 +11,7 @@ import {
 } from "@/lib/workspace/workspace-db";
 
 const OPEN_PROJECT_SESSION_KEY = "open-project";
+const PROJECT_REGISTRY_SESSION_KEY = "project-registry";
 
 export type ProjectBackingKind = "browser-indexeddb";
 
@@ -31,6 +32,7 @@ export type StoredProjectFile = ProjectArtifactTextFile & {
 export type ProjectBackingStore = {
   getOpenProject(): Promise<OpenProjectState | null>;
   setOpenProject(project: OpenProjectState | null): Promise<void>;
+  listProjects(): Promise<OpenProjectState[]>;
   listProjectFiles(projectId: string): Promise<ProjectArtifactTextFile[]>;
   readProjectFile(
     projectId: string,
@@ -51,6 +53,11 @@ export type ProjectBackingStore = {
 type ProjectSessionRow = {
   key: string;
   project: OpenProjectState | null;
+};
+
+type ProjectRegistryRow = {
+  key: string;
+  projects: OpenProjectState[];
 };
 
 type ProjectFileRow = StoredProjectFile & {
@@ -103,6 +110,18 @@ function isOpenProjectState(value: unknown): value is OpenProjectState {
   );
 }
 
+function isProjectRegistryRow(value: unknown): value is ProjectRegistryRow {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<ProjectRegistryRow>;
+  return (
+    candidate.key === PROJECT_REGISTRY_SESSION_KEY &&
+    Array.isArray(candidate.projects)
+  );
+}
+
 function normalizeOpenProjectState(
   project: OpenProjectState,
 ): OpenProjectState {
@@ -118,6 +137,31 @@ function normalizeOpenProjectState(
         ? project.defaultSourceRef
         : null,
   };
+}
+
+function mergeProjects(projects: OpenProjectState[]): OpenProjectState[] {
+  const merged = new Map<string, OpenProjectState>();
+
+  for (const project of projects) {
+    const normalized = normalizeOpenProjectState(project);
+    if (!normalized.id || !normalized.name) {
+      continue;
+    }
+
+    const existing = merged.get(normalized.id);
+    merged.set(normalized.id, {
+      ...existing,
+      ...normalized,
+      openedAt: existing?.openedAt ?? normalized.openedAt,
+      updatedAt: Math.max(existing?.updatedAt ?? 0, normalized.updatedAt),
+      defaultSourceRef:
+        normalized.defaultSourceRef ?? existing?.defaultSourceRef ?? null,
+    });
+  }
+
+  return Array.from(merged.values()).sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
 }
 
 function normalizeProjectFiles(
@@ -211,6 +255,34 @@ async function ensureProjectStores(): Promise<void> {
 }
 
 export class BrowserProjectStore implements ProjectBackingStore {
+  private async getProjectRegistry(): Promise<OpenProjectState[]> {
+    await ensureProjectStores();
+    const row = await getByKey<ProjectRegistryRow>(
+      STORE_PROJECT_SESSIONS as never,
+      PROJECT_REGISTRY_SESSION_KEY,
+    );
+
+    if (!row || !isProjectRegistryRow(row)) {
+      return [];
+    }
+
+    return mergeProjects(row.projects.filter(isOpenProjectState));
+  }
+
+  private async saveProjectRegistry(
+    projects: OpenProjectState[],
+  ): Promise<void> {
+    await putOne(STORE_PROJECT_SESSIONS as never, {
+      key: PROJECT_REGISTRY_SESSION_KEY,
+      projects: mergeProjects(projects),
+    } satisfies ProjectRegistryRow);
+  }
+
+  private async rememberProject(project: OpenProjectState): Promise<void> {
+    const projects = await this.getProjectRegistry();
+    await this.saveProjectRegistry([...projects, project]);
+  }
+
   async getOpenProject(): Promise<OpenProjectState | null> {
     await ensureProjectStores();
     const row = await getByKey<ProjectSessionRow>(
@@ -245,6 +317,15 @@ export class BrowserProjectStore implements ProjectBackingStore {
       key: OPEN_PROJECT_SESSION_KEY,
       project: normalized,
     } satisfies ProjectSessionRow);
+    await this.rememberProject(normalized);
+  }
+
+  async listProjects(): Promise<OpenProjectState[]> {
+    await ensureProjectStores();
+    const openProject = await this.getOpenProject();
+    const projects = await this.getProjectRegistry();
+
+    return mergeProjects(openProject ? [...projects, openProject] : projects);
   }
 
   async listProjectFiles(
@@ -364,6 +445,10 @@ export async function setOpenProject(
   project: OpenProjectState | null,
 ): Promise<void> {
   await getProjectStore().setOpenProject(project);
+}
+
+export async function listProjects(): Promise<OpenProjectState[]> {
+  return getProjectStore().listProjects();
 }
 
 export async function listOpenProjectFiles(): Promise<

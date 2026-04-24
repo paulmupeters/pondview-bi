@@ -1,11 +1,20 @@
 import {
+  BrainCircuit,
+  Check,
   Database,
   FolderOpen,
-  Palette,
-  Sparkles,
   type LucideIcon,
+  Palette,
+  Pencil,
+  Plus,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   type AiProvider,
   getAiProviderDisplayName,
@@ -15,7 +24,6 @@ import {
   saveAiSettingsToStorage,
 } from "@/ai/settings";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -67,13 +75,12 @@ import {
 import { DuckdbWasmClient } from "@/lib/duckdb/duckdb-wasm-client";
 import { importParsedProjectArtifacts } from "@/lib/project-artifacts/import";
 import { parseProjectArtifactFileSet } from "@/lib/project-artifacts/parse";
-import {
-  clearProjectRuntimeSelection,
-  hydrateProjectRuntimeFromParsedArtifacts,
-} from "@/lib/project-runtime";
+import { hydrateProjectRuntimeFromParsedArtifacts } from "@/lib/project-runtime";
 import {
   getOpenProject,
   listOpenProjectFiles,
+  listProjects,
+  type OpenProjectState,
   setOpenProject,
 } from "@/lib/project-store";
 import {
@@ -119,33 +126,28 @@ type SettingsSection = "ai" | "runtime" | "projects" | "appearance";
 type SectionNavItem = {
   id: SettingsSection;
   label: string;
-  description: string;
   icon: LucideIcon;
 };
 
 const SECTION_NAV: readonly SectionNavItem[] = [
   {
+    id: "projects",
+    label: "Projects",
+    icon: FolderOpen,
+  },
+  {
     id: "ai",
     label: "AI",
-    description: "Provider credentials and chat display.",
-    icon: Sparkles,
+    icon: BrainCircuit,
   },
   {
     id: "runtime",
     label: "Query Runtime",
-    description: "Where SQL executes and how it connects.",
     icon: Database,
-  },
-  {
-    id: "projects",
-    label: "Projects",
-    description: "Browser-local projects and DuckDB snapshots.",
-    icon: FolderOpen,
   },
   {
     id: "appearance",
     label: "Appearance",
-    description: "Themes and custom styles.",
     icon: Palette,
   },
 ] as const;
@@ -160,6 +162,42 @@ function projectDownloadName(name: string): string {
   return `pondview-project-${slug}.zip`;
 }
 
+function createProjectSlug(name: string): string {
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "project"
+  );
+}
+
+function createNewProjectName(projects: readonly OpenProjectState[]): string {
+  const names = new Set(projects.map((project) => project.name));
+  if (!names.has("Untitled Project")) {
+    return "Untitled Project";
+  }
+
+  let index = 2;
+  while (names.has(`Untitled Project ${index}`)) {
+    index += 1;
+  }
+
+  return `Untitled Project ${index}`;
+}
+
+function createBrowserProjectState(name: string): OpenProjectState {
+  const now = Date.now();
+  return {
+    id: `browser-project-${createProjectSlug(name)}-${now}`,
+    name,
+    backingKind: "browser-indexeddb",
+    openedAt: now,
+    updatedAt: now,
+    defaultSourceRef: null,
+  };
+}
+
 function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
@@ -167,7 +205,8 @@ function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 export default function SettingsPage() {
-  const [activeSection, setActiveSection] = useState<SettingsSection>("ai");
+  const [activeSection, setActiveSection] =
+    useState<SettingsSection>("projects");
   const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -195,14 +234,15 @@ export default function SettingsPage() {
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [isExportingSnapshot, setIsExportingSnapshot] = useState(false);
   const [isImportingSnapshot, setIsImportingSnapshot] = useState(false);
-  const [openProjectName, setOpenProjectName] = useState("");
-  const [openProjectStatus, setOpenProjectStatus] = useState<string | null>(
-    null,
-  );
+  const [openProjectName, setOpenProjectName] = useState("Untitled Project");
+  const [projectNameDraft, setProjectNameDraft] = useState("");
+  const [knownProjects, setKnownProjects] = useState<OpenProjectState[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState("");
+  const [isEditingProjectName, setIsEditingProjectName] = useState(false);
+  const [isSavingProjectName, setIsSavingProjectName] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [isSwitchingProject, setIsSwitchingProject] = useState(false);
   const [openProjectError, setOpenProjectError] = useState<string | null>(null);
-  const [openProjectFileCount, setOpenProjectFileCount] = useState(0);
-  const [isOpeningProject, setIsOpeningProject] = useState(false);
-  const [isClosingProject, setIsClosingProject] = useState(false);
   const [isExportingProject, setIsExportingProject] = useState(false);
   const [isImportingProject, setIsImportingProject] = useState(false);
   const projectImportFileRef = useRef<HTMLInputElement>(null);
@@ -223,14 +263,23 @@ export default function SettingsPage() {
   const selectedSqlBackend = useSelectedSqlBackend();
   const effectiveSqlBackend = useResolvedSqlBackend();
 
-  const refreshOpenProjectCard = useCallback(async () => {
-    const project = await getOpenProject();
-    const files = project ? await listOpenProjectFiles() : [];
-    setOpenProjectName(project?.name ?? "");
-    setOpenProjectStatus(
-      project ? `Open project: ${project.name}` : "No project open.",
-    );
-    setOpenProjectFileCount(files.length);
+  const refreshOpenProjectSummary = useCallback(async () => {
+    let [project, projects] = await Promise.all([
+      getOpenProject(),
+      listProjects(),
+    ]);
+
+    if (!project) {
+      project = projects[0] ?? createBrowserProjectState("Untitled Project");
+      await setOpenProject(project);
+      projects = await listProjects();
+    }
+
+    const projectName = project?.name ?? "Untitled Project";
+    setKnownProjects(projects);
+    setActiveProjectId(project.id);
+    setOpenProjectName(projectName);
+    setProjectNameDraft(projectName);
   }, []);
 
   useEffect(() => {
@@ -260,7 +309,7 @@ export default function SettingsPage() {
 
     void (async () => {
       try {
-        await refreshOpenProjectCard();
+        await refreshOpenProjectSummary();
       } catch (error) {
         setOpenProjectError(
           error instanceof Error
@@ -269,7 +318,7 @@ export default function SettingsPage() {
         );
       }
     })();
-  }, [refreshOpenProjectCard]);
+  }, [refreshOpenProjectSummary]);
 
   useEffect(() => {
     const hash = window.location.hash.replace(/^#/, "");
@@ -516,65 +565,6 @@ export default function SettingsPage() {
     }
   };
 
-  const handleOpenProject = async () => {
-    const normalizedName = openProjectName.trim();
-    if (!normalizedName) {
-      setOpenProjectError("Project name is required.");
-      setOpenProjectStatus(null);
-      return;
-    }
-
-    setIsOpeningProject(true);
-    setOpenProjectError(null);
-    setOpenProjectStatus(null);
-
-    try {
-      const now = Date.now();
-      await setOpenProject({
-        id: `browser-project-${
-          normalizedName
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-+|-+$/g, "") || "project"
-        }`,
-        name: normalizedName,
-        backingKind: "browser-indexeddb",
-        openedAt: now,
-        updatedAt: now,
-      });
-      clearProjectRuntimeSelection();
-      await refreshOpenProjectCard();
-      setShowSuccessMessage(true);
-      setTimeout(() => setShowSuccessMessage(false), 3000);
-    } catch (error) {
-      setOpenProjectError(
-        error instanceof Error ? error.message : "Failed to open project.",
-      );
-    } finally {
-      setIsOpeningProject(false);
-    }
-  };
-
-  const handleCloseProject = async () => {
-    setIsClosingProject(true);
-    setOpenProjectError(null);
-    setOpenProjectStatus(null);
-
-    try {
-      await setOpenProject(null);
-      clearProjectRuntimeSelection();
-      await refreshOpenProjectCard();
-      setShowSuccessMessage(true);
-      setTimeout(() => setShowSuccessMessage(false), 3000);
-    } catch (error) {
-      setOpenProjectError(
-        error instanceof Error ? error.message : "Failed to close project.",
-      );
-    } finally {
-      setIsClosingProject(false);
-    }
-  };
-
   const handleExportProject = async () => {
     setIsExportingProject(true);
     setOpenProjectError(null);
@@ -611,6 +601,130 @@ export default function SettingsPage() {
     }
   };
 
+  const handleEditProjectName = () => {
+    setProjectNameDraft(openProjectName);
+    setIsEditingProjectName(true);
+    setOpenProjectError(null);
+  };
+
+  const handleCancelProjectNameEdit = () => {
+    setProjectNameDraft(openProjectName);
+    setIsEditingProjectName(false);
+    setOpenProjectError(null);
+  };
+
+  const syncActiveProjectFromFiles = async (project: OpenProjectState) => {
+    const files = await listOpenProjectFiles();
+    const parsedArtifacts = parseProjectArtifactFileSet(files);
+    await hydrateProjectRuntimeFromParsedArtifacts({
+      project,
+      parsed: parsedArtifacts,
+    });
+    await importParsedProjectArtifacts(parsedArtifacts, {
+      projectId: project.id,
+      defaultSourceRef:
+        parsedArtifacts.projectManifest?.defaultSourceRef ??
+        project.defaultSourceRef ??
+        null,
+    });
+  };
+
+  const handleProjectSwitch = async (projectId: string) => {
+    if (projectId === activeProjectId) {
+      return;
+    }
+
+    const project = knownProjects.find(
+      (candidate) => candidate.id === projectId,
+    );
+    if (!project) {
+      return;
+    }
+
+    setIsSwitchingProject(true);
+    setIsEditingProjectName(false);
+    setOpenProjectError(null);
+
+    try {
+      await setOpenProject(project);
+      setActiveProjectId(project.id);
+      setOpenProjectName(project.name);
+      setProjectNameDraft(project.name);
+      await syncActiveProjectFromFiles(project);
+      await refreshOpenProjectSummary();
+    } catch (error) {
+      setOpenProjectError(
+        error instanceof Error ? error.message : "Failed to switch project.",
+      );
+    } finally {
+      setIsSwitchingProject(false);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    const defaultName = createNewProjectName(knownProjects);
+    const requestedName = window.prompt("Project name", defaultName);
+    if (requestedName === null) {
+      return;
+    }
+
+    const name = requestedName.trim();
+    if (!name) {
+      setOpenProjectError("Project name is required.");
+      return;
+    }
+
+    setIsCreatingProject(true);
+    setIsEditingProjectName(false);
+    setOpenProjectError(null);
+
+    try {
+      const project = createBrowserProjectState(name);
+
+      await setOpenProject(project);
+      await syncActiveProjectFromFiles(project);
+      await refreshOpenProjectSummary();
+    } catch (error) {
+      setOpenProjectError(
+        error instanceof Error ? error.message : "Failed to create project.",
+      );
+    } finally {
+      setIsCreatingProject(false);
+    }
+  };
+
+  const handleSaveProjectName = async () => {
+    const normalizedName = projectNameDraft.trim();
+    if (!normalizedName) {
+      setOpenProjectError("Project name is required.");
+      return;
+    }
+
+    setIsSavingProjectName(true);
+    setOpenProjectError(null);
+
+    try {
+      const project =
+        (await getOpenProject()) ?? createBrowserProjectState(normalizedName);
+
+      await setOpenProject({
+        ...project,
+        name: normalizedName,
+        updatedAt: Date.now(),
+      });
+      await refreshOpenProjectSummary();
+      setIsEditingProjectName(false);
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      setOpenProjectError(
+        error instanceof Error ? error.message : "Failed to rename project.",
+      );
+    } finally {
+      setIsSavingProjectName(false);
+    }
+  };
+
   const handleImportProject = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -640,12 +754,13 @@ export default function SettingsPage() {
         parsed: parsedArtifacts,
       });
       await importParsedProjectArtifacts(parsedArtifacts, {
+        projectId: project.id,
         defaultSourceRef:
           parsedArtifacts.projectManifest?.defaultSourceRef ??
           project.defaultSourceRef ??
           null,
       });
-      await refreshOpenProjectCard();
+      await refreshOpenProjectSummary();
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } catch (error) {
@@ -760,20 +875,74 @@ export default function SettingsPage() {
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-auto">
         <div className="mx-auto w-full max-w-6xl px-6 py-10 lg:px-8">
-          <header className="mb-8">
-            <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-            <p className="mt-1 text-muted-foreground">
-              Manage your application preferences and configuration.
-            </p>
+          <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+              <p className="mt-1 text-muted-foreground">
+                Manage your application preferences and configuration.
+              </p>
+            </div>
+
+            {knownProjects.length > 0 && (
+              <div className="flex flex-col items-stretch gap-2 sm:items-end">
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={activeProjectId}
+                    onValueChange={(value) => void handleProjectSwitch(value)}
+                    disabled={
+                      knownProjects.length < 2 ||
+                      isSwitchingProject ||
+                      isCreatingProject
+                    }
+                  >
+                    <SelectTrigger
+                      id="active-project"
+                      className="w-full sm:w-64"
+                    >
+                      <SelectValue placeholder="Select project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {knownProjects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => void handleCreateProject()}
+                    disabled={
+                      isCreatingProject ||
+                      isSwitchingProject ||
+                      isImportingProject
+                    }
+                    aria-label={
+                      isCreatingProject ? "Creating project" : "New project"
+                    }
+                    title={
+                      isCreatingProject ? "Creating project..." : "New project"
+                    }
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {isSwitchingProject && (
+                  <p className="text-xs text-muted-foreground">
+                    Switching project...
+                  </p>
+                )}
+              </div>
+            )}
           </header>
 
           {showSuccessMessage && (
-            <div
-              role="status"
-              className="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200"
-            >
-              Settings saved successfully!
-            </div>
+            <output className="mb-6 flex w-1/5 items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+              <Check className="h-4 w-4" aria-hidden="true" />
+              <span>Saved</span>
+            </output>
           )}
 
           <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
@@ -787,12 +956,11 @@ export default function SettingsPage() {
               <SectionHeader
                 icon={activeNavItem.icon}
                 title={activeNavItem.label}
-                description={activeNavItem.description}
               />
 
               {activeSection === "ai" && (
                 <>
-                  <Card className="p-6">
+                  <SettingsContentSection>
                     <div className="space-y-4">
                       <div>
                         <h3 className="text-lg font-semibold">
@@ -923,9 +1091,9 @@ export default function SettingsPage() {
                         </Button>
                       </div>
                     </div>
-                  </Card>
+                  </SettingsContentSection>
 
-                  <Card className="p-6">
+                  <SettingsContentSection>
                     <div className="space-y-4">
                       <div>
                         <h3 className="text-lg font-semibold">Chat display</h3>
@@ -969,7 +1137,7 @@ export default function SettingsPage() {
 
                       <label
                         htmlFor="show-tool-calls"
-                        className="flex items-center justify-between gap-4 rounded-md border border-border p-3"
+                        className="flex items-center justify-between gap-4 border-t pt-4"
                       >
                         <div>
                           <p className="text-sm font-medium">Show tool calls</p>
@@ -992,7 +1160,7 @@ export default function SettingsPage() {
 
                       <label
                         htmlFor="show-execute-sql-raw-output"
-                        className="flex items-center justify-between gap-4 rounded-md border border-border p-3 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="flex items-center justify-between gap-4 border-t pt-4 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <div>
                           <p className="text-sm font-medium">
@@ -1002,8 +1170,8 @@ export default function SettingsPage() {
                             In notebook AI transcripts, include raw
                             `tool-execute_final_sql` and
                             `tool-execute_exploratory_sql` output in the tool
-                            card, in addition to the SQL result block. This
-                            only applies when tool calls are visible.
+                            card, in addition to the SQL result block. This only
+                            applies when tool calls are visible.
                           </p>
                         </div>
                         <input
@@ -1025,12 +1193,12 @@ export default function SettingsPage() {
                         transcript shown in analysis cells.
                       </p>
                     </div>
-                  </Card>
+                  </SettingsContentSection>
                 </>
               )}
 
               {activeSection === "runtime" && (
-                <Card className="p-6">
+                <SettingsContentSection>
                   <div className="space-y-6">
                     <div>
                       <h3 className="text-lg font-semibold">SQL runtime</h3>
@@ -1041,15 +1209,15 @@ export default function SettingsPage() {
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
+                    <div className="flex items-center justify-between border-b pb-3 text-sm">
                       <span className="text-muted-foreground">
                         Active runtime
                       </span>
                       <span
                         className={
                           effectiveSqlBackend === "duckdb-wasm"
-                            ? "text-muted-foreground"
-                            : "text-green-600 dark:text-green-400"
+                            ? "font-medium text-muted-foreground"
+                            : "font-medium text-green-600 dark:text-green-400"
                         }
                       >
                         {effectiveRuntimeLabel}
@@ -1104,7 +1272,7 @@ export default function SettingsPage() {
                     )}
 
                     {selectedSqlBackend === "bridge" && (
-                      <div className="space-y-3 rounded-lg border p-4">
+                      <div className="space-y-3 border-t pt-5">
                         <div>
                           <h4 className="text-sm font-semibold">Bridge auth</h4>
                           <p className="text-sm text-muted-foreground">
@@ -1151,14 +1319,14 @@ export default function SettingsPage() {
                     )}
 
                     {selectedSqlBackend === "duckdb-http" && (
-                      <div className="space-y-4 rounded-lg border p-4">
+                      <div className="space-y-4 border-t pt-5">
                         <div>
                           <h4 className="text-sm font-semibold">
                             DuckDB HTTP connection
                           </h4>
                           <p className="text-sm text-muted-foreground">
-                            Configure host, port, and optional auth for a
-                            remote DuckDB{" "}
+                            Configure host, port, and optional auth for a remote
+                            DuckDB{" "}
                             <code className="rounded bg-muted px-1 py-0.5 text-xs">
                               httpserver
                             </code>{" "}
@@ -1253,121 +1421,122 @@ export default function SettingsPage() {
                       </div>
                     )}
                   </div>
-                </Card>
+                </SettingsContentSection>
               )}
 
               {activeSection === "projects" && (
                 <>
-                  <Card className="p-6">
-                    <div className="space-y-6">
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          Project files
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Open a browser-local project backing store so saved
-                          queries and published notebooks write project
-                          artifact files automatically, then export or import
-                          that file tree as a project archive.
-                        </p>
-                      </div>
-
-                      <div className="space-y-3 rounded-lg border p-4">
-                        <div className="grid gap-2">
-                          <label
-                            htmlFor="open-project-name"
-                            className="text-sm font-medium"
-                          >
-                            Project name
-                          </label>
-                          <Input
-                            id="open-project-name"
-                            type="text"
-                            name="open-project-name"
-                            autoComplete="off"
-                            value={openProjectName}
-                            onChange={(event) =>
-                              setOpenProjectName(event.target.value)
-                            }
-                            placeholder="My Browser Project"
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
-                          <span className="text-muted-foreground">
-                            Browser-local project status
-                          </span>
-                          <span>
-                            {openProjectStatus ?? "No project open."}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
-                          <span className="text-muted-foreground">
-                            Tracked files
-                          </span>
-                          <span>{openProjectFileCount}</span>
-                        </div>
-
-                        {openProjectError && (
-                          <p className="text-sm text-red-600 dark:text-red-400">
-                            {openProjectError}
-                          </p>
+                  <SettingsContentSection>
+                    <div className="space-y-5">
+                      <div className="space-y-3">
+                        <p className="text-sm font-medium">Project name</p>
+                        {isEditingProjectName ? (
+                          <div className="flex max-w-sm flex-col gap-2 sm:flex-row">
+                            <Input
+                              id="project-name"
+                              type="text"
+                              name="project-name"
+                              autoComplete="off"
+                              value={projectNameDraft}
+                              onChange={(event) =>
+                                setProjectNameDraft(event.target.value)
+                              }
+                              placeholder="Project name"
+                              disabled={isSwitchingProject || isCreatingProject}
+                            />
+                            <Button
+                              type="button"
+                              onClick={() => void handleSaveProjectName()}
+                              disabled={
+                                isSavingProjectName ||
+                                isSwitchingProject ||
+                                isCreatingProject
+                              }
+                            >
+                              {isSavingProjectName ? "Saving..." : "Save"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={handleCancelProjectNameEdit}
+                              disabled={
+                                isSavingProjectName ||
+                                isSwitchingProject ||
+                                isCreatingProject
+                              }
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex max-w-sm items-center gap-2">
+                            <div
+                              id="project-name"
+                              className="min-h-9 min-w-0 flex-1 truncate border-b py-2 text-sm font-medium"
+                              title={openProjectName}
+                            >
+                              {openProjectName}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={handleEditProjectName}
+                              disabled={isSwitchingProject || isCreatingProject}
+                              aria-label="Edit project name"
+                              title="Edit project name"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </div>
                         )}
-
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => void handleOpenProject()}
-                            disabled={isOpeningProject}
-                          >
-                            {isOpeningProject
-                              ? "Opening..."
-                              : "Open Browser Project"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => void handleCloseProject()}
-                            disabled={isClosingProject}
-                          >
-                            {isClosingProject
-                              ? "Closing..."
-                              : "Close Project"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => void handleExportProject()}
-                            disabled={isExportingProject}
-                          >
-                            {isExportingProject
-                              ? "Exporting..."
-                              : "Export Project"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() =>
-                              projectImportFileRef.current?.click()
-                            }
-                            disabled={isImportingProject}
-                          >
-                            {isImportingProject
-                              ? "Importing..."
-                              : "Import Project"}
-                          </Button>
-                        </div>
-
-                        <input
-                          ref={projectImportFileRef}
-                          type="file"
-                          accept=".zip,.json,application/zip,application/json"
-                          className="hidden"
-                          onChange={handleImportProject}
-                        />
                       </div>
-                    </div>
-                  </Card>
 
-                  <Card className="p-6">
+                      {openProjectError && (
+                        <p className="text-sm text-red-600 dark:text-red-400">
+                          {openProjectError}
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => projectImportFileRef.current?.click()}
+                          disabled={
+                            isImportingProject ||
+                            isSwitchingProject ||
+                            isCreatingProject
+                          }
+                        >
+                          {isImportingProject ? "Opening..." : "Open Project"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => void handleExportProject()}
+                          disabled={
+                            isExportingProject ||
+                            isSwitchingProject ||
+                            isCreatingProject ||
+                            !activeProjectId
+                          }
+                        >
+                          {isExportingProject
+                            ? "Exporting..."
+                            : "Export Project"}
+                        </Button>
+                      </div>
+
+                      <input
+                        ref={projectImportFileRef}
+                        type="file"
+                        accept=".zip,.json,application/zip,application/json"
+                        className="hidden"
+                        onChange={handleImportProject}
+                      />
+                    </div>
+                  </SettingsContentSection>
+
+                  <SettingsContentSection>
                     <div className="space-y-6">
                       <div>
                         <h3 className="text-lg font-semibold">
@@ -1390,9 +1559,7 @@ export default function SettingsPage() {
                         <Button
                           variant="outline"
                           onClick={() => void handleExportSnapshot()}
-                          disabled={
-                            isExportingSnapshot || isImportingSnapshot
-                          }
+                          disabled={isExportingSnapshot || isImportingSnapshot}
                         >
                           {isExportingSnapshot
                             ? "Exporting..."
@@ -1400,12 +1567,8 @@ export default function SettingsPage() {
                         </Button>
                         <Button
                           variant="outline"
-                          onClick={() =>
-                            snapshotImportFileRef.current?.click()
-                          }
-                          disabled={
-                            isImportingSnapshot || isExportingSnapshot
-                          }
+                          onClick={() => snapshotImportFileRef.current?.click()}
+                          disabled={isImportingSnapshot || isExportingSnapshot}
                         >
                           {isImportingSnapshot
                             ? "Importing..."
@@ -1421,13 +1584,13 @@ export default function SettingsPage() {
                         onChange={handleImportSnapshot}
                       />
                     </div>
-                  </Card>
+                  </SettingsContentSection>
                 </>
               )}
 
               {activeSection === "appearance" && (
                 <>
-                  <Card className="p-6">
+                  <SettingsContentSection>
                     <div className="space-y-4">
                       <div>
                         <h3 className="text-lg font-semibold">
@@ -1480,14 +1643,12 @@ export default function SettingsPage() {
                         )}
                       </div>
                     </div>
-                  </Card>
+                  </SettingsContentSection>
 
-                  <Card className="p-6">
+                  <SettingsContentSection>
                     <div className="space-y-4">
                       <div>
-                        <h3 className="text-lg font-semibold">
-                          Custom styles
-                        </h3>
+                        <h3 className="text-lg font-semibold">Custom styles</h3>
                         <p className="text-sm text-muted-foreground">
                           {selectedTheme === CUSTOM_THEME_VALUE
                             ? "Customize the appearance of the application using CSS variables."
@@ -1495,7 +1656,10 @@ export default function SettingsPage() {
                         </p>
                       </div>
 
-                      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                      <Dialog
+                        open={isDialogOpen}
+                        onOpenChange={setIsDialogOpen}
+                      >
                         <DialogTrigger asChild>
                           <Button
                             variant="outline"
@@ -1529,10 +1693,7 @@ export default function SettingsPage() {
                             >
                               Cancel
                             </Button>
-                            <Button
-                              onClick={handleSaveCss}
-                              disabled={isSaving}
-                            >
+                            <Button onClick={handleSaveCss} disabled={isSaving}>
                               {isSaving ? "Saving..." : "Save Styles"}
                             </Button>
                           </DialogFooter>
@@ -1548,7 +1709,7 @@ export default function SettingsPage() {
                         </div>
                       )}
                     </div>
-                  </Card>
+                  </SettingsContentSection>
                 </>
               )}
             </main>
@@ -1607,14 +1768,28 @@ function SettingsNav({
   );
 }
 
+function SettingsContentSection({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={cn("border-b pb-7 last:border-b-0 last:pb-0", className)}
+    >
+      {children}
+    </section>
+  );
+}
+
 function SectionHeader({
   icon: Icon,
   title,
-  description,
 }: {
   icon: LucideIcon;
   title: string;
-  description: string;
 }) {
   return (
     <div className="flex items-start gap-3 border-b pb-4">
@@ -1623,7 +1798,6 @@ function SectionHeader({
       </div>
       <div>
         <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
+import { useWasmTables } from "@/hooks/use-wasm-tables";
 import { refreshDuckDbHttpHealth } from "@/lib/duckdb/duckdb-http-browser";
 import {
   clearJoinDefsInStorage,
@@ -33,6 +34,13 @@ export default function ViewDataPage() {
     isConfigured: isDuckdbHttpConfigured,
     connectionInfo: duckdbHttpConnectionInfo,
   } = useDuckdbHttpTables(effectiveSqlBackend, runtimeRefreshToken);
+  const {
+    tables: wasmTables,
+    isLoading: isWasmTablesLoading,
+    error: wasmTablesError,
+  } = useWasmTables(runtimeRefreshToken, {
+    enabled: effectiveSqlBackend === "duckdb-wasm",
+  });
 
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
   const [joinDefsRaw, setJoinDefsRaw] = useState("[]");
@@ -85,7 +93,10 @@ export default function ViewDataPage() {
 
   const tablesBySchema = useMemo(() => {
     const grouped = new Map<string, { name: string; type: string }[]>();
-    for (const table of duckdbTables) {
+    const sourceTables =
+      effectiveSqlBackend === "duckdb-wasm" ? wasmTables : duckdbTables;
+
+    for (const table of sourceTables) {
       const schema = table.schema.trim();
       const catalog = table.catalog?.trim();
       if (isHiddenRuntimeSchema(schema)) {
@@ -109,7 +120,7 @@ export default function ViewDataPage() {
         tables: [...entries].sort((a, b) => a.name.localeCompare(b.name)),
       }))
       .sort((a, b) => a.schema.localeCompare(b.schema));
-  }, [duckdbTables]);
+  }, [duckdbTables, effectiveSqlBackend, wasmTables]);
 
   const remoteRuntimeLabel =
     effectiveSqlBackend === "bridge" ? "Bridge" : "DuckDB over HTTP";
@@ -185,6 +196,48 @@ export default function ViewDataPage() {
                       Queries are running against the browser-local DuckDB WASM
                       database.
                     </p>
+                    {isWasmTablesLoading ? (
+                      <p className="text-sm text-muted-foreground">
+                        Loading tables...
+                      </p>
+                    ) : wasmTablesError ? (
+                      <p className="text-sm text-destructive">
+                        Failed to load tables: {wasmTablesError}
+                      </p>
+                    ) : tablesBySchema.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No tables found.
+                      </p>
+                    ) : (
+                      <div className="grid gap-3">
+                        {tablesBySchema.map((group) => (
+                          <div
+                            key={group.schema}
+                            className="rounded-lg border p-3"
+                          >
+                            <p className="text-xs uppercase text-muted-foreground">
+                              Schema
+                            </p>
+                            <p className="mb-2 text-sm font-semibold">
+                              {group.schema}
+                            </p>
+                            <div className="grid gap-1">
+                              {group.tables.map((table) => (
+                                <div
+                                  key={`${group.schema}.${table.name}`}
+                                  className="flex items-center justify-between text-sm"
+                                >
+                                  <span>{table.name}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {table.type}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ) : isDuckdbHttpConfigured ? (

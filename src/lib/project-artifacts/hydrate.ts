@@ -31,6 +31,7 @@ import type {
 
 export type ProjectArtifactHydrationOptions = {
   now?: number;
+  projectId?: string | null;
   localSourceBindings?: LocalProjectSourceBindings | null;
   defaultSourceRef?: string | null;
   fallbackSqlBackend?: SqlBackend;
@@ -248,6 +249,7 @@ export function hydratePublishedNotebookArtifact(
   const notebook: WorkspaceAnalysisNotebook = {
     id: artifact.manifest.id,
     title: artifact.manifest.title,
+    projectId: options.projectId ?? null,
     projectPath: artifact.rootPath,
     createdAt: now,
     updatedAt: now,

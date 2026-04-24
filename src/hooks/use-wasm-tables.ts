@@ -39,7 +39,11 @@ export function parseWasmTables(
     );
 }
 
-export function useWasmTables() {
+export function useWasmTables(
+  refreshToken?: number,
+  options: { enabled?: boolean } = {},
+) {
+  const enabled = options.enabled ?? true;
   const [tables, setTables] = useState<WasmTableEntry[]>([]);
   const [currentCatalog, setCurrentCatalog] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,6 +51,14 @@ export function useWasmTables() {
   const isMountedRef = useRef(true);
 
   const refresh = useCallback(async () => {
+    if (!enabled) {
+      setTables([]);
+      setCurrentCatalog(null);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -81,8 +93,9 @@ export function useWasmTables() {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [enabled]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshToken is intentionally used to trigger re-fetches without being read
   useEffect(() => {
     isMountedRef.current = true;
     void refresh();
@@ -90,7 +103,7 @@ export function useWasmTables() {
     return () => {
       isMountedRef.current = false;
     };
-  }, [refresh]);
+  }, [refresh, refreshToken]);
 
   return { tables, currentCatalog, isLoading, error, refresh };
 }

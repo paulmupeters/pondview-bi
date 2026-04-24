@@ -76,14 +76,25 @@ export function AnalysisWorkspace({
     | null
   >(null);
   const appliedBootstrapKeyRef = useRef<string | null>(null);
+  const runningBootstrapKeyRef = useRef<string | null>(null);
+  const isMountedRef = useRef(false);
   const bootstrapIntent = useMemo(
     () => resolveAnalysisBootstrapIntent(searchParams),
     [searchParams],
   );
 
   useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!bootstrapIntent) {
       appliedBootstrapKeyRef.current = null;
+      runningBootstrapKeyRef.current = null;
     }
   }, [bootstrapIntent]);
 
@@ -137,82 +148,96 @@ export function AnalysisWorkspace({
     }
 
     const bootstrapKey = searchParams.toString();
-    if (appliedBootstrapKeyRef.current === bootstrapKey) {
+    if (
+      appliedBootstrapKeyRef.current === bootstrapKey ||
+      runningBootstrapKeyRef.current === bootstrapKey
+    ) {
       return;
     }
-    appliedBootstrapKeyRef.current = bootstrapKey;
-
-    let isCancelled = false;
+    runningBootstrapKeyRef.current = bootstrapKey;
 
     void (async () => {
-      const selectedCell =
-        (state.selectedCellId
-          ? notebookSession.cells.find(
-              (cell) => cell.id === state.selectedCellId,
-            )
-          : null) ?? null;
-      let targetCell = selectedCell ?? notebookSession.cells.at(-1) ?? null;
+      try {
+        const selectedCell =
+          (state.selectedCellId
+            ? notebookSession.cells.find(
+                (cell) => cell.id === state.selectedCellId,
+              )
+            : null) ?? null;
+        let targetCell = selectedCell ?? notebookSession.cells.at(-1) ?? null;
 
-      if (!targetCell) {
-        targetCell = await notebookSession.addCell({
-          kind: bootstrapIntent.mode === "manual" ? "sql" : "ai",
-          aiEnabled: bootstrapIntent.mode === "ai",
-          sqlEnabled: bootstrapIntent.mode === "manual",
-        });
-        if (isCancelled) {
-          return;
+        if (!targetCell) {
+          targetCell = await notebookSession.addCell({
+            kind: bootstrapIntent.mode === "manual" ? "sql" : "ai",
+            aiEnabled: bootstrapIntent.mode === "ai",
+            sqlEnabled: bootstrapIntent.mode === "manual",
+          });
+          if (
+            !isMountedRef.current ||
+            runningBootstrapKeyRef.current !== bootstrapKey
+          ) {
+            return;
+          }
+          dispatch({
+            type: "cellAdded",
+            cell: toAnalysisCellState(targetCell),
+          });
+        } else {
+          dispatch({ type: "cellSelected", cellId: targetCell.id });
         }
-        dispatch({
-          type: "cellAdded",
-          cell: toAnalysisCellState(targetCell),
-        });
-      } else {
-        dispatch({ type: "cellSelected", cellId: targetCell.id });
-      }
 
-      const nextPatch: Parameters<typeof notebookSession.updateCell>[1] = {};
-      if (bootstrapIntent.mode === "manual") {
-        if (!targetCell.sqlEnabled) {
-          nextPatch.sqlEnabled = true;
+        const nextPatch: Parameters<typeof notebookSession.updateCell>[1] = {};
+        if (bootstrapIntent.mode === "manual") {
+          if (!targetCell.sqlEnabled) {
+            nextPatch.sqlEnabled = true;
+          }
+          if (
+            bootstrapIntent.sql &&
+            targetCell.sqlDraft !== bootstrapIntent.sql
+          ) {
+            nextPatch.sqlDraft = bootstrapIntent.sql;
+          }
+        } else if (!targetCell.aiEnabled) {
+          nextPatch.aiEnabled = true;
         }
-        if (
-          bootstrapIntent.sql &&
-          targetCell.sqlDraft !== bootstrapIntent.sql
-        ) {
-          nextPatch.sqlDraft = bootstrapIntent.sql;
+
+        if (Object.keys(nextPatch).length > 0) {
+          await notebookSession.updateCell(targetCell.id, nextPatch);
+          if (
+            !isMountedRef.current ||
+            runningBootstrapKeyRef.current !== bootstrapKey
+          ) {
+            return;
+          }
         }
-      } else if (!targetCell.aiEnabled) {
-        nextPatch.aiEnabled = true;
-      }
 
-      if (Object.keys(nextPatch).length > 0) {
-        await notebookSession.updateCell(targetCell.id, nextPatch);
-        if (isCancelled) {
-          return;
+        if (bootstrapIntent.prompt) {
+          setPendingBootstrap({
+            kind: "ai",
+            cellId: targetCell.id,
+            prompt: bootstrapIntent.prompt,
+          });
+        } else if (bootstrapIntent.sql) {
+          setPendingBootstrap({
+            kind: "sql",
+            cellId: targetCell.id,
+            sql: bootstrapIntent.sql,
+            autorun: bootstrapIntent.autorun,
+          });
+        }
+
+        appliedBootstrapKeyRef.current = bootstrapKey;
+        runningBootstrapKeyRef.current = null;
+        router.replace(getAnalysisPostBootstrapHref(notebookId));
+      } catch (error) {
+        if (runningBootstrapKeyRef.current === bootstrapKey) {
+          runningBootstrapKeyRef.current = null;
+        }
+        if (isMountedRef.current) {
+          console.error("Failed to bootstrap analysis notebook:", error);
         }
       }
-
-      if (bootstrapIntent.prompt) {
-        setPendingBootstrap({
-          kind: "ai",
-          cellId: targetCell.id,
-          prompt: bootstrapIntent.prompt,
-        });
-      } else if (bootstrapIntent.sql) {
-        setPendingBootstrap({
-          kind: "sql",
-          cellId: targetCell.id,
-          sql: bootstrapIntent.sql,
-          autorun: bootstrapIntent.autorun,
-        });
-      }
-
-      router.replace(getAnalysisPostBootstrapHref(notebookId));
     })();
-
-    return () => {
-      isCancelled = true;
-    };
   }, [
     bootstrapIntent,
     notebookId,

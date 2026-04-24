@@ -180,6 +180,7 @@ export async function syncPublishedNotebookProjectArtifact(
   await replaceOpenProjectFiles(nextScopePath, files);
   await upsertAnalysisNotebook({
     ...snapshot.notebook,
+    projectId: project.id,
     projectPath: nextScopePath,
   });
 }

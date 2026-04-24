@@ -1,4 +1,4 @@
-import { Play, Sparkles, Square } from "lucide-react";
+import { Play, MessageCircle, Square, Code } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import {
@@ -66,6 +66,7 @@ export function SqlCell({
   ai,
 }: SqlCellProps) {
   const consoleApiRef = useRef<SqlConsoleApi | null>(null);
+  const [consoleApi, setConsoleApi] = useState<SqlConsoleApi | null>(null);
   const syncTimeoutRef = useRef<number | null>(null);
   const noticeRef = useRef<QueryNotice | null>(null);
   const runSucceededRef = useRef(false);
@@ -117,17 +118,17 @@ export function SqlCell({
   );
 
   useEffect(() => {
-    const api = consoleApiRef.current;
+    const api = consoleApi;
     const nextSql = cell.sqlDraft ?? "";
     if (!api || api.getQuery() === nextSql) {
       return;
     }
 
     api.setQuery(nextSql);
-  }, [cell.sqlDraft]);
+  }, [cell.sqlDraft, consoleApi]);
 
   useEffect(() => {
-    const api = consoleApiRef.current;
+    const api = consoleApi;
     if (!bootstrapSql || !api) {
       if (!bootstrapSql) {
         appliedBootstrapKeyRef.current = null;
@@ -154,7 +155,12 @@ export function SqlCell({
     }
 
     onBootstrapConsumed?.();
-  }, [bootstrapSql, cell.id, onBootstrapConsumed]);
+  }, [bootstrapSql, cell.id, consoleApi, onBootstrapConsumed]);
+
+  const handleConsoleApiChange = useCallback((api: SqlConsoleApi | null) => {
+    consoleApiRef.current = api;
+    setConsoleApi(api);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -382,7 +388,7 @@ export function SqlCell({
               )}
               onClick={() => handleSelectMode("ai")}
             >
-              <Sparkles className="size-3.5" />
+              <MessageCircle className="size-3.5" />
               Chat
             </Button>
             <Button
@@ -398,6 +404,7 @@ export function SqlCell({
               )}
               onClick={() => handleSelectMode("sql")}
             >
+              <Code className="size-3.5" />
               SQL
             </Button>
           </div>
@@ -442,9 +449,7 @@ export function SqlCell({
             aria-hidden={!isChatMode}
             className={cn(
               "p-0 [grid-area:1/1] transition-opacity duration-200 ease-out",
-              isChatMode
-                ? "opacity-100"
-                : "pointer-events-none opacity-0",
+              isChatMode ? "opacity-100" : "pointer-events-none opacity-0",
             )}
             onSubmit={(event) => {
               event.preventDefault();
@@ -532,9 +537,7 @@ export function SqlCell({
             aria-hidden={isChatMode}
             className={cn(
               "[grid-area:1/1] transition-opacity duration-200 ease-out",
-              isChatMode
-                ? "pointer-events-none opacity-0"
-                : "opacity-100",
+              isChatMode ? "pointer-events-none opacity-0" : "opacity-100",
             )}
           >
             <SqlConsole
@@ -546,9 +549,7 @@ export function SqlCell({
               showInlineResults={false}
               showRunControls={false}
               showKeyboardHint={false}
-              onApiChangeAction={(api) => {
-                consoleApiRef.current = api;
-              }}
+              onApiChangeAction={handleConsoleApiChange}
               onQueryChangeAction={handleQueryChange}
               onSuccessAction={handleSuccess}
               onNoticeAction={handleNotice}

@@ -145,6 +145,7 @@ async function reconcileProjectOwnedDashboards(
 async function reconcileProjectOwnedNotebooks(
   parsed: ParsedProjectArtifacts,
   deps: ProjectArtifactImportDeps,
+  projectId?: string | null,
 ): Promise<string[]> {
   const importedPaths = new Set(
     parsed.publishedNotebooks
@@ -154,6 +155,10 @@ async function reconcileProjectOwnedNotebooks(
   const deletedIds: string[] = [];
 
   for (const notebook of await deps.listAnalysisNotebooks()) {
+    if (projectId && notebook.projectId !== projectId) {
+      continue;
+    }
+
     const projectPath = normalizeProjectPath(notebook.projectPath);
     if (!isProjectOwnedPath(projectPath, "pondview/notebooks")) {
       continue;
@@ -172,12 +177,13 @@ async function reconcileProjectOwnedNotebooks(
 async function reconcileImportedProjectArtifacts(
   parsed: ParsedProjectArtifacts,
   deps: ProjectArtifactImportDeps,
+  options: ProjectArtifactHydrationOptions,
 ): Promise<ProjectImportReconciliationResult> {
   const [deletedSavedQueryIds, deletedDashboardIds, deletedNotebookIds] =
     await Promise.all([
       reconcileProjectOwnedQueries(parsed, deps),
       reconcileProjectOwnedDashboards(parsed, deps),
-      reconcileProjectOwnedNotebooks(parsed, deps),
+      reconcileProjectOwnedNotebooks(parsed, deps, options.projectId),
     ]);
 
   return {
@@ -249,7 +255,11 @@ export async function importParsedProjectArtifacts(
     defaultSourceRef:
       options.defaultSourceRef ?? parsed.projectManifest?.defaultSourceRef,
   };
-  const reconciliation = await reconcileImportedProjectArtifacts(parsed, deps);
+  const reconciliation = await reconcileImportedProjectArtifacts(
+    parsed,
+    deps,
+    hydrationOptions,
+  );
 
   const dashboards = [];
   for (const dashboard of parsed.dashboards) {

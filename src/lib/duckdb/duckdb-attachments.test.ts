@@ -50,4 +50,36 @@ describe("buildAttachmentPlan", () => {
       `ATTACH 'md:my_db' AS "motherduck";`,
     ]);
   });
+
+  test("loads httpfs for remote DuckDB attachments on native runtimes", () => {
+    const plan = buildAttachmentPlan({
+      type: "duckdb_remote",
+      identifier: "s3://bucket/warehouse.duckdb",
+      alias: "warehouse",
+      readOnly: true,
+    });
+
+    expect(plan.alias).toBe("warehouse");
+    expect(plan.statements).toEqual([
+      "INSTALL httpfs;",
+      "LOAD httpfs;",
+      `ATTACH 's3://bucket/warehouse.duckdb' AS "warehouse" (READ_ONLY);`,
+    ]);
+  });
+
+  test("can skip extension loading for remote DuckDB attachments in WASM", () => {
+    const plan = buildAttachmentPlan(
+      {
+        type: "duckdb_remote",
+        identifier: "https://example.com/warehouse.duckdb",
+        alias: "warehouse",
+        readOnly: true,
+      },
+      { skipExtensionLoad: true },
+    );
+
+    expect(plan.statements).toEqual([
+      `ATTACH 'https://example.com/warehouse.duckdb' AS "warehouse" (READ_ONLY);`,
+    ]);
+  });
 });

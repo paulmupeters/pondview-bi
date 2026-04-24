@@ -197,6 +197,7 @@ type DuckdbReplProps = {
   onNoticeAction?: (notice: QueryNotice | null) => void;
   onRunStateChangeAction?: (isRunning: boolean) => void;
   onRunSuccessAction?: () => void;
+  onRunShortcutAction?: () => void;
   inlineResults?: boolean;
   onResultChangeAction?: (
     result: {
@@ -333,6 +334,7 @@ export function DuckdbRepl({
   onNoticeAction,
   onRunStateChangeAction,
   onRunSuccessAction,
+  onRunShortcutAction,
   inlineResults = true,
   onResultChangeAction,
   showRunControls = true,
@@ -794,6 +796,7 @@ export function DuckdbRepl({
             onNoticeAction={onNoticeAction}
             onRunStateChangeAction={onRunStateChangeAction}
             onCancelQueryAction={handleCancelQuery}
+            onRunShortcutAction={onRunShortcutAction}
             showInlineResults={inlineResults}
             showRunControls={false}
             onSuccessAction={({
