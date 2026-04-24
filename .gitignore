@@ -72,8 +72,9 @@ semantic-layer/models/sources.yml
 # ai
 .rules/
 
-# vitepress
-.vitepress/
+# vitepress build output and cache
+.vitepress/dist/
+.vitepress/cache/
 
 # analyzer
 stats.html
