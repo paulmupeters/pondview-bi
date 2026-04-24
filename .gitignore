@@ -79,7 +79,7 @@ semantic-layer/models/sources.yml
 .cursor/
 .agents/
 .pi/
-
+skills-lock.json
 # vitepress build output and cache
 .vitepress/dist/
 .vitepress/cache/
