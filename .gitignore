@@ -74,6 +74,11 @@ semantic-layer/models/sources.yml
 
 # ai
 .rules/
+.worktrees/
+.claude/
+.cursor/
+.agents/
+.pi/
 
 # vitepress build output and cache
 .vitepress/dist/
@@ -87,6 +92,3 @@ notes.md
 
 # local app state
 /state/
-.worktrees/
-.claude/
-.cursor/
