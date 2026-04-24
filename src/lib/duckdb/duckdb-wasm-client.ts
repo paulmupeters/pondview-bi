@@ -3,7 +3,10 @@ import {
   DuckDBDataProtocol,
 } from "@duckdb/duckdb-wasm";
 
-import { DuckdbWasmProvider } from "@/lib/duckdb/duckdb-wasm";
+import {
+  DUCKDB_WASM_BASE_TABLE_PATH,
+  DuckdbWasmProvider,
+} from "@/lib/duckdb/duckdb-wasm";
 import { RequestQueue } from "@/lib/duckdb/request-queue";
 
 interface ExecuteOptions {
@@ -23,6 +26,13 @@ type QueryResult = Awaited<ReturnType<AsyncDuckDBConnection["query"]>>;
 
 const MUTATING_SQL_PATTERN =
   /^\s*(?:WITH\b[\s\S]+?\)\s*)?(?:CREATE|INSERT|UPDATE|DELETE|ALTER|DROP|TRUNCATE|COPY|ATTACH|DETACH|CHECKPOINT|VACUUM|MERGE|REPLACE)\b/i;
+const DUCKDB_WASM_WAL_PATH = `${DUCKDB_WASM_BASE_TABLE_PATH}.wal`;
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
 
 export function shouldCheckpointAfterSql(sql: string): boolean {
   return MUTATING_SQL_PATTERN.test(sql);
@@ -159,6 +169,66 @@ export class DuckdbWasmClient {
       const createTableSql = `CREATE OR REPLACE TABLE ${this.quoteIdentifier(options.schema)}.${this.quoteIdentifier(options.tableName)} AS SELECT * FROM ${sourceSql}`;
       await con.query(createTableSql);
       await this.checkpoint(con);
+    };
+
+    return this.queue.add(task);
+  }
+
+  async exportDatabaseSnapshot(): Promise<Uint8Array> {
+    const task = async () => {
+      const { db, con } = await this.provider.getCurrentWasm();
+      await con.query("CHECKPOINT");
+      await db.flushFiles();
+
+      try {
+        return await db.copyFileToBuffer(DUCKDB_WASM_BASE_TABLE_PATH);
+      } catch (error) {
+        try {
+          return await db.copyFileToBuffer(
+            DuckdbWasmProvider.getDatabasePath(),
+          );
+        } catch {
+          throw error;
+        }
+      }
+    };
+
+    return this.queue.add(task);
+  }
+
+  async importDatabaseSnapshot(
+    snapshot: ArrayBuffer | Uint8Array,
+  ): Promise<void> {
+    const bytes =
+      snapshot instanceof Uint8Array ? snapshot : new Uint8Array(snapshot);
+    if (bytes.byteLength === 0) {
+      throw new Error("DuckDB snapshot file is empty.");
+    }
+
+    const task = async () => {
+      await this.provider.destroy();
+
+      const rootHandle = await navigator.storage.getDirectory();
+      const fileHandle = await rootHandle.getFileHandle(
+        DUCKDB_WASM_BASE_TABLE_PATH,
+        { create: true },
+      );
+      const writable = await fileHandle.createWritable();
+      try {
+        await writable.write(toArrayBuffer(bytes));
+      } finally {
+        await writable.close();
+      }
+
+      try {
+        await rootHandle.removeEntry(DUCKDB_WASM_WAL_PATH);
+      } catch (error) {
+        if (
+          !(error instanceof DOMException && error.name === "NotFoundError")
+        ) {
+          throw error;
+        }
+      }
     };
 
     return this.queue.add(task);

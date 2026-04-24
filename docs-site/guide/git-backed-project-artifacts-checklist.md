@@ -59,12 +59,15 @@ implementation phases.
 
 ## Phase 6: Snapshot artifact flow
 
-- [ ] Define a non-Git `.duckdb` snapshot export/import model
-- [ ] Decide which runtime schemas and metadata belong in snapshots
-- [ ] Add `Export Snapshot` and `Import Snapshot` product flows
-- [ ] Document that snapshots are portable runtime artifacts, not canonical
+- [x] Define a non-Git `.duckdb` snapshot export/import model
+- [~] Decide which runtime schemas and metadata belong in snapshots
+      The v1 browser flow snapshots the whole local DuckDB WASM database file,
+      including runtime metadata and materialized state. Remote Bridge and
+      DuckDB HTTP snapshot scoping remains future work.
+- [x] Add `Export Snapshot` and `Import Snapshot` product flows
+- [x] Document that snapshots are portable runtime artifacts, not canonical
       authored project source
-- [ ] Keep snapshot files out of Git by default
+- [x] Keep snapshot files out of Git by default
 
 ## Phase 7: Canonical project integration
 
@@ -77,6 +80,6 @@ implementation phases.
 - [x] Add automatic project file writes for authored assets when a project is
       open
 - [x] Add conflict handling for existing dashboards, queries, and notebooks
-- [ ] Add docs for source binding setup and round-trip workflows
+- [x] Add docs for source binding setup and round-trip workflows
 - [x] Decide how project files are written from browser environments
 - [ ] Move toward project files as the canonical write path for authored assets

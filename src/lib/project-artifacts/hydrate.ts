@@ -206,6 +206,12 @@ function buildNotebookSqlPayload(input: {
   ) {
     payload.visualType = "card";
     payload.cardConfig = input.visualConfig;
+  } else if (
+    "configType" in input.visualConfig &&
+    input.visualConfig.configType === "text"
+  ) {
+    payload.visualType = "text";
+    payload.textConfig = input.visualConfig;
   } else {
     payload.visualType = "chart";
     payload.chartConfig = input.visualConfig;

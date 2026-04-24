@@ -151,7 +151,7 @@ export function AiResponseBanner({
         </div>
       ) : null}
 
-      {hasTranscript ? (
+      {hasTranscript && (!hasResponse || isResponseExpanded) ? (
         <div className="border-t px-3 py-1.5">
           <Button
             type="button"

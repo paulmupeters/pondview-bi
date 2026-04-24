@@ -882,6 +882,47 @@ not project source. A project artifact may reference the idea of a snapshot in a
 future feature, but it must not store snapshot ids or snapshot-specific runtime
 schemas in Git.
 
+### v1 browser snapshot model
+
+The first product snapshot flow is scoped to the browser-local DuckDB WASM
+runtime:
+
+- `Export Snapshot` checkpoints the local DuckDB WASM database and downloads the
+  OPFS database file as a `.duckdb` artifact.
+- `Import Snapshot` replaces the local DuckDB WASM database with a selected
+  `.duckdb` file, clears the local WAL file, switches the runtime preference to
+  DuckDB WASM, and reloads the app.
+- Browser workspace metadata is not reset by snapshot import. Chats, saved
+  project files, and preferences remain browser-local workspace state.
+- Snapshot files are runtime artifacts and remain gitignored by default.
+
+Remote runtime snapshots for Bridge and DuckDB HTTP are future work. Those
+flows need explicit server-side file handling because the browser cannot safely
+copy arbitrary remote database files by itself.
+
+## Source Binding And Round-Trip Workflow
+
+Project archives contain the tracked `pondview/...` file tree plus hidden
+browser project metadata. They may also include `pondview.sources.local.json`
+when a user intentionally exports local bindings for handoff, but that file is
+gitignored and should not be committed.
+
+To round-trip a project archive:
+
+1. Open Settings.
+2. Use `Import Project` and select a `.zip` project archive.
+3. Ensure `pondview.sources.local.json` contains bindings for every referenced
+   `sourceRef`.
+4. Pondview hydrates the default runtime from `defaultSourceRef` when a matching
+   local binding exists.
+5. Edit dashboards, saved queries, views, or published notebooks normally.
+6. Use `Export Project` to download the updated tracked file tree.
+
+For Git-backed collaboration, unzip the project archive into a repository and
+commit only the tracked project files under `pondview/`. Keep
+`pondview.sources.local.json`, `.duckdb` snapshots, WAL files, and other runtime
+state out of Git.
+
 ## Automatic Project Asset Workflow
 
 The v1 product workflow is:

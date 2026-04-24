@@ -54,6 +54,9 @@ next-env.d.ts
 *.duckdb
 *db.wal
 
+# pondview project local bindings
+pondview.sources.local.json
+
 # semantic-layer
 semantic-layer/data
 semantic-layer/models
@@ -75,6 +78,8 @@ semantic-layer/models/sources.yml
 # vitepress build output and cache
 .vitepress/dist/
 .vitepress/cache/
+docs-site/.vitepress/dist/
+docs-site/.vitepress/cache/
 
 # analyzer
 stats.html

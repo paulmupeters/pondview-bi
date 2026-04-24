@@ -57,6 +57,7 @@ import {
   setDuckDbHttpConfigInStorage,
   setDuckDbHttpSessionAuth,
 } from "@/lib/duckdb/duckdb-http-browser";
+import { DuckdbWasmClient } from "@/lib/duckdb/duckdb-wasm-client";
 import { importParsedProjectArtifacts } from "@/lib/project-artifacts/import";
 import { parseProjectArtifactFileSet } from "@/lib/project-artifacts/parse";
 import {
@@ -121,6 +122,12 @@ function projectDownloadName(name: string): string {
   return `pondview-project-${slug}.zip`;
 }
 
+function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
 export default function SettingsPage() {
   const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
   const [model, setModel] = useState("");
@@ -150,6 +157,9 @@ export default function SettingsPage() {
   const [isExportingWorkspace, setIsExportingWorkspace] = useState(false);
   const [isImportingWorkspace, setIsImportingWorkspace] = useState(false);
   const [isResettingWorkspace, setIsResettingWorkspace] = useState(false);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const [isExportingSnapshot, setIsExportingSnapshot] = useState(false);
+  const [isImportingSnapshot, setIsImportingSnapshot] = useState(false);
   const [openProjectName, setOpenProjectName] = useState("");
   const [openProjectStatus, setOpenProjectStatus] = useState<string | null>(
     null,
@@ -162,6 +172,7 @@ export default function SettingsPage() {
   const [isImportingProject, setIsImportingProject] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
   const projectImportFileRef = useRef<HTMLInputElement>(null);
+  const snapshotImportFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
   const bridgeRuntimeState = useBridgeRuntimeState();
   const duckDbHttpConfig = useDuckDbHttpConfig();
@@ -460,6 +471,76 @@ export default function SettingsPage() {
     }
   };
 
+  const handleExportSnapshot = async () => {
+    setIsExportingSnapshot(true);
+    setSnapshotError(null);
+
+    try {
+      const snapshot = await new DuckdbWasmClient().exportDatabaseSnapshot();
+      const blob = new Blob([uint8ArrayToArrayBuffer(snapshot)], {
+        type: "application/vnd.duckdb.database",
+      });
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = `pondview-snapshot-${new Date()
+        .toISOString()
+        .slice(0, 10)}.duckdb`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(href);
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      setSnapshotError(
+        error instanceof Error ? error.message : "Failed to export snapshot.",
+      );
+    } finally {
+      setIsExportingSnapshot(false);
+    }
+  };
+
+  const handleImportSnapshot = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (
+      !confirm(
+        "Import this DuckDB snapshot and replace the local DuckDB WASM database? Browser workspace metadata is not reset.",
+      )
+    ) {
+      if (snapshotImportFileRef.current) {
+        snapshotImportFileRef.current.value = "";
+      }
+      return;
+    }
+
+    setIsImportingSnapshot(true);
+    setSnapshotError(null);
+
+    try {
+      await new DuckdbWasmClient().importDatabaseSnapshot(
+        await file.arrayBuffer(),
+      );
+      setSqlBackendPreferenceInStorage("duckdb-wasm");
+      location.reload();
+    } catch (error) {
+      setSnapshotError(
+        error instanceof Error ? error.message : "Failed to import snapshot.",
+      );
+    } finally {
+      setIsImportingSnapshot(false);
+      if (snapshotImportFileRef.current) {
+        snapshotImportFileRef.current.value = "";
+      }
+    }
+  };
+
   const handleOpenProject = async () => {
     const normalizedName = openProjectName.trim();
     if (!normalizedName) {
@@ -533,7 +614,7 @@ export default function SettingsPage() {
         project,
         files: await listOpenProjectFiles(),
       });
-      const blob = new Blob([archive], {
+      const blob = new Blob([uint8ArrayToArrayBuffer(archive)], {
         type: "application/zip",
       });
       const href = URL.createObjectURL(blob);
@@ -1145,6 +1226,49 @@ export default function SettingsPage() {
                   onChange={handleImportProject}
                 />
               </div>
+            </div>
+          </Card>
+
+          <Card className="p-6 mb-6">
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Runtime Snapshot</h2>
+                <p className="text-sm text-muted-foreground">
+                  Export or import the local DuckDB WASM database as a non-Git
+                  `.duckdb` runtime artifact.
+                </p>
+              </div>
+
+              {snapshotError && (
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {snapshotError}
+                </p>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => void handleExportSnapshot()}
+                  disabled={isExportingSnapshot || isImportingSnapshot}
+                >
+                  {isExportingSnapshot ? "Exporting..." : "Export Snapshot"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => snapshotImportFileRef.current?.click()}
+                  disabled={isImportingSnapshot || isExportingSnapshot}
+                >
+                  {isImportingSnapshot ? "Importing..." : "Import Snapshot"}
+                </Button>
+              </div>
+
+              <input
+                ref={snapshotImportFileRef}
+                type="file"
+                accept=".duckdb,application/octet-stream,application/vnd.duckdb.database"
+                className="hidden"
+                onChange={handleImportSnapshot}
+              />
             </div>
           </Card>
 
