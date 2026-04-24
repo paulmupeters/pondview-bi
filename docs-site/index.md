@@ -1,6 +1,6 @@
 # Pondview Docs
 
-This docs site now has two tracks:
+Documentation for Pondview — getting started, runtime behavior, connected data, and architecture reference.
 
 - [User Guide](/user/) for people using Pondview day to day
 - [Technical Guide](/guide/) for developer-focused and runtime documentation

@@ -1,26 +1,24 @@
-# Technical Guide
+# Docs Map
 
-This section is for developer-focused, runtime, and architecture documentation.
+This docs set covers setup, runtime behavior, connected data, uploads, and persistence.
 
-If you want a simpler product walkthrough, use the [User Guide](/user/).
-
-## Runtime and setup
-
-- [Getting Started](/introduction/getting-started)
-- [AI Provider Configuration](/introduction/ai-provider-configuration)
-- [SQL Runtime Backends](/introduction/sql-runtime-backends)
-- [Connected Data Sources](/introduction/connected-data-sources)
-- [Git-Backed Project Artifacts](/introduction/git-backed-project-artifacts)
-- [Uploads and Browser Storage](/introduction/uploads-and-browser-storage)
-- [Workspace Persistence](/introduction/workspace-persistence)
-
-## DuckDB and execution
-
-- [DuckDB Extension Connections](/introduction/duckdb-extension-connections)
-- [DuckDB Usage Overview](/introduction/duckdb-usage-overview)
-- [DuckDB WASM Usage](/introduction/duckdb-wasm-usage)
-- [Semantic Layer Materialization](/introduction/semantic-layer-materialization)
-
-## Product workflow docs
-
+- [Getting Started](/guide/getting-started)
 - [Dashboards](/guide/dashboards)
+- [AI Provider Configuration](/guide/ai-provider-configuration)
+- [Connected Data Sources](/guide/connected-data-sources)
+- [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
+- [SQL Runtime Backends](/guide/sql-runtime-backends)
+- [Workspace Persistence](/guide/workspace-persistence)
+- [Git-Backed Project Artifacts](/guide/git-backed-project-artifacts)
+- [DuckDB Extension Connections](/guide/duckdb-extension-connections)
+- [DuckDB Usage Overview](/guide/duckdb-usage-overview)
+- [DuckDB WASM Usage](/guide/duckdb-wasm-usage)
+- [Semantic Layer Materialization](/guide/semantic-layer-materialization)
+
+## Suggested reading path
+
+1. Start with [Getting Started](/guide/getting-started).
+2. Review [AI Provider Configuration](/guide/ai-provider-configuration) and [SQL Runtime Backends](/guide/sql-runtime-backends).
+3. Add data with [Connected Data Sources](/guide/connected-data-sources) and [Uploads and Browser Storage](/guide/uploads-and-browser-storage).
+4. Build reusable views with [Dashboards](/guide/dashboards).
+5. Understand state management in [Workspace Persistence](/guide/workspace-persistence).
