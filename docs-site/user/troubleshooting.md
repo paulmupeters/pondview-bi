@@ -20,7 +20,7 @@ Possible causes:
 - You are using a remote source while the app is running in DuckDB/WASM mode
 - The remote runtime is unavailable
 
-If you are connecting Postgres, MySQL, SQLite, or MotherDuck, check the runtime in **Settings** and review [SQL Runtime Backends](/introduction/sql-runtime-backends).
+If you are connecting Postgres, MySQL, SQLite, or MotherDuck, check the runtime in **Settings** and review [SQL Runtime Backends](/guide/sql-runtime-backends).
 
 ## My uploaded file is missing or not showing up
 
@@ -30,7 +30,7 @@ Try:
 - Confirming the file type is supported
 - Refreshing the workspace if the browser state looks stale
 
-If you are relying on browser-local state, also review [Uploads and Browser Storage](/introduction/uploads-and-browser-storage).
+If you are relying on browser-local state, also review [Uploads and Browser Storage](/guide/uploads-and-browser-storage).
 
 ## Results do not look right
 
@@ -51,13 +51,13 @@ Check:
 - Whether the selected runtime is the one you expect
 - Whether you are looking at a saved dashboard result rather than an exploratory chat result
 
-If you need the technical execution model, see [Dashboards](/guide/dashboards) and [DuckDB Usage Overview](/introduction/duckdb-usage-overview).
+If you need the technical execution model, see [Dashboards](/guide/dashboards) and [DuckDB Usage Overview](/guide/duckdb-usage-overview).
 
 ## Still stuck?
 
 Use these deeper references:
 
-- [AI Provider Configuration](/introduction/ai-provider-configuration)
-- [Connected Data Sources](/introduction/connected-data-sources)
-- [SQL Runtime Backends](/introduction/sql-runtime-backends)
-- [Workspace Persistence](/introduction/workspace-persistence)
+- [AI Provider Configuration](/guide/ai-provider-configuration)
+- [Connected Data Sources](/guide/connected-data-sources)
+- [SQL Runtime Backends](/guide/sql-runtime-backends)
+- [Workspace Persistence](/guide/workspace-persistence)

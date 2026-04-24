@@ -28,4 +28,4 @@ No. You can start with natural-language questions. Manual mode and the technical
 
 Most day-to-day app settings, including AI configuration, are browser-first. Some data source and runtime setups also depend on the runtime you are using.
 
-For the lower-level details, see [Workspace Persistence](/introduction/workspace-persistence) and [AI Provider Configuration](/introduction/ai-provider-configuration).
+For the lower-level details, see [Workspace Persistence](/guide/workspace-persistence) and [AI Provider Configuration](/guide/ai-provider-configuration).

@@ -31,7 +31,7 @@ The most common flow looks like this:
 6. Tweak the visual so it looks the way you want
 7. Add it to a dashboard
 
-If you have not done the earlier setup yet, start with [Getting Started](/introduction/getting-started).
+If you have not done the earlier setup yet, start with [Getting Started](/guide/getting-started).
 
 ## Start from chat
 
@@ -199,8 +199,8 @@ Now you have the beginning of a reusable dashboard instead of a single conversat
 
 ## Related guides
 
-- [Getting Started](/introduction/getting-started)
-- [Connected Data Sources](/introduction/connected-data-sources)
-- [Uploads and Browser Storage](/introduction/uploads-and-browser-storage)
-- [AI Provider Configuration](/introduction/ai-provider-configuration)
-- [Workspace Persistence](/introduction/workspace-persistence)
+- [Getting Started](/guide/getting-started)
+- [Connected Data Sources](/guide/connected-data-sources)
+- [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
+- [AI Provider Configuration](/guide/ai-provider-configuration)
+- [Workspace Persistence](/guide/workspace-persistence)
