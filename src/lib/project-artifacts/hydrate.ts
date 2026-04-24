@@ -242,6 +242,7 @@ export function hydratePublishedNotebookArtifact(
   const notebook: WorkspaceAnalysisNotebook = {
     id: artifact.manifest.id,
     title: artifact.manifest.title,
+    projectPath: artifact.rootPath,
     createdAt: now,
     updatedAt: now,
   };
@@ -306,6 +307,7 @@ export function hydrateDashboardArtifact(
     homeDbIdentifier: dashboardSource.dbIdentifier,
     homeSqlBackend: dashboardSource.sqlBackend,
     storageStatus: getStorageStatus(dashboardSource.sqlBackend),
+    projectPath: artifact.rootPath,
   };
 
   const measures = artifact.measures.map<WorkspaceDashboardMeasure>(

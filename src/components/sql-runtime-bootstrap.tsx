@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { refreshDuckDbHttpHealth } from "@/lib/duckdb/duckdb-http-browser";
+import { hydrateOpenProjectRuntimeFromStore } from "@/lib/project-runtime";
 import {
   refreshBridgeHealth,
   resolveSelectedSqlBackend,
@@ -43,6 +44,9 @@ export function startSqlRuntimeBootstrap(
 
 export function SqlRuntimeBootstrap() {
   useEffect(() => {
+    void hydrateOpenProjectRuntimeFromStore().catch((error) => {
+      console.error("Failed to hydrate project runtime defaults:", error);
+    });
     return startSqlRuntimeBootstrap();
   }, []);
 

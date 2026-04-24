@@ -1,9 +1,12 @@
+import { Squares2X2Icon } from "@heroicons/react/24/outline";
 import { Eye, Pencil } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
+import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { Button } from "@/components/ui/button";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
+import type { TextConfig } from "@/lib/types";
 
 type TextCellProps = {
   cell: AnalysisCellState;
@@ -45,6 +48,10 @@ export function TextCell({ cell, notebookSession }: TextCellProps) {
 
   // Auto-switch to preview when content is present and user hasn't interacted
   const hasContent = content.trim().length > 0;
+  const textConfig: TextConfig = {
+    configType: "text",
+    content,
+  };
 
   return (
     <div className="space-y-2">
@@ -52,27 +59,52 @@ export function TextCell({ cell, notebookSession }: TextCellProps) {
         <span className="text-xs font-medium text-muted-foreground">
           Markdown
         </span>
-        {hasContent && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs"
-            onClick={() => setShowPreview((prev) => !prev)}
-          >
-            {showPreview ? (
-              <>
-                <Pencil className="size-3" />
-                Edit
-              </>
-            ) : (
-              <>
-                <Eye className="size-3" />
-                Preview
-              </>
-            )}
-          </Button>
-        )}
+        <div className="flex items-center gap-1">
+          {hasContent ? (
+            <AddToDashboardDialog
+              trigger={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                >
+                  <Squares2X2Icon className="size-3" />
+                  Add to dashboard
+                </Button>
+              }
+              sql="SELECT 1"
+              visualOptions={[
+                {
+                  type: "text",
+                  config: textConfig,
+                },
+              ]}
+              defaultVisualType="text"
+            />
+          ) : null}
+          {hasContent && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={() => setShowPreview((prev) => !prev)}
+            >
+              {showPreview ? (
+                <>
+                  <Pencil className="size-3" />
+                  Edit
+                </>
+              ) : (
+                <>
+                  <Eye className="size-3" />
+                  Preview
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </div>
       {showPreview ? (
         <div className="min-h-[80px] rounded-md border border-input bg-background p-3 text-sm">

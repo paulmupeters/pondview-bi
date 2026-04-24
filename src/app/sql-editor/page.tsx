@@ -16,6 +16,10 @@ import { VisualizationPanel } from "@/components/visualization-panel";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
+import {
+  getProjectRuntimeDefaultCatalogContext,
+  getProjectRuntimeDefaultDbIdentifier,
+} from "@/lib/project-runtime";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config, Result } from "@/lib/types";
@@ -27,7 +31,14 @@ import {
   renameSavedSqlQuery,
   type SavedSqlQuery,
   saveSqlQuery,
+  upsertSavedSqlQuery,
 } from "@/lib/workspace/saved-sql-queries-repo";
+import {
+  type DraftSqlQuery,
+  deriveDraftSqlQueryName,
+  listDraftSqlQueries,
+  replaceDraftSqlQueries,
+} from "@/lib/workspace/sql-editor-drafts-repo";
 
 const VISUALIZATION_ID = "sql-editor-repl";
 const SQL_EDITOR_RESULTS_HEIGHT_STORAGE_KEY = "sql-editor-results-height";
@@ -49,25 +60,86 @@ type SqlQueryTab = {
   id: string;
   name: string;
   sql: string;
+  status: "draft" | "saved";
+  savedQueryId: string | null;
+  createdAt: number;
+  updatedAt: number;
+  isNameManuallySet: boolean;
   result: SqlResultPayload | null;
   manualChartConfig: Config | null;
   manualCardConfig: CardConfig | null;
   manualVisualType: "table" | "chart" | "card" | null;
 };
 
-function createEmptyTab(index: number): SqlQueryTab {
+function createDraftTab(index: number, timestamp = Date.now()): SqlQueryTab {
   const id =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   return {
     id,
-    name: `Query ${index}`,
+    name: `Draft ${index}`,
     sql: "",
+    status: "draft",
+    savedQueryId: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    isNameManuallySet: false,
     result: null,
     manualChartConfig: null,
     manualCardConfig: null,
     manualVisualType: null,
+  };
+}
+
+function createTabFromDraft(draft: DraftSqlQuery): SqlQueryTab {
+  return {
+    id: draft.id,
+    name: draft.name,
+    sql: draft.sql,
+    status: "draft",
+    savedQueryId: null,
+    createdAt: draft.createdAt,
+    updatedAt: draft.updatedAt,
+    isNameManuallySet: true,
+    result: null,
+    manualChartConfig: null,
+    manualCardConfig: null,
+    manualVisualType: null,
+  };
+}
+
+function createTabFromSavedQuery(query: SavedSqlQuery): SqlQueryTab {
+  return {
+    id:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: query.name,
+    sql: query.sql,
+    status: "saved",
+    savedQueryId: query.id,
+    createdAt: query.createdAt,
+    updatedAt: query.updatedAt,
+    isNameManuallySet: true,
+    result: null,
+    manualChartConfig: null,
+    manualCardConfig: null,
+    manualVisualType: null,
+  };
+}
+
+function shouldPersistDraftTab(tab: SqlQueryTab): boolean {
+  return tab.status === "draft" && tab.sql.trim().length > 0;
+}
+
+function toDraftSqlQuery(tab: SqlQueryTab): DraftSqlQuery {
+  return {
+    id: tab.id,
+    name: tab.name,
+    sql: tab.sql,
+    createdAt: tab.createdAt,
+    updatedAt: tab.updatedAt,
   };
 }
 
@@ -81,10 +153,12 @@ export function getInitialSqlEditorDb(
 export default function SqlEditorPage() {
   const effectiveSqlBackend = useResolvedSqlBackend();
 
-  const [selectedDb, setSelectedDb] = useState<string | undefined>();
+  const [selectedDb, setSelectedDb] = useState<string | undefined>(() =>
+    getProjectRuntimeDefaultDbIdentifier(),
+  );
   const [selectedCatalogContext, setSelectedCatalogContext] = useState<
     string | null
-  >(null);
+  >(() => getProjectRuntimeDefaultCatalogContext());
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false);
   const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(
     null,
@@ -104,10 +178,10 @@ export default function SqlEditorPage() {
   });
   const [isResizingPanels, setIsResizingPanels] = useState(false);
   const [queryTabs, setQueryTabs] = useState<SqlQueryTab[]>(() => [
-    createEmptyTab(1),
+    createDraftTab(1),
   ]);
-  const [activeQueryTabId, setActiveQueryTabId] = useState<string>(
-    () => queryTabs[0]?.id ?? "",
+  const [activeQueryTabId, setActiveQueryTabId] = useState<string>(() =>
+    queryTabs[0]?.id ? queryTabs[0].id : "",
   );
   const nextQueryTabIndexRef = useRef(2);
   const editorResultsContainerRef = useRef<HTMLDivElement>(null);
@@ -115,6 +189,7 @@ export default function SqlEditorPage() {
   const resizePointerIdRef = useRef<number | null>(null);
   const resizeStartYRef = useRef(0);
   const resizeStartEditorHeightRef = useRef(0);
+  const lastSyncedQueryTabIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -125,26 +200,55 @@ export default function SqlEditorPage() {
     }
   }, [editorHeight]);
 
-  // Load saved SQL queries on mount
   useEffect(() => {
     let cancelled = false;
-    const loadSavedQueries = async () => {
+    const loadSqlEditorState = async () => {
       try {
-        const rows = await listSavedSqlQueries();
+        const [savedQueries, draftQueries] = await Promise.all([
+          listSavedSqlQueries(),
+          listDraftSqlQueries(),
+        ]);
         if (!cancelled) {
-          setStoredSqlQueries(rows);
+          setStoredSqlQueries(savedQueries);
+          if (draftQueries.length > 0) {
+            const draftTabs = draftQueries.map((draft) =>
+              createTabFromDraft(draft),
+            );
+            setQueryTabs(draftTabs);
+            setActiveQueryTabId(draftTabs[0]?.id ?? "");
+            nextQueryTabIndexRef.current = draftTabs.length + 1;
+          }
         }
       } catch (error) {
         if (!cancelled) {
-          console.error("Failed to load saved SQL queries:", error);
+          console.error("Failed to load SQL editor state:", error);
         }
       }
     };
-    void loadSavedQueries();
+    void loadSqlEditorState();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const draftSqlQueries = useMemo(
+    () =>
+      queryTabs
+        .filter((tab) => shouldPersistDraftTab(tab))
+        .map((tab) => toDraftSqlQuery(tab))
+        .sort((left, right) => right.updatedAt - left.updatedAt),
+    [queryTabs],
+  );
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void replaceDraftSqlQueries(draftSqlQueries);
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [draftSqlQueries]);
 
   const activeTab = useMemo(
     () => queryTabs.find((tab) => tab.id === activeQueryTabId) ?? null,
@@ -154,6 +258,19 @@ export default function SqlEditorPage() {
   const manualChartConfig = activeTab?.manualChartConfig ?? null;
   const manualCardConfig = activeTab?.manualCardConfig ?? null;
   const manualVisualType = activeTab?.manualVisualType ?? null;
+
+  useEffect(() => {
+    if (!sqlConsoleApi || !activeTab) {
+      return;
+    }
+
+    if (lastSyncedQueryTabIdRef.current === activeTab.id) {
+      return;
+    }
+
+    sqlConsoleApi.setQuery(activeTab.sql);
+    lastSyncedQueryTabIdRef.current = activeTab.id;
+  }, [activeTab, sqlConsoleApi]);
 
   const patchActiveTab = useCallback(
     (patch: Partial<SqlQueryTab>) => {
@@ -250,17 +367,42 @@ export default function SqlEditorPage() {
   const activeVisualizationId =
     visualizations.length > 0 ? VISUALIZATION_ID : null;
 
+  const handleSqlQueryChange = useCallback(
+    (nextSql: string) => {
+      setQueryTabs((prev) =>
+        prev.map((tab) => {
+          if (tab.id !== activeQueryTabId) {
+            return tab;
+          }
+
+          const nextUpdatedAt = Date.now();
+          if (tab.status === "saved") {
+            return {
+              ...tab,
+              sql: nextSql,
+              updatedAt: nextUpdatedAt,
+            };
+          }
+
+          return {
+            ...tab,
+            sql: nextSql,
+            name: tab.isNameManuallySet
+              ? tab.name
+              : deriveDraftSqlQueryName(nextSql, nextUpdatedAt),
+            updatedAt: nextUpdatedAt,
+          };
+        }),
+      );
+    },
+    [activeQueryTabId],
+  );
+
   const handleSelectQueryTab = useCallback(
     (tabId: string) => {
       if (tabId === activeQueryTabId) return;
       const target = queryTabs.find((tab) => tab.id === tabId);
       if (!target) return;
-      const currentSql = sqlConsoleApi?.getQuery() ?? "";
-      setQueryTabs((prev) =>
-        prev.map((tab) =>
-          tab.id === activeQueryTabId ? { ...tab, sql: currentSql } : tab,
-        ),
-      );
       setActiveQueryTabId(tabId);
       if (sqlConsoleApi) {
         sqlConsoleApi.setQuery(target.sql);
@@ -273,20 +415,14 @@ export default function SqlEditorPage() {
   const handleAddQueryTab = useCallback(() => {
     const nextIndex = nextQueryTabIndexRef.current;
     nextQueryTabIndexRef.current = nextIndex + 1;
-    const newTab = createEmptyTab(nextIndex);
-    const currentSql = sqlConsoleApi?.getQuery() ?? "";
-    setQueryTabs((prev) => [
-      ...prev.map((tab) =>
-        tab.id === activeQueryTabId ? { ...tab, sql: currentSql } : tab,
-      ),
-      newTab,
-    ]);
+    const newTab = createDraftTab(nextIndex);
+    setQueryTabs((prev) => [...prev, newTab]);
     setActiveQueryTabId(newTab.id);
     if (sqlConsoleApi) {
       sqlConsoleApi.setQuery("");
       sqlConsoleApi.focus();
     }
-  }, [activeQueryTabId, sqlConsoleApi]);
+  }, [sqlConsoleApi]);
 
   const handleCloseQueryTab = useCallback(
     (tabId: string) => {
@@ -294,7 +430,7 @@ export default function SqlEditorPage() {
         if (prev.length <= 1) {
           const nextIndex = nextQueryTabIndexRef.current;
           nextQueryTabIndexRef.current = nextIndex + 1;
-          const replacement = createEmptyTab(nextIndex);
+          const replacement = createDraftTab(nextIndex);
           setActiveQueryTabId(replacement.id);
           if (sqlConsoleApi) {
             sqlConsoleApi.setQuery("");
@@ -324,20 +460,85 @@ export default function SqlEditorPage() {
     [activeQueryTabId, sqlConsoleApi],
   );
 
-  const handleRenameQueryTab = useCallback((tabId: string) => {
-    if (typeof window === "undefined") return;
-    setQueryTabs((prev) => {
-      const target = prev.find((tab) => tab.id === tabId);
-      if (!target) return prev;
-      const requested = window.prompt("Rename tab:", target.name);
-      if (requested === null) return prev;
-      const normalized = requested.trim();
-      if (!normalized) return prev;
-      return prev.map((tab) =>
-        tab.id === tabId ? { ...tab, name: normalized } : tab,
+  const handleRenameStoredSqlQuery = useCallback(
+    async (queryId: string) => {
+      const existing = storedSqlQueries.find((entry) => entry.id === queryId);
+      if (!existing) return;
+
+      const requestedName =
+        typeof window !== "undefined"
+          ? window.prompt("Rename saved query:", existing.name)
+          : existing.name;
+      if (requestedName === null) return;
+
+      const normalizedName = requestedName.trim();
+      if (!normalizedName) return;
+
+      const duplicateByName = storedSqlQueries.find(
+        (entry) =>
+          entry.id !== queryId &&
+          entry.name.trim().toLowerCase() === normalizedName.toLowerCase(),
       );
-    });
-  }, []);
+      if (duplicateByName && typeof window !== "undefined") {
+        const shouldReplace = window.confirm(
+          `A saved query named "${normalizedName}" already exists. Replace it?`,
+        );
+        if (!shouldReplace) return;
+      }
+
+      try {
+        const rows = await renameSavedSqlQuery(queryId, normalizedName);
+        setStoredSqlQueries(rows);
+        setQueryTabs((prev) =>
+          prev.map((tab) =>
+            tab.savedQueryId === queryId
+              ? {
+                  ...tab,
+                  name: normalizedName,
+                  updatedAt: Date.now(),
+                }
+              : tab,
+          ),
+        );
+      } catch (error) {
+        console.error("Failed to rename saved SQL query:", error);
+      }
+    },
+    [storedSqlQueries],
+  );
+
+  const handleRenameQueryTab = useCallback(
+    (tabId: string) => {
+      if (typeof window === "undefined") return;
+      const target = queryTabs.find((tab) => tab.id === tabId);
+      if (!target) return;
+
+      if (target.status === "saved" && target.savedQueryId) {
+        void handleRenameStoredSqlQuery(target.savedQueryId);
+        return;
+      }
+
+      const requested = window.prompt("Rename draft:", target.name);
+      if (requested === null) return;
+
+      const normalized = requested.trim();
+      if (!normalized) return;
+
+      setQueryTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === tabId
+            ? {
+                ...tab,
+                name: normalized,
+                updatedAt: Date.now(),
+                isNameManuallySet: true,
+              }
+            : tab,
+        ),
+      );
+    },
+    [handleRenameStoredSqlQuery, queryTabs],
+  );
 
   const handleInsertTableIntoSql = useCallback(
     (payload: ExplorerInsertPayload) => {
@@ -392,6 +593,42 @@ export default function SqlEditorPage() {
       const sql = (sqlOverride ?? sqlConsoleApi?.getQuery() ?? "").trim();
       if (!sql) return;
 
+      if (activeTab?.status === "saved" && activeTab.savedQueryId) {
+        const existing = storedSqlQueries.find(
+          (entry) => entry.id === activeTab.savedQueryId,
+        );
+        if (!existing) {
+          return;
+        }
+
+        setIsSavingStoredSqlQuery(true);
+        try {
+          const rows = await upsertSavedSqlQuery({
+            ...existing,
+            sql,
+            updatedAt: Date.now(),
+          });
+          setStoredSqlQueries(rows);
+          setQueryTabs((prev) =>
+            prev.map((tab) =>
+              tab.id === activeTab.id
+                ? {
+                    ...tab,
+                    sql,
+                    name: existing.name,
+                    updatedAt: Date.now(),
+                  }
+                : tab,
+            ),
+          );
+        } catch (error) {
+          console.error("Failed to save SQL query changes:", error);
+        } finally {
+          setIsSavingStoredSqlQuery(false);
+        }
+        return;
+      }
+
       const suggestedName = deriveSavedSqlQueryName(sql);
       const requestedName =
         typeof window !== "undefined"
@@ -417,76 +654,116 @@ export default function SqlEditorPage() {
       try {
         const rows = await saveSqlQuery({ sql, name: normalizedName });
         setStoredSqlQueries(rows);
+        const saved = rows.find(
+          (entry) =>
+            entry.name.trim().toLowerCase() === normalizedName.toLowerCase(),
+        );
+        if (saved && activeTab) {
+          setQueryTabs((prev) =>
+            prev.map((tab) =>
+              tab.id === activeTab.id
+                ? {
+                    ...tab,
+                    name: saved.name,
+                    sql: saved.sql,
+                    status: "saved",
+                    savedQueryId: saved.id,
+                    updatedAt: saved.updatedAt,
+                    isNameManuallySet: true,
+                  }
+                : tab,
+            ),
+          );
+        }
       } catch (error) {
         console.error("Failed to save SQL query:", error);
       } finally {
         setIsSavingStoredSqlQuery(false);
       }
     },
-    [isSavingStoredSqlQuery, sqlConsoleApi, storedSqlQueries],
+    [activeTab, isSavingStoredSqlQuery, sqlConsoleApi, storedSqlQueries],
   );
 
   const handleSelectStoredSqlQuery = useCallback(
     (queryId: string) => {
       const selected = storedSqlQueries.find((entry) => entry.id === queryId);
-      if (!selected || !sqlConsoleApi) return;
-      sqlConsoleApi.setQuery(selected.sql);
-      sqlConsoleApi.focus();
-      setQueryTabs((prev) =>
-        prev.map((tab) =>
-          tab.id === activeQueryTabId
-            ? { ...tab, sql: selected.sql, name: selected.name || tab.name }
-            : tab,
-        ),
-      );
+      if (!selected) return;
+
+      const existingTab = queryTabs.find((tab) => tab.savedQueryId === queryId);
+      if (existingTab) {
+        setActiveQueryTabId(existingTab.id);
+        if (sqlConsoleApi) {
+          sqlConsoleApi.setQuery(existingTab.sql);
+          sqlConsoleApi.focus();
+        }
+        return;
+      }
+
+      const savedTab = createTabFromSavedQuery(selected);
+      setQueryTabs((prev) => [...prev, savedTab]);
+      setActiveQueryTabId(savedTab.id);
+      if (sqlConsoleApi) {
+        sqlConsoleApi.setQuery(savedTab.sql);
+        sqlConsoleApi.focus();
+      }
     },
-    [activeQueryTabId, sqlConsoleApi, storedSqlQueries],
+    [queryTabs, sqlConsoleApi, storedSqlQueries],
+  );
+
+  const handleSelectDraftSqlQuery = useCallback(
+    (draftId: string) => {
+      const existingTab = queryTabs.find((tab) => tab.id === draftId);
+      if (!existingTab) {
+        return;
+      }
+
+      setActiveQueryTabId(existingTab.id);
+      if (sqlConsoleApi) {
+        sqlConsoleApi.setQuery(existingTab.sql);
+        sqlConsoleApi.focus();
+      }
+    },
+    [queryTabs, sqlConsoleApi],
+  );
+
+  const handleDeleteDraftSqlQuery = useCallback(
+    (draftId: string) => {
+      handleCloseQueryTab(draftId);
+    },
+    [handleCloseQueryTab],
+  );
+
+  const handleRenameDraftSqlQuery = useCallback(
+    (draftId: string) => {
+      handleRenameQueryTab(draftId);
+    },
+    [handleRenameQueryTab],
   );
 
   const handleDeleteStoredSqlQuery = useCallback(async (queryId: string) => {
     try {
       const rows = await deleteSavedSqlQuery(queryId);
       setStoredSqlQueries(rows);
+      setQueryTabs((prev) =>
+        prev.map((tab) =>
+          tab.savedQueryId === queryId
+            ? {
+                ...tab,
+                status: "draft",
+                savedQueryId: null,
+                updatedAt: Date.now(),
+                isNameManuallySet: true,
+              }
+            : tab,
+        ),
+      );
     } catch (error) {
       console.error("Failed to delete saved SQL query:", error);
     }
   }, []);
 
-  const handleRenameStoredSqlQuery = useCallback(
-    async (queryId: string) => {
-      const existing = storedSqlQueries.find((entry) => entry.id === queryId);
-      if (!existing) return;
-
-      const requestedName =
-        typeof window !== "undefined"
-          ? window.prompt("Rename saved SQL query:", existing.name)
-          : existing.name;
-      if (requestedName === null) return;
-
-      const normalizedName = requestedName.trim();
-      if (!normalizedName) return;
-
-      const duplicateByName = storedSqlQueries.find(
-        (entry) =>
-          entry.id !== queryId &&
-          entry.name.trim().toLowerCase() === normalizedName.toLowerCase(),
-      );
-      if (duplicateByName && typeof window !== "undefined") {
-        const shouldReplace = window.confirm(
-          `A saved query named "${normalizedName}" already exists. Replace it?`,
-        );
-        if (!shouldReplace) return;
-      }
-
-      try {
-        const rows = await renameSavedSqlQuery(queryId, normalizedName);
-        setStoredSqlQueries(rows);
-      } catch (error) {
-        console.error("Failed to rename saved SQL query:", error);
-      }
-    },
-    [storedSqlQueries],
-  );
+  const saveQueryLabel =
+    activeTab?.status === "saved" ? "Save changes" : "Save";
 
   const queryTabsStrip = (
     <div
@@ -509,12 +786,22 @@ export default function SqlEditorPage() {
           >
             <button
               type="button"
-              className="max-w-[160px] truncate font-medium"
+              className="flex max-w-[200px] items-center gap-1 truncate font-medium"
               onClick={() => handleSelectQueryTab(tab.id)}
               onDoubleClick={() => handleRenameQueryTab(tab.id)}
-              title={tab.name}
+              title={`${tab.name} (${tab.status})`}
             >
-              {tab.name}
+              <span className="truncate">{tab.name}</span>
+              <span
+                className={cn(
+                  "shrink-0 rounded px-1 py-0.5 text-[9px] uppercase tracking-wide",
+                  tab.status === "saved"
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                    : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+                )}
+              >
+                {tab.status}
+              </span>
             </button>
             <button
               type="button"
@@ -667,6 +954,10 @@ export default function SqlEditorPage() {
                 showCollapseToggle
                 className="shrink-0 bg-background"
                 sqlBackend={effectiveSqlBackend}
+                draftSqlQueries={draftSqlQueries}
+                onSelectDraftSqlQuery={handleSelectDraftSqlQuery}
+                onDeleteDraftSqlQuery={handleDeleteDraftSqlQuery}
+                onRenameDraftSqlQuery={handleRenameDraftSqlQuery}
                 storedSqlQueries={storedSqlQueries}
                 onSelectStoredSqlQuery={handleSelectStoredSqlQuery}
                 onDeleteStoredSqlQuery={(queryId) => {
@@ -694,6 +985,7 @@ export default function SqlEditorPage() {
                     selectedDbIdentifier={selectedDb}
                     catalogContext={selectedCatalogContext}
                     onConsoleApiChangeAction={setSqlConsoleApi}
+                    onQueryChangeAction={handleSqlQueryChange}
                     inlineResults={false}
                     onResultChangeAction={handleResultChange}
                     showRunControls={false}
@@ -703,6 +995,7 @@ export default function SqlEditorPage() {
                     showSaveQueryButton
                     onSaveQueryAction={handleSaveStoredSqlQuery}
                     isSavingQuery={isSavingStoredSqlQuery}
+                    saveQueryLabel={saveQueryLabel}
                     chartConfig={manualChartConfig}
                     editorMinHeight="100%"
                     editorMaxHeight="100%"

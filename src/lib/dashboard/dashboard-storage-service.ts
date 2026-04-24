@@ -16,6 +16,10 @@ import {
   dedupeJoinDefinitions,
   type JoinDefinition,
 } from "@/lib/joins/graph";
+import {
+  deleteDashboardProjectArtifact,
+  syncDashboardProjectArtifact,
+} from "@/lib/project-store/dashboard-project-artifact-sync";
 import { runQuery } from "@/lib/sql/run-query";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
@@ -91,6 +95,7 @@ type DashboardSummary = Pick<
   | "homeDbIdentifier"
   | "homeSqlBackend"
   | "storageStatus"
+  | "projectPath"
 >;
 
 function sqlNullableString(value: string | null | undefined): string {
@@ -402,6 +407,7 @@ function normalizeDashboardRow(
       normalizeSqlBackend(row.home_sql_backend) ??
       normalizeSqlBackend(row.runtime_backend),
     storageStatus: normalizeStorageStatus(row.storage_status),
+    projectPath: toNullableString(row.project_path),
   };
 }
 
@@ -634,7 +640,8 @@ async function ensureMetadataSchema(
       active_snapshot_id TEXT,
       home_db_identifier TEXT,
       home_sql_backend TEXT,
-      storage_status TEXT NOT NULL DEFAULT 'best-effort'
+      storage_status TEXT NOT NULL DEFAULT 'best-effort',
+      project_path TEXT
     );`,
     `CREATE TABLE IF NOT EXISTS ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts (
       id TEXT PRIMARY KEY,
@@ -731,6 +738,8 @@ async function ensureMetadataSchema(
      ADD COLUMN IF NOT EXISTS runtime_backend TEXT;`,
     `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboards
      ADD COLUMN IF NOT EXISTS active_snapshot_id TEXT;`,
+    `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboards
+     ADD COLUMN IF NOT EXISTS project_path TEXT;`,
     `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
      ADD COLUMN IF NOT EXISTS sql TEXT;`,
     `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
@@ -1026,7 +1035,8 @@ async function upsertDashboardRecord(
       active_snapshot_id,
       home_db_identifier,
       home_sql_backend,
-      storage_status
+      storage_status,
+      project_path
     ) VALUES (
       ${quoteString(dashboard.id)},
       ${quoteString(dashboard.title)},
@@ -1038,7 +1048,8 @@ async function upsertDashboardRecord(
       ${sqlNullableString(dashboard.activeSnapshotId)},
       ${sqlNullableString(dashboard.homeDbIdentifier)},
       ${sqlNullableBackend(dashboard.homeSqlBackend)},
-      ${quoteString(dashboard.storageStatus ?? "best-effort")}
+      ${quoteString(dashboard.storageStatus ?? "best-effort")},
+      ${sqlNullableString(dashboard.projectPath)}
     );`,
   );
 }
@@ -1207,6 +1218,39 @@ async function touchDashboard(
     ...existing,
     updatedAt: now,
   });
+  await syncDashboardToOpenProject(target, dashboardId);
+}
+
+async function syncDashboardToOpenProject(
+  target: DashboardStorageTarget,
+  dashboardId: string,
+): Promise<void> {
+  const dashboard = await getDashboardFromTarget(target, dashboardId);
+  if (!dashboard) {
+    return;
+  }
+
+  const [charts, measures, slicers, joins] = await Promise.all([
+    listChartsFromTarget(target, dashboardId),
+    listMeasuresFromTarget(target, dashboardId),
+    listDashboardSlicersFromTarget(target, dashboardId),
+    listJoinDefsFromTarget(target, dashboardId),
+  ]);
+
+  const synced = await syncDashboardProjectArtifact({
+    dashboard,
+    charts,
+    measures,
+    slicers,
+    joins,
+  });
+
+  if (synced && synced.projectPath !== dashboard.projectPath) {
+    await upsertDashboardRecord(target, {
+      ...dashboard,
+      projectPath: synced.projectPath,
+    });
+  }
 }
 
 function assertDashboardSourceCompatible(
@@ -1369,6 +1413,7 @@ export class DashboardStorageService {
       id,
       resolveJoinDefsForNewDashboard(input.joinDefs),
     );
+    await syncDashboardToOpenProject(target, id);
     return { id };
   }
 
@@ -1469,6 +1514,7 @@ export class DashboardStorageService {
       title,
       updatedAt: now,
     });
+    await syncDashboardToOpenProject(resolved.target, dashboardId);
 
     return { updated: true };
   }
@@ -1492,6 +1538,7 @@ export class DashboardStorageService {
       autoFitRows: input.autoFitRows ?? resolved.dashboard.autoFitRows,
       updatedAt: input.now ?? Date.now(),
     });
+    await syncDashboardToOpenProject(resolved.target, dashboardId);
 
     return { updated: true };
   }
@@ -1905,6 +1952,10 @@ export class DashboardStorageService {
       `DELETE FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboards
        WHERE id = ${quoteString(dashboardId)};`,
     ]);
+    await deleteDashboardProjectArtifact({
+      title: resolved.dashboard.title,
+      projectPath: resolved.dashboard.projectPath ?? null,
+    });
 
     return { deleted: true };
   }

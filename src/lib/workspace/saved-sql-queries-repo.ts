@@ -1,4 +1,8 @@
 import { nanoid } from "nanoid";
+import {
+  deleteSavedQueryProjectArtifact,
+  syncSavedQueryProjectArtifact,
+} from "@/lib/project-store/project-artifact-sync";
 import { getPreference, setPreference } from "@/lib/workspace/preferences-repo";
 
 const SAVED_SQL_QUERIES_KEY = "workspace:saved-sql-queries";
@@ -191,6 +195,14 @@ export async function saveSqlQuery(input: {
 
   const persisted = next.slice(0, MAX_SAVED_SQL_QUERIES);
   await setPreference(SAVED_SQL_QUERIES_KEY, persisted);
+  const savedQuery = persisted.find(
+    (entry) =>
+      entry.sql === normalizedSql &&
+      normalizeName(entry.name) === normalizeName(normalizedName),
+  );
+  if (savedQuery) {
+    await syncSavedQueryProjectArtifact(savedQuery.id);
+  }
   return persisted;
 }
 
@@ -228,6 +240,7 @@ export async function upsertSavedSqlQuery(
   ].slice(0, MAX_SAVED_SQL_QUERIES);
 
   await setPreference(SAVED_SQL_QUERIES_KEY, next);
+  await syncSavedQueryProjectArtifact(upserted.id);
   return next;
 }
 
@@ -263,6 +276,7 @@ export async function renameSavedSqlQuery(
   ].slice(0, MAX_SAVED_SQL_QUERIES);
 
   await setPreference(SAVED_SQL_QUERIES_KEY, next);
+  await syncSavedQueryProjectArtifact(updated.id);
   return next;
 }
 
@@ -270,7 +284,11 @@ export async function deleteSavedSqlQuery(
   id: string,
 ): Promise<SavedSqlQuery[]> {
   const existing = await listSavedSqlQueries();
+  const deleted = existing.find((entry) => entry.id === id) ?? null;
   const next = existing.filter((entry) => entry.id !== id);
   await setPreference(SAVED_SQL_QUERIES_KEY, next);
+  if (deleted) {
+    await deleteSavedQueryProjectArtifact(deleted);
+  }
   return next;
 }

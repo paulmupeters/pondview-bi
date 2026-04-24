@@ -38,6 +38,7 @@ import {
 } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
+import type { DraftSqlQuery } from "@/lib/workspace/sql-editor-drafts-repo";
 import { Separator } from "./ui/separator";
 
 type ExplorerTableGroup = {
@@ -293,6 +294,10 @@ interface ConnectedDataPanelProps {
   showCollapseToggle?: boolean;
   refreshToken?: number;
   sqlBackend?: SqlBackend;
+  draftSqlQueries?: DraftSqlQuery[];
+  onSelectDraftSqlQuery?: (draftId: string) => void;
+  onDeleteDraftSqlQuery?: (draftId: string) => void;
+  onRenameDraftSqlQuery?: (draftId: string) => void;
   storedSqlQueries?: SavedSqlQuery[];
   onSelectStoredSqlQuery?: (queryId: string) => void;
   onDeleteStoredSqlQuery?: (queryId: string) => void;
@@ -313,6 +318,10 @@ export function ConnectedDataPanel({
   showCollapseToggle = false,
   refreshToken,
   sqlBackend = "duckdb-wasm",
+  draftSqlQueries = [],
+  onSelectDraftSqlQuery,
+  onDeleteDraftSqlQuery,
+  onRenameDraftSqlQuery,
   storedSqlQueries = [],
   onSelectStoredSqlQuery,
   onDeleteStoredSqlQuery,
@@ -537,24 +546,30 @@ export function ConnectedDataPanel({
         </div>
       ));
 
-  const renderStoredSqlQueries = () => {
-    if (!showStoredSqlQueries) {
-      return null;
-    }
+  const renderQuerySection = (params: {
+    title: string;
+    emptyMessage: string;
+    queries: Array<{ id: string; name: string }>;
+    onSelect?: (id: string) => void;
+    onRename?: (id: string) => void;
+    onDelete?: (id: string) => void;
+  }) => {
+    const { emptyMessage, onDelete, onRename, onSelect, queries, title } =
+      params;
 
     return (
       <div className="flex max-h-56 flex-col gap-2 p-2">
         <p className="px-1 text-[10px] font-bold uppercase tracking-widest text-[#5C6658]">
-          Stored SQL Queries
+          {title}
         </p>
         <div className="min-h-0 overflow-y-auto">
-          {storedSqlQueries.length === 0 ? (
+          {queries.length === 0 ? (
             <p className="px-1 py-2 text-xs text-muted-foreground">
-              No stored queries yet.
+              {emptyMessage}
             </p>
           ) : (
             <div className="space-y-1">
-              {storedSqlQueries.map((query) => (
+              {queries.map((query) => (
                 <div
                   key={query.id}
                   className="group flex items-center gap-1 rounded px-1 py-1 hover:bg-sidebar-accent/40"
@@ -562,29 +577,29 @@ export function ConnectedDataPanel({
                   <button
                     type="button"
                     className="flex-1 truncate text-left text-xs font-mono text-sidebar-foreground"
-                    onClick={() => onSelectStoredSqlQuery?.(query.id)}
+                    onClick={() => onSelect?.(query.id)}
                     title={query.name}
                   >
                     {query.name}
                   </button>
-                  {onDeleteStoredSqlQuery || onRenameStoredSqlQuery ? (
+                  {onDelete || onRename ? (
                     <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      {onRenameStoredSqlQuery ? (
+                      {onRename ? (
                         <button
                           type="button"
                           className="rounded p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                          aria-label={`Rename stored query ${query.name}`}
-                          onClick={() => onRenameStoredSqlQuery(query.id)}
+                          aria-label={`Rename ${title.toLowerCase()} ${query.name}`}
+                          onClick={() => onRename(query.id)}
                         >
                           <PencilSquareIcon className="h-3.5 w-3.5" />
                         </button>
                       ) : null}
-                      {onDeleteStoredSqlQuery ? (
+                      {onDelete ? (
                         <button
                           type="button"
                           className="rounded p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                          aria-label={`Delete stored query ${query.name}`}
-                          onClick={() => onDeleteStoredSqlQuery(query.id)}
+                          aria-label={`Delete ${title.toLowerCase()} ${query.name}`}
+                          onClick={() => onDelete(query.id)}
                         >
                           <TrashIcon className="h-3.5 w-3.5" />
                         </button>
@@ -597,6 +612,34 @@ export function ConnectedDataPanel({
           )}
         </div>
       </div>
+    );
+  };
+
+  const renderStoredSqlQueries = () => {
+    if (!showStoredSqlQueries) {
+      return null;
+    }
+
+    return (
+      <>
+        {renderQuerySection({
+          title: "Draft Queries",
+          emptyMessage: "No draft queries yet.",
+          queries: draftSqlQueries,
+          onSelect: onSelectDraftSqlQuery,
+          onRename: onRenameDraftSqlQuery,
+          onDelete: onDeleteDraftSqlQuery,
+        })}
+        <Separator />
+        {renderQuerySection({
+          title: "Saved Queries",
+          emptyMessage: "No saved queries yet.",
+          queries: storedSqlQueries,
+          onSelect: onSelectStoredSqlQuery,
+          onRename: onRenameStoredSqlQuery,
+          onDelete: onDeleteStoredSqlQuery,
+        })}
+      </>
     );
   };
 

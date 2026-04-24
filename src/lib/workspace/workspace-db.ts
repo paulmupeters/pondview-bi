@@ -23,6 +23,7 @@ export interface WorkspaceMessage {
 export interface WorkspaceAnalysisNotebook {
   id: string;
   title: string | null;
+  projectPath?: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -81,6 +82,7 @@ export interface WorkspaceDashboard {
   homeDbIdentifier?: string | null;
   homeSqlBackend?: SqlBackend | null;
   storageStatus?: DashboardStorageStatus | null;
+  projectPath?: string | null;
 }
 
 export interface WorkspaceChart {
@@ -211,7 +213,7 @@ export type WorkspaceExport =
   | WorkspaceExportV3;
 
 export const WORKSPACE_DB_NAME = "pondview-workspace";
-export const WORKSPACE_DB_VERSION = 5;
+export const WORKSPACE_DB_VERSION = 6;
 const WORKSPACE_DB_NAME_OVERRIDE_KEY = "pondview-workspace-name-override";
 
 export const STORE_CHATS = "chats";
@@ -221,6 +223,8 @@ export const STORE_ANALYSIS_CELLS = "analysisCells";
 export const STORE_ANALYSIS_CELL_ENTRIES = "analysisCellEntries";
 export const STORE_PREFERENCES = "preferences";
 export const STORE_UPLOADED_FILE_BLOBS = "uploadedFileBlobs";
+export const STORE_PROJECT_SESSIONS = "projectSessions";
+export const STORE_PROJECT_FILES = "projectFiles";
 
 type StoreName =
   | typeof STORE_CHATS
@@ -229,7 +233,9 @@ type StoreName =
   | typeof STORE_ANALYSIS_CELLS
   | typeof STORE_ANALYSIS_CELL_ENTRIES
   | typeof STORE_PREFERENCES
-  | typeof STORE_UPLOADED_FILE_BLOBS;
+  | typeof STORE_UPLOADED_FILE_BLOBS
+  | typeof STORE_PROJECT_SESSIONS
+  | typeof STORE_PROJECT_FILES;
 
 let openDbPromise: Promise<IDBDatabase> | null = null;
 let workspaceTraceId = 0;
@@ -426,6 +432,22 @@ function createStores(db: IDBDatabase): void {
 
   if (!db.objectStoreNames.contains(STORE_UPLOADED_FILE_BLOBS)) {
     db.createObjectStore(STORE_UPLOADED_FILE_BLOBS, { keyPath: "id" });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_PROJECT_SESSIONS)) {
+    db.createObjectStore(STORE_PROJECT_SESSIONS, {
+      keyPath: "key",
+    });
+  }
+
+  if (!db.objectStoreNames.contains(STORE_PROJECT_FILES)) {
+    const projectFiles = db.createObjectStore(STORE_PROJECT_FILES, {
+      keyPath: "key",
+    });
+    projectFiles.createIndex("projectId", "projectId", { unique: false });
+    projectFiles.createIndex("projectIdPath", ["projectId", "path"], {
+      unique: true,
+    });
   }
 }
 
@@ -644,6 +666,8 @@ export async function clearWorkspaceDb(): Promise<void> {
       STORE_ANALYSIS_CELL_ENTRIES,
       STORE_PREFERENCES,
       STORE_UPLOADED_FILE_BLOBS,
+      STORE_PROJECT_SESSIONS,
+      STORE_PROJECT_FILES,
     ],
     "readwrite",
   );
@@ -655,6 +679,8 @@ export async function clearWorkspaceDb(): Promise<void> {
   tx.objectStore(STORE_ANALYSIS_CELL_ENTRIES).clear();
   tx.objectStore(STORE_PREFERENCES).clear();
   tx.objectStore(STORE_UPLOADED_FILE_BLOBS).clear();
+  tx.objectStore(STORE_PROJECT_SESSIONS).clear();
+  tx.objectStore(STORE_PROJECT_FILES).clear();
 
   await transactionDone(tx);
 }

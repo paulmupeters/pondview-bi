@@ -150,6 +150,7 @@ describe("project artifact hydration", () => {
       homeDbIdentifier: "md:analytics",
       homeSqlBackend: "duckdb-http",
       storageStatus: "shared",
+      projectPath: "pondview/dashboards/revenue",
     });
     expect(hydrated.dashboards[0]?.charts[0]).toMatchObject({
       id: "revenue:visual:revenue-table",
@@ -165,6 +166,9 @@ describe("project artifact hydration", () => {
       tags: ["finance"],
     });
     expect(hydrated.publishedNotebooks[0]?.cells).toHaveLength(2);
+    expect(hydrated.publishedNotebooks[0]?.notebook.projectPath).toBe(
+      "pondview/notebooks/revenue-notes",
+    );
     expect(hydrated.publishedNotebooks[0]?.cells[1]).toMatchObject({
       id: "revenue-notes:cell:top-customers",
       sqlDraft: "select customer, revenue from customers",

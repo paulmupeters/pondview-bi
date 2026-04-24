@@ -1,5 +1,6 @@
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
+import { deletePublishedNotebookProjectArtifact } from "@/lib/project-store/project-artifact-sync";
 import { getPreference, setPreference } from "@/lib/workspace/preferences-repo";
 import {
   deleteByKey,
@@ -504,6 +505,13 @@ export async function listRecentAnalysisNotebooks(
     }));
 }
 
+export async function listAnalysisNotebooks(): Promise<
+  WorkspaceAnalysisNotebook[]
+> {
+  await ensureAnalysisNotebookMigration();
+  return getAllFromStore<WorkspaceAnalysisNotebook>(STORE_ANALYSIS_NOTEBOOKS);
+}
+
 export async function getAnalysisNotebookById(
   notebookId: string,
 ): Promise<WorkspaceAnalysisNotebook | null> {
@@ -587,7 +595,11 @@ export async function upsertAnalysisNotebook(
   notebook: WorkspaceAnalysisNotebook,
 ): Promise<void> {
   await ensureAnalysisNotebookMigration();
-  await putOne(STORE_ANALYSIS_NOTEBOOKS, notebook);
+  await putOne(STORE_ANALYSIS_NOTEBOOKS, {
+    ...notebook,
+    projectPath:
+      typeof notebook.projectPath === "string" ? notebook.projectPath : null,
+  });
 }
 
 export async function upsertAnalysisCell(
@@ -620,6 +632,7 @@ export async function ensureAnalysisNotebook(
   await putOne(STORE_ANALYSIS_NOTEBOOKS, {
     id: notebookId,
     title,
+    projectPath: null,
     createdAt: now,
     updatedAt: now,
   });
@@ -643,6 +656,8 @@ export async function updateAnalysisNotebookTitle(
   await putOne(STORE_ANALYSIS_NOTEBOOKS, {
     ...existing,
     title: normalizedTitle,
+    projectPath:
+      typeof existing.projectPath === "string" ? existing.projectPath : null,
     updatedAt: now,
   });
 }
@@ -705,6 +720,17 @@ export async function deleteAnalysisCellEntry(entryId: string): Promise<void> {
 export async function deleteAnalysisNotebook(
   notebookId: string,
 ): Promise<void> {
+  const existing = await getByKey<WorkspaceAnalysisNotebook>(
+    STORE_ANALYSIS_NOTEBOOKS,
+    notebookId,
+  );
   await deleteAnalysisCellsByNotebookId(notebookId);
   await deleteByKey(STORE_ANALYSIS_NOTEBOOKS, notebookId);
+  if (existing) {
+    await deletePublishedNotebookProjectArtifact({
+      notebookId,
+      title: existing.title,
+      projectPath: existing.projectPath ?? null,
+    });
+  }
 }

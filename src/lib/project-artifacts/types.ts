@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { cardConfigSchema, configSchema, tableConfigSchema } from "@/lib/types";
+import {
+  cardConfigSchema,
+  configSchema,
+  tableConfigSchema,
+  textConfigSchema,
+} from "@/lib/types";
 
 const schemaVersionSchema = z.literal(1);
 const nonEmptyStringSchema = z.string().trim().min(1);
@@ -25,6 +30,7 @@ export const projectVisualConfigSchema = z.union([
   configSchema,
   tableConfigSchema,
   cardConfigSchema,
+  textConfigSchema,
 ]);
 
 export const projectManifestSchema = z.object({

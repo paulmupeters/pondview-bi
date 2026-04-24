@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useState } from "react";
 import { mergeAnalysisCellPatch } from "@/hooks/use-notebook-session.utils";
+import { syncPublishedNotebookProjectArtifact } from "@/lib/project-store/project-artifact-sync";
 import {
   deleteAnalysisCell,
   deleteAnalysisCellEntry,
@@ -125,6 +126,7 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
       setNotebook((prev) =>
         prev ? { ...prev, title: title?.trim() || null, updatedAt: now } : prev,
       );
+      await syncPublishedNotebookProjectArtifact(notebookId);
     },
     [notebookId],
   );
@@ -179,6 +181,7 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
         return [...prev, newCell];
       });
       setNotebook((prev) => (prev ? { ...prev, updatedAt: now } : prev));
+      await syncPublishedNotebookProjectArtifact(notebookId);
       return newCell;
     },
     [notebookId, cells.length],
@@ -257,6 +260,7 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
     ) => {
       const now = Date.now();
       let updatedCell: WorkspaceAnalysisCell | undefined;
+      let shouldSyncProjectArtifact = false;
       setCells((prev) =>
         prev.map((cell) => {
           if (cell.id !== cellId) {
@@ -271,14 +275,25 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
             return cell;
           }
           updatedCell = mergedCell;
+          shouldSyncProjectArtifact =
+            mergedCell.promptText !== cell.promptText ||
+            mergedCell.kind !== cell.kind ||
+            mergedCell.aiEnabled !== cell.aiEnabled ||
+            mergedCell.sqlEnabled !== cell.sqlEnabled ||
+            mergedCell.sqlDraft !== cell.sqlDraft ||
+            mergedCell.selectedDbIdentifier !== cell.selectedDbIdentifier ||
+            mergedCell.selectedCatalogContext !== cell.selectedCatalogContext;
           return mergedCell;
         }),
       );
       if (updatedCell) {
         await upsertAnalysisCell(updatedCell);
+        if (shouldSyncProjectArtifact && notebookId) {
+          await syncPublishedNotebookProjectArtifact(notebookId);
+        }
       }
     },
-    [],
+    [notebookId],
   );
 
   const deleteCell = useCallback(
@@ -293,6 +308,7 @@ export function useNotebookSession(notebookId: string | null): NotebookSession {
         next.delete(cellId);
         return next;
       });
+      await syncPublishedNotebookProjectArtifact(notebookId);
     },
     [notebookId],
   );

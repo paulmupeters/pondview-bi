@@ -134,10 +134,8 @@ const _SQL_SAMPLE_LINES: {
     content: (
       <>
         count(
-        <span className="text-purple-600 font-bold">
-          DISTINCT
-        </span> user_id) <span className="text-purple-600 font-bold">AS</span>{" "}
-        active_users
+        <span className="text-purple-600 font-bold">DISTINCT</span> user_id){" "}
+        <span className="text-purple-600 font-bold">AS</span> active_users
       </>
     ),
   },
@@ -218,6 +216,7 @@ type DuckdbReplProps = {
   showSaveQueryButton?: boolean;
   onSaveQueryAction?: (sql: string) => void | Promise<void>;
   isSavingQuery?: boolean;
+  saveQueryLabel?: string;
   chartConfig?: Config | null;
   editorMinHeight?: string;
   editorMaxHeight?: string;
@@ -343,6 +342,7 @@ export function DuckdbRepl({
   showSaveQueryButton = false,
   onSaveQueryAction,
   isSavingQuery = false,
+  saveQueryLabel = "Save Query",
   chartConfig: _chartConfig,
   editorMinHeight = "8rem",
   editorMaxHeight = inlineResults ? "20rem" : "14rem",
@@ -758,7 +758,7 @@ export function DuckdbRepl({
               onClick={handleSaveQuery}
               disabled={isSaveQueryDisabled}
             >
-              {isSavingQuery ? "Saving..." : "Save Query"}
+              {isSavingQuery ? "Saving..." : saveQueryLabel}
             </button>
           )}
 

@@ -102,6 +102,33 @@ describe("dashboard artifact export", () => {
         createdAt: 3,
         updatedAt: 4,
       },
+      {
+        id: "chart_789",
+        dashboardId: dashboard.id,
+        title: "Narrative",
+        description: null,
+        sql: "select 1",
+        sourceDescriptor: buildDashboardSourceDescriptor({
+          runtimeBackend: "duckdb-http",
+          dbIdentifier: "md:analytics",
+          catalogContext: "main",
+        }),
+        sourceDescriptorJson: null,
+        snapshotId: null,
+        dbIdentifier: "md:analytics",
+        catalogContext: "main",
+        sqlBackend: "duckdb-http",
+        chartConfigJson: JSON.stringify({
+          configType: "text",
+          title: "Narrative",
+          content: "Revenue is **up** this month.",
+        }),
+        semanticQueryJson: null,
+        exploreName: null,
+        position: 2,
+        createdAt: 3,
+        updatedAt: 4,
+      },
     ];
 
     const measures: WorkspaceDashboardMeasure[] = [
@@ -191,6 +218,11 @@ describe("dashboard artifact export", () => {
           metadataFile: "visuals/monthly-revenue.visual.json",
           sqlFile: "visuals/monthly-revenue.sql",
         },
+        {
+          id: "narrative",
+          metadataFile: "visuals/narrative.visual.json",
+          sqlFile: "visuals/narrative.sql",
+        },
       ],
     });
 
@@ -219,6 +251,17 @@ describe("dashboard artifact export", () => {
         legend: false,
         countMode: false,
         multipleLines: false,
+      },
+      catalogContext: "main",
+    });
+
+    expect(artifact.visuals[2]?.metadata).toEqual({
+      schemaVersion: 1,
+      id: "narrative",
+      config: {
+        configType: "text",
+        title: "Narrative",
+        content: "Revenue is **up** this month.",
       },
       catalogContext: "main",
     });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AiProvider,
   getAiProviderDisplayName,
@@ -57,7 +57,24 @@ import {
   setDuckDbHttpConfigInStorage,
   setDuckDbHttpSessionAuth,
 } from "@/lib/duckdb/duckdb-http-browser";
-
+import { importParsedProjectArtifacts } from "@/lib/project-artifacts/import";
+import { parseProjectArtifactFileSet } from "@/lib/project-artifacts/parse";
+import {
+  clearProjectRuntimeSelection,
+  hydrateProjectRuntimeFromParsedArtifacts,
+} from "@/lib/project-runtime";
+import {
+  getOpenProject,
+  listOpenProjectFiles,
+  setOpenProject,
+} from "@/lib/project-store";
+import {
+  type BrowserProjectBundle,
+  createBrowserProjectArchive,
+  parseBrowserProjectArchive,
+  parseBrowserProjectBundle,
+  restoreBrowserProjectBundle,
+} from "@/lib/project-store/project-transfer";
 import {
   refreshBridgeHealth,
   type SqlBackend,
@@ -94,6 +111,16 @@ const CSS_PLACEHOLDER = `:root{
 
 const CUSTOM_THEME_VALUE = "custom";
 
+function projectDownloadName(name: string): string {
+  const slug =
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "project";
+  return `pondview-project-${slug}.zip`;
+}
+
 export default function SettingsPage() {
   const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
   const [model, setModel] = useState("");
@@ -123,7 +150,18 @@ export default function SettingsPage() {
   const [isExportingWorkspace, setIsExportingWorkspace] = useState(false);
   const [isImportingWorkspace, setIsImportingWorkspace] = useState(false);
   const [isResettingWorkspace, setIsResettingWorkspace] = useState(false);
+  const [openProjectName, setOpenProjectName] = useState("");
+  const [openProjectStatus, setOpenProjectStatus] = useState<string | null>(
+    null,
+  );
+  const [openProjectError, setOpenProjectError] = useState<string | null>(null);
+  const [openProjectFileCount, setOpenProjectFileCount] = useState(0);
+  const [isOpeningProject, setIsOpeningProject] = useState(false);
+  const [isClosingProject, setIsClosingProject] = useState(false);
+  const [isExportingProject, setIsExportingProject] = useState(false);
+  const [isImportingProject, setIsImportingProject] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
+  const projectImportFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
   const bridgeRuntimeState = useBridgeRuntimeState();
   const duckDbHttpConfig = useDuckDbHttpConfig();
@@ -139,6 +177,16 @@ export default function SettingsPage() {
   const isDuckDbHttpConfigured = Boolean(duckDbHttpConfig);
   const selectedSqlBackend = useSelectedSqlBackend();
   const effectiveSqlBackend = useResolvedSqlBackend();
+
+  const refreshOpenProjectCard = useCallback(async () => {
+    const project = await getOpenProject();
+    const files = project ? await listOpenProjectFiles() : [];
+    setOpenProjectName(project?.name ?? "");
+    setOpenProjectStatus(
+      project ? `Open project: ${project.name}` : "No project open.",
+    );
+    setOpenProjectFileCount(files.length);
+  }, []);
 
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -166,7 +214,19 @@ export default function SettingsPage() {
     if (savedDuckDbHttpConfig) {
       void refreshDuckDbHttpHealth();
     }
-  }, []);
+
+    void (async () => {
+      try {
+        await refreshOpenProjectCard();
+      } catch (error) {
+        setOpenProjectError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load browser-local project state.",
+        );
+      }
+    })();
+  }, [refreshOpenProjectCard]);
 
   useEffect(() => {
     setDuckDbHttpHost(duckDbHttpConfig?.host ?? "");
@@ -397,6 +457,150 @@ export default function SettingsPage() {
           : "Failed to reset workspace data.";
       setWorkspaceError(message);
       setIsResettingWorkspace(false);
+    }
+  };
+
+  const handleOpenProject = async () => {
+    const normalizedName = openProjectName.trim();
+    if (!normalizedName) {
+      setOpenProjectError("Project name is required.");
+      setOpenProjectStatus(null);
+      return;
+    }
+
+    setIsOpeningProject(true);
+    setOpenProjectError(null);
+    setOpenProjectStatus(null);
+
+    try {
+      const now = Date.now();
+      await setOpenProject({
+        id: `browser-project-${
+          normalizedName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || "project"
+        }`,
+        name: normalizedName,
+        backingKind: "browser-indexeddb",
+        openedAt: now,
+        updatedAt: now,
+      });
+      clearProjectRuntimeSelection();
+      await refreshOpenProjectCard();
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      setOpenProjectError(
+        error instanceof Error ? error.message : "Failed to open project.",
+      );
+    } finally {
+      setIsOpeningProject(false);
+    }
+  };
+
+  const handleCloseProject = async () => {
+    setIsClosingProject(true);
+    setOpenProjectError(null);
+    setOpenProjectStatus(null);
+
+    try {
+      await setOpenProject(null);
+      clearProjectRuntimeSelection();
+      await refreshOpenProjectCard();
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      setOpenProjectError(
+        error instanceof Error ? error.message : "Failed to close project.",
+      );
+    } finally {
+      setIsClosingProject(false);
+    }
+  };
+
+  const handleExportProject = async () => {
+    setIsExportingProject(true);
+    setOpenProjectError(null);
+
+    try {
+      const project = await getOpenProject();
+      if (!project) {
+        throw new Error("Open a browser-local project before exporting it.");
+      }
+
+      const archive = createBrowserProjectArchive({
+        project,
+        files: await listOpenProjectFiles(),
+      });
+      const blob = new Blob([archive], {
+        type: "application/zip",
+      });
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = projectDownloadName(project.name);
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(href);
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      setOpenProjectError(
+        error instanceof Error ? error.message : "Failed to export project.",
+      );
+    } finally {
+      setIsExportingProject(false);
+    }
+  };
+
+  const handleImportProject = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setIsImportingProject(true);
+    setOpenProjectError(null);
+
+    try {
+      let bundle: BrowserProjectBundle;
+      if (file.name.toLowerCase().endsWith(".zip")) {
+        bundle = parseBrowserProjectArchive(await file.arrayBuffer());
+      } else {
+        try {
+          bundle = parseBrowserProjectBundle(await file.text());
+        } catch {
+          bundle = parseBrowserProjectArchive(await file.arrayBuffer());
+        }
+      }
+      const project = await restoreBrowserProjectBundle(bundle);
+      const parsedArtifacts = parseProjectArtifactFileSet(bundle.files);
+      await hydrateProjectRuntimeFromParsedArtifacts({
+        project,
+        parsed: parsedArtifacts,
+      });
+      await importParsedProjectArtifacts(parsedArtifacts, {
+        defaultSourceRef:
+          parsedArtifacts.projectManifest?.defaultSourceRef ??
+          project.defaultSourceRef ??
+          null,
+      });
+      await refreshOpenProjectCard();
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      setOpenProjectError(
+        error instanceof Error ? error.message : "Failed to import project.",
+      );
+    } finally {
+      setIsImportingProject(false);
+      if (projectImportFileRef.current) {
+        projectImportFileRef.current.value = "";
+      }
     }
   };
 
@@ -854,7 +1058,98 @@ export default function SettingsPage() {
           </Card>
 
           <Card className="p-6 mb-6">
-            <div className="space-y-4">
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Project Files</h2>
+                <p className="text-sm text-muted-foreground">
+                  Open a browser-local project backing store so saved queries
+                  and published notebooks write project artifact files
+                  automatically, then export or import that file tree as a
+                  project archive.
+                </p>
+              </div>
+
+              <div className="space-y-3 rounded-lg border p-4">
+                <div className="grid gap-2">
+                  <label
+                    htmlFor="open-project-name"
+                    className="text-sm font-medium"
+                  >
+                    Project Name
+                  </label>
+                  <Input
+                    id="open-project-name"
+                    type="text"
+                    name="open-project-name"
+                    autoComplete="off"
+                    value={openProjectName}
+                    onChange={(event) => setOpenProjectName(event.target.value)}
+                    placeholder="My Browser Project"
+                  />
+                </div>
+
+                <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    Browser-local project status
+                  </span>
+                  <span>{openProjectStatus ?? "No project open."}</span>
+                </div>
+
+                <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs flex items-center justify-between">
+                  <span className="text-muted-foreground">Tracked files</span>
+                  <span>{openProjectFileCount}</span>
+                </div>
+
+                {openProjectError && (
+                  <p className="text-sm text-red-600 dark:text-red-400">
+                    {openProjectError}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleOpenProject()}
+                    disabled={isOpeningProject}
+                  >
+                    {isOpeningProject ? "Opening..." : "Open Browser Project"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleCloseProject()}
+                    disabled={isClosingProject}
+                  >
+                    {isClosingProject ? "Closing..." : "Close Project"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleExportProject()}
+                    disabled={isExportingProject}
+                  >
+                    {isExportingProject ? "Exporting..." : "Export Project"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => projectImportFileRef.current?.click()}
+                    disabled={isImportingProject}
+                  >
+                    {isImportingProject ? "Importing..." : "Import Project"}
+                  </Button>
+                </div>
+
+                <input
+                  ref={projectImportFileRef}
+                  type="file"
+                  accept=".zip,.json,application/zip,application/json"
+                  className="hidden"
+                  onChange={handleImportProject}
+                />
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6 mb-6">
+            <div className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold mb-2">Workspace Data</h2>
                 <p className="text-sm text-muted-foreground">

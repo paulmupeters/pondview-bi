@@ -323,6 +323,17 @@ Import into a live workspace requires local bindings for every referenced
 `sourceRef`. Missing bindings are a runtime import error, not a Git artifact
 validation error.
 
+When a project has a `defaultSourceRef` with a matching local binding, opening
+or importing that project should hydrate the browser runtime defaults from that
+binding:
+
+- select the bound runtime backend as the active SQL backend preference
+- use the bound `dbIdentifier` as the default runtime target when present
+- use the bound `catalogContext` as the default runtime catalog when present
+
+This hydration prepares the live runtime for authored work without restoring
+cache tables, snapshot rows, or other materialized DuckDB state.
+
 ## Dashboard Artifact Spec
 
 Dashboards are the highest-value Git-backed artifact type and should be treated
@@ -616,9 +627,9 @@ Shared queries are the Git-backed form of reusable saved SQL queries.
 Shared views also live under `queries/` in v1. A view is represented as a query
 artifact whose SQL is intended to create or define a reusable relation.
 
-Queries and views are intended for reusable project assets. One-off scratch SQL
-may stay inside the SQL editor session, but saved/named queries should be
-project assets by default.
+Queries and views are intended for reusable project assets. One-off draft SQL
+may stay inside the SQL editor session and local workspace state, but saved and
+named queries should be project assets by default.
 
 ### Query directory layout
 
@@ -813,6 +824,23 @@ notebook scaffold:
 Running the notebook after import creates live result state in the existing
 workspace persistence layer, not in Git.
 
+### Project import reconciliation rules
+
+Importing a full project artifact set into the live workspace should reconcile
+project-owned assets by `projectPath`:
+
+- dashboards under `pondview/dashboards/...` that are absent from the imported
+  project should be deleted from the workspace
+- saved queries under `pondview/queries/...` that are absent from the imported
+  project should be deleted from the workspace
+- published notebooks under `pondview/notebooks/...` that are absent from the
+  imported project should be deleted from the workspace
+- assets without a `projectPath` should be treated as local workspace state and
+  left alone
+
+This keeps project import authoritative for project-owned assets without
+deleting local drafts or non-project workspace content.
+
 ## What Must Not Be Stored In Git
 
 The following state is explicitly excluded from Git-backed artifacts:
@@ -882,7 +910,7 @@ The target product workflow is:
 
 This workflow intentionally separates:
 
-- scratch exploration state
+- draft exploration state
 - authored project definitions
 - runtime/snapshot state
 - data and backup storage

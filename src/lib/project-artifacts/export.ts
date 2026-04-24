@@ -13,6 +13,7 @@ import {
   configSchema,
   normalizeChartConfig,
   tableConfigSchema,
+  textConfigSchema,
 } from "@/lib/types";
 import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 import type {
@@ -393,6 +394,10 @@ function parseVisualConfig(
 
     if ((parsed as { configType?: string }).configType === "card") {
       return stripUndefinedValues(cardConfigSchema.parse(parsed));
+    }
+
+    if ((parsed as { configType?: string }).configType === "text") {
+      return stripUndefinedValues(textConfigSchema.parse(parsed));
     }
   }
 

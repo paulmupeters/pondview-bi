@@ -23,7 +23,13 @@ import {
   isWasmLocalIdentifier,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
-import type { CardConfig, Config, TableConfig, VisualType } from "@/lib/types";
+import type {
+  CardConfig,
+  Config,
+  TableConfig,
+  TextConfig,
+  VisualType,
+} from "@/lib/types";
 import {
   addChartToDashboard,
   createDashboard,
@@ -48,7 +54,13 @@ export type AddToDashboardVisualOption =
       config: CardConfig;
       columns: { name: string; type?: string }[];
       rows: Record<string, unknown>[];
+    }
+  | {
+      type: "text";
+      config: TextConfig;
     };
+
+type AddToDashboardVisualType = VisualType | "text";
 
 type DashboardLite = { id: string; title: string | null; updatedAt: number };
 
@@ -89,7 +101,7 @@ export function AddToDashboardDialog({
   defaultTitle?: string;
   tooltip?: string;
   visualOptions: AddToDashboardVisualOption[];
-  defaultVisualType?: VisualType;
+  defaultVisualType?: AddToDashboardVisualType;
 }) {
   const [open, setOpen] = useState(false);
   const [dashboards, setDashboards] = useState<DashboardLite[]>([]);
@@ -98,8 +110,11 @@ export function AddToDashboardDialog({
     string | "new"
   >("new");
   const [newDashboardTitle, setNewDashboardTitle] = useState("My Dashboard");
+  const selectDashboardId = useId();
   const newDashboardTitleId = useId();
-  const resolvedDefaultType = useMemo<VisualType | null>(() => {
+  const visualTitleId = useId();
+  const visualDescriptionId = useId();
+  const resolvedDefaultType = useMemo<AddToDashboardVisualType | null>(() => {
     if (!visualOptions.length) return null;
     if (
       defaultVisualType &&
@@ -110,7 +125,7 @@ export function AddToDashboardDialog({
     return visualOptions[0]?.type ?? null;
   }, [defaultVisualType, visualOptions]);
   const [selectedVisualType, setSelectedVisualType] =
-    useState<VisualType | null>(resolvedDefaultType);
+    useState<AddToDashboardVisualType | null>(resolvedDefaultType);
 
   useEffect(() => {
     setSelectedVisualType((prev) => {
@@ -124,9 +139,10 @@ export function AddToDashboardDialog({
   type VisualFormValue = { title: string; description: string };
 
   const initialVisualState = useMemo<
-    Partial<Record<VisualType, VisualFormValue>>
+    Partial<Record<AddToDashboardVisualType, VisualFormValue>>
   >(() => {
-    const state: Partial<Record<VisualType, VisualFormValue>> = {};
+    const state: Partial<Record<AddToDashboardVisualType, VisualFormValue>> =
+      {};
     for (const option of visualOptions) {
       if (option.type === "chart") {
         state.chart = {
@@ -140,6 +156,11 @@ export function AddToDashboardDialog({
           title: option.config.title || "Table",
           description: option.config.description ?? "",
         };
+      } else if (option.type === "text") {
+        state.text = {
+          title: option.config.title || "",
+          description: "",
+        };
       } else {
         state.card = {
           title: option.config.title || option.columns[0]?.name || "Card",
@@ -151,7 +172,9 @@ export function AddToDashboardDialog({
   }, [defaultTitle, visualOptions]);
 
   const [visualFormState, setVisualFormState] =
-    useState<Partial<Record<VisualType, VisualFormValue>>>(initialVisualState);
+    useState<Partial<Record<AddToDashboardVisualType, VisualFormValue>>>(
+      initialVisualState,
+    );
 
   useEffect(() => {
     setVisualFormState(initialVisualState);
@@ -183,7 +206,13 @@ export function AddToDashboardDialog({
   }, [open]);
 
   const canSubmit = useMemo(() => {
-    if (!visualOptions.length || !currentFormState.title.trim().length) {
+    if (!visualOptions.length || !selectedVisualType) {
+      return false;
+    }
+    if (
+      selectedVisualType !== "text" &&
+      !currentFormState.title.trim().length
+    ) {
       return false;
     }
     if (selectedDashboardId === "new")
@@ -193,6 +222,7 @@ export function AddToDashboardDialog({
     currentFormState.title,
     newDashboardTitle,
     selectedDashboardId,
+    selectedVisualType,
     visualOptions.length,
   ]);
 
@@ -223,7 +253,7 @@ export function AddToDashboardDialog({
         dashboardId = data.id;
       }
 
-      let configJson: Config | CardConfig | TableConfig;
+      let configJson: Config | CardConfig | TableConfig | TextConfig;
       if (currentVisualOption.type === "chart") {
         configJson = {
           ...currentVisualOption.config,
@@ -237,6 +267,14 @@ export function AddToDashboardDialog({
           title: currentFormState.title,
           description: currentFormState.description,
         };
+      } else if (currentVisualOption.type === "text") {
+        configJson = {
+          ...currentVisualOption.config,
+          configType: "text",
+          title: currentFormState.title.trim()
+            ? currentFormState.title.trim()
+            : undefined,
+        };
       } else {
         configJson = {
           ...currentVisualOption.config,
@@ -248,16 +286,25 @@ export function AddToDashboardDialog({
 
       await addChartToDashboard({
         dashboardId,
-        title: currentFormState.title,
-        description: currentFormState.description,
-        sql,
-        sourceDescriptor: resolvedSourceDescriptor,
-        dbIdentifier: resolveStoredChartDbIdentifier(
-          dbIdentifier,
-          sqlBackend ?? null,
-        ),
-        catalogContext,
-        sqlBackend: sqlBackend ?? null,
+        title:
+          currentVisualOption.type === "text"
+            ? currentFormState.title.trim() || "Text Card"
+            : currentFormState.title,
+        description:
+          currentVisualOption.type === "text"
+            ? null
+            : currentFormState.description,
+        sql: currentVisualOption.type === "text" ? "SELECT 1" : sql,
+        sourceDescriptor:
+          currentVisualOption.type === "text" ? null : resolvedSourceDescriptor,
+        dbIdentifier:
+          currentVisualOption.type === "text"
+            ? null
+            : resolveStoredChartDbIdentifier(dbIdentifier, sqlBackend ?? null),
+        catalogContext:
+          currentVisualOption.type === "text" ? null : catalogContext,
+        sqlBackend:
+          currentVisualOption.type === "text" ? null : (sqlBackend ?? null),
         chartConfigJson: JSON.stringify(configJson),
       });
       setOpen(false);
@@ -289,10 +336,11 @@ export function AddToDashboardDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor={useId()} className="text-sm font-medium">
+            <label htmlFor={selectDashboardId} className="text-sm font-medium">
               Select dashboard
             </label>
             <select
+              id={selectDashboardId}
               className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
               value={selectedDashboardId}
               onChange={(event) => setSelectedDashboardId(event.target.value)}
@@ -338,7 +386,9 @@ export function AddToDashboardDialog({
                       ? "Chart"
                       : option.type === "table"
                         ? "Table"
-                        : "Card";
+                        : option.type === "text"
+                          ? "Text"
+                          : "Card";
                   return (
                     <Button
                       key={option.type}
@@ -364,15 +414,15 @@ export function AddToDashboardDialog({
           )}
 
           <div className="space-y-2">
-            <label htmlFor="visual-title" className="text-sm font-medium">
+            <label htmlFor={visualTitleId} className="text-sm font-medium">
               {selectedVisualType
                 ? selectedVisualType.charAt(0).toUpperCase() +
                   selectedVisualType.slice(1)
                 : "Visual"}{" "}
-              title
+              title{selectedVisualType === "text" ? " (optional)" : ""}
             </label>
             <Input
-              id={useId()}
+              id={visualTitleId}
               value={currentFormState.title}
               onChange={(e) => {
                 const value = e.target.value;
@@ -390,31 +440,36 @@ export function AddToDashboardDialog({
             />
           </div>
 
-          <div className="space-y-2">
-            <label htmlFor="visual-description" className="text-sm font-medium">
-              {selectedVisualType
-                ? selectedVisualType.charAt(0).toUpperCase() +
-                  selectedVisualType.slice(1)
-                : "Visual"}{" "}
-              description (optional)
-            </label>
-            <Input
-              id={useId()}
-              value={currentFormState.description}
-              onChange={(e) => {
-                const value = e.target.value;
-                setVisualFormState((prev) => ({
-                  ...prev,
-                  [selectedVisualType ?? "chart"]: {
-                    title: prev[selectedVisualType ?? "chart"]?.title ?? "",
-                    description: value,
-                  },
-                }));
-              }}
-              placeholder="Short description"
-              disabled={!selectedVisualType}
-            />
-          </div>
+          {selectedVisualType !== "text" && (
+            <div className="space-y-2">
+              <label
+                htmlFor={visualDescriptionId}
+                className="text-sm font-medium"
+              >
+                {selectedVisualType
+                  ? selectedVisualType.charAt(0).toUpperCase() +
+                    selectedVisualType.slice(1)
+                  : "Visual"}{" "}
+                description (optional)
+              </label>
+              <Input
+                id={visualDescriptionId}
+                value={currentFormState.description}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setVisualFormState((prev) => ({
+                    ...prev,
+                    [selectedVisualType ?? "chart"]: {
+                      title: prev[selectedVisualType ?? "chart"]?.title ?? "",
+                      description: value,
+                    },
+                  }));
+                }}
+                placeholder="Short description"
+                disabled={!selectedVisualType}
+              />
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button

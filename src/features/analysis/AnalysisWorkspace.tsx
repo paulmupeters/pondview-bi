@@ -32,6 +32,7 @@ import {
 import { buildDashboardBuilderMessages } from "@/features/analysis/dashboard-builder-messages";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
+import { getProjectRuntimeDefaultDbIdentifier } from "@/lib/project-runtime";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import type { WorkspaceAnalysisCellKind } from "@/lib/workspace/workspace-db";
@@ -58,7 +59,7 @@ export function AnalysisWorkspace({
   const [isExplorerCollapsed, setIsExplorerCollapsed] = useState(false);
   const [selectedExplorerDb, setSelectedExplorerDb] = useState<
     string | undefined
-  >(DEFAULT_WASM_DB_IDENTIFIER);
+  >(() => getProjectRuntimeDefaultDbIdentifier() ?? DEFAULT_WASM_DB_IDENTIFIER);
   const [isDashboardPanelOpen, setIsDashboardPanelOpen] = useState(false);
   const [pendingBootstrap, setPendingBootstrap] = useState<
     | {
