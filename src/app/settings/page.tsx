@@ -73,6 +73,21 @@ import {
   setDuckDbHttpSessionAuth,
 } from "@/lib/duckdb/duckdb-http-browser";
 import { DuckdbWasmClient } from "@/lib/duckdb/duckdb-wasm-client";
+import {
+  downloadSnapshotFromS3,
+  listSnapshotsInS3,
+  type S3BackupObject,
+  testS3BackupConnection,
+  uploadSnapshotToS3,
+} from "@/lib/duckdb/s3-backup";
+import {
+  clearS3BackupConfigInStorage,
+  EMPTY_S3_BACKUP_CONFIG,
+  isS3BackupConfigComplete,
+  readS3BackupConfigFromStorage,
+  type S3BackupConfig,
+  saveS3BackupConfigToStorage,
+} from "@/lib/duckdb/s3-backup-storage";
 import { importParsedProjectArtifacts } from "@/lib/project-artifacts/import";
 import { parseProjectArtifactFileSet } from "@/lib/project-artifacts/parse";
 import { hydrateProjectRuntimeFromParsedArtifacts } from "@/lib/project-runtime";
@@ -198,6 +213,20 @@ function createBrowserProjectState(name: string): OpenProjectState {
   };
 }
 
+function formatSnapshotSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
 function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
@@ -234,6 +263,23 @@ export default function SettingsPage() {
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [isExportingSnapshot, setIsExportingSnapshot] = useState(false);
   const [isImportingSnapshot, setIsImportingSnapshot] = useState(false);
+  const [s3BackupForm, setS3BackupForm] = useState<S3BackupConfig>(
+    EMPTY_S3_BACKUP_CONFIG,
+  );
+  const [savedS3BackupConfig, setSavedS3BackupConfig] = useState<S3BackupConfig>(
+    EMPTY_S3_BACKUP_CONFIG,
+  );
+  const [s3BackupError, setS3BackupError] = useState<string | null>(null);
+  const [s3BackupSuccess, setS3BackupSuccess] = useState<string | null>(null);
+  const [isTestingS3Connection, setIsTestingS3Connection] = useState(false);
+  const [isBackingUpToS3, setIsBackingUpToS3] = useState(false);
+  const [isListingS3Snapshots, setIsListingS3Snapshots] = useState(false);
+  const [isRestoringFromS3, setIsRestoringFromS3] = useState(false);
+  const [s3SnapshotList, setS3SnapshotList] = useState<S3BackupObject[] | null>(
+    null,
+  );
+  const [s3RestoreKey, setS3RestoreKey] = useState<string | null>(null);
+  const [s3CorsError, setS3CorsError] = useState(false);
   const [openProjectName, setOpenProjectName] = useState("Untitled Project");
   const [projectNameDraft, setProjectNameDraft] = useState("");
   const [knownProjects, setKnownProjects] = useState<OpenProjectState[]>([]);
@@ -295,6 +341,10 @@ export default function SettingsPage() {
     setCssCode(savedCss);
     setSelectedTheme(savedTheme || (savedCss ? CUSTOM_THEME_VALUE : "default"));
     setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
+
+    const savedS3Config = readS3BackupConfigFromStorage();
+    setSavedS3BackupConfig(savedS3Config);
+    setS3BackupForm(savedS3Config);
 
     const savedDuckDbHttpConfig = getDuckDbHttpConfigFromStorage();
     setDuckDbHttpHost(savedDuckDbHttpConfig?.host ?? "");
@@ -562,6 +612,156 @@ export default function SettingsPage() {
       if (snapshotImportFileRef.current) {
         snapshotImportFileRef.current.value = "";
       }
+    }
+  };
+
+  const updateS3BackupForm = <K extends keyof S3BackupConfig>(
+    field: K,
+    value: S3BackupConfig[K],
+  ) => {
+    setS3BackupForm((previous) => ({ ...previous, [field]: value }));
+  };
+
+  const handleSaveS3BackupConfig = () => {
+    if (!isS3BackupConfigComplete(s3BackupForm)) {
+      setS3BackupError(
+        "Endpoint, region, bucket, access key, and secret are all required.",
+      );
+      setS3BackupSuccess(null);
+      return;
+    }
+
+    saveS3BackupConfigToStorage(s3BackupForm);
+    const stored = readS3BackupConfigFromStorage();
+    setSavedS3BackupConfig(stored);
+    setS3BackupForm(stored);
+    setS3BackupError(null);
+    setS3CorsError(false);
+    setS3BackupSuccess("S3 backup configuration saved.");
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleClearS3BackupConfig = () => {
+    clearS3BackupConfigInStorage();
+    setSavedS3BackupConfig(EMPTY_S3_BACKUP_CONFIG);
+    setS3BackupForm(EMPTY_S3_BACKUP_CONFIG);
+    setS3SnapshotList(null);
+    setS3RestoreKey(null);
+    setS3BackupError(null);
+    setS3CorsError(false);
+    setS3BackupSuccess("S3 backup configuration cleared.");
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleTestS3BackupConnection = async () => {
+    if (!isS3BackupConfigComplete(s3BackupForm)) {
+      setS3BackupError(
+        "Fill in all S3 fields before testing the connection.",
+      );
+      setS3BackupSuccess(null);
+      return;
+    }
+
+    setIsTestingS3Connection(true);
+    setS3BackupError(null);
+    setS3BackupSuccess(null);
+    setS3CorsError(false);
+
+    const result = await testS3BackupConnection(s3BackupForm);
+    if (result.ok) {
+      setS3BackupSuccess("Connection successful — bucket is reachable.");
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } else {
+      setS3CorsError(result.likelyCors);
+      setS3BackupError(`Connection failed: ${result.error}`);
+    }
+    setIsTestingS3Connection(false);
+  };
+
+  const handleBackupSnapshotToS3 = async () => {
+    if (!isS3BackupConfigComplete(savedS3BackupConfig)) {
+      setS3BackupError(
+        "Save the S3 configuration before running a backup.",
+      );
+      return;
+    }
+
+    setIsBackingUpToS3(true);
+    setS3BackupError(null);
+    setS3BackupSuccess(null);
+
+    try {
+      const snapshot = await new DuckdbWasmClient().exportDatabaseSnapshot();
+      const { key } = await uploadSnapshotToS3(savedS3BackupConfig, snapshot);
+      setS3BackupSuccess(`Snapshot uploaded as ${key}.`);
+      setS3SnapshotList(null);
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      setS3BackupError(
+        error instanceof Error ? error.message : "Failed to upload snapshot.",
+      );
+    } finally {
+      setIsBackingUpToS3(false);
+    }
+  };
+
+  const handleRefreshS3SnapshotList = async () => {
+    if (!isS3BackupConfigComplete(savedS3BackupConfig)) {
+      setS3BackupError(
+        "Save the S3 configuration before listing snapshots.",
+      );
+      return;
+    }
+
+    setIsListingS3Snapshots(true);
+    setS3BackupError(null);
+
+    try {
+      const snapshots = await listSnapshotsInS3(savedS3BackupConfig);
+      setS3SnapshotList(snapshots);
+      if (snapshots.length === 0) {
+        setS3BackupSuccess("No snapshots found at the configured prefix.");
+      } else {
+        setS3BackupSuccess(null);
+      }
+    } catch (error) {
+      setS3BackupError(
+        error instanceof Error ? error.message : "Failed to list snapshots.",
+      );
+    } finally {
+      setIsListingS3Snapshots(false);
+    }
+  };
+
+  const handleRestoreSnapshotFromS3 = async (key: string) => {
+    if (
+      !confirm(
+        `Restore "${key}" from S3? This replaces the local DuckDB WASM database. Browser workspace metadata is not reset.`,
+      )
+    ) {
+      return;
+    }
+
+    setIsRestoringFromS3(true);
+    setS3RestoreKey(key);
+    setS3BackupError(null);
+    setS3BackupSuccess(null);
+
+    try {
+      const bytes = await downloadSnapshotFromS3(savedS3BackupConfig, key);
+      await new DuckdbWasmClient().importDatabaseSnapshot(bytes);
+      setSqlBackendPreferenceInStorage("duckdb-wasm");
+      location.reload();
+    } catch (error) {
+      setS3BackupError(
+        error instanceof Error ? error.message : "Failed to restore snapshot.",
+      );
+      setIsRestoringFromS3(false);
+      setS3RestoreKey(null);
     }
   };
 
@@ -1583,6 +1783,311 @@ export default function SettingsPage() {
                         className="hidden"
                         onChange={handleImportSnapshot}
                       />
+                    </div>
+                  </SettingsContentSection>
+
+                  <SettingsContentSection>
+                    <div className="space-y-6">
+                      <div>
+                        <h3 className="text-lg font-semibold">
+                          S3-compatible backup
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Back up the runtime DuckDB snapshot to an S3-compatible
+                          bucket (Cloudflare R2, Backblaze B2, MinIO, etc.).
+                          Credentials are stored in this browser&apos;s local
+                          storage — use a scoped key limited to one bucket.
+                        </p>
+                      </div>
+
+                      {s3BackupError && (
+                        <p className="text-sm text-red-600 dark:text-red-400">
+                          {s3BackupError}
+                        </p>
+                      )}
+                      {s3CorsError && (
+                        <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs dark:border-amber-700 dark:bg-amber-950">
+                          <p className="mb-2 font-semibold text-amber-800 dark:text-amber-300">
+                            This looks like a CORS error. The browser blocked
+                            the request because the bucket does not allow
+                            cross-origin requests from this origin.
+                          </p>
+                          <p className="mb-1 font-medium text-amber-800 dark:text-amber-300">
+                            Add this CORS rule to your bucket:
+                          </p>
+                          <pre className="overflow-x-auto rounded bg-amber-100 p-2 text-amber-900 dark:bg-amber-900 dark:text-amber-100">{`[
+  {
+    "AllowedOrigins": ["*"],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"]
+  }
+]`}</pre>
+                          <p className="mt-2 text-amber-700 dark:text-amber-400">
+                            For R2: Manage bucket → Settings → CORS policy.
+                            For B2: Bucket → CORS Rules. For MinIO: use{" "}
+                            <code className="rounded bg-amber-100 px-0.5 dark:bg-amber-900">
+                              mc anonymous set-json cors.json alias/bucket
+                            </code>
+                            .
+                          </p>
+                        </div>
+                      )}
+                      {s3BackupSuccess && !s3BackupError && (
+                        <p className="text-sm text-green-600 dark:text-green-400">
+                          {s3BackupSuccess}
+                        </p>
+                      )}
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label
+                            htmlFor="s3-endpoint"
+                            className="mb-1 block text-sm font-medium"
+                          >
+                            Endpoint
+                          </label>
+                          <Input
+                            id="s3-endpoint"
+                            type="text"
+                            value={s3BackupForm.endpoint}
+                            onChange={(event) =>
+                              updateS3BackupForm("endpoint", event.target.value)
+                            }
+                            placeholder="https://<acct>.r2.cloudflarestorage.com"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="s3-region"
+                            className="mb-1 block text-sm font-medium"
+                          >
+                            Region
+                          </label>
+                          <Input
+                            id="s3-region"
+                            type="text"
+                            value={s3BackupForm.region}
+                            onChange={(event) =>
+                              updateS3BackupForm("region", event.target.value)
+                            }
+                            placeholder="auto"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="s3-bucket"
+                            className="mb-1 block text-sm font-medium"
+                          >
+                            Bucket
+                          </label>
+                          <Input
+                            id="s3-bucket"
+                            type="text"
+                            value={s3BackupForm.bucket}
+                            onChange={(event) =>
+                              updateS3BackupForm("bucket", event.target.value)
+                            }
+                            placeholder="pondview-backups"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="s3-prefix"
+                            className="mb-1 block text-sm font-medium"
+                          >
+                            Prefix{" "}
+                            <span className="font-normal text-muted-foreground">
+                              (optional)
+                            </span>
+                          </label>
+                          <Input
+                            id="s3-prefix"
+                            type="text"
+                            value={s3BackupForm.prefix}
+                            onChange={(event) =>
+                              updateS3BackupForm("prefix", event.target.value)
+                            }
+                            placeholder="pondview/"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="s3-access-key"
+                            className="mb-1 block text-sm font-medium"
+                          >
+                            Access Key ID
+                          </label>
+                          <Input
+                            id="s3-access-key"
+                            type="text"
+                            autoComplete="off"
+                            data-1p-ignore="true"
+                            data-lpignore="true"
+                            value={s3BackupForm.accessKeyId}
+                            onChange={(event) =>
+                              updateS3BackupForm(
+                                "accessKeyId",
+                                event.target.value,
+                              )
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="s3-secret-key"
+                            className="mb-1 block text-sm font-medium"
+                          >
+                            Secret Access Key
+                          </label>
+                          <Input
+                            id="s3-secret-key"
+                            type="password"
+                            autoComplete="off"
+                            data-1p-ignore="true"
+                            data-lpignore="true"
+                            data-form-type="other"
+                            value={s3BackupForm.secretAccessKey}
+                            onChange={(event) =>
+                              updateS3BackupForm(
+                                "secretAccessKey",
+                                event.target.value,
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <label
+                        htmlFor="s3-force-path-style"
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <input
+                          id="s3-force-path-style"
+                          type="checkbox"
+                          checked={s3BackupForm.forcePathStyle}
+                          onChange={(event) =>
+                            updateS3BackupForm(
+                              "forcePathStyle",
+                              event.target.checked,
+                            )
+                          }
+                          className="h-4 w-4 rounded border-border"
+                        />
+                        <span>
+                          Use path-style URLs{" "}
+                          <span className="text-muted-foreground">
+                            (required for MinIO and some B2 setups)
+                          </span>
+                        </span>
+                      </label>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Button onClick={handleSaveS3BackupConfig}>
+                          Save Configuration
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => void handleTestS3BackupConnection()}
+                          disabled={isTestingS3Connection}
+                        >
+                          {isTestingS3Connection
+                            ? "Testing..."
+                            : "Test Connection"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={handleClearS3BackupConfig}
+                          disabled={
+                            !isS3BackupConfigComplete(savedS3BackupConfig)
+                          }
+                        >
+                          Clear Configuration
+                        </Button>
+                      </div>
+
+                      {isS3BackupConfigComplete(savedS3BackupConfig) && (
+                        <div className="space-y-4 border-t pt-4">
+                          <div>
+                            <h4 className="text-sm font-semibold">
+                              Backup &amp; restore
+                            </h4>
+                            <p className="text-xs text-muted-foreground">
+                              Backup uploads the current DuckDB snapshot to
+                              `{savedS3BackupConfig.bucket}
+                              {savedS3BackupConfig.prefix
+                                ? `/${savedS3BackupConfig.prefix}`
+                                : "/"}
+                              `. Restore replaces the local database — browser
+                              workspace metadata is preserved.
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              onClick={() => void handleBackupSnapshotToS3()}
+                              disabled={isBackingUpToS3 || isRestoringFromS3}
+                            >
+                              {isBackingUpToS3
+                                ? "Uploading..."
+                                : "Backup to S3 Now"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() =>
+                                void handleRefreshS3SnapshotList()
+                              }
+                              disabled={
+                                isListingS3Snapshots || isRestoringFromS3
+                              }
+                            >
+                              {isListingS3Snapshots
+                                ? "Loading..."
+                                : "List Snapshots"}
+                            </Button>
+                          </div>
+
+                          {s3SnapshotList && s3SnapshotList.length > 0 && (
+                            <ul className="space-y-2 text-sm">
+                              {s3SnapshotList.map((snapshot) => (
+                                <li
+                                  key={snapshot.key}
+                                  className="flex flex-wrap items-center justify-between gap-2 rounded border bg-muted/30 px-3 py-2"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate font-mono text-xs">
+                                      {snapshot.key}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {formatSnapshotSize(snapshot.size)}
+                                      {snapshot.lastModified
+                                        ? ` · ${snapshot.lastModified.toLocaleString()}`
+                                        : ""}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      void handleRestoreSnapshotFromS3(
+                                        snapshot.key,
+                                      )
+                                    }
+                                    disabled={
+                                      isRestoringFromS3 || isBackingUpToS3
+                                    }
+                                  >
+                                    {isRestoringFromS3 &&
+                                    s3RestoreKey === snapshot.key
+                                      ? "Restoring..."
+                                      : "Restore"}
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </SettingsContentSection>
                 </>

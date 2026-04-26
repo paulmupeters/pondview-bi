@@ -29,6 +29,7 @@
     "@ai-sdk/openai": "^3.0.52",
     "@ai-sdk/openai-compatible": "^2.0.41",
     "@ai-sdk/react": "^3.0.155",
+    "@aws-sdk/client-s3": "^3.1037.0",
     "@codemirror/lang-sql": "^6.10.0",
     "@codemirror/state": "^6.6.0",
     "@codemirror/theme-one-dark": "^6.1.3",
