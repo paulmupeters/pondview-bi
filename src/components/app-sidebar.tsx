@@ -47,7 +47,9 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
     pathname === "/analysis" || pathname === "/chat"
       ? (searchParams.get("id") ?? null)
       : null;
-  const { chats, isLoading, error, loadChats } = useChatHistory(initialChats);
+  const { chats, isLoading, error, loadChats } = useChatHistory(initialChats, {
+    limit: 5,
+  });
   const [isChatHistoryPopoverOpen, setIsChatHistoryPopoverOpen] =
     useState(false);
   const [resettingDb, setResettingDb] = useState(false);
@@ -192,6 +194,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
             </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-80 p-4">
+            <div className="flex flex-col gap-3">
             <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
               {shouldShowBlockingLoading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
@@ -267,6 +270,16 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
               ) : (
                 <p className="text-sm text-muted-foreground">No chats</p>
               )}
+            </div>
+            <div className="flex justify-end border-t border-border pt-2">
+              <Link
+                href="/analysis/all"
+                onClick={() => setIsChatHistoryPopoverOpen(false)}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                View all analyses
+              </Link>
+            </div>
             </div>
           </PopoverContent>
         </Popover>

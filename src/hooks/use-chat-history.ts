@@ -7,6 +7,10 @@ type LoadChatsOptions = {
   showLoading?: boolean;
 };
 
+type UseChatHistoryOptions = {
+  limit?: number;
+};
+
 function getNotebookProjectPath(path: string): string | null {
   const segments = path.trim().replace(/\\/g, "/").split("/").filter(Boolean);
   const notebooksIndex = segments.indexOf("notebooks");
@@ -23,7 +27,10 @@ function getNotebookProjectPath(path: string): string | null {
   return `pondview/notebooks/${artifactId.trim()}`;
 }
 
-export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
+export function useChatHistory(
+  initialChats: ChatHistoryEntry[] = [],
+  { limit }: UseChatHistoryOptions = {},
+) {
   const [chats, setChats] = useState<ChatHistoryEntry[]>(initialChats);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,14 +58,15 @@ export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
               ),
             )
           : [];
-        const chatList = await listRecentAnalysisNotebooks(
-          project
+        const chatList = await listRecentAnalysisNotebooks({
+          ...(limit !== undefined ? { limit } : {}),
+          ...(project
             ? {
                 projectId: project.id,
                 projectPaths,
               }
-            : {},
-        );
+            : {}),
+        });
         setChats(chatList);
         return chatList;
       } catch (error) {
@@ -74,7 +82,7 @@ export function useChatHistory(initialChats: ChatHistoryEntry[] = []) {
 
       return [];
     },
-    [],
+    [limit],
   );
 
   return { chats, isLoading, error, loadChats };

@@ -44,7 +44,9 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
     pathname === "/analysis" || pathname === "/chat"
       ? (searchParams.get("id") ?? null)
       : null;
-  const { chats, isLoading, error, loadChats } = useChatHistory(initialChats);
+  const { chats, isLoading, error, loadChats } = useChatHistory(initialChats, {
+    limit: 5,
+  });
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const isDashboardsRoute = pathname?.startsWith("/dashboards");
@@ -132,6 +134,7 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
             </div>
           </PopoverTrigger>
           <PopoverContent side="top" align="start" className="w-80 p-4 mb-2">
+            <div className="flex flex-col gap-3">
             <div className="flex max-h-64 flex-col gap-2 overflow-y-auto">
               {shouldShowBlockingLoading ? (
                 <p className="text-sm text-muted-foreground">Loading...</p>
@@ -185,6 +188,16 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
               ) : (
                 <p className="text-sm text-muted-foreground">No chats</p>
               )}
+            </div>
+            <div className="flex justify-end border-t border-border pt-2">
+              <Link
+                href="/analysis/all"
+                onClick={() => setIsHistoryOpen(false)}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                View all analyses
+              </Link>
+            </div>
             </div>
           </PopoverContent>
         </Popover>

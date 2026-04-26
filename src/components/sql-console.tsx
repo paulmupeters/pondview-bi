@@ -333,7 +333,9 @@ export function SqlConsole({
     setResults(null);
 
     const currentSql = sql.trim();
-    if (!currentSql) return;
+    if (!currentSql) {
+      return;
+    }
     addToHistory(currentSql);
 
     const controller = new AbortController();
