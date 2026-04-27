@@ -2,9 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { strToU8, zipSync } from "fflate";
 import {
   BROWSER_PROJECT_ARCHIVE_METADATA_PATH,
+  BROWSER_PROJECT_EXPORT_MANIFEST_PATH,
+  BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH,
   createBrowserProjectArchive,
   createBrowserProjectBundle,
   parseBrowserProjectArchive,
+  parseBrowserProjectArchiveWithRuntime,
   parseBrowserProjectBundle,
 } from "@/lib/project-store/project-transfer";
 
@@ -85,6 +88,66 @@ describe("browser project transfer", () => {
       "pondview/queries/shared/revenue.query.json",
       "pondview/queries/shared/revenue.sql",
     ]);
+  });
+
+  test("includes a runtime snapshot and export manifest when provided", () => {
+    const snapshotBytes = new Uint8Array([1, 2, 3, 4, 5]);
+    const archive = createBrowserProjectArchive({
+      project: {
+        id: "browser-project-revenue",
+        name: "Revenue",
+        backingKind: "browser-indexeddb",
+        openedAt: 1,
+        updatedAt: 2,
+        defaultSourceRef: "analytics",
+      },
+      files: [
+        {
+          path: "pondview/queries/shared/revenue.sql",
+          content: "select 1;\n",
+        },
+      ],
+      runtimeSnapshot: { bytes: snapshotBytes },
+    });
+
+    const { bundle, manifest, runtimeSnapshotBytes } =
+      parseBrowserProjectArchiveWithRuntime(archive);
+
+    expect(bundle.files.map((file) => file.path)).toEqual([
+      "pondview/queries/shared/revenue.sql",
+    ]);
+    expect(manifest?.projectArtifacts.included).toBe(true);
+    expect(manifest?.runtimeSnapshot).toMatchObject({
+      included: true,
+      kind: "local",
+      path: BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH,
+      sizeBytes: 5,
+    });
+    expect(runtimeSnapshotBytes).not.toBeNull();
+    expect(Array.from(runtimeSnapshotBytes ?? [])).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  test("writes a manifest with runtimeSnapshot.included=false when omitted", () => {
+    const archive = createBrowserProjectArchive({
+      project: {
+        id: "browser-project-revenue",
+        name: "Revenue",
+        backingKind: "browser-indexeddb",
+        openedAt: 1,
+        updatedAt: 2,
+        defaultSourceRef: "analytics",
+      },
+      files: [],
+    });
+
+    const { manifest, runtimeSnapshotBytes } =
+      parseBrowserProjectArchiveWithRuntime(archive);
+
+    expect(manifest?.runtimeSnapshot).toEqual({ included: false });
+    expect(runtimeSnapshotBytes).toBeNull();
+    expect(BROWSER_PROJECT_EXPORT_MANIFEST_PATH).toBe(
+      ".pondview/export-manifest.json",
+    );
   });
 
   test("zip archive parser requires the project metadata entry", () => {

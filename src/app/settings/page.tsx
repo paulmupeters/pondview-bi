@@ -261,18 +261,15 @@ export default function SettingsPage() {
   >(null);
   const [isTestingHttpConnection, setIsTestingHttpConnection] = useState(false);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
-  const [isExportingSnapshot, setIsExportingSnapshot] = useState(false);
   const [isImportingSnapshot, setIsImportingSnapshot] = useState(false);
   const [s3BackupForm, setS3BackupForm] = useState<S3BackupConfig>(
     EMPTY_S3_BACKUP_CONFIG,
   );
-  const [savedS3BackupConfig, setSavedS3BackupConfig] = useState<S3BackupConfig>(
-    EMPTY_S3_BACKUP_CONFIG,
-  );
+  const [savedS3BackupConfig, setSavedS3BackupConfig] =
+    useState<S3BackupConfig>(EMPTY_S3_BACKUP_CONFIG);
   const [s3BackupError, setS3BackupError] = useState<string | null>(null);
   const [s3BackupSuccess, setS3BackupSuccess] = useState<string | null>(null);
   const [isTestingS3Connection, setIsTestingS3Connection] = useState(false);
-  const [isBackingUpToS3, setIsBackingUpToS3] = useState(false);
   const [isListingS3Snapshots, setIsListingS3Snapshots] = useState(false);
   const [isRestoringFromS3, setIsRestoringFromS3] = useState(false);
   const [s3SnapshotList, setS3SnapshotList] = useState<S3BackupObject[] | null>(
@@ -291,6 +288,11 @@ export default function SettingsPage() {
   const [openProjectError, setOpenProjectError] = useState<string | null>(null);
   const [isExportingProject, setIsExportingProject] = useState(false);
   const [isImportingProject, setIsImportingProject] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [exportIncludeSnapshot, setExportIncludeSnapshot] = useState(false);
+  const [exportDownloadArchive, setExportDownloadArchive] = useState(true);
+  const [exportUploadSnapshotToS3, setExportUploadSnapshotToS3] =
+    useState(false);
   const projectImportFileRef = useRef<HTMLInputElement>(null);
   const snapshotImportFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
@@ -545,36 +547,6 @@ export default function SettingsPage() {
     }
   };
 
-  const handleExportSnapshot = async () => {
-    setIsExportingSnapshot(true);
-    setSnapshotError(null);
-
-    try {
-      const snapshot = await new DuckdbWasmClient().exportDatabaseSnapshot();
-      const blob = new Blob([uint8ArrayToArrayBuffer(snapshot)], {
-        type: "application/vnd.duckdb.database",
-      });
-      const href = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = href;
-      anchor.download = `pondview-snapshot-${new Date()
-        .toISOString()
-        .slice(0, 10)}.duckdb`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(href);
-      setShowSuccessMessage(true);
-      setTimeout(() => setShowSuccessMessage(false), 3000);
-    } catch (error) {
-      setSnapshotError(
-        error instanceof Error ? error.message : "Failed to export snapshot.",
-      );
-    } finally {
-      setIsExportingSnapshot(false);
-    }
-  };
-
   const handleImportSnapshot = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -657,9 +629,7 @@ export default function SettingsPage() {
 
   const handleTestS3BackupConnection = async () => {
     if (!isS3BackupConfigComplete(s3BackupForm)) {
-      setS3BackupError(
-        "Fill in all S3 fields before testing the connection.",
-      );
+      setS3BackupError("Fill in all S3 fields before testing the connection.");
       setS3BackupSuccess(null);
       return;
     }
@@ -681,39 +651,9 @@ export default function SettingsPage() {
     setIsTestingS3Connection(false);
   };
 
-  const handleBackupSnapshotToS3 = async () => {
-    if (!isS3BackupConfigComplete(savedS3BackupConfig)) {
-      setS3BackupError(
-        "Save the S3 configuration before running a backup.",
-      );
-      return;
-    }
-
-    setIsBackingUpToS3(true);
-    setS3BackupError(null);
-    setS3BackupSuccess(null);
-
-    try {
-      const snapshot = await new DuckdbWasmClient().exportDatabaseSnapshot();
-      const { key } = await uploadSnapshotToS3(savedS3BackupConfig, snapshot);
-      setS3BackupSuccess(`Snapshot uploaded as ${key}.`);
-      setS3SnapshotList(null);
-      setShowSuccessMessage(true);
-      setTimeout(() => setShowSuccessMessage(false), 3000);
-    } catch (error) {
-      setS3BackupError(
-        error instanceof Error ? error.message : "Failed to upload snapshot.",
-      );
-    } finally {
-      setIsBackingUpToS3(false);
-    }
-  };
-
   const handleRefreshS3SnapshotList = async () => {
     if (!isS3BackupConfigComplete(savedS3BackupConfig)) {
-      setS3BackupError(
-        "Save the S3 configuration before listing snapshots.",
-      );
+      setS3BackupError("Save the S3 configuration before listing snapshots.");
       return;
     }
 
@@ -765,9 +705,32 @@ export default function SettingsPage() {
     }
   };
 
-  const handleExportProject = async () => {
+  const handleOpenExportDialog = () => {
+    setOpenProjectError(null);
+    setS3BackupError(null);
+    setIsExportDialogOpen(true);
+  };
+
+  const handleUnifiedExport = async () => {
+    if (!exportDownloadArchive && !exportUploadSnapshotToS3) {
+      setOpenProjectError("Choose at least one destination.");
+      return;
+    }
+
+    if (
+      exportUploadSnapshotToS3 &&
+      !isS3BackupConfigComplete(savedS3BackupConfig)
+    ) {
+      setOpenProjectError(
+        "Save the S3 backup configuration before uploading a snapshot.",
+      );
+      return;
+    }
+
     setIsExportingProject(true);
     setOpenProjectError(null);
+    setS3BackupError(null);
+    setS3BackupSuccess(null);
 
     try {
       const project = await getOpenProject();
@@ -775,23 +738,61 @@ export default function SettingsPage() {
         throw new Error("Open a browser-local project before exporting it.");
       }
 
-      const archive = createBrowserProjectArchive({
-        project,
-        files: await listOpenProjectFiles(),
-      });
-      const blob = new Blob([uint8ArrayToArrayBuffer(archive)], {
-        type: "application/zip",
-      });
-      const href = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = href;
-      anchor.download = projectDownloadName(project.name);
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(href);
+      let snapshotBytes: Uint8Array | null = null;
+      let s3Key: string | null = null;
+
+      if (exportIncludeSnapshot || exportUploadSnapshotToS3) {
+        snapshotBytes = await new DuckdbWasmClient().exportDatabaseSnapshot();
+      }
+
+      if (exportUploadSnapshotToS3 && snapshotBytes) {
+        const result = await uploadSnapshotToS3(
+          savedS3BackupConfig,
+          snapshotBytes,
+        );
+        s3Key = result.key;
+      }
+
+      if (exportDownloadArchive) {
+        const files = await listOpenProjectFiles();
+        const archive = createBrowserProjectArchive({
+          project,
+          files,
+          runtimeSnapshot:
+            exportIncludeSnapshot && snapshotBytes
+              ? {
+                  bytes: snapshotBytes,
+                  pointer: s3Key
+                    ? {
+                        kind: "s3",
+                        key: s3Key,
+                        sizeBytes: snapshotBytes.byteLength,
+                      }
+                    : undefined,
+                }
+              : undefined,
+        });
+        const blob = new Blob([uint8ArrayToArrayBuffer(archive)], {
+          type: "application/zip",
+        });
+        const href = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = href;
+        anchor.download = projectDownloadName(project.name);
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(href);
+      }
+
+      if (s3Key) {
+        setS3BackupSuccess(`Snapshot uploaded as ${s3Key}.`);
+        setS3SnapshotList(null);
+      }
+
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
+      setIsExportDialogOpen(false);
     } catch (error) {
       setOpenProjectError(
         error instanceof Error ? error.message : "Failed to export project.",
@@ -1712,7 +1713,7 @@ export default function SettingsPage() {
                         </Button>
                         <Button
                           variant="outline"
-                          onClick={() => void handleExportProject()}
+                          onClick={handleOpenExportDialog}
                           disabled={
                             isExportingProject ||
                             isSwitchingProject ||
@@ -1722,7 +1723,7 @@ export default function SettingsPage() {
                         >
                           {isExportingProject
                             ? "Exporting..."
-                            : "Export Project"}
+                            : "Export Project..."}
                         </Button>
                       </div>
 
@@ -1736,16 +1737,17 @@ export default function SettingsPage() {
                     </div>
                   </SettingsContentSection>
 
-                  <SettingsContentSection>
-                    <div className="space-y-6">
+                  {/*<SettingsContentSection>*/}
+                  {/*<div className="space-y-6">
                       <div>
                         <h3 className="text-lg font-semibold">
                           Runtime snapshot
                         </h3>
                         <p className="text-sm text-muted-foreground">
-                          Export or import the local DuckDB WASM database as a
-                          non-Git `.duckdb` runtime artifact. Useful for moving
-                          data between machines alongside a project archive.
+                          Import a `.duckdb` runtime snapshot to replace the
+                          local DuckDB WASM database. To export a snapshot, use
+                          Export Project... and check &quot;Include DuckDB
+                          runtime snapshot&quot;.
                         </p>
                       </div>
 
@@ -1758,17 +1760,8 @@ export default function SettingsPage() {
                       <div className="flex flex-wrap gap-2">
                         <Button
                           variant="outline"
-                          onClick={() => void handleExportSnapshot()}
-                          disabled={isExportingSnapshot || isImportingSnapshot}
-                        >
-                          {isExportingSnapshot
-                            ? "Exporting..."
-                            : "Export Snapshot"}
-                        </Button>
-                        <Button
-                          variant="outline"
                           onClick={() => snapshotImportFileRef.current?.click()}
-                          disabled={isImportingSnapshot || isExportingSnapshot}
+                          disabled={isImportingSnapshot}
                         >
                           {isImportingSnapshot
                             ? "Importing..."
@@ -1783,8 +1776,8 @@ export default function SettingsPage() {
                         className="hidden"
                         onChange={handleImportSnapshot}
                       />
-                    </div>
-                  </SettingsContentSection>
+                    </div>*/}
+                  {/*</SettingsContentSection>*/}
 
                   <SettingsContentSection>
                     <div className="space-y-6">
@@ -1793,10 +1786,12 @@ export default function SettingsPage() {
                           S3-compatible backup
                         </h3>
                         <p className="text-sm text-muted-foreground">
-                          Back up the runtime DuckDB snapshot to an S3-compatible
-                          bucket (Cloudflare R2, Backblaze B2, MinIO, etc.).
-                          Credentials are stored in this browser&apos;s local
-                          storage — use a scoped key limited to one bucket.
+                          Configure an S3-compatible bucket (Cloudflare R2,
+                          Backblaze B2, MinIO, etc.) so Export Project... can
+                          upload runtime snapshots and so saved snapshots can be
+                          restored here. Credentials are stored in this
+                          browser&apos;s local storage — use a scoped key
+                          limited to one bucket.
                         </p>
                       </div>
 
@@ -1824,8 +1819,8 @@ export default function SettingsPage() {
   }
 ]`}</pre>
                           <p className="mt-2 text-amber-700 dark:text-amber-400">
-                            For R2: Manage bucket → Settings → CORS policy.
-                            For B2: Bucket → CORS Rules. For MinIO: use{" "}
+                            For R2: Manage bucket → Settings → CORS policy. For
+                            B2: Bucket → CORS Rules. For MinIO: use{" "}
                             <code className="rounded bg-amber-100 px-0.5 dark:bg-amber-900">
                               mc anonymous set-json cors.json alias/bucket
                             </code>
@@ -2010,33 +2005,23 @@ export default function SettingsPage() {
                         <div className="space-y-4 border-t pt-4">
                           <div>
                             <h4 className="text-sm font-semibold">
-                              Backup &amp; restore
+                              Restore from S3
                             </h4>
                             <p className="text-xs text-muted-foreground">
-                              Backup uploads the current DuckDB snapshot to
-                              `{savedS3BackupConfig.bucket}
+                              Bucket `{savedS3BackupConfig.bucket}
                               {savedS3BackupConfig.prefix
                                 ? `/${savedS3BackupConfig.prefix}`
                                 : "/"}
                               `. Restore replaces the local database — browser
-                              workspace metadata is preserved.
+                              workspace metadata is preserved. Upload happens
+                              from the Export Project... dialog.
                             </p>
                           </div>
 
                           <div className="flex flex-wrap gap-2">
                             <Button
-                              onClick={() => void handleBackupSnapshotToS3()}
-                              disabled={isBackingUpToS3 || isRestoringFromS3}
-                            >
-                              {isBackingUpToS3
-                                ? "Uploading..."
-                                : "Backup to S3 Now"}
-                            </Button>
-                            <Button
                               variant="outline"
-                              onClick={() =>
-                                void handleRefreshS3SnapshotList()
-                              }
+                              onClick={() => void handleRefreshS3SnapshotList()}
                               disabled={
                                 isListingS3Snapshots || isRestoringFromS3
                               }
@@ -2073,9 +2058,7 @@ export default function SettingsPage() {
                                         snapshot.key,
                                       )
                                     }
-                                    disabled={
-                                      isRestoringFromS3 || isBackingUpToS3
-                                    }
+                                    disabled={isRestoringFromS3}
                                   >
                                     {isRestoringFromS3 &&
                                     s3RestoreKey === snapshot.key
@@ -2217,6 +2200,153 @@ export default function SettingsPage() {
                   </SettingsContentSection>
                 </>
               )}
+
+              <Dialog
+                open={isExportDialogOpen}
+                onOpenChange={(open) => {
+                  setIsExportDialogOpen(open);
+                  if (!open) {
+                    setExportIncludeSnapshot(false);
+                    setExportDownloadArchive(true);
+                    setExportUploadSnapshotToS3(false);
+                  }
+                }}
+              >
+                <DialogContent className="max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>Export Project</DialogTitle>
+                    <DialogDescription>
+                      Export project artifacts and an optional DuckDB runtime
+                      snapshot. Choose one or more destinations.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-5 py-2">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Contents</p>
+                      <label
+                        htmlFor="export-include-artifacts"
+                        className="flex items-start gap-2 text-sm text-muted-foreground"
+                      >
+                        <input
+                          id="export-include-artifacts"
+                          type="checkbox"
+                          checked
+                          disabled
+                          className="mt-0.5 h-4 w-4 rounded border-border"
+                        />
+                        <span>
+                          Project artifacts{" "}
+                          <span className="text-xs">
+                            (dashboards, queries, notebooks)
+                          </span>
+                        </span>
+                      </label>
+                      <label
+                        htmlFor="export-include-snapshot"
+                        className="flex items-start gap-2 text-sm"
+                      >
+                        <input
+                          id="export-include-snapshot"
+                          type="checkbox"
+                          checked={exportIncludeSnapshot}
+                          onChange={(event) =>
+                            setExportIncludeSnapshot(event.target.checked)
+                          }
+                          className="mt-0.5 h-4 w-4 rounded border-border"
+                        />
+                        <span>
+                          Include DuckDB runtime snapshot{" "}
+                          <span className="text-xs text-muted-foreground">
+                            (data, caches, materialized state)
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Destinations</p>
+                      <label
+                        htmlFor="export-destination-download"
+                        className="flex items-start gap-2 text-sm"
+                      >
+                        <input
+                          id="export-destination-download"
+                          type="checkbox"
+                          checked={exportDownloadArchive}
+                          onChange={(event) =>
+                            setExportDownloadArchive(event.target.checked)
+                          }
+                          className="mt-0.5 h-4 w-4 rounded border-border"
+                        />
+                        <span>
+                          Download archive{" "}
+                          <span className="text-xs text-muted-foreground">
+                            (.zip with `pondview/` and optional
+                            `runtime/pondview-runtime.duckdb`)
+                          </span>
+                        </span>
+                      </label>
+                      <label
+                        htmlFor="export-destination-s3"
+                        className={cn(
+                          "flex items-start gap-2 text-sm",
+                          (!exportIncludeSnapshot ||
+                            !isS3BackupConfigComplete(savedS3BackupConfig)) &&
+                            "text-muted-foreground",
+                        )}
+                      >
+                        <input
+                          id="export-destination-s3"
+                          type="checkbox"
+                          checked={exportUploadSnapshotToS3}
+                          onChange={(event) =>
+                            setExportUploadSnapshotToS3(event.target.checked)
+                          }
+                          disabled={
+                            !exportIncludeSnapshot ||
+                            !isS3BackupConfigComplete(savedS3BackupConfig)
+                          }
+                          className="mt-0.5 h-4 w-4 rounded border-border"
+                        />
+                        <span>
+                          Upload runtime snapshot to S3{" "}
+                          <span className="text-xs text-muted-foreground">
+                            {isS3BackupConfigComplete(savedS3BackupConfig)
+                              ? "(uses the configured S3 backup bucket)"
+                              : "(configure S3 backup first)"}
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+
+                    {openProjectError && (
+                      <p className="text-sm text-red-600 dark:text-red-400">
+                        {openProjectError}
+                      </p>
+                    )}
+                  </div>
+
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsExportDialogOpen(false)}
+                      disabled={isExportingProject}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => void handleUnifiedExport()}
+                      disabled={
+                        isExportingProject ||
+                        (!exportDownloadArchive && !exportUploadSnapshotToS3)
+                      }
+                    >
+                      {isExportingProject ? "Exporting..." : "Export"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </main>
           </div>
         </div>

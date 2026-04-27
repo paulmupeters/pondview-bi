@@ -9,6 +9,7 @@ This docs set covers setup, runtime behavior, connected data, uploads, and persi
 - [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
 - [SQL Runtime Backends](/guide/sql-runtime-backends)
 - [Workspace Persistence](/guide/workspace-persistence)
+- [Sharing Dashboards](/guide/sharing-dashboards)
 - [Git-Backed Project Artifacts](/guide/git-backed-project-artifacts)
 - [DuckDB Extension Connections](/guide/duckdb-extension-connections)
 - [DuckDB Usage Overview](/guide/duckdb-usage-overview)

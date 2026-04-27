@@ -33,12 +33,50 @@ const browserProjectArchiveMetadataSchema = z.object({
   project: browserProjectBundleSchema.shape.project,
 });
 
+const runtimeSnapshotPointerSchema = z.union([
+  z.object({
+    kind: z.literal("local"),
+    path: z.string().trim().min(1),
+    sizeBytes: z.number().int().nonnegative().optional(),
+  }),
+  z.object({
+    kind: z.literal("s3"),
+    key: z.string().trim().min(1),
+    sizeBytes: z.number().int().nonnegative().optional(),
+  }),
+]);
+
+const runtimeSnapshotManifestSchema = z.union([
+  z.object({ included: z.literal(false) }),
+  z.intersection(
+    z.object({ included: z.literal(true) }),
+    runtimeSnapshotPointerSchema,
+  ),
+]);
+
+const exportManifestSchema = z.object({
+  schemaVersion: z.literal(1),
+  exportedAt: z.string(),
+  projectArtifacts: z.object({
+    included: z.boolean(),
+  }),
+  runtimeSnapshot: runtimeSnapshotManifestSchema.optional(),
+});
+
 export type BrowserProjectBundle = z.infer<typeof browserProjectBundleSchema>;
 export type BrowserProjectArchiveMetadata = z.infer<
   typeof browserProjectArchiveMetadataSchema
 >;
+export type ProjectExportManifest = z.infer<typeof exportManifestSchema>;
+export type RuntimeSnapshotPointer = z.infer<
+  typeof runtimeSnapshotPointerSchema
+>;
 
 export const BROWSER_PROJECT_ARCHIVE_METADATA_PATH = ".pondview/project.json";
+export const BROWSER_PROJECT_EXPORT_MANIFEST_PATH =
+  ".pondview/export-manifest.json";
+export const BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH =
+  "runtime/pondview-runtime.duckdb";
 
 export function createBrowserProjectBundle(input: {
   project: OpenProjectState;
@@ -65,6 +103,10 @@ export function createBrowserProjectBundle(input: {
 export function createBrowserProjectArchive(input: {
   project: OpenProjectState;
   files: ProjectArtifactTextFile[];
+  runtimeSnapshot?: {
+    bytes: Uint8Array;
+    pointer?: RuntimeSnapshotPointer;
+  };
 }): Uint8Array {
   const bundle = createBrowserProjectBundle(input);
   const archiveFiles: Record<string, Uint8Array> = {
@@ -87,6 +129,29 @@ export function createBrowserProjectArchive(input: {
     );
   }
 
+  const manifest: ProjectExportManifest = {
+    schemaVersion: 1,
+    exportedAt: bundle.exportedAt,
+    projectArtifacts: { included: true },
+  };
+
+  if (input.runtimeSnapshot) {
+    archiveFiles[BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH] =
+      input.runtimeSnapshot.bytes;
+    const pointer: RuntimeSnapshotPointer = input.runtimeSnapshot.pointer ?? {
+      kind: "local",
+      path: BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH,
+      sizeBytes: input.runtimeSnapshot.bytes.byteLength,
+    };
+    manifest.runtimeSnapshot = { included: true, ...pointer };
+  } else {
+    manifest.runtimeSnapshot = { included: false };
+  }
+
+  archiveFiles[BROWSER_PROJECT_EXPORT_MANIFEST_PATH] = strToU8(
+    JSON.stringify(manifest, null, 2),
+  );
+
   return zipSync(archiveFiles, {
     level: 6,
   });
@@ -102,6 +167,16 @@ export function parseBrowserProjectBundle(
 export function parseBrowserProjectArchive(
   input: ArrayBuffer | Uint8Array,
 ): BrowserProjectBundle {
+  return parseBrowserProjectArchiveWithRuntime(input).bundle;
+}
+
+export function parseBrowserProjectArchiveWithRuntime(
+  input: ArrayBuffer | Uint8Array,
+): {
+  bundle: BrowserProjectBundle;
+  manifest: ProjectExportManifest | null;
+  runtimeSnapshotBytes: Uint8Array | null;
+} {
   const archive = unzipSync(
     input instanceof Uint8Array ? input : new Uint8Array(input),
   );
@@ -115,13 +190,24 @@ export function parseBrowserProjectArchive(
   const metadata = browserProjectArchiveMetadataSchema.parse(
     JSON.parse(strFromU8(metadataEntry)),
   );
+
+  const manifestEntry = archive[BROWSER_PROJECT_EXPORT_MANIFEST_PATH];
+  const manifest = manifestEntry
+    ? exportManifestSchema.parse(JSON.parse(strFromU8(manifestEntry)))
+    : null;
+
+  const runtimeSnapshotBytes =
+    archive[BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH] ?? null;
+
   const files = new Map<string, ProjectArtifactTextFile>();
 
   for (const [path, bytes] of Object.entries(archive)) {
     const normalizedPath = normalizeProjectArtifactPath(path);
     if (
       !normalizedPath ||
-      normalizedPath === BROWSER_PROJECT_ARCHIVE_METADATA_PATH
+      normalizedPath === BROWSER_PROJECT_ARCHIVE_METADATA_PATH ||
+      normalizedPath === BROWSER_PROJECT_EXPORT_MANIFEST_PATH ||
+      normalizedPath === BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH
     ) {
       continue;
     }
@@ -132,7 +218,7 @@ export function parseBrowserProjectArchive(
     });
   }
 
-  return browserProjectBundleSchema.parse({
+  const bundle = browserProjectBundleSchema.parse({
     schemaVersion: metadata.schemaVersion,
     exportedAt: metadata.exportedAt,
     project: metadata.project,
@@ -140,6 +226,8 @@ export function parseBrowserProjectArchive(
       left.path.localeCompare(right.path),
     ),
   });
+
+  return { bundle, manifest, runtimeSnapshotBytes };
 }
 
 export async function restoreBrowserProjectBundle(
