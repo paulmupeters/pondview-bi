@@ -3,21 +3,12 @@ import {
   Check,
   Database,
   FolderOpen,
-  type LucideIcon,
   Palette,
-  Pencil,
   Plus,
 } from "lucide-react";
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AiProvider,
-  getAiProviderDisplayName,
   getApiKeyStorageKeyForProvider,
   getMissingRequiredSetting,
   loadAiSettingsFromStorage,
@@ -25,23 +16,12 @@ import {
 } from "@/ai/settings";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import {
   clearSessionSecret,
   setSessionSecret,
@@ -58,11 +38,7 @@ import {
   getSelectedTheme,
   setSelectedTheme as setThemeInStorage,
 } from "@/lib/custom-css";
-import {
-  type DefaultPromptMode,
-  setDefaultPromptModePreference,
-  useDefaultPromptModePreference,
-} from "@/lib/default-prompt-mode";
+import { useDefaultPromptModePreference } from "@/lib/default-prompt-mode";
 import {
   clearDuckDbHttpConfigInStorage,
   clearDuckDbHttpSessionAuth,
@@ -99,6 +75,15 @@ import {
   setOpenProject,
 } from "@/lib/project-store";
 import {
+  clearGitHubProjectConfigInStorage,
+  EMPTY_GITHUB_PROJECT_CONFIG,
+  type GitHubProjectConfig,
+  isGitHubProjectConfigComplete,
+  readGitHubProjectConfigFromStorage,
+  saveGitHubProjectConfigToStorage,
+  uploadProjectArtifactsToGitHub,
+} from "@/lib/project-store/github-project-sync";
+import {
   type BrowserProjectBundle,
   createBrowserProjectArchive,
   parseBrowserProjectArchive,
@@ -117,9 +102,21 @@ import {
   useResolvedSqlBackend,
   useSelectedSqlBackend,
 } from "@/lib/sql/use-sql-backend";
-import { cn } from "@/lib/utils";
 import { getAllThemes } from "@/themes";
 import { getActiveRuntimeLabel } from "./runtime-label";
+import {
+  SectionHeader,
+  type SectionNavItem,
+  SettingsNav,
+  type SettingsSection,
+} from "./settings-layout";
+import {
+  AiSettingsSections,
+  AppearanceSettingsSections,
+  ExportProjectDialog,
+  ProjectsSettingsSections,
+  RuntimeSettingsSection,
+} from "./settings-sections";
 
 const CSS_PLACEHOLDER = `:root{
   --background: 0 0% 100%;
@@ -135,14 +132,6 @@ const CSS_PLACEHOLDER = `:root{
 }`;
 
 const CUSTOM_THEME_VALUE = "custom";
-
-type SettingsSection = "ai" | "runtime" | "projects" | "appearance";
-
-type SectionNavItem = {
-  id: SettingsSection;
-  label: string;
-  icon: LucideIcon;
-};
 
 const SECTION_NAV: readonly SectionNavItem[] = [
   {
@@ -260,8 +249,6 @@ export default function SettingsPage() {
     string | null
   >(null);
   const [isTestingHttpConnection, setIsTestingHttpConnection] = useState(false);
-  const [snapshotError, setSnapshotError] = useState<string | null>(null);
-  const [isImportingSnapshot, setIsImportingSnapshot] = useState(false);
   const [s3BackupForm, setS3BackupForm] = useState<S3BackupConfig>(
     EMPTY_S3_BACKUP_CONFIG,
   );
@@ -293,8 +280,19 @@ export default function SettingsPage() {
   const [exportDownloadArchive, setExportDownloadArchive] = useState(true);
   const [exportUploadSnapshotToS3, setExportUploadSnapshotToS3] =
     useState(false);
+  const [exportUploadArtifactsToGitHub, setExportUploadArtifactsToGitHub] =
+    useState(false);
+  const [githubProjectForm, setGitHubProjectForm] =
+    useState<GitHubProjectConfig>(EMPTY_GITHUB_PROJECT_CONFIG);
+  const [savedGitHubProjectConfig, setSavedGitHubProjectConfig] =
+    useState<GitHubProjectConfig>(EMPTY_GITHUB_PROJECT_CONFIG);
+  const [githubProjectError, setGitHubProjectError] = useState<string | null>(
+    null,
+  );
+  const [githubProjectSuccess, setGitHubProjectSuccess] = useState<
+    string | null
+  >(null);
   const projectImportFileRef = useRef<HTMLInputElement>(null);
-  const snapshotImportFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
   const bridgeRuntimeState = useBridgeRuntimeState();
   const duckDbHttpConfig = useDuckDbHttpConfig();
@@ -347,6 +345,9 @@ export default function SettingsPage() {
     const savedS3Config = readS3BackupConfigFromStorage();
     setSavedS3BackupConfig(savedS3Config);
     setS3BackupForm(savedS3Config);
+    const savedGitHubConfig = readGitHubProjectConfigFromStorage();
+    setSavedGitHubProjectConfig(savedGitHubConfig);
+    setGitHubProjectForm(savedGitHubConfig);
 
     const savedDuckDbHttpConfig = getDuckDbHttpConfigFromStorage();
     setDuckDbHttpHost(savedDuckDbHttpConfig?.host ?? "");
@@ -547,51 +548,48 @@ export default function SettingsPage() {
     }
   };
 
-  const handleImportSnapshot = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    if (
-      !confirm(
-        "Import this DuckDB snapshot and replace the local DuckDB WASM database? Browser workspace metadata is not reset.",
-      )
-    ) {
-      if (snapshotImportFileRef.current) {
-        snapshotImportFileRef.current.value = "";
-      }
-      return;
-    }
-
-    setIsImportingSnapshot(true);
-    setSnapshotError(null);
-
-    try {
-      await new DuckdbWasmClient().importDatabaseSnapshot(
-        await file.arrayBuffer(),
-      );
-      setSqlBackendPreferenceInStorage("duckdb-wasm");
-      location.reload();
-    } catch (error) {
-      setSnapshotError(
-        error instanceof Error ? error.message : "Failed to import snapshot.",
-      );
-    } finally {
-      setIsImportingSnapshot(false);
-      if (snapshotImportFileRef.current) {
-        snapshotImportFileRef.current.value = "";
-      }
-    }
-  };
-
   const updateS3BackupForm = <K extends keyof S3BackupConfig>(
     field: K,
     value: S3BackupConfig[K],
   ) => {
     setS3BackupForm((previous) => ({ ...previous, [field]: value }));
+  };
+
+  const updateGitHubProjectForm = <K extends keyof GitHubProjectConfig>(
+    field: K,
+    value: GitHubProjectConfig[K],
+  ) => {
+    setGitHubProjectForm((previous) => ({ ...previous, [field]: value }));
+  };
+
+  const handleSaveGitHubProjectConfig = () => {
+    if (!isGitHubProjectConfigComplete(githubProjectForm)) {
+      setGitHubProjectError(
+        "Owner, repository, branch, and token are required.",
+      );
+      setGitHubProjectSuccess(null);
+      return;
+    }
+
+    saveGitHubProjectConfigToStorage(githubProjectForm);
+    const stored = readGitHubProjectConfigFromStorage();
+    setSavedGitHubProjectConfig(stored);
+    setGitHubProjectForm(stored);
+    setGitHubProjectError(null);
+    setGitHubProjectSuccess("GitHub project sync configuration saved.");
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleClearGitHubProjectConfig = () => {
+    clearGitHubProjectConfigInStorage();
+    setSavedGitHubProjectConfig(EMPTY_GITHUB_PROJECT_CONFIG);
+    setGitHubProjectForm(EMPTY_GITHUB_PROJECT_CONFIG);
+    setExportUploadArtifactsToGitHub(false);
+    setGitHubProjectError(null);
+    setGitHubProjectSuccess("GitHub project sync configuration cleared.");
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
   };
 
   const handleSaveS3BackupConfig = () => {
@@ -708,11 +706,16 @@ export default function SettingsPage() {
   const handleOpenExportDialog = () => {
     setOpenProjectError(null);
     setS3BackupError(null);
+    setGitHubProjectError(null);
     setIsExportDialogOpen(true);
   };
 
   const handleUnifiedExport = async () => {
-    if (!exportDownloadArchive && !exportUploadSnapshotToS3) {
+    if (
+      !exportDownloadArchive &&
+      !exportUploadSnapshotToS3 &&
+      !exportUploadArtifactsToGitHub
+    ) {
       setOpenProjectError("Choose at least one destination.");
       return;
     }
@@ -727,10 +730,22 @@ export default function SettingsPage() {
       return;
     }
 
+    if (
+      exportUploadArtifactsToGitHub &&
+      !isGitHubProjectConfigComplete(savedGitHubProjectConfig)
+    ) {
+      setOpenProjectError(
+        "Save the GitHub project sync configuration before uploading project artifacts.",
+      );
+      return;
+    }
+
     setIsExportingProject(true);
     setOpenProjectError(null);
     setS3BackupError(null);
     setS3BackupSuccess(null);
+    setGitHubProjectError(null);
+    setGitHubProjectSuccess(null);
 
     try {
       const project = await getOpenProject();
@@ -738,10 +753,14 @@ export default function SettingsPage() {
         throw new Error("Open a browser-local project before exporting it.");
       }
 
+      const files = await listOpenProjectFiles();
       let snapshotBytes: Uint8Array | null = null;
       let s3Key: string | null = null;
+      const needsSnapshot =
+        (exportDownloadArchive && exportIncludeSnapshot) ||
+        exportUploadSnapshotToS3;
 
-      if (exportIncludeSnapshot || exportUploadSnapshotToS3) {
+      if (needsSnapshot) {
         snapshotBytes = await new DuckdbWasmClient().exportDatabaseSnapshot();
       }
 
@@ -754,7 +773,6 @@ export default function SettingsPage() {
       }
 
       if (exportDownloadArchive) {
-        const files = await listOpenProjectFiles();
         const archive = createBrowserProjectArchive({
           project,
           files,
@@ -783,6 +801,24 @@ export default function SettingsPage() {
         anchor.click();
         document.body.removeChild(anchor);
         URL.revokeObjectURL(href);
+      }
+
+      if (exportUploadArtifactsToGitHub) {
+        const result = await uploadProjectArtifactsToGitHub(
+          savedGitHubProjectConfig,
+          files,
+          {
+            message: `Export Pondview project: ${project.name}`,
+          },
+        );
+        const target = result.pathPrefix
+          ? `${savedGitHubProjectConfig.owner}/${savedGitHubProjectConfig.repo}:${result.branch}/${result.pathPrefix}`
+          : `${savedGitHubProjectConfig.owner}/${savedGitHubProjectConfig.repo}:${result.branch}`;
+        setGitHubProjectSuccess(
+          `Uploaded ${result.uploaded} project artifact file${
+            result.uploaded === 1 ? "" : "s"
+          } to ${target}.`,
+        );
       }
 
       if (s3Key) {
@@ -1068,6 +1104,9 @@ export default function SettingsPage() {
         : "required"
       : "not required"
     : "unknown";
+  const bridgeHealthSummary = bridgeConfig
+    ? `Health: ${bridgeHealthStatus} • Endpoint: ${bridgeConfig.host}:${bridgeConfig.port} • Auth: ${bridgeAuthStatusLabel}`
+    : `Health: ${bridgeHealthStatus} • Auth: ${bridgeAuthStatusLabel}`;
 
   const activeNavItem =
     SECTION_NAV.find((item) => item.id === activeSection) ?? SECTION_NAV[0];
@@ -1160,1279 +1199,168 @@ export default function SettingsPage() {
               />
 
               {activeSection === "ai" && (
-                <>
-                  <SettingsContentSection>
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          Provider configuration
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Credentials and model selection for AI requests.
-                        </p>
-                      </div>
-
-                      <div>
-                        <label
-                          htmlFor="ai-provider"
-                          className="mb-2 block text-sm font-medium"
-                        >
-                          Provider
-                        </label>
-                        <Select
-                          value={aiProvider}
-                          onValueChange={(value) =>
-                            handleAiProviderChange(value as AiProvider)
-                          }
-                        >
-                          <SelectTrigger id="ai-provider" className="mb-4">
-                            <SelectValue placeholder="Select provider" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="openai">OpenAI</SelectItem>
-                            <SelectItem value="anthropic">Anthropic</SelectItem>
-                            <SelectItem value="xai">xAI</SelectItem>
-                            <SelectItem value="openai-compatible">
-                              OpenAI Compatible
-                            </SelectItem>
-                            <SelectItem value="gateway">AI Gateway</SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        <label
-                          htmlFor="model-id"
-                          className="mb-2 block text-sm font-medium"
-                        >
-                          Model
-                        </label>
-                        <Input
-                          id="model-id"
-                          type="text"
-                          name="ai-model-id"
-                          autoComplete="off"
-                          value={model}
-                          onChange={(e) => setModel(e.target.value)}
-                          placeholder="Enter model ID"
-                          className="mb-4"
-                        />
-
-                        <label
-                          htmlFor="api-key"
-                          className="mb-2 block text-sm font-medium"
-                        >
-                          {getApiKeyStorageKeyForProvider(aiProvider)}
-                        </label>
-                        <Input
-                          id="api-key"
-                          type="password"
-                          name="settings-ai-provider-secret"
-                          autoComplete="off"
-                          data-1p-ignore="true"
-                          data-lpignore="true"
-                          data-form-type="other"
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
-                          placeholder="Enter your API key"
-                          className="mb-4"
-                        />
-                        {aiProvider === "openai-compatible" && (
-                          <>
-                            <label
-                              htmlFor="openai-compatible-url"
-                              className="mb-2 block text-sm font-medium"
-                            >
-                              Base URL
-                            </label>
-                            <Input
-                              id="openai-compatible-url"
-                              type="text"
-                              name="openai-compatible-url"
-                              autoComplete="off"
-                              value={openAiCompatibleUrl}
-                              onChange={(e) =>
-                                setOpenAiCompatibleUrl(e.target.value)
-                              }
-                              placeholder="https://api.example.com/v1"
-                              className="mb-4"
-                            />
-
-                            <label
-                              htmlFor="openai-compatible-name"
-                              className="mb-2 block text-sm font-medium"
-                            >
-                              Provider Name
-                            </label>
-                            <Input
-                              id="openai-compatible-name"
-                              type="text"
-                              name="openai-compatible-provider-name"
-                              autoComplete="off"
-                              value={openAiCompatibleName}
-                              onChange={(e) =>
-                                setOpenAiCompatibleName(e.target.value)
-                              }
-                              placeholder="my-provider"
-                              className="mb-4"
-                            />
-                          </>
-                        )}
-                        {aiSettingsError && (
-                          <p className="mb-4 text-sm text-red-600 dark:text-red-400">
-                            {aiSettingsError}
-                          </p>
-                        )}
-                        <Button
-                          onClick={handleSaveAiSettings}
-                          disabled={isSaving}
-                          className="w-full sm:w-auto"
-                        >
-                          {isSaving
-                            ? "Saving..."
-                            : `Save ${getAiProviderDisplayName(aiProvider)} Settings`}
-                        </Button>
-                      </div>
-                    </div>
-                  </SettingsContentSection>
-
-                  <SettingsContentSection>
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="text-lg font-semibold">Chat display</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Configure how chat opens and how tool results are
-                          shown in messages.
-                        </p>
-                      </div>
-
-                      <div>
-                        <label
-                          htmlFor="default-prompt-mode"
-                          className="mb-2 block text-sm font-medium"
-                        >
-                          Default prompt mode
-                        </label>
-                        <Select
-                          value={defaultPromptMode}
-                          onValueChange={(value) =>
-                            setDefaultPromptModePreference(
-                              value as DefaultPromptMode,
-                            )
-                          }
-                        >
-                          <SelectTrigger
-                            id="default-prompt-mode"
-                            className="w-full sm:w-auto"
-                          >
-                            <SelectValue placeholder="Select default prompt mode" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ai">AI</SelectItem>
-                            <SelectItem value="manual">Manual</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          Applies to the home page and new chat sessions unless
-                          the URL explicitly sets `?mode=ai` or `?mode=manual`.
-                        </p>
-                      </div>
-
-                      <label
-                        htmlFor="show-tool-calls"
-                        className="flex items-center justify-between gap-4 border-t pt-4"
-                      >
-                        <div>
-                          <p className="text-sm font-medium">Show tool calls</p>
-                          <p className="text-xs text-muted-foreground">
-                            In notebook AI transcripts, show `tool-*` cards.
-                            When disabled, transcript tool cards are hidden
-                            while SQL result blocks and visuals remain visible.
-                          </p>
-                        </div>
-                        <input
-                          id="show-tool-calls"
-                          type="checkbox"
-                          checked={showToolCalls}
-                          onChange={(event) =>
-                            setShowToolCallsPreference(event.target.checked)
-                          }
-                          className="h-4 w-4 rounded border-border"
-                        />
-                      </label>
-
-                      <label
-                        htmlFor="show-execute-sql-raw-output"
-                        className="flex items-center justify-between gap-4 border-t pt-4 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <div>
-                          <p className="text-sm font-medium">
-                            Show raw SQL tool output JSON
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            In notebook AI transcripts, include raw
-                            `tool-execute_final_sql` and
-                            `tool-execute_exploratory_sql` output in the tool
-                            card, in addition to the SQL result block. This only
-                            applies when tool calls are visible.
-                          </p>
-                        </div>
-                        <input
-                          id="show-execute-sql-raw-output"
-                          type="checkbox"
-                          checked={showExecuteSqlRawOutput}
-                          disabled={!showToolCalls}
-                          onChange={(event) =>
-                            setExecuteSqlRawOutputPreference(
-                              event.target.checked,
-                            )
-                          }
-                          className="h-4 w-4 rounded border-border"
-                        />
-                      </label>
-
-                      <p className="text-xs text-muted-foreground">
-                        These display settings only affect the expandable
-                        transcript shown in analysis cells.
-                      </p>
-                    </div>
-                  </SettingsContentSection>
-                </>
+                <AiSettingsSections
+                  aiProvider={aiProvider}
+                  onAiProviderChange={handleAiProviderChange}
+                  model={model}
+                  onModelChange={setModel}
+                  apiKey={apiKey}
+                  onApiKeyChange={setApiKey}
+                  openAiCompatibleUrl={openAiCompatibleUrl}
+                  onOpenAiCompatibleUrlChange={setOpenAiCompatibleUrl}
+                  openAiCompatibleName={openAiCompatibleName}
+                  onOpenAiCompatibleNameChange={setOpenAiCompatibleName}
+                  aiSettingsError={aiSettingsError}
+                  onSaveAiSettings={() => void handleSaveAiSettings()}
+                  isSaving={isSaving}
+                  defaultPromptMode={defaultPromptMode}
+                  showToolCalls={showToolCalls}
+                  onShowToolCallsChange={setShowToolCallsPreference}
+                  showExecuteSqlRawOutput={showExecuteSqlRawOutput}
+                  onShowExecuteSqlRawOutputChange={
+                    setExecuteSqlRawOutputPreference
+                  }
+                />
               )}
 
               {activeSection === "runtime" && (
-                <SettingsContentSection>
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="text-lg font-semibold">SQL runtime</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Choose where SQL runs. Bridge uses Pondview endpoints,
-                        while DuckDB over HTTP connects directly from the
-                        browser to a DuckDB `httpserver` instance.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between border-b pb-3 text-sm">
-                      <span className="text-muted-foreground">
-                        Active runtime
-                      </span>
-                      <span
-                        className={
-                          effectiveSqlBackend === "duckdb-wasm"
-                            ? "font-medium text-muted-foreground"
-                            : "font-medium text-green-600 dark:text-green-400"
-                        }
-                      >
-                        {effectiveRuntimeLabel}
-                      </span>
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="sql-backend-select"
-                        className="mb-2 block text-sm font-medium"
-                      >
-                        Query runtime
-                      </label>
-                      <Select
-                        value={selectedSqlBackend}
-                        onValueChange={(value) =>
-                          handleSqlBackendChange(value as SqlBackend)
-                        }
-                      >
-                        <SelectTrigger
-                          id="sql-backend-select"
-                          className="w-full sm:w-auto"
-                        >
-                          <SelectValue placeholder="Select query runtime" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="duckdb-wasm">
-                            DuckDB WASM
-                          </SelectItem>
-                          <SelectItem
-                            value="bridge"
-                            disabled={!isBridgeDiscoverable}
-                          >
-                            {bridgeOptionLabel}
-                          </SelectItem>
-                          <SelectItem value="duckdb-http">
-                            DuckDB over HTTP
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {runtimeSettingsError && (
-                      <p className="text-sm text-red-600 dark:text-red-400">
-                        {runtimeSettingsError}
-                      </p>
-                    )}
-                    {runtimeSettingsSuccess && (
-                      <p className="text-sm text-green-600 dark:text-green-400">
-                        {runtimeSettingsSuccess}
-                      </p>
-                    )}
-
-                    {selectedSqlBackend === "bridge" && (
-                      <div className="space-y-3 border-t pt-5">
-                        <div>
-                          <h4 className="text-sm font-semibold">Bridge auth</h4>
-                          <p className="text-sm text-muted-foreground">
-                            Optional session-only Pondview secret for
-                            authenticated bridge queries. Leave empty when
-                            Pondview is started with an empty secret.
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Health: {bridgeHealthStatus}
-                            {bridgeConfig
-                              ? ` • Endpoint: ${bridgeConfig.host}:${bridgeConfig.port} • Auth: ${bridgeAuthStatusLabel}`
-                              : ` • Auth: ${bridgeAuthStatusLabel}`}
-                          </p>
-                        </div>
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <Input
-                            type="password"
-                            name="settings-bridge-secret"
-                            autoComplete="off"
-                            data-1p-ignore="true"
-                            data-lpignore="true"
-                            data-form-type="other"
-                            value={bridgeSecret}
-                            onChange={(event) =>
-                              setBridgeSecret(event.target.value)
-                            }
-                            placeholder="Enter Pondview secret"
-                          />
-                          <Button
-                            onClick={handleSetBridgeSecret}
-                            disabled={!bridgeSecret.trim().length}
-                          >
-                            Set Session Secret
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={handleClearBridgeSecret}
-                            disabled={!hasBridgeSessionSecret}
-                          >
-                            Clear
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {selectedSqlBackend === "duckdb-http" && (
-                      <div className="space-y-4 border-t pt-5">
-                        <div>
-                          <h4 className="text-sm font-semibold">
-                            DuckDB HTTP connection
-                          </h4>
-                          <p className="text-sm text-muted-foreground">
-                            Configure host, port, and optional auth for a remote
-                            DuckDB{" "}
-                            <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                              httpserver
-                            </code>{" "}
-                            instance.
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Health: {duckDbHttpHealthStatus}
-                          </p>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-                          <Input
-                            type="text"
-                            value={duckDbHttpHost}
-                            onChange={(event) =>
-                              setDuckDbHttpHost(event.target.value)
-                            }
-                            placeholder="http://127.0.0.1 or duckdb-host.local"
-                          />
-                          <Input
-                            type="text"
-                            value={duckDbHttpPort}
-                            onChange={(event) =>
-                              setDuckDbHttpPort(event.target.value)
-                            }
-                            placeholder="8123"
-                          />
-                        </div>
-
-                        <div>
-                          <label
-                            htmlFor="duckdb-http-auth"
-                            className="mb-2 block text-sm font-medium"
-                          >
-                            Auth{" "}
-                            <span className="font-normal text-muted-foreground">
-                              ({hasDuckDbHttpAuth ? "set" : "not set"})
-                            </span>
-                          </label>
-                          <div className="flex flex-col gap-2 sm:flex-row">
-                            <Input
-                              id="duckdb-http-auth"
-                              type="password"
-                              name="settings-duckdb-http-auth"
-                              autoComplete="off"
-                              data-1p-ignore="true"
-                              data-lpignore="true"
-                              data-form-type="other"
-                              value={duckDbHttpAuth}
-                              onChange={(event) =>
-                                setDuckDbHttpAuth(event.target.value)
-                              }
-                              placeholder={
-                                hasDuckDbHttpAuth
-                                  ? "••••••••  (enter new value, then Save Config)"
-                                  : "token or user:pass"
-                              }
-                            />
-                            <Button
-                              variant="outline"
-                              onClick={handleClearDuckDbHttpAuth}
-                              disabled={!hasDuckDbHttpAuth}
-                            >
-                              Clear
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <Button onClick={handleSaveDuckDbHttpConfig}>
-                            Save Connection
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() =>
-                              void handleTestDuckDbHttpConnection()
-                            }
-                            disabled={isTestingHttpConnection}
-                          >
-                            {isTestingHttpConnection
-                              ? "Testing..."
-                              : "Test Connection"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={handleClearDuckDbHttpConfig}
-                            disabled={!isDuckDbHttpConfigured}
-                          >
-                            Clear Config
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </SettingsContentSection>
+                <RuntimeSettingsSection
+                  effectiveSqlBackend={effectiveSqlBackend}
+                  effectiveRuntimeLabel={effectiveRuntimeLabel}
+                  selectedSqlBackend={selectedSqlBackend}
+                  onSqlBackendChange={handleSqlBackendChange}
+                  isBridgeDiscoverable={isBridgeDiscoverable}
+                  bridgeOptionLabel={bridgeOptionLabel}
+                  runtimeSettingsError={runtimeSettingsError}
+                  runtimeSettingsSuccess={runtimeSettingsSuccess}
+                  bridgeHealthSummary={bridgeHealthSummary}
+                  bridgeSecret={bridgeSecret}
+                  onBridgeSecretChange={setBridgeSecret}
+                  onSetBridgeSecret={handleSetBridgeSecret}
+                  onClearBridgeSecret={handleClearBridgeSecret}
+                  hasBridgeSessionSecret={hasBridgeSessionSecret}
+                  duckDbHttpHealthStatus={duckDbHttpHealthStatus}
+                  duckDbHttpHost={duckDbHttpHost}
+                  onDuckDbHttpHostChange={setDuckDbHttpHost}
+                  duckDbHttpPort={duckDbHttpPort}
+                  onDuckDbHttpPortChange={setDuckDbHttpPort}
+                  hasDuckDbHttpAuth={hasDuckDbHttpAuth}
+                  duckDbHttpAuth={duckDbHttpAuth}
+                  onDuckDbHttpAuthChange={setDuckDbHttpAuth}
+                  onClearDuckDbHttpAuth={handleClearDuckDbHttpAuth}
+                  onSaveDuckDbHttpConfig={handleSaveDuckDbHttpConfig}
+                  onTestDuckDbHttpConnection={() =>
+                    void handleTestDuckDbHttpConnection()
+                  }
+                  isTestingHttpConnection={isTestingHttpConnection}
+                  onClearDuckDbHttpConfig={handleClearDuckDbHttpConfig}
+                  isDuckDbHttpConfigured={isDuckDbHttpConfigured}
+                />
               )}
 
               {activeSection === "projects" && (
-                <>
-                  <SettingsContentSection>
-                    <div className="space-y-5">
-                      <div className="space-y-3">
-                        <p className="text-sm font-medium">Project name</p>
-                        {isEditingProjectName ? (
-                          <div className="flex max-w-sm flex-col gap-2 sm:flex-row">
-                            <Input
-                              id="project-name"
-                              type="text"
-                              name="project-name"
-                              autoComplete="off"
-                              value={projectNameDraft}
-                              onChange={(event) =>
-                                setProjectNameDraft(event.target.value)
-                              }
-                              placeholder="Project name"
-                              disabled={isSwitchingProject || isCreatingProject}
-                            />
-                            <Button
-                              type="button"
-                              onClick={() => void handleSaveProjectName()}
-                              disabled={
-                                isSavingProjectName ||
-                                isSwitchingProject ||
-                                isCreatingProject
-                              }
-                            >
-                              {isSavingProjectName ? "Saving..." : "Save"}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleCancelProjectNameEdit}
-                              disabled={
-                                isSavingProjectName ||
-                                isSwitchingProject ||
-                                isCreatingProject
-                              }
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex max-w-sm items-center gap-2">
-                            <div
-                              id="project-name"
-                              className="min-h-9 min-w-0 flex-1 truncate border-b py-2 text-sm font-medium"
-                              title={openProjectName}
-                            >
-                              {openProjectName}
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              onClick={handleEditProjectName}
-                              disabled={isSwitchingProject || isCreatingProject}
-                              aria-label="Edit project name"
-                              title="Edit project name"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-
-                      {openProjectError && (
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                          {openProjectError}
-                        </p>
-                      )}
-
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => projectImportFileRef.current?.click()}
-                          disabled={
-                            isImportingProject ||
-                            isSwitchingProject ||
-                            isCreatingProject
-                          }
-                        >
-                          {isImportingProject ? "Opening..." : "Open Project"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={handleOpenExportDialog}
-                          disabled={
-                            isExportingProject ||
-                            isSwitchingProject ||
-                            isCreatingProject ||
-                            !activeProjectId
-                          }
-                        >
-                          {isExportingProject
-                            ? "Exporting..."
-                            : "Export Project..."}
-                        </Button>
-                      </div>
-
-                      <input
-                        ref={projectImportFileRef}
-                        type="file"
-                        accept=".zip,.json,application/zip,application/json"
-                        className="hidden"
-                        onChange={handleImportProject}
-                      />
-                    </div>
-                  </SettingsContentSection>
-
-                  {/*<SettingsContentSection>*/}
-                  {/*<div className="space-y-6">
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          Runtime snapshot
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Import a `.duckdb` runtime snapshot to replace the
-                          local DuckDB WASM database. To export a snapshot, use
-                          Export Project... and check &quot;Include DuckDB
-                          runtime snapshot&quot;.
-                        </p>
-                      </div>
-
-                      {snapshotError && (
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                          {snapshotError}
-                        </p>
-                      )}
-
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => snapshotImportFileRef.current?.click()}
-                          disabled={isImportingSnapshot}
-                        >
-                          {isImportingSnapshot
-                            ? "Importing..."
-                            : "Import Snapshot"}
-                        </Button>
-                      </div>
-
-                      <input
-                        ref={snapshotImportFileRef}
-                        type="file"
-                        accept=".duckdb,application/octet-stream,application/vnd.duckdb.database"
-                        className="hidden"
-                        onChange={handleImportSnapshot}
-                      />
-                    </div>*/}
-                  {/*</SettingsContentSection>*/}
-
-                  <SettingsContentSection>
-                    <div className="space-y-6">
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          S3-compatible backup
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Configure an S3-compatible bucket (Cloudflare R2,
-                          Backblaze B2, MinIO, etc.) so Export Project... can
-                          upload runtime snapshots and so saved snapshots can be
-                          restored here. Credentials are stored in this
-                          browser&apos;s local storage — use a scoped key
-                          limited to one bucket.
-                        </p>
-                      </div>
-
-                      {s3BackupError && (
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                          {s3BackupError}
-                        </p>
-                      )}
-                      {s3CorsError && (
-                        <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs dark:border-amber-700 dark:bg-amber-950">
-                          <p className="mb-2 font-semibold text-amber-800 dark:text-amber-300">
-                            This looks like a CORS error. The browser blocked
-                            the request because the bucket does not allow
-                            cross-origin requests from this origin.
-                          </p>
-                          <p className="mb-1 font-medium text-amber-800 dark:text-amber-300">
-                            Add this CORS rule to your bucket:
-                          </p>
-                          <pre className="overflow-x-auto rounded bg-amber-100 p-2 text-amber-900 dark:bg-amber-900 dark:text-amber-100">{`[
-  {
-    "AllowedOrigins": ["*"],
-    "AllowedMethods": ["GET", "PUT", "HEAD"],
-    "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag"]
-  }
-]`}</pre>
-                          <p className="mt-2 text-amber-700 dark:text-amber-400">
-                            For R2: Manage bucket → Settings → CORS policy. For
-                            B2: Bucket → CORS Rules. For MinIO: use{" "}
-                            <code className="rounded bg-amber-100 px-0.5 dark:bg-amber-900">
-                              mc anonymous set-json cors.json alias/bucket
-                            </code>
-                            .
-                          </p>
-                        </div>
-                      )}
-                      {s3BackupSuccess && !s3BackupError && (
-                        <p className="text-sm text-green-600 dark:text-green-400">
-                          {s3BackupSuccess}
-                        </p>
-                      )}
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div>
-                          <label
-                            htmlFor="s3-endpoint"
-                            className="mb-1 block text-sm font-medium"
-                          >
-                            Endpoint
-                          </label>
-                          <Input
-                            id="s3-endpoint"
-                            type="text"
-                            value={s3BackupForm.endpoint}
-                            onChange={(event) =>
-                              updateS3BackupForm("endpoint", event.target.value)
-                            }
-                            placeholder="https://<acct>.r2.cloudflarestorage.com"
-                          />
-                        </div>
-                        <div>
-                          <label
-                            htmlFor="s3-region"
-                            className="mb-1 block text-sm font-medium"
-                          >
-                            Region
-                          </label>
-                          <Input
-                            id="s3-region"
-                            type="text"
-                            value={s3BackupForm.region}
-                            onChange={(event) =>
-                              updateS3BackupForm("region", event.target.value)
-                            }
-                            placeholder="auto"
-                          />
-                        </div>
-                        <div>
-                          <label
-                            htmlFor="s3-bucket"
-                            className="mb-1 block text-sm font-medium"
-                          >
-                            Bucket
-                          </label>
-                          <Input
-                            id="s3-bucket"
-                            type="text"
-                            value={s3BackupForm.bucket}
-                            onChange={(event) =>
-                              updateS3BackupForm("bucket", event.target.value)
-                            }
-                            placeholder="pondview-backups"
-                          />
-                        </div>
-                        <div>
-                          <label
-                            htmlFor="s3-prefix"
-                            className="mb-1 block text-sm font-medium"
-                          >
-                            Prefix{" "}
-                            <span className="font-normal text-muted-foreground">
-                              (optional)
-                            </span>
-                          </label>
-                          <Input
-                            id="s3-prefix"
-                            type="text"
-                            value={s3BackupForm.prefix}
-                            onChange={(event) =>
-                              updateS3BackupForm("prefix", event.target.value)
-                            }
-                            placeholder="pondview/"
-                          />
-                        </div>
-                        <div>
-                          <label
-                            htmlFor="s3-access-key"
-                            className="mb-1 block text-sm font-medium"
-                          >
-                            Access Key ID
-                          </label>
-                          <Input
-                            id="s3-access-key"
-                            type="text"
-                            autoComplete="off"
-                            data-1p-ignore="true"
-                            data-lpignore="true"
-                            value={s3BackupForm.accessKeyId}
-                            onChange={(event) =>
-                              updateS3BackupForm(
-                                "accessKeyId",
-                                event.target.value,
-                              )
-                            }
-                          />
-                        </div>
-                        <div>
-                          <label
-                            htmlFor="s3-secret-key"
-                            className="mb-1 block text-sm font-medium"
-                          >
-                            Secret Access Key
-                          </label>
-                          <Input
-                            id="s3-secret-key"
-                            type="password"
-                            autoComplete="off"
-                            data-1p-ignore="true"
-                            data-lpignore="true"
-                            data-form-type="other"
-                            value={s3BackupForm.secretAccessKey}
-                            onChange={(event) =>
-                              updateS3BackupForm(
-                                "secretAccessKey",
-                                event.target.value,
-                              )
-                            }
-                          />
-                        </div>
-                      </div>
-
-                      <label
-                        htmlFor="s3-force-path-style"
-                        className="flex items-center gap-2 text-sm"
-                      >
-                        <input
-                          id="s3-force-path-style"
-                          type="checkbox"
-                          checked={s3BackupForm.forcePathStyle}
-                          onChange={(event) =>
-                            updateS3BackupForm(
-                              "forcePathStyle",
-                              event.target.checked,
-                            )
-                          }
-                          className="h-4 w-4 rounded border-border"
-                        />
-                        <span>
-                          Use path-style URLs{" "}
-                          <span className="text-muted-foreground">
-                            (required for MinIO and some B2 setups)
-                          </span>
-                        </span>
-                      </label>
-
-                      <div className="flex flex-wrap gap-2">
-                        <Button onClick={handleSaveS3BackupConfig}>
-                          Save Configuration
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => void handleTestS3BackupConnection()}
-                          disabled={isTestingS3Connection}
-                        >
-                          {isTestingS3Connection
-                            ? "Testing..."
-                            : "Test Connection"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={handleClearS3BackupConfig}
-                          disabled={
-                            !isS3BackupConfigComplete(savedS3BackupConfig)
-                          }
-                        >
-                          Clear Configuration
-                        </Button>
-                      </div>
-
-                      {isS3BackupConfigComplete(savedS3BackupConfig) && (
-                        <div className="space-y-4 border-t pt-4">
-                          <div>
-                            <h4 className="text-sm font-semibold">
-                              Restore from S3
-                            </h4>
-                            <p className="text-xs text-muted-foreground">
-                              Bucket `{savedS3BackupConfig.bucket}
-                              {savedS3BackupConfig.prefix
-                                ? `/${savedS3BackupConfig.prefix}`
-                                : "/"}
-                              `. Restore replaces the local database — browser
-                              workspace metadata is preserved. Upload happens
-                              from the Export Project... dialog.
-                            </p>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              variant="outline"
-                              onClick={() => void handleRefreshS3SnapshotList()}
-                              disabled={
-                                isListingS3Snapshots || isRestoringFromS3
-                              }
-                            >
-                              {isListingS3Snapshots
-                                ? "Loading..."
-                                : "List Snapshots"}
-                            </Button>
-                          </div>
-
-                          {s3SnapshotList && s3SnapshotList.length > 0 && (
-                            <ul className="space-y-2 text-sm">
-                              {s3SnapshotList.map((snapshot) => (
-                                <li
-                                  key={snapshot.key}
-                                  className="flex flex-wrap items-center justify-between gap-2 rounded border bg-muted/30 px-3 py-2"
-                                >
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate font-mono text-xs">
-                                      {snapshot.key}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {formatSnapshotSize(snapshot.size)}
-                                      {snapshot.lastModified
-                                        ? ` · ${snapshot.lastModified.toLocaleString()}`
-                                        : ""}
-                                    </p>
-                                  </div>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() =>
-                                      void handleRestoreSnapshotFromS3(
-                                        snapshot.key,
-                                      )
-                                    }
-                                    disabled={isRestoringFromS3}
-                                  >
-                                    {isRestoringFromS3 &&
-                                    s3RestoreKey === snapshot.key
-                                      ? "Restoring..."
-                                      : "Restore"}
-                                  </Button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </SettingsContentSection>
-                </>
+                <ProjectsSettingsSections
+                  isEditingProjectName={isEditingProjectName}
+                  projectNameDraft={projectNameDraft}
+                  onProjectNameDraftChange={setProjectNameDraft}
+                  isSwitchingProject={isSwitchingProject}
+                  isCreatingProject={isCreatingProject}
+                  isSavingProjectName={isSavingProjectName}
+                  onSaveProjectName={() => void handleSaveProjectName()}
+                  onCancelProjectNameEdit={handleCancelProjectNameEdit}
+                  openProjectName={openProjectName}
+                  onEditProjectName={handleEditProjectName}
+                  openProjectError={openProjectError}
+                  onOpenProjectDialog={() =>
+                    projectImportFileRef.current?.click()
+                  }
+                  isImportingProject={isImportingProject}
+                  onOpenExportDialog={handleOpenExportDialog}
+                  isExportingProject={isExportingProject}
+                  activeProjectId={activeProjectId}
+                  projectImportFileRef={projectImportFileRef}
+                  onImportProject={(event) => void handleImportProject(event)}
+                  githubProjectError={githubProjectError}
+                  githubProjectSuccess={githubProjectSuccess}
+                  githubProjectForm={githubProjectForm}
+                  onUpdateGitHubProjectForm={updateGitHubProjectForm}
+                  onSaveGitHubProjectConfig={handleSaveGitHubProjectConfig}
+                  onClearGitHubProjectConfig={handleClearGitHubProjectConfig}
+                  savedGitHubProjectConfig={savedGitHubProjectConfig}
+                  s3BackupError={s3BackupError}
+                  s3CorsError={s3CorsError}
+                  s3BackupSuccess={s3BackupSuccess}
+                  s3BackupForm={s3BackupForm}
+                  onUpdateS3BackupForm={updateS3BackupForm}
+                  onSaveS3BackupConfig={handleSaveS3BackupConfig}
+                  onTestS3BackupConnection={() =>
+                    void handleTestS3BackupConnection()
+                  }
+                  isTestingS3Connection={isTestingS3Connection}
+                  onClearS3BackupConfig={handleClearS3BackupConfig}
+                  savedS3BackupConfig={savedS3BackupConfig}
+                  onRefreshS3SnapshotList={() =>
+                    void handleRefreshS3SnapshotList()
+                  }
+                  isListingS3Snapshots={isListingS3Snapshots}
+                  isRestoringFromS3={isRestoringFromS3}
+                  s3SnapshotList={s3SnapshotList}
+                  s3RestoreKey={s3RestoreKey}
+                  onRestoreSnapshotFromS3={(key) =>
+                    void handleRestoreSnapshotFromS3(key)
+                  }
+                  formatSnapshotSize={formatSnapshotSize}
+                />
               )}
 
               {activeSection === "appearance" && (
-                <>
-                  <SettingsContentSection>
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          Theme selection
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Choose a default theme or create your own custom
-                          theme.
-                        </p>
-                      </div>
-
-                      <div>
-                        <label
-                          htmlFor="theme-select"
-                          className="mb-2 block text-sm font-medium"
-                        >
-                          Select theme
-                        </label>
-                        <Select
-                          value={selectedTheme}
-                          onValueChange={handleThemeChange}
-                          disabled={isSaving}
-                        >
-                          <SelectTrigger
-                            id="theme-select"
-                            className="w-full sm:w-auto"
-                          >
-                            <SelectValue placeholder="Select a theme" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableThemes.map((theme) => (
-                              <SelectItem key={theme.name} value={theme.name}>
-                                {theme.displayName}
-                              </SelectItem>
-                            ))}
-                            <SelectItem value={CUSTOM_THEME_VALUE}>
-                              Custom
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {selectedTheme !== CUSTOM_THEME_VALUE && (
-                          <p className="mt-2 text-sm text-muted-foreground">
-                            Currently using:{" "}
-                            <span className="font-medium">
-                              {availableThemes.find(
-                                (t) => t.name === selectedTheme,
-                              )?.displayName || "Default"}
-                            </span>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </SettingsContentSection>
-
-                  <SettingsContentSection>
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="text-lg font-semibold">Custom styles</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {selectedTheme === CUSTOM_THEME_VALUE
-                            ? "Customize the appearance of the application using CSS variables."
-                            : "Select 'Custom' theme to edit your own CSS styles."}
-                        </p>
-                      </div>
-
-                      <Dialog
-                        open={isDialogOpen}
-                        onOpenChange={setIsDialogOpen}
-                      >
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            disabled={selectedTheme !== CUSTOM_THEME_VALUE}
-                          >
-                            Edit Styles
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
-                          <DialogHeader>
-                            <DialogTitle>Edit Custom CSS</DialogTitle>
-                            <DialogDescription>
-                              Paste your custom CSS here. Changes will be
-                              applied immediately.
-                            </DialogDescription>
-                          </DialogHeader>
-
-                          <div className="space-y-4 py-4">
-                            <Textarea
-                              value={cssCode}
-                              onChange={(e) => setCssCode(e.target.value)}
-                              placeholder={CSS_PLACEHOLDER}
-                              className="min-h-100 font-mono text-sm"
-                            />
-                          </div>
-
-                          <DialogFooter>
-                            <Button
-                              variant="outline"
-                              onClick={() => setIsDialogOpen(false)}
-                            >
-                              Cancel
-                            </Button>
-                            <Button onClick={handleSaveCss} disabled={isSaving}>
-                              {isSaving ? "Saving..." : "Save Styles"}
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-
-                      {cssCode && selectedTheme === CUSTOM_THEME_VALUE && (
-                        <div className="rounded-lg bg-muted p-3 text-sm">
-                          <p className="mb-1 font-medium">Current CSS:</p>
-                          <pre className="max-h-40 overflow-auto rounded border bg-background p-2 text-xs">
-                            {cssCode}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  </SettingsContentSection>
-                </>
+                <AppearanceSettingsSections
+                  selectedTheme={selectedTheme}
+                  onThemeChange={handleThemeChange}
+                  isSaving={isSaving}
+                  availableThemes={availableThemes}
+                  customThemeValue={CUSTOM_THEME_VALUE}
+                  isDialogOpen={isDialogOpen}
+                  onDialogOpenChange={setIsDialogOpen}
+                  cssCode={cssCode}
+                  onCssCodeChange={setCssCode}
+                  onSaveCss={() => void handleSaveCss()}
+                  onCancelCssDialog={() => setIsDialogOpen(false)}
+                  cssPlaceholder={CSS_PLACEHOLDER}
+                />
               )}
 
-              <Dialog
-                open={isExportDialogOpen}
-                onOpenChange={(open) => {
+              <ExportProjectDialog
+                isExportDialogOpen={isExportDialogOpen}
+                onExportDialogOpenChange={(open) => {
                   setIsExportDialogOpen(open);
                   if (!open) {
                     setExportIncludeSnapshot(false);
                     setExportDownloadArchive(true);
                     setExportUploadSnapshotToS3(false);
+                    setExportUploadArtifactsToGitHub(false);
                   }
                 }}
-              >
-                <DialogContent className="max-w-lg">
-                  <DialogHeader>
-                    <DialogTitle>Export Project</DialogTitle>
-                    <DialogDescription>
-                      Export project artifacts and an optional DuckDB runtime
-                      snapshot. Choose one or more destinations.
-                    </DialogDescription>
-                  </DialogHeader>
-
-                  <div className="space-y-5 py-2">
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">Contents</p>
-                      <label
-                        htmlFor="export-include-artifacts"
-                        className="flex items-start gap-2 text-sm text-muted-foreground"
-                      >
-                        <input
-                          id="export-include-artifacts"
-                          type="checkbox"
-                          checked
-                          disabled
-                          className="mt-0.5 h-4 w-4 rounded border-border"
-                        />
-                        <span>
-                          Project artifacts{" "}
-                          <span className="text-xs">
-                            (dashboards, queries, notebooks)
-                          </span>
-                        </span>
-                      </label>
-                      <label
-                        htmlFor="export-include-snapshot"
-                        className="flex items-start gap-2 text-sm"
-                      >
-                        <input
-                          id="export-include-snapshot"
-                          type="checkbox"
-                          checked={exportIncludeSnapshot}
-                          onChange={(event) =>
-                            setExportIncludeSnapshot(event.target.checked)
-                          }
-                          className="mt-0.5 h-4 w-4 rounded border-border"
-                        />
-                        <span>
-                          Include DuckDB runtime snapshot{" "}
-                          <span className="text-xs text-muted-foreground">
-                            (data, caches, materialized state)
-                          </span>
-                        </span>
-                      </label>
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">Destinations</p>
-                      <label
-                        htmlFor="export-destination-download"
-                        className="flex items-start gap-2 text-sm"
-                      >
-                        <input
-                          id="export-destination-download"
-                          type="checkbox"
-                          checked={exportDownloadArchive}
-                          onChange={(event) =>
-                            setExportDownloadArchive(event.target.checked)
-                          }
-                          className="mt-0.5 h-4 w-4 rounded border-border"
-                        />
-                        <span>
-                          Download archive{" "}
-                          <span className="text-xs text-muted-foreground">
-                            (.zip with `pondview/` and optional
-                            `runtime/pondview-runtime.duckdb`)
-                          </span>
-                        </span>
-                      </label>
-                      <label
-                        htmlFor="export-destination-s3"
-                        className={cn(
-                          "flex items-start gap-2 text-sm",
-                          (!exportIncludeSnapshot ||
-                            !isS3BackupConfigComplete(savedS3BackupConfig)) &&
-                            "text-muted-foreground",
-                        )}
-                      >
-                        <input
-                          id="export-destination-s3"
-                          type="checkbox"
-                          checked={exportUploadSnapshotToS3}
-                          onChange={(event) =>
-                            setExportUploadSnapshotToS3(event.target.checked)
-                          }
-                          disabled={
-                            !exportIncludeSnapshot ||
-                            !isS3BackupConfigComplete(savedS3BackupConfig)
-                          }
-                          className="mt-0.5 h-4 w-4 rounded border-border"
-                        />
-                        <span>
-                          Upload runtime snapshot to S3{" "}
-                          <span className="text-xs text-muted-foreground">
-                            {isS3BackupConfigComplete(savedS3BackupConfig)
-                              ? "(uses the configured S3 backup bucket)"
-                              : "(configure S3 backup first)"}
-                          </span>
-                        </span>
-                      </label>
-                    </div>
-
-                    {openProjectError && (
-                      <p className="text-sm text-red-600 dark:text-red-400">
-                        {openProjectError}
-                      </p>
-                    )}
-                  </div>
-
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setIsExportDialogOpen(false)}
-                      disabled={isExportingProject}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={() => void handleUnifiedExport()}
-                      disabled={
-                        isExportingProject ||
-                        (!exportDownloadArchive && !exportUploadSnapshotToS3)
-                      }
-                    >
-                      {isExportingProject ? "Exporting..." : "Export"}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                exportIncludeSnapshot={exportIncludeSnapshot}
+                onExportIncludeSnapshotChange={setExportIncludeSnapshot}
+                exportDownloadArchive={exportDownloadArchive}
+                onExportDownloadArchiveChange={setExportDownloadArchive}
+                exportUploadSnapshotToS3={exportUploadSnapshotToS3}
+                onExportUploadSnapshotToS3Change={setExportUploadSnapshotToS3}
+                exportUploadArtifactsToGitHub={exportUploadArtifactsToGitHub}
+                onExportUploadArtifactsToGitHubChange={
+                  setExportUploadArtifactsToGitHub
+                }
+                savedS3BackupConfig={savedS3BackupConfig}
+                savedGitHubProjectConfig={savedGitHubProjectConfig}
+                openProjectError={openProjectError}
+                onCloseExportDialog={() => setIsExportDialogOpen(false)}
+                isExportingProject={isExportingProject}
+                onExportProject={() => void handleUnifiedExport()}
+              />
             </main>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function SettingsNav({
-  items,
-  activeSection,
-  onSelect,
-}: {
-  items: readonly SectionNavItem[];
-  activeSection: SettingsSection;
-  onSelect: (id: SettingsSection) => void;
-}) {
-  return (
-    <nav
-      aria-label="Settings sections"
-      className="w-full shrink-0 lg:sticky lg:top-6 lg:w-56"
-    >
-      <ul className="flex gap-1 overflow-x-auto lg:flex-col lg:gap-0.5">
-        {items.map((item) => {
-          const Icon = item.icon;
-          const isActive = item.id === activeSection;
-          return (
-            <li key={item.id}>
-              <button
-                type="button"
-                onClick={() => onSelect(item.id)}
-                aria-current={isActive ? "page" : undefined}
-                className={cn(
-                  "flex w-full items-center gap-2.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  "lg:whitespace-normal",
-                  isActive
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "h-4 w-4 shrink-0",
-                    isActive ? "text-foreground" : "text-muted-foreground",
-                  )}
-                />
-                <span>{item.label}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
-  );
-}
-
-function SettingsContentSection({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={cn("border-b pb-7 last:border-b-0 last:pb-0", className)}
-    >
-      {children}
-    </section>
-  );
-}
-
-function SectionHeader({
-  icon: Icon,
-  title,
-}: {
-  icon: LucideIcon;
-  title: string;
-}) {
-  return (
-    <div className="flex items-start gap-3 border-b pb-4">
-      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-foreground">
-        <Icon className="h-4 w-4" />
-      </div>
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
       </div>
     </div>
   );
