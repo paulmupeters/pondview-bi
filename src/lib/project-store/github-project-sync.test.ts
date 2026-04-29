@@ -1,12 +1,63 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
+  clearGitHubProjectConfigInStorage,
   EMPTY_GITHUB_PROJECT_CONFIG,
   fetchProjectArtifactsFromGitHub,
+  GITHUB_PROJECT_CONFIG_STORAGE_KEY,
+  GITHUB_PROJECT_TOKEN_SESSION_STORAGE_KEY,
   isGitHubProjectConfigComplete,
   parseGitHubProjectConfigPayload,
   parseGitHubProjectUrl,
+  readGitHubProjectConfigFromStorage,
+  saveGitHubProjectConfigToStorage,
   uploadProjectArtifactsToGitHub,
 } from "@/lib/project-store/github-project-sync";
+
+type StorageLike = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+};
+
+function createStorage(): StorageLike {
+  const store = new Map<string, string>();
+
+  return {
+    getItem(key: string) {
+      return store.get(key) ?? null;
+    },
+    setItem(key: string, value: string) {
+      store.set(key, value);
+    },
+    removeItem(key: string) {
+      store.delete(key);
+    },
+  };
+}
+
+function setBrowserStorage(
+  localStorage: StorageLike,
+  sessionStorage: StorageLike,
+) {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    writable: true,
+    value: {
+      localStorage,
+      sessionStorage,
+    },
+  });
+}
+
+const originalWindow = (globalThis as { window?: unknown }).window;
+
+afterEach(() => {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    writable: true,
+    value: originalWindow,
+  });
+});
 
 describe("github project sync", () => {
   test("normalizes config payloads", () => {
@@ -40,6 +91,64 @@ describe("github project sync", () => {
         token: "token",
       }),
     ).toBe(true);
+  });
+
+  test("stores repository config persistently and token in session storage", () => {
+    const localStorage = createStorage();
+    const sessionStorage = createStorage();
+    setBrowserStorage(localStorage, sessionStorage);
+
+    saveGitHubProjectConfigToStorage({
+      owner: "paul",
+      repo: "analytics",
+      branch: "main",
+      pathPrefix: "examples",
+      token: "ghp_session",
+    });
+
+    expect(
+      sessionStorage.getItem(GITHUB_PROJECT_TOKEN_SESSION_STORAGE_KEY),
+    ).toBe("ghp_session");
+    expect(
+      localStorage.getItem(GITHUB_PROJECT_CONFIG_STORAGE_KEY),
+    ).not.toContain("ghp_session");
+    expect(readGitHubProjectConfigFromStorage()).toEqual({
+      owner: "paul",
+      repo: "analytics",
+      branch: "main",
+      pathPrefix: "examples",
+      token: "ghp_session",
+    });
+
+    const nextSessionStorage = createStorage();
+    setBrowserStorage(localStorage, nextSessionStorage);
+    expect(readGitHubProjectConfigFromStorage()).toEqual({
+      owner: "paul",
+      repo: "analytics",
+      branch: "main",
+      pathPrefix: "examples",
+      token: "",
+    });
+  });
+
+  test("clears repository config and session token", () => {
+    const localStorage = createStorage();
+    const sessionStorage = createStorage();
+    setBrowserStorage(localStorage, sessionStorage);
+    saveGitHubProjectConfigToStorage({
+      owner: "paul",
+      repo: "analytics",
+      branch: "main",
+      pathPrefix: "",
+      token: "ghp_session",
+    });
+
+    clearGitHubProjectConfigInStorage();
+
+    expect(localStorage.getItem(GITHUB_PROJECT_CONFIG_STORAGE_KEY)).toBe(null);
+    expect(
+      sessionStorage.getItem(GITHUB_PROJECT_TOKEN_SESSION_STORAGE_KEY),
+    ).toBe(null);
   });
 
   test("uploads files through GitHub contents API", async () => {

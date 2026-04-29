@@ -5,10 +5,10 @@ import {
   AI_PROVIDER_STORAGE_KEY,
   type AiProvider,
   getApiKeyStorageKeyForProvider,
+  loadAiSettingsFromStorage,
   OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY,
   OPENAI_COMPATIBLE_URL_STORAGE_KEY,
-  OPEN_RESPONSES_PROVIDER_NAME_STORAGE_KEY,
-  OPEN_RESPONSES_URL_STORAGE_KEY,
+  saveAiSettingsToStorage,
 } from "@/ai/settings";
 
 type LocalStorageLike = {
@@ -33,12 +33,17 @@ function createStorage(): LocalStorageLike {
   };
 }
 
-function setBrowserStorage(storage: LocalStorageLike) {
+function setBrowserStorage(
+  storage: LocalStorageLike,
+  sessionStorage: LocalStorageLike = storage,
+) {
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     writable: true,
     value: {
       localStorage: storage,
+      sessionStorage,
+      dispatchEvent: () => true,
     },
   });
 }
@@ -54,20 +59,24 @@ afterEach(() => {
 });
 
 function configureProvider(provider: AiProvider, options?: { model?: string }) {
-  const storage = createStorage();
-  storage.setItem(AI_PROVIDER_STORAGE_KEY, provider);
-  storage.setItem(AI_MODEL_STORAGE_KEY, options?.model ?? "test-model");
-  storage.setItem(getApiKeyStorageKeyForProvider(provider), "test-key");
+  const localStorage = createStorage();
+  const sessionStorage = createStorage();
+  localStorage.setItem(AI_PROVIDER_STORAGE_KEY, provider);
+  localStorage.setItem(AI_MODEL_STORAGE_KEY, options?.model ?? "test-model");
+  sessionStorage.setItem(getApiKeyStorageKeyForProvider(provider), "test-key");
 
   if (provider === "openai-compatible") {
-    storage.setItem(
+    localStorage.setItem(
       OPENAI_COMPATIBLE_URL_STORAGE_KEY,
       "https://api.example.com/v1",
     );
-    storage.setItem(OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY, "example");
+    localStorage.setItem(
+      OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY,
+      "example",
+    );
   }
 
-  return storage;
+  return { localStorage, sessionStorage };
 }
 
 describe("resolveGatewayModel", () => {
@@ -81,8 +90,8 @@ describe("resolveGatewayModel", () => {
     ];
 
     for (const provider of providers) {
-      const storage = configureProvider(provider);
-      setBrowserStorage(storage);
+      const { localStorage, sessionStorage } = configureProvider(provider);
+      setBrowserStorage(localStorage, sessionStorage);
 
       const model = resolveGatewayModel("fallback-model");
       expect(model).toBeTruthy();
@@ -93,7 +102,7 @@ describe("resolveGatewayModel", () => {
     const storage = createStorage();
     storage.setItem(AI_PROVIDER_STORAGE_KEY, "openai");
     storage.setItem(AI_MODEL_STORAGE_KEY, "gpt-4.1");
-    setBrowserStorage(storage);
+    setBrowserStorage(storage, createStorage());
 
     expect(() => resolveGatewayModel("fallback-model")).toThrow(
       "Missing OpenAI API key",
@@ -101,8 +110,10 @@ describe("resolveGatewayModel", () => {
   });
 
   test("throws when model is missing", () => {
-    const storage = configureProvider("openai", { model: "" });
-    setBrowserStorage(storage);
+    const { localStorage, sessionStorage } = configureProvider("openai", {
+      model: "",
+    });
+    setBrowserStorage(localStorage, sessionStorage);
 
     expect(() => resolveGatewayModel("fallback-model")).toThrow(
       "Missing model",
@@ -110,15 +121,19 @@ describe("resolveGatewayModel", () => {
   });
 
   test("throws when openai compatible URL is missing", () => {
-    const storage = createStorage();
-    storage.setItem(AI_PROVIDER_STORAGE_KEY, "openai-compatible");
-    storage.setItem(AI_MODEL_STORAGE_KEY, "gpt-4.1");
-    storage.setItem(
+    const localStorage = createStorage();
+    const sessionStorage = createStorage();
+    localStorage.setItem(AI_PROVIDER_STORAGE_KEY, "openai-compatible");
+    localStorage.setItem(AI_MODEL_STORAGE_KEY, "gpt-4.1");
+    sessionStorage.setItem(
       getApiKeyStorageKeyForProvider("openai-compatible"),
       "test-key",
     );
-    storage.setItem(OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY, "example");
-    setBrowserStorage(storage);
+    localStorage.setItem(
+      OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY,
+      "example",
+    );
+    setBrowserStorage(localStorage, sessionStorage);
 
     expect(() => resolveGatewayModel("fallback-model")).toThrow(
       "Missing OpenAI Compatible URL",
@@ -134,5 +149,31 @@ describe("resolveGatewayModel", () => {
 
     const model = resolveGatewayModel("moonshotai/kimi-k2.5");
     expect(model).toBeTruthy();
+  });
+
+  test("stores provider api keys in session storage only", () => {
+    const localStorage = createStorage();
+    const sessionStorage = createStorage();
+    setBrowserStorage(localStorage, sessionStorage);
+
+    saveAiSettingsToStorage({
+      provider: "openai",
+      model: "gpt-4.1",
+      apiKey: "sk-session",
+      openAiCompatibleName: "",
+      openAiCompatibleUrl: "",
+    });
+
+    expect(localStorage.getItem(getApiKeyStorageKeyForProvider("openai"))).toBe(
+      null,
+    );
+    expect(
+      sessionStorage.getItem(getApiKeyStorageKeyForProvider("openai")),
+    ).toBe("sk-session");
+    expect(loadAiSettingsFromStorage()).toMatchObject({
+      provider: "openai",
+      model: "gpt-4.1",
+      apiKey: "sk-session",
+    });
   });
 });

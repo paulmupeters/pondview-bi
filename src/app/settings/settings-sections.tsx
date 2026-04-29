@@ -1,5 +1,5 @@
 import { Pencil } from "lucide-react";
-import { useState, type ReactNode, type RefObject } from "react";
+import { type ReactNode, type RefObject, useState } from "react";
 import {
   type AiProvider,
   getAiProviderDisplayName,
@@ -28,7 +28,7 @@ import {
   type DefaultPromptMode,
   setDefaultPromptModePreference,
 } from "@/lib/default-prompt-mode";
-import { type S3BackupObject } from "@/lib/duckdb/s3-backup";
+import type { S3BackupObject } from "@/lib/duckdb/s3-backup";
 import {
   isS3BackupConfigComplete,
   type S3BackupConfig,
@@ -38,8 +38,7 @@ import {
   isGitHubProjectConfigComplete,
 } from "@/lib/project-store/github-project-sync";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
-import { cn } from "@/lib/utils";
-import { type Theme } from "@/themes";
+import type { Theme } from "@/themes";
 import { SettingsContentSection } from "./settings-layout";
 
 // ---------------------------------------------------------------------------
@@ -47,9 +46,7 @@ import { SettingsContentSection } from "./settings-layout";
 // ---------------------------------------------------------------------------
 
 function ErrorMessage({ children }: { children: ReactNode }) {
-  return (
-    <p className="text-sm text-red-600 dark:text-red-400">{children}</p>
-  );
+  return <p className="text-sm text-red-600 dark:text-red-400">{children}</p>;
 }
 
 function SuccessMessage({ children }: { children: ReactNode }) {
@@ -131,7 +128,8 @@ export function AiSettingsSections({
           <div>
             <h3 className="text-lg font-semibold">Provider configuration</h3>
             <p className="text-sm text-muted-foreground">
-              Credentials and model selection for AI requests.
+              Credentials and model selection for AI requests. API keys are kept
+              only for the current browser session.
             </p>
           </div>
 
@@ -229,9 +227,7 @@ export function AiSettingsSections({
               </>
             )}
 
-            {aiSettingsError && (
-              <ErrorMessage>{aiSettingsError}</ErrorMessage>
-            )}
+            {aiSettingsError && <ErrorMessage>{aiSettingsError}</ErrorMessage>}
             <Button
               onClick={onSaveAiSettings}
               disabled={isSaving}
@@ -610,6 +606,9 @@ type ProjectsSettingsSectionsProps = {
   onOpenExportDialog: () => void;
   isExportingProject: boolean;
   activeProjectId: string;
+  showExternalProjectIntegrations: boolean;
+  onUploadRuntimeSnapshotToS3: () => void;
+  onPushProjectArtifactsToGitHub: () => void;
   projectImportFileRef: RefObject<HTMLInputElement | null>;
   onImportProject: (event: React.ChangeEvent<HTMLInputElement>) => void;
   githubProjectError: string | null;
@@ -661,6 +660,9 @@ export function ProjectsSettingsSections({
   onOpenExportDialog,
   isExportingProject,
   activeProjectId,
+  showExternalProjectIntegrations,
+  onUploadRuntimeSnapshotToS3,
+  onPushProjectArtifactsToGitHub,
   projectImportFileRef,
   onImportProject,
   githubProjectError,
@@ -700,7 +702,10 @@ export function ProjectsSettingsSections({
     onUpdateGitHubProjectForm("owner", savedGitHubProjectConfig.owner);
     onUpdateGitHubProjectForm("repo", savedGitHubProjectConfig.repo);
     onUpdateGitHubProjectForm("branch", savedGitHubProjectConfig.branch);
-    onUpdateGitHubProjectForm("pathPrefix", savedGitHubProjectConfig.pathPrefix);
+    onUpdateGitHubProjectForm(
+      "pathPrefix",
+      savedGitHubProjectConfig.pathPrefix,
+    );
     onUpdateGitHubProjectForm("token", savedGitHubProjectConfig.token);
     setIsEditingGitHubConfig(false);
   };
@@ -846,204 +851,247 @@ export function ProjectsSettingsSections({
         </div>
       </SettingsContentSection>
 
-      <SettingsContentSection>
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-lg font-semibold">GitHub project sync</h3>
-            <p className="text-sm text-muted-foreground">
-              Configure a GitHub repository destination for project artifacts.
-              The export flow uploads dashboards, queries, notebooks, and source
-              metadata only; runtime snapshots and credentials are not
-              committed.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded border bg-muted/30 px-3 py-2 text-sm">
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Status
+      {showExternalProjectIntegrations && (
+        <SettingsContentSection>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold">GitHub project sync</h3>
+              <p className="text-sm text-muted-foreground">
+                Configure a GitHub repository destination for project artifacts.
+                The export flow uploads dashboards, queries, notebooks, and
+                source metadata only; runtime snapshots and credentials are not
+                committed. Tokens are kept only for the current browser session.
               </p>
-              {isGitHubConnected ? (
-                <p className="truncate">
-                  Connected to{" "}
-                  <span className="font-mono text-xs">{githubTargetLabel}</span>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded border bg-muted/30 px-3 py-2 text-sm">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Status
                 </p>
-              ) : (
-                <p className="text-muted-foreground">Not connected</p>
+                {isGitHubConnected ? (
+                  <p className="truncate">
+                    Connected to{" "}
+                    <span className="font-mono text-xs">
+                      {githubTargetLabel}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground">Not connected</p>
+                )}
+              </div>
+              {!isEditingGitHubConfig && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditingGitHubConfig(true)}
+                >
+                  {isGitHubConnected ? "Edit connection" : "Add connection"}
+                </Button>
               )}
             </div>
+
+            {isEditingGitHubConfig && (
+              <>
+                {githubProjectError && (
+                  <ErrorMessage>{githubProjectError}</ErrorMessage>
+                )}
+                {githubProjectSuccess && !githubProjectError && (
+                  <SuccessMessage>{githubProjectSuccess}</SuccessMessage>
+                )}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField label="Owner" htmlFor="github-owner">
+                    <Input
+                      id="github-owner"
+                      type="text"
+                      value={githubProjectForm.owner}
+                      onChange={(event) =>
+                        onUpdateGitHubProjectForm("owner", event.target.value)
+                      }
+                      placeholder="organization-or-user"
+                    />
+                  </FormField>
+
+                  <FormField label="Repository" htmlFor="github-repo">
+                    <Input
+                      id="github-repo"
+                      type="text"
+                      value={githubProjectForm.repo}
+                      onChange={(event) =>
+                        onUpdateGitHubProjectForm("repo", event.target.value)
+                      }
+                      placeholder="analytics-project"
+                    />
+                  </FormField>
+
+                  <FormField label="Branch" htmlFor="github-branch">
+                    <Input
+                      id="github-branch"
+                      type="text"
+                      value={githubProjectForm.branch}
+                      onChange={(event) =>
+                        onUpdateGitHubProjectForm("branch", event.target.value)
+                      }
+                      placeholder="main"
+                    />
+                  </FormField>
+
+                  <FormField
+                    label={
+                      <>
+                        Path prefix{" "}
+                        <span className="font-normal text-muted-foreground">
+                          (optional)
+                        </span>
+                      </>
+                    }
+                    htmlFor="github-path-prefix"
+                  >
+                    <Input
+                      id="github-path-prefix"
+                      type="text"
+                      value={githubProjectForm.pathPrefix}
+                      onChange={(event) =>
+                        onUpdateGitHubProjectForm(
+                          "pathPrefix",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="examples/revenue"
+                    />
+                  </FormField>
+
+                  <FormField
+                    label="GitHub token"
+                    htmlFor="github-token"
+                    className="sm:col-span-2"
+                  >
+                    <Input
+                      id="github-token"
+                      type="password"
+                      autoComplete="off"
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      data-form-type="other"
+                      value={githubProjectForm.token}
+                      onChange={(event) =>
+                        onUpdateGitHubProjectForm("token", event.target.value)
+                      }
+                      placeholder="Fine-grained token with contents write access"
+                    />
+                  </FormField>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={handleSaveGitHubAndCollapse}>
+                    Save Configuration
+                  </Button>
+                  <Button variant="outline" onClick={handleCancelGitHubEdit}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleClearGitHubAndCollapse}
+                    disabled={!isGitHubConnected}
+                  >
+                    Clear Configuration
+                  </Button>
+                </div>
+              </>
+            )}
+
             {!isEditingGitHubConfig && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditingGitHubConfig(true)}
-              >
-                {isGitHubConnected ? "Edit connection" : "Add connection"}
-              </Button>
+              <div className="space-y-3 border-t pt-4">
+                {githubProjectError && (
+                  <ErrorMessage>{githubProjectError}</ErrorMessage>
+                )}
+                {githubProjectSuccess && !githubProjectError && (
+                  <SuccessMessage>{githubProjectSuccess}</SuccessMessage>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={onPushProjectArtifactsToGitHub}
+                    disabled={
+                      isExportingProject ||
+                      isProjectBusy ||
+                      !activeProjectId ||
+                      !isGitHubConnected
+                    }
+                  >
+                    {isExportingProject
+                      ? "Pushing..."
+                      : "Push project artifacts to GitHub"}
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
+        </SettingsContentSection>
+      )}
 
-          {isEditingGitHubConfig && (
-            <>
-              {githubProjectError && (
-                <ErrorMessage>{githubProjectError}</ErrorMessage>
-              )}
-              {githubProjectSuccess && !githubProjectError && (
-                <SuccessMessage>{githubProjectSuccess}</SuccessMessage>
-              )}
-
-              <div className="grid gap-3 sm:grid-cols-2">
-            <FormField label="Owner" htmlFor="github-owner">
-              <Input
-                id="github-owner"
-                type="text"
-                value={githubProjectForm.owner}
-                onChange={(event) =>
-                  onUpdateGitHubProjectForm("owner", event.target.value)
-                }
-                placeholder="organization-or-user"
-              />
-            </FormField>
-
-            <FormField label="Repository" htmlFor="github-repo">
-              <Input
-                id="github-repo"
-                type="text"
-                value={githubProjectForm.repo}
-                onChange={(event) =>
-                  onUpdateGitHubProjectForm("repo", event.target.value)
-                }
-                placeholder="analytics-project"
-              />
-            </FormField>
-
-            <FormField label="Branch" htmlFor="github-branch">
-              <Input
-                id="github-branch"
-                type="text"
-                value={githubProjectForm.branch}
-                onChange={(event) =>
-                  onUpdateGitHubProjectForm("branch", event.target.value)
-                }
-                placeholder="main"
-              />
-            </FormField>
-
-            <FormField
-              label={
-                <>
-                  Path prefix{" "}
-                  <span className="font-normal text-muted-foreground">
-                    (optional)
-                  </span>
-                </>
-              }
-              htmlFor="github-path-prefix"
-            >
-              <Input
-                id="github-path-prefix"
-                type="text"
-                value={githubProjectForm.pathPrefix}
-                onChange={(event) =>
-                  onUpdateGitHubProjectForm("pathPrefix", event.target.value)
-                }
-                placeholder="examples/revenue"
-              />
-            </FormField>
-
-            <FormField
-              label="GitHub token"
-              htmlFor="github-token"
-              className="sm:col-span-2"
-            >
-              <Input
-                id="github-token"
-                type="password"
-                autoComplete="off"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                data-form-type="other"
-                value={githubProjectForm.token}
-                onChange={(event) =>
-                  onUpdateGitHubProjectForm("token", event.target.value)
-                }
-                placeholder="Fine-grained token with contents write access"
-              />
-            </FormField>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={handleSaveGitHubAndCollapse}>
-              Save Configuration
-            </Button>
-            <Button variant="outline" onClick={handleCancelGitHubEdit}>
-              Cancel
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleClearGitHubAndCollapse}
-              disabled={!isGitHubConnected}
-            >
-              Clear Configuration
-            </Button>
-          </div>
-            </>
-          )}
-        </div>
-      </SettingsContentSection>
-
-      <SettingsContentSection>
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-lg font-semibold">S3-compatible backup</h3>
-            <p className="text-sm text-muted-foreground">
-              Configure an S3-compatible bucket (Cloudflare R2, Backblaze B2,
-              MinIO, etc.) so Export Project... can upload runtime snapshots and
-              so saved snapshots can be restored here. Credentials are stored in
-              this browser&apos;s local storage - use a scoped key limited to
-              one bucket.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded border bg-muted/30 px-3 py-2 text-sm">
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Status
+      {showExternalProjectIntegrations && (
+        <SettingsContentSection>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold">S3-compatible backup</h3>
+              <p className="text-sm text-muted-foreground">
+                Configure an S3-compatible bucket (Cloudflare R2, Backblaze B2,
+                MinIO, etc.) so Export Project... can upload runtime snapshots
+                and so saved snapshots can be restored here. Credentials are
+                kept only for the current browser session - use a scoped key
+                limited to one bucket.
               </p>
-              {isS3Connected ? (
-                <p className="truncate">
-                  Connected to{" "}
-                  <span className="font-mono text-xs">{s3TargetLabel}</span>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded border bg-muted/30 px-3 py-2 text-sm">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Status
                 </p>
-              ) : (
-                <p className="text-muted-foreground">Not connected</p>
+                {isS3Connected ? (
+                  <p className="truncate">
+                    Connected to{" "}
+                    <span className="font-mono text-xs">{s3TargetLabel}</span>
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground">Not connected</p>
+                )}
+              </div>
+              {!isEditingS3Config && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditingS3Config(true)}
+                >
+                  {isS3Connected ? "Edit connection" : "Add connection"}
+                </Button>
               )}
             </div>
-            {!isEditingS3Config && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditingS3Config(true)}
-              >
-                {isS3Connected ? "Edit connection" : "Add connection"}
-              </Button>
-            )}
-          </div>
 
-          {isEditingS3Config && (
-            <>
-          {s3BackupError && <ErrorMessage>{s3BackupError}</ErrorMessage>}
-          {s3CorsError && (
-            <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs dark:border-amber-700 dark:bg-amber-950">
-              <p className="mb-2 font-semibold text-amber-800 dark:text-amber-300">
-                This looks like a CORS error. The browser blocked the request
-                because the bucket does not allow cross-origin requests from
-                this origin.
-              </p>
-              <p className="mb-1 font-medium text-amber-800 dark:text-amber-300">
-                Add this CORS rule to your bucket:
-              </p>
-              <pre className="overflow-x-auto rounded bg-amber-100 p-2 text-amber-900 dark:bg-amber-900 dark:text-amber-100">{`[
+            {!isEditingS3Config && s3BackupError && (
+              <ErrorMessage>{s3BackupError}</ErrorMessage>
+            )}
+            {!isEditingS3Config && s3BackupSuccess && !s3BackupError && (
+              <SuccessMessage>{s3BackupSuccess}</SuccessMessage>
+            )}
+
+            {isEditingS3Config && (
+              <>
+                {s3BackupError && <ErrorMessage>{s3BackupError}</ErrorMessage>}
+                {s3CorsError && (
+                  <div className="rounded border border-amber-300 bg-amber-50 p-3 text-xs dark:border-amber-700 dark:bg-amber-950">
+                    <p className="mb-2 font-semibold text-amber-800 dark:text-amber-300">
+                      This looks like a CORS error. The browser blocked the
+                      request because the bucket does not allow cross-origin
+                      requests from this origin.
+                    </p>
+                    <p className="mb-1 font-medium text-amber-800 dark:text-amber-300">
+                      Add this CORS rule to your bucket:
+                    </p>
+                    <pre className="overflow-x-auto rounded bg-amber-100 p-2 text-amber-900 dark:bg-amber-900 dark:text-amber-100">{`[
   {
     "AllowedOrigins": ["*"],
     "AllowedMethods": ["GET", "PUT", "HEAD"],
@@ -1051,214 +1099,240 @@ export function ProjectsSettingsSections({
     "ExposeHeaders": ["ETag"]
   }
 ]`}</pre>
-              <p className="mt-2 text-amber-700 dark:text-amber-400">
-                For R2: Manage bucket - Settings - CORS policy. For B2: Bucket -
-                CORS Rules. For MinIO: use{" "}
-                <code className="rounded bg-amber-100 px-0.5 dark:bg-amber-900">
-                  mc anonymous set-json cors.json alias/bucket
-                </code>
-                .
-              </p>
-            </div>
-          )}
-          {s3BackupSuccess && !s3BackupError && (
-            <SuccessMessage>{s3BackupSuccess}</SuccessMessage>
-          )}
+                    <p className="mt-2 text-amber-700 dark:text-amber-400">
+                      For R2: Manage bucket - Settings - CORS policy. For B2:
+                      Bucket - CORS Rules. For MinIO: use{" "}
+                      <code className="rounded bg-amber-100 px-0.5 dark:bg-amber-900">
+                        mc anonymous set-json cors.json alias/bucket
+                      </code>
+                      .
+                    </p>
+                  </div>
+                )}
+                {s3BackupSuccess && !s3BackupError && (
+                  <SuccessMessage>{s3BackupSuccess}</SuccessMessage>
+                )}
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FormField label="Endpoint" htmlFor="s3-endpoint">
-              <Input
-                id="s3-endpoint"
-                type="text"
-                value={s3BackupForm.endpoint}
-                onChange={(event) =>
-                  onUpdateS3BackupForm("endpoint", event.target.value)
-                }
-                placeholder="https://<acct>.r2.cloudflarestorage.com"
-              />
-            </FormField>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField label="Endpoint" htmlFor="s3-endpoint">
+                    <Input
+                      id="s3-endpoint"
+                      type="text"
+                      value={s3BackupForm.endpoint}
+                      onChange={(event) =>
+                        onUpdateS3BackupForm("endpoint", event.target.value)
+                      }
+                      placeholder="https://<acct>.r2.cloudflarestorage.com"
+                    />
+                  </FormField>
 
-            <FormField label="Region" htmlFor="s3-region">
-              <Input
-                id="s3-region"
-                type="text"
-                value={s3BackupForm.region}
-                onChange={(event) =>
-                  onUpdateS3BackupForm("region", event.target.value)
-                }
-                placeholder="auto"
-              />
-            </FormField>
+                  <FormField label="Region" htmlFor="s3-region">
+                    <Input
+                      id="s3-region"
+                      type="text"
+                      value={s3BackupForm.region}
+                      onChange={(event) =>
+                        onUpdateS3BackupForm("region", event.target.value)
+                      }
+                      placeholder="auto"
+                    />
+                  </FormField>
 
-            <FormField label="Bucket" htmlFor="s3-bucket">
-              <Input
-                id="s3-bucket"
-                type="text"
-                value={s3BackupForm.bucket}
-                onChange={(event) =>
-                  onUpdateS3BackupForm("bucket", event.target.value)
-                }
-                placeholder="pondview-backups"
-              />
-            </FormField>
+                  <FormField label="Bucket" htmlFor="s3-bucket">
+                    <Input
+                      id="s3-bucket"
+                      type="text"
+                      value={s3BackupForm.bucket}
+                      onChange={(event) =>
+                        onUpdateS3BackupForm("bucket", event.target.value)
+                      }
+                      placeholder="pondview-backups"
+                    />
+                  </FormField>
 
-            <FormField
-              label={
-                <>
-                  Prefix{" "}
-                  <span className="font-normal text-muted-foreground">
-                    (optional)
-                  </span>
-                </>
-              }
-              htmlFor="s3-prefix"
-            >
-              <Input
-                id="s3-prefix"
-                type="text"
-                value={s3BackupForm.prefix}
-                onChange={(event) =>
-                  onUpdateS3BackupForm("prefix", event.target.value)
-                }
-                placeholder="pondview/"
-              />
-            </FormField>
+                  <FormField
+                    label={
+                      <>
+                        Prefix{" "}
+                        <span className="font-normal text-muted-foreground">
+                          (optional)
+                        </span>
+                      </>
+                    }
+                    htmlFor="s3-prefix"
+                  >
+                    <Input
+                      id="s3-prefix"
+                      type="text"
+                      value={s3BackupForm.prefix}
+                      onChange={(event) =>
+                        onUpdateS3BackupForm("prefix", event.target.value)
+                      }
+                      placeholder="pondview/"
+                    />
+                  </FormField>
 
-            <FormField label="Access Key ID" htmlFor="s3-access-key">
-              <Input
-                id="s3-access-key"
-                type="text"
-                autoComplete="off"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                value={s3BackupForm.accessKeyId}
-                onChange={(event) =>
-                  onUpdateS3BackupForm("accessKeyId", event.target.value)
-                }
-              />
-            </FormField>
+                  <FormField label="Access Key ID" htmlFor="s3-access-key">
+                    <Input
+                      id="s3-access-key"
+                      type="text"
+                      autoComplete="off"
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      value={s3BackupForm.accessKeyId}
+                      onChange={(event) =>
+                        onUpdateS3BackupForm("accessKeyId", event.target.value)
+                      }
+                    />
+                  </FormField>
 
-            <FormField label="Secret Access Key" htmlFor="s3-secret-key">
-              <Input
-                id="s3-secret-key"
-                type="password"
-                autoComplete="off"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                data-form-type="other"
-                value={s3BackupForm.secretAccessKey}
-                onChange={(event) =>
-                  onUpdateS3BackupForm("secretAccessKey", event.target.value)
-                }
-              />
-            </FormField>
-          </div>
+                  <FormField label="Secret Access Key" htmlFor="s3-secret-key">
+                    <Input
+                      id="s3-secret-key"
+                      type="password"
+                      autoComplete="off"
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      data-form-type="other"
+                      value={s3BackupForm.secretAccessKey}
+                      onChange={(event) =>
+                        onUpdateS3BackupForm(
+                          "secretAccessKey",
+                          event.target.value,
+                        )
+                      }
+                    />
+                  </FormField>
+                </div>
 
-          <label
-            htmlFor="s3-force-path-style"
-            className="flex items-center gap-2 text-sm"
-          >
-            <input
-              id="s3-force-path-style"
-              type="checkbox"
-              checked={s3BackupForm.forcePathStyle}
-              onChange={(event) =>
-                onUpdateS3BackupForm("forcePathStyle", event.target.checked)
-              }
-              className="h-4 w-4 rounded border-border"
-            />
-            <span>
-              Use path-style URLs{" "}
-              <span className="text-muted-foreground">
-                (required for MinIO and some B2 setups)
-              </span>
-            </span>
-          </label>
-
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={handleSaveS3AndCollapse}>Save Configuration</Button>
-            <Button variant="outline" onClick={handleCancelS3Edit}>
-              Cancel
-            </Button>
-            <Button
-              variant="outline"
-              onClick={onTestS3BackupConnection}
-              disabled={isTestingS3Connection}
-            >
-              {isTestingS3Connection ? "Testing..." : "Test Connection"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleClearS3AndCollapse}
-              disabled={!isS3Connected}
-            >
-              Clear Configuration
-            </Button>
-          </div>
-            </>
-          )}
-
-          {isS3Connected && (
-            <div className="space-y-4 border-t pt-4">
-              <div>
-                <h4 className="text-sm font-semibold">Restore from S3</h4>
-                <p className="text-xs text-muted-foreground">
-                  Bucket `{savedS3BackupConfig.bucket}
-                  {savedS3BackupConfig.prefix
-                    ? `/${savedS3BackupConfig.prefix}`
-                    : "/"}
-                  `. Restore replaces the local database - browser workspace
-                  metadata is preserved. Upload happens from the Export
-                  Project... dialog.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  onClick={onRefreshS3SnapshotList}
-                  disabled={isListingS3Snapshots || isRestoringFromS3}
+                <label
+                  htmlFor="s3-force-path-style"
+                  className="flex items-center gap-2 text-sm"
                 >
-                  {isListingS3Snapshots ? "Loading..." : "List Snapshots"}
-                </Button>
-              </div>
+                  <input
+                    id="s3-force-path-style"
+                    type="checkbox"
+                    checked={s3BackupForm.forcePathStyle}
+                    onChange={(event) =>
+                      onUpdateS3BackupForm(
+                        "forcePathStyle",
+                        event.target.checked,
+                      )
+                    }
+                    className="h-4 w-4 rounded border-border"
+                  />
+                  <span>
+                    Use path-style URLs{" "}
+                    <span className="text-muted-foreground">
+                      (required for MinIO and some B2 setups)
+                    </span>
+                  </span>
+                </label>
 
-              {s3SnapshotList && s3SnapshotList.length > 0 && (
-                <ul className="space-y-2 text-sm">
-                  {s3SnapshotList.map((snapshot) => (
-                    <li
-                      key={snapshot.key}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded border bg-muted/30 px-3 py-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-mono text-xs">
-                          {snapshot.key}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatSnapshotSize(snapshot.size)}
-                          {snapshot.lastModified
-                            ? ` · ${snapshot.lastModified.toLocaleString()}`
-                            : ""}
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onRestoreSnapshotFromS3(snapshot.key)}
-                        disabled={isRestoringFromS3}
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={handleSaveS3AndCollapse}>
+                    Save Configuration
+                  </Button>
+                  <Button variant="outline" onClick={handleCancelS3Edit}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={onTestS3BackupConnection}
+                    disabled={isTestingS3Connection}
+                  >
+                    {isTestingS3Connection ? "Testing..." : "Test Connection"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleClearS3AndCollapse}
+                    disabled={!isS3Connected}
+                  >
+                    Clear Configuration
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {isS3Connected && (
+              <div className="space-y-4 border-t pt-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={onUploadRuntimeSnapshotToS3}
+                    disabled={
+                      isExportingProject ||
+                      isProjectBusy ||
+                      !activeProjectId ||
+                      !isS3Connected
+                    }
+                  >
+                    {isExportingProject
+                      ? "Uploading..."
+                      : "Upload runtime snapshot to S3"}
+                  </Button>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-semibold">Restore from S3</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Bucket `{savedS3BackupConfig.bucket}
+                    {savedS3BackupConfig.prefix
+                      ? `/${savedS3BackupConfig.prefix}`
+                      : "/"}
+                    `. Restore replaces the local database - browser workspace
+                    metadata is preserved. Upload happens from the Export
+                    Project... dialog.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={onRefreshS3SnapshotList}
+                    disabled={isListingS3Snapshots || isRestoringFromS3}
+                  >
+                    {isListingS3Snapshots ? "Loading..." : "List Snapshots"}
+                  </Button>
+                </div>
+
+                {s3SnapshotList && s3SnapshotList.length > 0 && (
+                  <ul className="space-y-2 text-sm">
+                    {s3SnapshotList.map((snapshot) => (
+                      <li
+                        key={snapshot.key}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded border bg-muted/30 px-3 py-2"
                       >
-                        {isRestoringFromS3 && s3RestoreKey === snapshot.key
-                          ? "Restoring..."
-                          : "Restore"}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-      </SettingsContentSection>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-mono text-xs">
+                            {snapshot.key}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatSnapshotSize(snapshot.size)}
+                            {snapshot.lastModified
+                              ? ` · ${snapshot.lastModified.toLocaleString()}`
+                              : ""}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onRestoreSnapshotFromS3(snapshot.key)}
+                          disabled={isRestoringFromS3}
+                        >
+                          {isRestoringFromS3 && s3RestoreKey === snapshot.key
+                            ? "Restoring..."
+                            : "Restore"}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        </SettingsContentSection>
+      )}
     </>
   );
 }
@@ -1410,14 +1484,6 @@ type ExportProjectDialogProps = {
   onExportDialogOpenChange: (open: boolean) => void;
   exportIncludeSnapshot: boolean;
   onExportIncludeSnapshotChange: (value: boolean) => void;
-  exportDownloadArchive: boolean;
-  onExportDownloadArchiveChange: (value: boolean) => void;
-  exportUploadSnapshotToS3: boolean;
-  onExportUploadSnapshotToS3Change: (value: boolean) => void;
-  exportUploadArtifactsToGitHub: boolean;
-  onExportUploadArtifactsToGitHubChange: (value: boolean) => void;
-  savedS3BackupConfig: S3BackupConfig;
-  savedGitHubProjectConfig: GitHubProjectConfig;
   openProjectError: string | null;
   onCloseExportDialog: () => void;
   isExportingProject: boolean;
@@ -1429,32 +1495,19 @@ export function ExportProjectDialog({
   onExportDialogOpenChange,
   exportIncludeSnapshot,
   onExportIncludeSnapshotChange,
-  exportDownloadArchive,
-  onExportDownloadArchiveChange,
-  exportUploadSnapshotToS3,
-  onExportUploadSnapshotToS3Change,
-  exportUploadArtifactsToGitHub,
-  onExportUploadArtifactsToGitHubChange,
-  savedS3BackupConfig,
-  savedGitHubProjectConfig,
   openProjectError,
   onCloseExportDialog,
   isExportingProject,
   onExportProject,
 }: ExportProjectDialogProps) {
-  const s3ConfigComplete = isS3BackupConfigComplete(savedS3BackupConfig);
-  const githubConfigComplete = isGitHubProjectConfigComplete(
-    savedGitHubProjectConfig,
-  );
-
   return (
     <Dialog open={isExportDialogOpen} onOpenChange={onExportDialogOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Export Project</DialogTitle>
           <DialogDescription>
-            Export project artifacts and an optional DuckDB runtime snapshot.
-            Choose one or more destinations.
+            Download a project archive with artifacts and an optional DuckDB
+            runtime snapshot.
           </DialogDescription>
         </DialogHeader>
 
@@ -1501,84 +1554,6 @@ export function ExportProjectDialog({
             </label>
           </div>
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Destinations</p>
-            <label
-              htmlFor="export-destination-download"
-              className="flex items-start gap-2 text-sm"
-            >
-              <input
-                id="export-destination-download"
-                type="checkbox"
-                checked={exportDownloadArchive}
-                onChange={(event) =>
-                  onExportDownloadArchiveChange(event.target.checked)
-                }
-                className="mt-0.5 h-4 w-4 rounded border-border"
-              />
-              <span>
-                Download archive{" "}
-                <span className="text-xs text-muted-foreground">
-                  (.zip with `pondview/` and optional
-                  `runtime/pondview-runtime.duckdb`)
-                </span>
-              </span>
-            </label>
-            <label
-              htmlFor="export-destination-s3"
-              className={cn(
-                "flex items-start gap-2 text-sm",
-                (!exportIncludeSnapshot || !s3ConfigComplete) &&
-                  "text-muted-foreground",
-              )}
-            >
-              <input
-                id="export-destination-s3"
-                type="checkbox"
-                checked={exportUploadSnapshotToS3}
-                onChange={(event) =>
-                  onExportUploadSnapshotToS3Change(event.target.checked)
-                }
-                disabled={!exportIncludeSnapshot || !s3ConfigComplete}
-                className="mt-0.5 h-4 w-4 rounded border-border"
-              />
-              <span>
-                Upload runtime snapshot to S3{" "}
-                <span className="text-xs text-muted-foreground">
-                  {s3ConfigComplete
-                    ? "(uses the configured S3 backup bucket)"
-                    : "(configure S3 backup first)"}
-                </span>
-              </span>
-            </label>
-            <label
-              htmlFor="export-destination-github"
-              className={cn(
-                "flex items-start gap-2 text-sm",
-                !githubConfigComplete && "text-muted-foreground",
-              )}
-            >
-              <input
-                id="export-destination-github"
-                type="checkbox"
-                checked={exportUploadArtifactsToGitHub}
-                onChange={(event) =>
-                  onExportUploadArtifactsToGitHubChange(event.target.checked)
-                }
-                disabled={!githubConfigComplete}
-                className="mt-0.5 h-4 w-4 rounded border-border"
-              />
-              <span>
-                Push project artifacts to GitHub{" "}
-                <span className="text-xs text-muted-foreground">
-                  {githubConfigComplete
-                    ? "(uses the configured repository)"
-                    : "(configure GitHub project sync first)"}
-                </span>
-              </span>
-            </label>
-          </div>
-
           {openProjectError && <ErrorMessage>{openProjectError}</ErrorMessage>}
         </div>
 
@@ -1590,15 +1565,7 @@ export function ExportProjectDialog({
           >
             Cancel
           </Button>
-          <Button
-            onClick={onExportProject}
-            disabled={
-              isExportingProject ||
-              (!exportDownloadArchive &&
-                !exportUploadSnapshotToS3 &&
-                !exportUploadArtifactsToGitHub)
-            }
-          >
+          <Button onClick={onExportProject} disabled={isExportingProject}>
             {isExportingProject ? "Exporting..." : "Export"}
           </Button>
         </DialogFooter>

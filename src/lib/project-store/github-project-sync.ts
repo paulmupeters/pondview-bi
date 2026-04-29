@@ -2,6 +2,8 @@ import type { ProjectArtifactTextFile } from "@/lib/project-artifacts/export";
 
 export const GITHUB_PROJECT_CONFIG_STORAGE_KEY =
   "pondview.project.githubSync.v1";
+export const GITHUB_PROJECT_TOKEN_SESSION_STORAGE_KEY =
+  "pondview.project.githubSync.token.v1";
 
 export type GitHubProjectConfig = {
   owner: string;
@@ -49,7 +51,9 @@ type GitHubProjectSyncFetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-const isClient = typeof window !== "undefined";
+function isClient(): boolean {
+  return typeof window !== "undefined";
+}
 
 export function parseGitHubProjectConfigPayload(
   payload: unknown,
@@ -69,7 +73,7 @@ export function parseGitHubProjectConfigPayload(
 }
 
 export function readGitHubProjectConfigFromStorage(): GitHubProjectConfig {
-  if (!isClient) {
+  if (!isClient()) {
     return { ...EMPTY_GITHUB_PROJECT_CONFIG };
   }
 
@@ -79,7 +83,12 @@ export function readGitHubProjectConfigFromStorage(): GitHubProjectConfig {
   }
 
   try {
-    return parseGitHubProjectConfigPayload(JSON.parse(raw));
+    const parsed = parseGitHubProjectConfigPayload(JSON.parse(raw));
+    if (parsed.token) {
+      saveGitHubProjectConfigToStorage(parsed);
+      return parsed;
+    }
+    return { ...parsed, token: readGitHubProjectTokenFromSession() };
   } catch (error) {
     console.error("[githubProjectSync] Failed to parse config", error);
     return { ...EMPTY_GITHUB_PROJECT_CONFIG };
@@ -89,22 +98,61 @@ export function readGitHubProjectConfigFromStorage(): GitHubProjectConfig {
 export function saveGitHubProjectConfigToStorage(
   config: GitHubProjectConfig,
 ): void {
-  if (!isClient) {
+  if (!isClient()) {
     return;
   }
 
   window.localStorage.setItem(
     GITHUB_PROJECT_CONFIG_STORAGE_KEY,
-    JSON.stringify(normalizeGitHubProjectConfig(config)),
+    JSON.stringify({
+      ...normalizeGitHubProjectConfig(config),
+      token: "",
+    }),
   );
+  saveGitHubProjectTokenToSession(config.token);
 }
 
 export function clearGitHubProjectConfigInStorage(): void {
-  if (!isClient) {
+  if (!isClient()) {
     return;
   }
 
   window.localStorage.removeItem(GITHUB_PROJECT_CONFIG_STORAGE_KEY);
+  clearGitHubProjectTokenInSession();
+}
+
+export function readGitHubProjectTokenFromSession(): string {
+  if (!isClient()) {
+    return "";
+  }
+
+  return toTrimmedString(
+    window.sessionStorage.getItem(GITHUB_PROJECT_TOKEN_SESSION_STORAGE_KEY),
+  );
+}
+
+export function saveGitHubProjectTokenToSession(token: string): void {
+  if (!isClient()) {
+    return;
+  }
+
+  const trimmed = token.trim();
+  if (trimmed) {
+    window.sessionStorage.setItem(
+      GITHUB_PROJECT_TOKEN_SESSION_STORAGE_KEY,
+      trimmed,
+    );
+  } else {
+    clearGitHubProjectTokenInSession();
+  }
+}
+
+export function clearGitHubProjectTokenInSession(): void {
+  if (!isClient()) {
+    return;
+  }
+
+  window.sessionStorage.removeItem(GITHUB_PROJECT_TOKEN_SESSION_STORAGE_KEY);
 }
 
 export function isGitHubProjectConfigComplete(

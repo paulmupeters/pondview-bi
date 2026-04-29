@@ -9,8 +9,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AiProvider,
-  getApiKeyStorageKeyForProvider,
   getMissingRequiredSetting,
+  getProviderApiKeyFromStorage,
   loadAiSettingsFromStorage,
   saveAiSettingsToStorage,
 } from "@/ai/settings";
@@ -51,6 +51,7 @@ import {
 import { DuckdbWasmClient } from "@/lib/duckdb/duckdb-wasm-client";
 import {
   downloadSnapshotFromS3,
+  isCorsLikeError,
   listSnapshotsInS3,
   type S3BackupObject,
   testS3BackupConnection,
@@ -277,11 +278,6 @@ export default function SettingsPage() {
   const [isImportingProject, setIsImportingProject] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [exportIncludeSnapshot, setExportIncludeSnapshot] = useState(false);
-  const [exportDownloadArchive, setExportDownloadArchive] = useState(true);
-  const [exportUploadSnapshotToS3, setExportUploadSnapshotToS3] =
-    useState(false);
-  const [exportUploadArtifactsToGitHub, setExportUploadArtifactsToGitHub] =
-    useState(false);
   const [githubProjectForm, setGitHubProjectForm] =
     useState<GitHubProjectConfig>(EMPTY_GITHUB_PROJECT_CONFIG);
   const [savedGitHubProjectConfig, setSavedGitHubProjectConfig] =
@@ -585,7 +581,6 @@ export default function SettingsPage() {
     clearGitHubProjectConfigInStorage();
     setSavedGitHubProjectConfig(EMPTY_GITHUB_PROJECT_CONFIG);
     setGitHubProjectForm(EMPTY_GITHUB_PROJECT_CONFIG);
-    setExportUploadArtifactsToGitHub(false);
     setGitHubProjectError(null);
     setGitHubProjectSuccess("GitHub project sync configuration cleared.");
     setShowSuccessMessage(true);
@@ -651,7 +646,9 @@ export default function SettingsPage() {
 
   const handleRefreshS3SnapshotList = async () => {
     if (!isS3BackupConfigComplete(savedS3BackupConfig)) {
-      setS3BackupError("Save the S3 configuration before listing snapshots.");
+      setS3BackupError(
+        "Save the S3 configuration and enter credentials for this browser session before listing snapshots.",
+      );
       return;
     }
 
@@ -710,32 +707,42 @@ export default function SettingsPage() {
     setIsExportDialogOpen(true);
   };
 
-  const handleUnifiedExport = async () => {
+  const handleUnifiedExport = async ({
+    downloadArchive = true,
+    includeSnapshot = exportIncludeSnapshot,
+    uploadSnapshotToS3Backup = false,
+    uploadArtifactsToGitHub = false,
+  }: {
+    downloadArchive?: boolean;
+    includeSnapshot?: boolean;
+    uploadSnapshotToS3Backup?: boolean;
+    uploadArtifactsToGitHub?: boolean;
+  } = {}) => {
     if (
-      !exportDownloadArchive &&
-      !exportUploadSnapshotToS3 &&
-      !exportUploadArtifactsToGitHub
+      !downloadArchive &&
+      !uploadSnapshotToS3Backup &&
+      !uploadArtifactsToGitHub
     ) {
-      setOpenProjectError("Choose at least one destination.");
+      setOpenProjectError("Choose at least one export action.");
       return;
     }
 
     if (
-      exportUploadSnapshotToS3 &&
+      uploadSnapshotToS3Backup &&
       !isS3BackupConfigComplete(savedS3BackupConfig)
     ) {
-      setOpenProjectError(
-        "Save the S3 backup configuration before uploading a snapshot.",
+      setS3BackupError(
+        "Save the S3 backup configuration and enter credentials for this browser session before uploading a snapshot.",
       );
       return;
     }
 
     if (
-      exportUploadArtifactsToGitHub &&
+      uploadArtifactsToGitHub &&
       !isGitHubProjectConfigComplete(savedGitHubProjectConfig)
     ) {
-      setOpenProjectError(
-        "Save the GitHub project sync configuration before uploading project artifacts.",
+      setGitHubProjectError(
+        "Save the GitHub project sync configuration and enter a token for this browser session before uploading project artifacts.",
       );
       return;
     }
@@ -744,6 +751,7 @@ export default function SettingsPage() {
     setOpenProjectError(null);
     setS3BackupError(null);
     setS3BackupSuccess(null);
+    setS3CorsError(false);
     setGitHubProjectError(null);
     setGitHubProjectSuccess(null);
 
@@ -757,14 +765,13 @@ export default function SettingsPage() {
       let snapshotBytes: Uint8Array | null = null;
       let s3Key: string | null = null;
       const needsSnapshot =
-        (exportDownloadArchive && exportIncludeSnapshot) ||
-        exportUploadSnapshotToS3;
+        (downloadArchive && includeSnapshot) || uploadSnapshotToS3Backup;
 
       if (needsSnapshot) {
         snapshotBytes = await new DuckdbWasmClient().exportDatabaseSnapshot();
       }
 
-      if (exportUploadSnapshotToS3 && snapshotBytes) {
+      if (uploadSnapshotToS3Backup && snapshotBytes) {
         const result = await uploadSnapshotToS3(
           savedS3BackupConfig,
           snapshotBytes,
@@ -772,12 +779,12 @@ export default function SettingsPage() {
         s3Key = result.key;
       }
 
-      if (exportDownloadArchive) {
+      if (downloadArchive) {
         const archive = createBrowserProjectArchive({
           project,
           files,
           runtimeSnapshot:
-            exportIncludeSnapshot && snapshotBytes
+            includeSnapshot && snapshotBytes
               ? {
                   bytes: snapshotBytes,
                   pointer: s3Key
@@ -803,7 +810,7 @@ export default function SettingsPage() {
         URL.revokeObjectURL(href);
       }
 
-      if (exportUploadArtifactsToGitHub) {
+      if (uploadArtifactsToGitHub) {
         const result = await uploadProjectArtifactsToGitHub(
           savedGitHubProjectConfig,
           files,
@@ -828,11 +835,24 @@ export default function SettingsPage() {
 
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
-      setIsExportDialogOpen(false);
+      if (downloadArchive) {
+        setIsExportDialogOpen(false);
+      }
     } catch (error) {
-      setOpenProjectError(
-        error instanceof Error ? error.message : "Failed to export project.",
-      );
+      const message =
+        error instanceof Error ? error.message : "Failed to export project.";
+      const likelyS3CorsError =
+        uploadSnapshotToS3Backup && isCorsLikeError(error);
+
+      if (uploadSnapshotToS3Backup && !downloadArchive) {
+        setS3CorsError(likelyS3CorsError);
+        setS3BackupError(message);
+      } else if (uploadArtifactsToGitHub && !downloadArchive) {
+        setGitHubProjectError(message);
+      } else {
+        setS3CorsError(likelyS3CorsError);
+        setOpenProjectError(message);
+      }
     } finally {
       setIsExportingProject(false);
     }
@@ -1038,12 +1058,8 @@ export default function SettingsPage() {
   };
 
   const handleAiProviderChange = (provider: AiProvider) => {
-    const persistedApiKey = localStorage.getItem(
-      getApiKeyStorageKeyForProvider(provider),
-    );
-
     setAiProvider(provider);
-    setApiKey((persistedApiKey ?? "").trim());
+    setApiKey(getProviderApiKeyFromStorage(provider));
     setAiSettingsError(null);
   };
 
@@ -1278,6 +1294,21 @@ export default function SettingsPage() {
                   onOpenExportDialog={handleOpenExportDialog}
                   isExportingProject={isExportingProject}
                   activeProjectId={activeProjectId}
+                  showExternalProjectIntegrations={
+                    effectiveSqlBackend === "bridge"
+                  }
+                  onUploadRuntimeSnapshotToS3={() =>
+                    void handleUnifiedExport({
+                      downloadArchive: false,
+                      uploadSnapshotToS3Backup: true,
+                    })
+                  }
+                  onPushProjectArtifactsToGitHub={() =>
+                    void handleUnifiedExport({
+                      downloadArchive: false,
+                      uploadArtifactsToGitHub: true,
+                    })
+                  }
                   projectImportFileRef={projectImportFileRef}
                   onImportProject={(event) => void handleImportProject(event)}
                   githubProjectError={githubProjectError}
@@ -1336,23 +1367,10 @@ export default function SettingsPage() {
                   setIsExportDialogOpen(open);
                   if (!open) {
                     setExportIncludeSnapshot(false);
-                    setExportDownloadArchive(true);
-                    setExportUploadSnapshotToS3(false);
-                    setExportUploadArtifactsToGitHub(false);
                   }
                 }}
                 exportIncludeSnapshot={exportIncludeSnapshot}
                 onExportIncludeSnapshotChange={setExportIncludeSnapshot}
-                exportDownloadArchive={exportDownloadArchive}
-                onExportDownloadArchiveChange={setExportDownloadArchive}
-                exportUploadSnapshotToS3={exportUploadSnapshotToS3}
-                onExportUploadSnapshotToS3Change={setExportUploadSnapshotToS3}
-                exportUploadArtifactsToGitHub={exportUploadArtifactsToGitHub}
-                onExportUploadArtifactsToGitHubChange={
-                  setExportUploadArtifactsToGitHub
-                }
-                savedS3BackupConfig={savedS3BackupConfig}
-                savedGitHubProjectConfig={savedGitHubProjectConfig}
                 openProjectError={openProjectError}
                 onCloseExportDialog={() => setIsExportDialogOpen(false)}
                 isExportingProject={isExportingProject}
