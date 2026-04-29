@@ -222,6 +222,7 @@ type DuckdbReplProps = {
   editorMinHeight?: string;
   editorMaxHeight?: string;
   toolbarLeftSlot?: ReactNode;
+  toolbarRightSlot?: ReactNode;
 };
 
 const HISTORY_KEY = "bi.repl.history";
@@ -349,6 +350,7 @@ export function DuckdbRepl({
   editorMinHeight = "8rem",
   editorMaxHeight = inlineResults ? "20rem" : "14rem",
   toolbarLeftSlot,
+  toolbarRightSlot,
 }: DuckdbReplProps) {
   const [lastResult, setLastResult] = useState<{
     sql: string;
@@ -695,6 +697,7 @@ export function DuckdbRepl({
             toolbarInsetClassName,
           )}
         >
+          {toolbarRightSlot}
           {lastResult && showClearButton && (
             <Tooltip>
               <TooltipTrigger asChild>

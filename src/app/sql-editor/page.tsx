@@ -10,9 +10,10 @@ import {
 } from "react";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { DuckdbRepl } from "@/components/duckdb-shell/repl";
-import type { SqlConsoleApi } from "@/components/sql-console";
+import type { QueryNotice, SqlConsoleApi } from "@/components/sql-console";
 import type { VisualizationEntry } from "@/components/visualization-entry";
 import { VisualizationPanel } from "@/components/visualization-panel";
+import { SqlEditorAiAssist } from "@/features/sql-editor/SqlEditorAiAssist";
 import type { ConnectedTable } from "@/lib/connected-tables";
 import { buildDashboardSourceDescriptor } from "@/lib/dashboard/source-descriptor";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
@@ -163,6 +164,8 @@ export default function SqlEditorPage() {
   const [sqlConsoleApi, setSqlConsoleApi] = useState<SqlConsoleApi | null>(
     null,
   );
+  const [latestQueryNotice, setLatestQueryNotice] =
+    useState<QueryNotice | null>(null);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
   const [storedSqlQueries, setStoredSqlQueries] = useState<SavedSqlQuery[]>([]);
   const [isSavingStoredSqlQuery, setIsSavingStoredSqlQuery] = useState(false);
@@ -586,6 +589,15 @@ export default function SqlEditorPage() {
     [activeQueryTabId],
   );
 
+  const handleAcceptAiSql = useCallback(
+    (sql: string) => {
+      sqlConsoleApi?.setQuery(sql);
+      handleSqlQueryChange(sql);
+      sqlConsoleApi?.focus();
+    },
+    [handleSqlQueryChange, sqlConsoleApi],
+  );
+
   const handleSaveStoredSqlQuery = useCallback(
     async (sqlOverride?: string) => {
       if (isSavingStoredSqlQuery) return;
@@ -986,6 +998,7 @@ export default function SqlEditorPage() {
                     catalogContext={selectedCatalogContext}
                     onConsoleApiChangeAction={setSqlConsoleApi}
                     onQueryChangeAction={handleSqlQueryChange}
+                    onNoticeAction={setLatestQueryNotice}
                     inlineResults={false}
                     onResultChangeAction={handleResultChange}
                     showRunControls={false}
@@ -1000,6 +1013,16 @@ export default function SqlEditorPage() {
                     editorMinHeight="100%"
                     editorMaxHeight="100%"
                     toolbarLeftSlot={queryTabsStrip}
+                    toolbarRightSlot={
+                      <SqlEditorAiAssist
+                        currentSql={activeTab?.sql ?? ""}
+                        selectedDb={selectedDb}
+                        selectedCatalogContext={selectedCatalogContext}
+                        queryNotice={latestQueryNotice}
+                        result={sqlResult}
+                        onAcceptSql={handleAcceptAiSql}
+                      />
+                    }
                   />
                 </div>
                 {sqlResult ? (
