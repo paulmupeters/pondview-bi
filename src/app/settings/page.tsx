@@ -1128,14 +1128,30 @@ export default function SettingsPage() {
     SECTION_NAV.find((item) => item.id === activeSection) ?? SECTION_NAV[0];
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto w-full max-w-6xl px-6 py-10 lg:px-8">
-          <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-              <p className="mt-1 text-muted-foreground">
-                Manage your application preferences and configuration.
+    <div className="relative flex h-full flex-col">
+      <div className="relative flex-1 overflow-auto bg-background">
+        {/* Atmospheric glow */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-[400px]"
+          style={{
+            background:
+              "radial-gradient(ellipse 80% 50% at 50% 0%, hsl(var(--primary) / 0.06), transparent)",
+          }}
+        />
+
+        <div className="relative mx-auto max-w-6xl px-6 py-12 lg:px-8">
+          {/* Header */}
+          <header className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-3">
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
+                Configuration
+              </p>
+              <h1 className="text-5xl font-black tracking-tighter text-foreground sm:text-6xl">
+                Settings
+              </h1>
+              <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">
+                Manage application preferences, AI models, query runtimes, and
+                project configurations.
               </p>
             </div>
 
@@ -1169,6 +1185,7 @@ export default function SettingsPage() {
                     type="button"
                     variant="outline"
                     size="icon"
+                    className="shrink-0"
                     onClick={() => void handleCreateProject()}
                     disabled={
                       isCreatingProject ||
@@ -1187,20 +1204,24 @@ export default function SettingsPage() {
                 </div>
                 {isSwitchingProject && (
                   <p className="text-xs text-muted-foreground">
-                    Switching project...
+                    Switching project…
                   </p>
                 )}
               </div>
             )}
           </header>
 
+          {/* Global success toast */}
           {showSuccessMessage && (
-            <output className="mb-6 flex w-1/5 items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-              <Check className="h-4 w-4" aria-hidden="true" />
-              <span>Saved</span>
-            </output>
+            <div className="mb-8 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center gap-2 rounded border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+                <Check className="h-4 w-4" aria-hidden="true" />
+                <span>Saved</span>
+              </div>
+            </div>
           )}
 
+          {/* Layout: nav sidebar + main content */}
           <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
             <SettingsNav
               items={SECTION_NAV}

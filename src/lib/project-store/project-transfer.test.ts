@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { strToU8, zipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import {
   BROWSER_PROJECT_ARCHIVE_METADATA_PATH,
   BROWSER_PROJECT_EXPORT_MANIFEST_PATH,
   BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH,
+  BROWSER_PROJECT_VIEWER_HTML_PATH,
+  BROWSER_PROJECT_VIEWER_SCRIPT_PATH,
   createBrowserProjectArchive,
   createBrowserProjectBundle,
   parseBrowserProjectArchive,
@@ -84,6 +86,43 @@ describe("browser project transfer", () => {
     const parsed = parseBrowserProjectArchive(archive);
 
     expect(parsed.project.name).toBe("Revenue");
+    expect(parsed.files.map((file) => file.path)).toEqual([
+      "pondview/queries/shared/revenue.query.json",
+      "pondview/queries/shared/revenue.sql",
+    ]);
+  });
+
+  test("includes an offline project viewer in the zip archive", () => {
+    const archive = createBrowserProjectArchive({
+      project: {
+        id: "browser-project-revenue",
+        name: "Revenue",
+        backingKind: "browser-indexeddb",
+        openedAt: 1,
+        updatedAt: 2,
+        defaultSourceRef: "analytics",
+      },
+      files: [
+        {
+          path: "pondview/queries/shared/revenue.query.json",
+          content: '{\n  "schemaVersion": 1,\n  "name": "Revenue"\n}\n',
+        },
+        {
+          path: "pondview/queries/shared/revenue.sql",
+          content: "select 1;\n",
+        },
+      ],
+    });
+
+    const entries = unzipSync(archive);
+    const html = strFromU8(entries[BROWSER_PROJECT_VIEWER_HTML_PATH]);
+    const script = strFromU8(entries[BROWSER_PROJECT_VIEWER_SCRIPT_PATH]);
+    const parsed = parseBrowserProjectArchive(archive);
+
+    expect(html).toContain("Pondview project export");
+    expect(html).toContain("./pondview-export.js");
+    expect(script).toContain("const pondviewExport = ");
+    expect(script).toContain("pondview/queries/shared/revenue.sql");
     expect(parsed.files.map((file) => file.path)).toEqual([
       "pondview/queries/shared/revenue.query.json",
       "pondview/queries/shared/revenue.sql",

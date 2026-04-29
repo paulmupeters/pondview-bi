@@ -38,6 +38,7 @@ import {
   isGitHubProjectConfigComplete,
 } from "@/lib/project-store/github-project-sync";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
+import { cn } from "@/lib/utils";
 import type { Theme } from "@/themes";
 import { SettingsContentSection } from "./settings-layout";
 
@@ -45,14 +46,32 @@ import { SettingsContentSection } from "./settings-layout";
 // Shared primitives
 // ---------------------------------------------------------------------------
 
+function AlertBlock({
+  kind,
+  children,
+}: {
+  kind: "error" | "success" | "info";
+  children: ReactNode;
+}) {
+  const accent =
+    kind === "error"
+      ? "border-l-destructive text-destructive bg-destructive/5"
+      : kind === "success"
+        ? "border-l-green-500 text-green-700 dark:text-green-400 bg-green-500/5"
+        : "border-l-primary text-foreground bg-primary/5";
+  return (
+    <div className={cn("rounded border-l-2 px-3 py-2 text-sm", accent)}>
+      {children}
+    </div>
+  );
+}
+
 function ErrorMessage({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-red-600 dark:text-red-400">{children}</p>;
+  return <AlertBlock kind="error">{children}</AlertBlock>;
 }
 
 function SuccessMessage({ children }: { children: ReactNode }) {
-  return (
-    <p className="text-sm text-green-600 dark:text-green-400">{children}</p>
-  );
+  return <AlertBlock kind="success">{children}</AlertBlock>;
 }
 
 function FormField({
@@ -60,18 +79,28 @@ function FormField({
   htmlFor,
   children,
   className,
+  description,
 }: {
   label: ReactNode;
   htmlFor: string;
   children: ReactNode;
   className?: string;
+  description?: ReactNode;
 }) {
   return (
-    <div className={className}>
-      <label htmlFor={htmlFor} className="mb-2 block text-sm font-medium">
+    <div className={cn("space-y-1.5", className)}>
+      <label
+        htmlFor={htmlFor}
+        className="block text-sm font-semibold text-foreground"
+      >
         {label}
       </label>
-      {children}
+      {description && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+      )}
+      <div className="pt-0.5">{children}</div>
     </div>
   );
 }
@@ -1506,8 +1535,8 @@ export function ExportProjectDialog({
         <DialogHeader>
           <DialogTitle>Export Project</DialogTitle>
           <DialogDescription>
-            Download a project archive with artifacts and an optional DuckDB
-            runtime snapshot.
+            Download a project archive with artifacts, an offline HTML viewer,
+            and an optional DuckDB runtime snapshot.
           </DialogDescription>
         </DialogHeader>
 
