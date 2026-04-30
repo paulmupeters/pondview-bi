@@ -1,8 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { InlineChartConfig } from "@/components/inline-chart-config";
 import { MetricCard } from "@/components/metric-card";
 import { SqlChart } from "@/components/sql-chart";
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import type { CardConfig, Config } from "@/lib/types";
 import type {
   SelectedForCard,
@@ -37,8 +36,8 @@ export function ChartView({
   onChartConfigChange,
   onCardConfigChange,
   showVisualOptions,
-  onShowVisualOptionsChange,
 }: ChartViewProps) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const defaultChartConfig = useMemo(
     () => buildDefaultChartConfig(columnsForDialog),
     [columnsForDialog],
@@ -126,43 +125,54 @@ export function ChartView({
           onTitleChange={(value) => updateCardMeta("title", value)}
           onDescriptionChange={(value) => updateCardMeta("description", value)}
           onTakeawayChange={(value) => updateCardMeta("takeaway", value)}
-          className="mx-auto w-fit border-0 shadow-none py-6"
+          className="mx-auto my-2 w-fit border-0 shadow-none py-6"
         />
       ) : (
         <>
-          {columnsForDialog.length > 0 && (
-            <Collapsible
-              open={showVisualOptions}
-              onOpenChange={onShowVisualOptionsChange}
-            >
-              <CollapsibleContent
-                id="chart-visual-options"
-                className="px-4 pt-4"
-              >
-                <InlineChartConfig
-                  chartConfig={chartConfig}
-                  defaultChartConfig={defaultChartConfig}
-                  onChartConfigChange={onChartConfigChange}
-                  columns={columnsForDialog}
-                  rows={selectedForChart?.rows}
-                  showAdvancedConfig={true}
-                  hideNarrativeFields={true}
-                />
-              </CollapsibleContent>
-            </Collapsible>
-          )}
           {selectedForChart && selectedForChart.rows.length > 0 ? (
-            <SqlChart
-              customChartConfig={effectiveChartConfig}
-              dataOverride={selectedForChart}
-              onTitleChange={(value) => updateChartMeta("title", value)}
-              onDescriptionChange={(value) =>
-                updateChartMeta("description", value)
+            <div
+              className={
+                showVisualOptions
+                  ? "flex flex-col lg:flex-row lg:gap-0"
+                  : undefined
               }
-              onTakeawayChange={(value) => updateChartMeta("takeaway", value)}
-            />
+            >
+              {/* Chart on the left */}
+              <div className="flex-1 min-w-0">
+                <SqlChart
+                  customChartConfig={effectiveChartConfig}
+                  dataOverride={selectedForChart}
+                  onTitleChange={(value) => updateChartMeta("title", value)}
+                  onDescriptionChange={(value) =>
+                    updateChartMeta("description", value)
+                  }
+                  onTakeawayChange={(value) =>
+                    updateChartMeta("takeaway", value)
+                  }
+                />
+              </div>
+
+              {/* Options panel on the right */}
+              {columnsForDialog.length > 0 && showVisualOptions && (
+                <div
+                  id="chart-visual-options"
+                  className="w-full shrink-0 lg:w-52 lg:border-l lg:border-border/60 lg:overflow-y-auto lg:max-h-[70vh]"
+                >
+                  <InlineChartConfig
+                    chartConfig={chartConfig}
+                    defaultChartConfig={defaultChartConfig}
+                    onChartConfigChange={onChartConfigChange}
+                    columns={columnsForDialog}
+                    rows={selectedForChart?.rows}
+                    showAdvancedConfig={showAdvanced}
+                    onToggleAdvanced={() => setShowAdvanced((s) => !s)}
+                    hideNarrativeFields={true}
+                    sidebar
+                  />
+                </div>
+              )}
+            </div>
           ) : !selectedForChart && !selectedForCard ? (
-            // Keep layout stable when no chart/card data can be rendered yet.
             <div className="min-h-[200px]" />
           ) : null}
         </>

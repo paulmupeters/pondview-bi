@@ -221,16 +221,9 @@ export default function AllAnalysesPage() {
         {/* Header */}
         <header className="mb-16 flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-3">
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
-              Project Archive
-            </p>
             <h1 className="text-5xl font-black tracking-tighter text-foreground sm:text-6xl">
               Analyses
             </h1>
-            <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-              Browse every analysis notebook in this project. Select any entry
-              to revisit your work.
-            </p>
           </div>
 
           <div className="flex items-center gap-6">
@@ -240,7 +233,7 @@ export default function AllAnalysesPage() {
                   {sortedChats.length}
                 </p>
                 <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  {sortedChats.length === 1 ? "Specimen" : "Specimens"}
+                  {sortedChats.length === 1 ? "Analysis" : "Analyses"}
                 </p>
               </div>
             )}
@@ -275,6 +268,7 @@ export default function AllAnalysesPage() {
                   className={cn(
                     "group relative flex flex-col gap-5 rounded-lg border border-border bg-card p-5 text-left transition-[transform,box-shadow,background-color,border-color] ease-out hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/5 hover:bg-accent/[0.06]",
                     isFeatured && "lg:col-span-2",
+                    i === 1 && "lg:col-start-1",
                     isFeatured ? "border-l-[4px]" : "border-l-[3px]",
                     "border-l-primary",
                   )}
@@ -293,12 +287,12 @@ export default function AllAnalysesPage() {
                   {/* Stretched link for card-level navigation */}
                   <button
                     type="button"
-                    className="absolute inset-0 z-0 cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="absolute inset-0 z-10 cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     onClick={() => handleOpen(chat.id)}
                     aria-label={`Open ${getChatHistoryDisplayTitle(chat)}`}
                   />
 
-                  <div className="relative z-10 flex items-start justify-between gap-3">
+                  <div className="pointer-events-none relative z-20 flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1 space-y-1.5">
                       <div className="flex items-center gap-3">
                         <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary/70">
@@ -322,7 +316,7 @@ export default function AllAnalysesPage() {
 
                     <button
                       type="button"
-                      className="relative z-10 mt-0.5 inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-0 ring-offset-background transition-all hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100"
+                      className="pointer-events-auto relative z-20 mt-0.5 inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-0 ring-offset-background transition-all hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100"
                       onClick={() => setChatToDelete(chat)}
                       disabled={deletingId === chat.id}
                       aria-label="Delete analysis"
@@ -332,7 +326,7 @@ export default function AllAnalysesPage() {
                     </button>
                   </div>
 
-                  <div className="relative z-10 mt-auto flex items-center justify-between">
+                  <div className="pointer-events-none relative z-20 mt-auto flex items-center justify-between">
                     <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                       <ClockIcon className="h-3 w-3" />
                       {formatRelativeTime(rtf, chat.updatedAt)}

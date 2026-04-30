@@ -123,20 +123,6 @@ export function SqlAnalysisHeader({
             </TooltipContent>
           </Tooltip>
         )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Edit with AI</p>
-          </TooltipContent>
-        </Tooltip>
         {showClearButton ? (
           <Tooltip>
             <TooltipTrigger asChild>

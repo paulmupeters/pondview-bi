@@ -787,7 +787,7 @@ export function exportPublishedNotebookArtifact(
     stripUndefinedValues({
       schemaVersion: 1,
       id: notebookId,
-      title: input.notebook.title ?? "Untitled Notebook",
+      title: input.notebook.title ?? "Untitled Analysis",
       description: normalizeOptionalDescription(input.description),
       cells: [...input.cells]
         .sort((left, right) => left.position - right.position)

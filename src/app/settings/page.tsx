@@ -1143,16 +1143,9 @@ export default function SettingsPage() {
           {/* Header */}
           <header className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-3">
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
-                Configuration
-              </p>
               <h1 className="text-5xl font-black tracking-tighter text-foreground sm:text-6xl">
                 Settings
               </h1>
-              <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">
-                Manage application preferences, AI models, query runtimes, and
-                project configurations.
-              </p>
             </div>
 
             {knownProjects.length > 0 && (

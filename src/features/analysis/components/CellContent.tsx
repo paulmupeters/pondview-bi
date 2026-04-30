@@ -121,7 +121,7 @@ function CellContentAiSql({
   }, [bootstrapSql, cell.activeMode, cell.id, onSelectCellMode]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <AiResponseBanner ai={ai} showPromptError={cell.activeMode === "ai"} />
       <SqlCell
         cell={cell}

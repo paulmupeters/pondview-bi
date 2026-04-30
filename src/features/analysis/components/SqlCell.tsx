@@ -1,4 +1,4 @@
-import { Code, MessageCircle, Play, Square } from "lucide-react";
+import { Play, MessageCircle, Square, Code } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import {
@@ -29,8 +29,8 @@ import {
   updateSqlCellPayloadVisualType,
 } from "@/features/analysis/sql-cell-payload";
 import {
-  isSqlResultStale,
   normalizeSqlDraft,
+  isSqlResultStale,
   resolveCellStatusFromRunState,
   shouldPersistSqlDraftChange,
   shouldPersistVisualTypeChange,

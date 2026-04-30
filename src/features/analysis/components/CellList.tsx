@@ -1,4 +1,4 @@
-import { Bot, FileText, Plus, Type } from "lucide-react";
+import { ChartNetwork, FileText, Plus, Type } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   AI_SETTINGS_UPDATED_EVENT,
@@ -83,7 +83,7 @@ function InsertCellDivider({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="center">
           <DropdownMenuItem onClick={() => onAddCell("ai")}>
-            <Bot className="size-4" />
+            <ChartNetwork className="size-4" />
             Analysis cell
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => onAddCell("text")}>

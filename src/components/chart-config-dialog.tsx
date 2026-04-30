@@ -7,6 +7,10 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { useRef, useState } from "react";
+import {
+  SqlPreviewPanel,
+  type SqlPreviewRunResult,
+} from "@/components/sql-preview-panel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,6 +27,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { SqlBackendPreference } from "@/lib/sql/sql-runtime";
 import type { Config, Result } from "@/lib/types";
 
 interface ChartConfigFormProps {
@@ -32,6 +37,7 @@ interface ChartConfigFormProps {
   onConfigChange: (config: Config) => void;
   onCancel?: () => void;
   inline?: boolean;
+  sqlEditor?: React.ReactNode;
 }
 
 export function ChartConfigForm({
@@ -41,6 +47,7 @@ export function ChartConfigForm({
   onConfigChange,
   onCancel,
   inline = false,
+  sqlEditor,
 }: ChartConfigFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -271,6 +278,13 @@ export function ChartConfigForm({
         </TabsList>
 
         <TabsContent value="data" className="space-y-6 mt-4">
+          {sqlEditor ? (
+            <>
+              {sqlEditor}
+              <Separator />
+            </>
+          ) : null}
+
           {/* Chart Type */}
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium">Chart type</legend>
@@ -914,6 +928,10 @@ interface ChartConfigDialogProps {
   rows?: Result[];
   onConfigChange: (config: Config) => void;
   tooltip?: string;
+  sql?: string;
+  dbIdentifier?: string;
+  backendPreference?: SqlBackendPreference;
+  onSqlSave?: (newSql: string) => Promise<void>;
 }
 
 export function ChartConfigDialog({
@@ -923,13 +941,56 @@ export function ChartConfigDialog({
   rows = [],
   onConfigChange,
   tooltip,
+  sql,
+  dbIdentifier,
+  backendPreference,
+  onSqlSave,
 }: ChartConfigDialogProps) {
   const [open, setOpen] = useState(false);
+  const [sqlPreviewRows, setSqlPreviewRows] = useState<Result[] | null>(null);
+  const [sqlPreviewColumns, setSqlPreviewColumns] = useState<Array<{
+    name: string;
+  }> | null>(null);
 
   const handleConfigChange = (newConfig: Config) => {
     onConfigChange(newConfig);
     setOpen(false);
   };
+
+  const handleSqlRun = (result: SqlPreviewRunResult) => {
+    setSqlPreviewRows(result.rows as Result[]);
+    setSqlPreviewColumns(
+      result.columns.map((column) => ({ name: column.name })),
+    );
+  };
+
+  const handleSqlSave = async (newSql: string) => {
+    await onSqlSave?.(newSql);
+    setSqlPreviewRows(null);
+    setSqlPreviewColumns(null);
+  };
+
+  const effectiveRows = sqlPreviewRows ?? rows;
+  const effectiveColumns = sqlPreviewColumns ?? columns;
+  const canEditSql = Boolean(sql && onSqlSave);
+  const sqlEditor = canEditSql ? (
+    <SqlPreviewPanel
+      query={sql ?? ""}
+      dbIdentifier={dbIdentifier}
+      backendPreference={backendPreference}
+      defaultOpen={false}
+      onSave={handleSqlSave}
+      onRunStart={() => {
+        setSqlPreviewRows([]);
+        setSqlPreviewColumns(null);
+      }}
+      onRun={handleSqlRun}
+      onCancel={() => {
+        setSqlPreviewRows(null);
+        setSqlPreviewColumns(null);
+      }}
+    />
+  ) : undefined;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -945,7 +1006,7 @@ export function ChartConfigDialog({
       ) : (
         <DialogTrigger asChild>{trigger}</DialogTrigger>
       )}
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-card">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-card">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="text-gray-500">⚙️</span>
@@ -954,10 +1015,11 @@ export function ChartConfigDialog({
         </DialogHeader>
         <ChartConfigForm
           config={config}
-          columns={columns}
-          rows={rows}
+          columns={effectiveColumns}
+          rows={effectiveRows}
           onConfigChange={handleConfigChange}
           onCancel={() => setOpen(false)}
+          sqlEditor={sqlEditor}
         />
       </DialogContent>
     </Dialog>

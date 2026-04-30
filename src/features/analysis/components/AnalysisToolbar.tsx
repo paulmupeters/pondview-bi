@@ -76,7 +76,7 @@ export function AnalysisToolbar({
           onBlur={handleTitleBlur}
           onKeyDown={handleTitleKeyDown}
           className="h-8 w-56 text-sm font-semibold tracking-tight"
-          placeholder="Untitled notebook"
+          placeholder="Untitled analysis"
         />
       ) : (
         <button
@@ -84,7 +84,7 @@ export function AnalysisToolbar({
           onClick={handleTitleClick}
           className="cursor-text rounded px-1.5 py-0.5 text-sm font-semibold tracking-tight text-foreground transition-colors hover:bg-muted"
         >
-          {title ?? "Untitled notebook"}
+          {title ?? "Untitled analysis"}
         </button>
       )}
 
