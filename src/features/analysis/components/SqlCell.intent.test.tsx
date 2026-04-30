@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { Children, isValidElement, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server.node";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
@@ -15,35 +15,32 @@ mock.module("@/components/sql-analysis-display", () => ({
 }));
 
 mock.module("@/components/ui/popover", () => {
+  const popoverContentMarker = Symbol("PopoverContent");
+
   const PopoverContent = ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   );
-
-  const PopoverTrigger = ({ children }: { children: ReactNode }) => (
-    <>{children}</>
-  );
-
-  const Popover = ({
-    open,
-    children,
-  }: {
-    open?: boolean;
-    children: ReactNode;
-  }) => (
-    <div data-open={String(Boolean(open))}>
-      {Children.toArray(children).map((child) => {
-        if (isValidElement(child) && child.type === PopoverContent) {
-          return open ? child : null;
-        }
-
-        return child;
-      })}
-    </div>
-  );
+  Reflect.set(PopoverContent, popoverContentMarker, true);
 
   return {
-    Popover,
-    PopoverTrigger,
+    Popover: ({ open, children }: { open?: boolean; children: ReactNode }) => (
+      <div data-open={String(Boolean(open))}>
+        {Array.from((children as Iterable<ReactNode>) ?? []).map((child) => {
+          if (
+            typeof child === "object" &&
+            child !== null &&
+            "type" in child &&
+            typeof child.type === "function" &&
+            Reflect.get(child.type, popoverContentMarker) === true
+          ) {
+            return open ? child : null;
+          }
+
+          return child;
+        })}
+      </div>
+    ),
+    PopoverTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
     PopoverContent,
   };
 });
