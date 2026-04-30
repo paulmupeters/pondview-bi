@@ -17,17 +17,32 @@ export default defineConfig({
       { text: "FAQ", link: "/user/faq" },
       { text: "Troubleshooting", link: "/user/troubleshooting" },
       // Setup and runtime reference
-      { text: "AI Provider Configuration", link: "/guide/ai-provider-configuration" },
+      {
+        text: "AI Provider Configuration",
+        link: "/guide/ai-provider-configuration",
+      },
       { text: "Connected Data Sources", link: "/guide/connected-data-sources" },
-      { text: "Uploads and Browser Storage", link: "/guide/uploads-and-browser-storage" },
+      {
+        text: "Uploads and Browser Storage",
+        link: "/guide/uploads-and-browser-storage",
+      },
       { text: "SQL Runtime Backends", link: "/guide/sql-runtime-backends" },
       { text: "Workspace Persistence", link: "/guide/workspace-persistence" },
-      { text: "Git-Backed Project Artifacts", link: "/guide/git-backed-project-artifacts" },
+      {
+        text: "Git-Backed Project Artifacts",
+        link: "/guide/git-backed-project-artifacts",
+      },
       // DuckDB internals
-      { text: "DuckDB Extension Connections", link: "/guide/duckdb-extension-connections" },
+      {
+        text: "DuckDB Extension Connections",
+        link: "/guide/duckdb-extension-connections",
+      },
       { text: "DuckDB Usage Overview", link: "/guide/duckdb-usage-overview" },
       { text: "DuckDB WASM Usage", link: "/guide/duckdb-wasm-usage" },
-      { text: "Semantic Layer Materialization", link: "/guide/semantic-layer-materialization" },
+      {
+        text: "Semantic Layer Materialization",
+        link: "/guide/semantic-layer-materialization",
+      },
     ],
 
     socialLinks: [],

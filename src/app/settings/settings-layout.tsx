@@ -51,9 +51,7 @@ export function SettingsNav({
                 <Icon
                   className={cn(
                     "h-4 w-4 shrink-0",
-                    isActive
-                      ? "text-primary"
-                      : "text-muted-foreground/60",
+                    isActive ? "text-primary" : "text-muted-foreground/60",
                   )}
                 />
                 <span>{item.label}</span>

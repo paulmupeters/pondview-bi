@@ -28,6 +28,17 @@ import { cn } from "@/lib/utils";
 type TableEntry = { name: string; type: string };
 type SchemaGroup = { schema: string; tables: TableEntry[] };
 
+const SCHEMA_SKELETON_KEYS = [
+  "schema-skeleton-1",
+  "schema-skeleton-2",
+  "schema-skeleton-3",
+] as const;
+const SCHEMA_ROW_SKELETON_KEYS = [
+  "schema-row-skeleton-1",
+  "schema-row-skeleton-2",
+  "schema-row-skeleton-3",
+] as const;
+
 /* ------------------------------------------------------------------ */
 /*  Sub-components                                                      */
 /* ------------------------------------------------------------------ */
@@ -35,15 +46,15 @@ type SchemaGroup = { schema: string; tables: TableEntry[] };
 function SchemaSkeleton() {
   return (
     <div className="space-y-3">
-      {Array.from({ length: 3 }).map((_, i) => (
+      {SCHEMA_SKELETON_KEYS.map((key) => (
         <div
-          key={i}
+          key={key}
           className="animate-pulse overflow-hidden rounded-lg border border-border"
         >
           <div className="h-9 border-b border-border bg-muted/40" />
           <div className="space-y-px">
-            {Array.from({ length: 3 }).map((__, j) => (
-              <div key={j} className="h-9 bg-muted/30" />
+            {SCHEMA_ROW_SKELETON_KEYS.map((rowKey) => (
+              <div key={`${key}-${rowKey}`} className="h-9 bg-muted/30" />
             ))}
           </div>
         </div>
@@ -187,9 +198,7 @@ export default function ViewDataPage() {
       ? isWasmTablesLoading
       : isDuckdbTablesLoading;
   const tablesError =
-    effectiveSqlBackend === "duckdb-wasm"
-      ? wasmTablesError
-      : duckdbTablesError;
+    effectiveSqlBackend === "duckdb-wasm" ? wasmTablesError : duckdbTablesError;
 
   /* ── Dialogs ── */
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
@@ -217,14 +226,6 @@ export default function ViewDataPage() {
   useEffect(() => {
     setJoinDefsRaw(readJoinDefsRawFromStorage());
   }, []);
-
-  useEffect(() => {
-    if (!isTablesLoading && tablesBySchema.length > 0) {
-      const id = requestAnimationFrame(() => setGridVisible(true));
-      return () => cancelAnimationFrame(id);
-    }
-    if (isTablesLoading) setGridVisible(false);
-  }, [isTablesLoading]); // tablesBySchema is derived and already in scope below
 
   /* ── Derived data ── */
   const tablesBySchema = useMemo(() => {
@@ -257,6 +258,14 @@ export default function ViewDataPage() {
       }))
       .sort((a, b) => a.schema.localeCompare(b.schema));
   }, [duckdbTables, effectiveSqlBackend, wasmTables]);
+
+  useEffect(() => {
+    if (!isTablesLoading && tablesBySchema.length > 0) {
+      const id = requestAnimationFrame(() => setGridVisible(true));
+      return () => cancelAnimationFrame(id);
+    }
+    if (isTablesLoading) setGridVisible(false);
+  }, [isTablesLoading, tablesBySchema.length]);
 
   /* ── Labels ── */
   const remoteRuntimeLabel =
@@ -408,8 +417,8 @@ export default function ViewDataPage() {
                   ) : effectiveSqlBackend === "duckdb-http" &&
                     isDuckdbHttpConfigured ? (
                     <p className="text-sm leading-relaxed text-muted-foreground">
-                      Remote DuckDB instance connected. Tables are listed in
-                      the catalog below.
+                      Remote DuckDB instance connected. Tables are listed in the
+                      catalog below.
                     </p>
                   ) : (
                     <>
@@ -438,9 +447,15 @@ export default function ViewDataPage() {
                   </p>
                   {tablesBySchema.length > 0 && !isTablesLoading && (
                     <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                      {tablesBySchema.reduce((acc, g) => acc + g.tables.length, 0)}{" "}
+                      {tablesBySchema.reduce(
+                        (acc, g) => acc + g.tables.length,
+                        0,
+                      )}{" "}
                       table
-                      {tablesBySchema.reduce((acc, g) => acc + g.tables.length, 0) !== 1
+                      {tablesBySchema.reduce(
+                        (acc, g) => acc + g.tables.length,
+                        0,
+                      ) !== 1
                         ? "s"
                         : ""}{" "}
                       across {tablesBySchema.length} schema

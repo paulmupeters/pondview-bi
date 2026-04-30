@@ -18,8 +18,8 @@ import {
 } from "@/components/ui/popover";
 import { useChatHistory } from "@/hooks/use-chat-history";
 import {
-  getChatHistoryDisplayTitle,
   type ChatHistoryEntry,
+  getChatHistoryDisplayTitle,
 } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 import { deleteAnalysisNotebook } from "@/lib/workspace/analysis-notebook-repo";
@@ -195,91 +195,91 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
           </PopoverTrigger>
           <PopoverContent align="start" className="w-80 p-4">
             <div className="flex flex-col gap-3">
-            <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
-              {shouldShowBlockingLoading ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              ) : error ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">{error}</p>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void loadChats({ showLoading: true })}
-                    >
-                      Retry
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => void handleResetWorkspaceDb()}
-                      disabled={resettingDb}
-                    >
-                      {resettingDb ? "Resetting..." : "Reset local data"}
-                    </Button>
-                  </div>
-                </div>
-              ) : chats.length > 0 ? (
-                chats.map((chat) => (
-                  <div
-                    key={chat.id}
-                    className={cn(
-                      "group relative flex items-center gap-2 rounded-md p-2 pr-8 transition-colors hover:bg-sidebar-accent text-sidebar-foreground hover:text-sidebar-accent-foreground",
-                      activeChatId === chat.id &&
-                        "bg-sidebar-accent text-sidebar-accent-foreground",
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleChatClick(chat.id)}
-                      className="flex min-w-0 flex-1 cursor-pointer items-start justify-between gap-2 text-left"
-                    >
-                      <p className="min-w-0 flex-1 truncate text-sm">
-                        {getChatHistoryDisplayTitle(chat)}
-                      </p>
-                      <p className="whitespace-nowrap text-xs text-muted-foreground">
-                        {formatDate(chat.updatedAt)}
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteChat(chat.id, e)}
-                      className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 translate-x-2 rounded-md bg-background/80 p-1 text-muted-foreground opacity-0 backdrop-blur-sm transition-all duration-200 hover:bg-sidebar-accent/80 hover:text-destructive group-hover:translate-x-0 group-hover:opacity-100"
-                      aria-label="Delete chat"
-                      title="Delete chat"
-                    >
-                      <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+              <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
+                {shouldShowBlockingLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading...</p>
+                ) : error ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">{error}</p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void loadChats({ showLoading: true })}
                       >
-                        <title>Delete chat</title>
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
-                    </button>
+                        Retry
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => void handleResetWorkspaceDb()}
+                        disabled={resettingDb}
+                      >
+                        {resettingDb ? "Resetting..." : "Reset local data"}
+                      </Button>
+                    </div>
                   </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No chats</p>
-              )}
-            </div>
-            <div className="flex justify-end border-t border-border pt-2">
-              <Link
-                href="/analysis/all"
-                onClick={() => setIsChatHistoryPopoverOpen(false)}
-                className="text-xs font-medium text-primary hover:underline"
-              >
-                View all analyses
-              </Link>
-            </div>
+                ) : chats.length > 0 ? (
+                  chats.map((chat) => (
+                    <div
+                      key={chat.id}
+                      className={cn(
+                        "group relative flex items-center gap-2 rounded-md p-2 pr-8 transition-colors hover:bg-sidebar-accent text-sidebar-foreground hover:text-sidebar-accent-foreground",
+                        activeChatId === chat.id &&
+                          "bg-sidebar-accent text-sidebar-accent-foreground",
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleChatClick(chat.id)}
+                        className="flex min-w-0 flex-1 cursor-pointer items-start justify-between gap-2 text-left"
+                      >
+                        <p className="min-w-0 flex-1 truncate text-sm">
+                          {getChatHistoryDisplayTitle(chat)}
+                        </p>
+                        <p className="whitespace-nowrap text-xs text-muted-foreground">
+                          {formatDate(chat.updatedAt)}
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteChat(chat.id, e)}
+                        className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 translate-x-2 rounded-md bg-background/80 p-1 text-muted-foreground opacity-0 backdrop-blur-sm transition-all duration-200 hover:bg-sidebar-accent/80 hover:text-destructive group-hover:translate-x-0 group-hover:opacity-100"
+                        aria-label="Delete chat"
+                        title="Delete chat"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <title>Delete chat</title>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No chats</p>
+                )}
+              </div>
+              <div className="flex justify-end border-t border-border pt-2">
+                <Link
+                  href="/analysis/all"
+                  onClick={() => setIsChatHistoryPopoverOpen(false)}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  View all analyses
+                </Link>
+              </div>
             </div>
           </PopoverContent>
         </Popover>

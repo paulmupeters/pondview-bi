@@ -1,10 +1,12 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { DashboardBuilderJoinCard } from "@/components/dashboard-builder-panel.joins-card";
 import { SelectedVisualsSection } from "@/components/dashboard-builder-panel.visuals";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useDashboardBuilder } from "@/components/use-dashboard-builder";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
+
+export { resolveStoredChartDbIdentifier } from "@/components/dashboard-builder-panel.shared";
 
 type DashboardBuilderPanelProps = {
   open: boolean;

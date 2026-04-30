@@ -1,10 +1,10 @@
 import { MinusCircleIcon, PlusCircleIcon } from "lucide-react";
 import type { JoinDraftGroup } from "@/components/dashboard-builder-panel.joins";
-import type { JoinColumnState } from "@/components/dashboard-builder-panel.shared";
 import {
   type SearchableSelectOption,
   SearchableSingleSelect,
 } from "@/components/dashboard-builder-panel.searchable-select";
+import type { JoinColumnState } from "@/components/dashboard-builder-panel.shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {

@@ -28,7 +28,10 @@ async function loadS3Client(config: S3BackupConfig) {
   });
 }
 
-export function buildSnapshotKey(config: S3BackupConfig, now: Date = new Date()): string {
+export function buildSnapshotKey(
+  config: S3BackupConfig,
+  now: Date = new Date(),
+): string {
   const stamp = now.toISOString().replace(/[:.]/g, "-");
   return `${config.prefix}pondview-snapshot-${stamp}.duckdb`;
 }
@@ -71,7 +74,7 @@ export async function listSnapshotsInS3(
 
   const contents = response.Contents ?? [];
   return contents
-    .filter((entry) => entry.Key && entry.Key.endsWith(".duckdb"))
+    .filter((entry) => entry.Key?.endsWith(".duckdb"))
     .map((entry) => ({
       key: entry.Key as string,
       size: entry.Size ?? 0,

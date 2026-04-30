@@ -1,4 +1,10 @@
-import { ArrowRight, ClockIcon, LayoutDashboard, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowRight,
+  ClockIcon,
+  LayoutDashboard,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,13 +16,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   createDashboard,
   deleteDashboard,
   listDashboards,
 } from "@/lib/workspace/dashboard-repo";
 import Link from "@/vite/next-link";
-import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -30,6 +36,14 @@ type DashboardLite = {
 };
 
 const EMPTY_INITIAL_DASHBOARDS: DashboardLite[] = [];
+const DASHBOARD_SKELETON_KEYS = [
+  "dashboard-skeleton-1",
+  "dashboard-skeleton-2",
+  "dashboard-skeleton-3",
+  "dashboard-skeleton-4",
+  "dashboard-skeleton-5",
+  "dashboard-skeleton-6",
+] as const;
 
 /* ------------------------------------------------------------------ */
 /*  Time formatting                                                     */
@@ -75,9 +89,9 @@ function formatRelativeTime(
 function SkeletonGrid() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, i) => (
+      {DASHBOARD_SKELETON_KEYS.map((key) => (
         <div
-          key={i}
+          key={key}
           className="h-36 animate-pulse rounded-lg border border-border bg-muted/40 border-l-[3px] border-l-primary/20"
         />
       ))}
@@ -170,9 +184,7 @@ export default function DashboardsPage() {
       setDashboards(list);
     } catch (error) {
       setLoadError(
-        error instanceof Error
-          ? error.message
-          : "Failed to load dashboards.",
+        error instanceof Error ? error.message : "Failed to load dashboards.",
       );
     } finally {
       setIsLoading(false);
@@ -304,8 +316,7 @@ export default function DashboardsPage() {
                   style={{
                     transitionProperty:
                       "opacity, transform, box-shadow, background-color, border-color",
-                    transitionTimingFunction:
-                      "cubic-bezier(0.22, 1, 0.36, 1)",
+                    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
                     transitionDuration: gridVisible ? "600ms" : "0ms",
                     transitionDelay: gridVisible ? `${delayMs}ms` : "0ms",
                     opacity: gridVisible ? 1 : 0,

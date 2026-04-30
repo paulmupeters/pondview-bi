@@ -271,9 +271,7 @@ export function SqlEditorAiAssist({
             <Sparkles className="h-3.5 w-3.5 text-primary" />
           </div>
           <div className="flex flex-1 flex-col">
-            <p className="text-sm font-semibold leading-none">
-              SQL AI Assist
-            </p>
+            <p className="text-sm font-semibold leading-none">SQL AI Assist</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
               {isRunning
                 ? "Thinking..."

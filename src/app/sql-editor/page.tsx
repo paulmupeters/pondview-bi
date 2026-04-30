@@ -1039,8 +1039,9 @@ export default function SqlEditorPage() {
                       aria-valuemax={MAX_EDITOR_HEIGHT}
                       aria-valuemin={MIN_EDITOR_HEIGHT}
                       aria-valuenow={Math.round(editorHeight)}
-                      role="separator"
-                      aria-orientation="horizontal"
+                      aria-orientation="vertical"
+                      aria-valuetext={`${Math.round(editorHeight)}% editor height`}
+                      role="slider"
                       tabIndex={0}
                     >
                       <div

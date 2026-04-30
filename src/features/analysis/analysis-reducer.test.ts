@@ -128,9 +128,7 @@ describe("analysis reducer", () => {
       },
     });
 
-    expect(addedAgain.cells.map((nextCell) => nextCell.id)).toEqual([
-      "cell-1",
-    ]);
+    expect(addedAgain.cells.map((nextCell) => nextCell.id)).toEqual(["cell-1"]);
     expect(addedAgain.cells[0]?.updatedAt).toBe(2);
     expect(addedAgain.selectedCellId).toBe("cell-1");
   });

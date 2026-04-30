@@ -19,7 +19,6 @@ import {
   useExecuteSqlRawOutputPreference,
   useShowToolCallsPreference,
 } from "@/lib/chat-display-preferences";
-import { cn } from "@/lib/utils";
 
 export type AiCellState = {
   promptDraft: string;

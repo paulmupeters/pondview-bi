@@ -11,16 +11,24 @@ import {
 } from "@/components/ui/dialog";
 import { useChatHistory } from "@/hooks/use-chat-history";
 import {
-  getChatHistoryDisplayTitle,
   type ChatHistoryEntry,
+  getChatHistoryDisplayTitle,
 } from "@/lib/chat-history";
+import { cn } from "@/lib/utils";
 import { deleteAnalysisNotebook } from "@/lib/workspace/analysis-notebook-repo";
 import { deleteChat } from "@/lib/workspace/chat-repo";
-import { cn } from "@/lib/utils";
 import Link from "@/vite/next-link";
 import { useRouter } from "@/vite/next-navigation";
 
 const EMPTY_INITIAL_CHATS: ChatHistoryEntry[] = [];
+const ANALYSIS_SKELETON_KEYS = [
+  "analysis-skeleton-1",
+  "analysis-skeleton-2",
+  "analysis-skeleton-3",
+  "analysis-skeleton-4",
+  "analysis-skeleton-5",
+  "analysis-skeleton-6",
+] as const;
 
 /* ------------------------------------------------------------------ */
 /*  Time formatting                                                     */
@@ -66,9 +74,9 @@ function formatRelativeTime(
 function SkeletonGrid() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, i) => (
+      {ANALYSIS_SKELETON_KEYS.map((key) => (
         <div
-          key={i}
+          key={key}
           className="h-36 animate-pulse rounded-lg border border-border bg-muted/40 border-l-[3px] border-l-primary/20"
         />
       ))}
@@ -273,8 +281,7 @@ export default function AllAnalysesPage() {
                   style={{
                     transitionProperty:
                       "opacity, transform, box-shadow, background-color, border-color",
-                    transitionTimingFunction:
-                      "cubic-bezier(0.22, 1, 0.36, 1)",
+                    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
                     transitionDuration: gridVisible ? "600ms" : "0ms",
                     transitionDelay: gridVisible ? `${delayMs}ms` : "0ms",
                     opacity: gridVisible ? 1 : 0,
@@ -351,9 +358,7 @@ export default function AllAnalysesPage() {
               Are you sure you want to delete{" "}
               <span className="font-semibold text-foreground">
                 &ldquo;
-                {chatToDelete
-                  ? getChatHistoryDisplayTitle(chatToDelete)
-                  : ""}
+                {chatToDelete ? getChatHistoryDisplayTitle(chatToDelete) : ""}
                 &rdquo;
               </span>
               ? This action cannot be undone.

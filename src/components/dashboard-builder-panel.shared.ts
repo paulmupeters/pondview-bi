@@ -11,12 +11,7 @@ import {
   isWasmLocalIdentifier,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
-import type {
-  CardConfig,
-  Config,
-  Result,
-  TableConfig,
-} from "@/lib/types";
+import type { CardConfig, Config, Result, TableConfig } from "@/lib/types";
 import type { SqlAnalysisData } from "./sql-analysis-display.types";
 
 export type VisualSnapshot = {
@@ -144,7 +139,10 @@ export function normalizeVisualArtifact(
 
     const defaultCardConfig: CardConfig = {
       configType: "card",
-      title: payload.cardConfig?.title ?? payload.columns?.[0]?.name ?? "Untitled Card",
+      title:
+        payload.cardConfig?.title ??
+        payload.columns?.[0]?.name ??
+        "Untitled Card",
       description: payload.cardConfig?.description ?? "",
       takeaway: payload.cardConfig?.takeaway ?? "",
     };
@@ -179,7 +177,9 @@ export function normalizeVisualArtifact(
           ? `Table: ${payload.query.substring(0, 50)}${payload.query.length > 50 ? "..." : ""}`
           : "Data Table",
       description:
-        payload.tableConfig?.description ?? payload.summary?.insights?.[0] ?? "",
+        payload.tableConfig?.description ??
+        payload.summary?.insights?.[0] ??
+        "",
     };
 
     return {

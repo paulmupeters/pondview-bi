@@ -130,9 +130,7 @@ export function CellFrame({
         </div>
       </div>
 
-      {!isCollapsed && (
-        <div className="px-3 pb-4 pt-0.5">{children}</div>
-      )}
+      {!isCollapsed && <div className="px-3 pb-4 pt-0.5">{children}</div>}
     </div>
   );
 }
@@ -143,7 +141,10 @@ function StatusIcon({ cell, className, statusMessage }: StatusIconProps) {
   const iconMarkup = (
     <span
       data-status-icon={cell.status}
-      className={cn("shrink-0 inline-flex items-center justify-center", className)}
+      className={cn(
+        "shrink-0 inline-flex items-center justify-center",
+        className,
+      )}
       aria-hidden="true"
     >
       <IconComponent
@@ -159,9 +160,8 @@ function StatusIcon({ cell, className, statusMessage }: StatusIconProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <span
-          role="button"
-          tabIndex={0}
+        <button
+          type="button"
           className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           aria-label="Show error details"
           onClick={(event) => event.stopPropagation()}
@@ -173,7 +173,7 @@ function StatusIcon({ cell, className, statusMessage }: StatusIconProps) {
           }}
         >
           {iconMarkup}
-        </span>
+        </button>
       </PopoverTrigger>
       <PopoverContent
         className="w-80 px-3 py-2 text-sm"

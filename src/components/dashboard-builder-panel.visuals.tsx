@@ -1,10 +1,10 @@
 import { MinusCircleIcon, PlusCircleIcon } from "lucide-react";
+import type { VisualSnapshot } from "@/components/dashboard-builder-panel.shared";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { SqlChart } from "@/components/sql-chart";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { VisualSnapshot } from "@/components/dashboard-builder-panel.shared";
 import type { CardConfig, Config, TableConfig, TextConfig } from "@/lib/types";
 
 function getSnapshotTitle(snapshot: VisualSnapshot): string {
