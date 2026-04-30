@@ -371,17 +371,17 @@ export function SqlCell({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-lg border bg-background">
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
         {/* Toolbar row */}
-        <div className="flex items-center gap-2 border-b px-2 py-1.5">
-          <div className="inline-flex items-center gap-1 rounded-full border bg-muted/50 p-1">
+        <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
+          <div className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 p-0.5">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               aria-pressed={isChatMode}
               className={cn(
-                "h-7 gap-1.5 rounded-full px-3 text-xs",
+                "h-7 gap-1.5 rounded-sm px-3 text-xs",
                 isChatMode
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -397,7 +397,7 @@ export function SqlCell({
               size="sm"
               aria-pressed={!isChatMode}
               className={cn(
-                "h-7 rounded-full px-3 text-xs",
+                "h-7 gap-1.5 rounded-sm px-3 text-xs",
                 !isChatMode
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -412,7 +412,7 @@ export function SqlCell({
           <div className="ml-auto flex items-center gap-1.5">
             {!isChatMode && (
               <>
-                <span className="text-[11px] text-muted-foreground">
+                <span className="hidden text-[11px] text-muted-foreground/70 sm:inline">
                   Shift+Enter to run
                 </span>
                 {!isSqlRunning ? (
@@ -431,7 +431,7 @@ export function SqlCell({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="h-7 gap-1 px-2.5 text-xs font-mono bg-primary text-primary-foreground"
+                    className="h-7 gap-1 px-2.5 text-xs font-mono bg-primary text-primary-foreground hover:bg-primary/90"
                     onClick={() => consoleApiRef.current?.cancelQuery()}
                   >
                     <Square className="size-3" />
@@ -443,7 +443,7 @@ export function SqlCell({
           </div>
         </div>
 
-        {/* Chat ↔ SQL cross-fade — both stacked in the same grid cell */}
+        {/* Chat ↔ SQL cross-fade */}
         <div className="grid">
           <form
             aria-hidden={!isChatMode}
@@ -474,7 +474,7 @@ export function SqlCell({
                     }
                   }
                 }}
-                placeholder="Ask AI to refine this cell..."
+                placeholder="Ask AI to refine this cell…"
                 rows={4}
                 disabled={ai?.isAssistantThinking ?? false}
                 tabIndex={isChatMode ? undefined : -1}
@@ -494,7 +494,7 @@ export function SqlCell({
                         }
                         tabIndex={isChatMode ? undefined : -1}
                       >
-                        {ai?.isAssistantThinking ? "Running..." : "Ask AI"}
+                        {ai?.isAssistantThinking ? "Running…" : "Ask AI"}
                       </InputGroupButton>
                     </span>
                   </PopoverTrigger>
@@ -560,7 +560,7 @@ export function SqlCell({
       </div>
 
       {hasFreshStoredPayload || isSqlRunning ? (
-        <div className="overflow-hidden rounded-lg border bg-background pb-4">
+        <div className="overflow-hidden rounded-lg border border-border bg-card pb-4">
           <SqlAnalysisDisplay
             data={storedPayload}
             stage={
@@ -574,7 +574,7 @@ export function SqlCell({
           />
         </div>
       ) : (
-        <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
           Run a query in this cell to persist its result and visualization.
         </div>
       )}

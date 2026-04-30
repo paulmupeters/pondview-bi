@@ -126,7 +126,7 @@ export function ChartView({
           onTitleChange={(value) => updateCardMeta("title", value)}
           onDescriptionChange={(value) => updateCardMeta("description", value)}
           onTakeawayChange={(value) => updateCardMeta("takeaway", value)}
-          className="mx-auto w-fit border-0 shadow-none"
+          className="mx-auto w-fit border-0 shadow-none py-6"
         />
       ) : (
         <>

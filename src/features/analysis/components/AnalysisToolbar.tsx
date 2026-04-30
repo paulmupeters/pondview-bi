@@ -64,7 +64,7 @@ export function AnalysisToolbar({
   return (
     <div
       className={cn(
-        "flex h-14 items-center gap-3 border-b border-border pr-6 transition-[padding] duration-200 ease-out",
+        "flex h-14 items-center gap-3 border-b border-border bg-background/80 backdrop-blur-sm pr-6 transition-[padding] duration-200 ease-out",
         isExplorerCollapsed ? "pl-16" : "pl-6",
       )}
     >
@@ -75,42 +75,44 @@ export function AnalysisToolbar({
           onChange={(e) => setTitleDraft(e.target.value)}
           onBlur={handleTitleBlur}
           onKeyDown={handleTitleKeyDown}
-          className="h-8 w-48 text-sm font-medium"
+          className="h-8 w-56 text-sm font-semibold tracking-tight"
           placeholder="Untitled notebook"
         />
       ) : (
         <button
           type="button"
           onClick={handleTitleClick}
-          className="cursor-text rounded px-1 py-0.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="cursor-text rounded px-1.5 py-0.5 text-sm font-semibold tracking-tight text-foreground transition-colors hover:bg-muted"
         >
           {title ?? "Untitled notebook"}
         </button>
       )}
+
       <div className="ml-auto flex items-center gap-3">
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground/70">
           {isBusy ? (
             <>
               <Loader2 className="size-3 animate-spin" />
-              Saving...
+              <span className="hidden sm:inline">Saving…</span>
             </>
           ) : lastSavedAt ? (
             <>
               <Check className="size-3" />
-              Saved {formatRelativeTime(lastSavedAt)}
+              <span>Saved {formatRelativeTime(lastSavedAt)}</span>
             </>
           ) : null}
         </span>
+
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="outline" size="sm" onClick={onCreateDashboard}>
-              <LayoutDashboard />
-              Create dashboard
+              <LayoutDashboard className="size-3.5" />
+              <span className="hidden sm:inline">Create dashboard</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
             Create dashboard{" "}
-            <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
+            <kbd className="ml-1 rounded border border-border/40 bg-muted/40 px-1 py-0.5 font-mono text-[10px]">
               {dashboardShortcutLabel}
             </kbd>
           </TooltipContent>

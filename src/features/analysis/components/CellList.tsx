@@ -1,4 +1,4 @@
-import { Bot, Plus, Type } from "lucide-react";
+import { Bot, FileText, Plus, Type } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   AI_SETTINGS_UPDATED_EVENT,
@@ -71,12 +71,12 @@ function InsertCellDivider({
   disabled: boolean;
 }) {
   return (
-    <div className="group/insert relative flex items-center justify-center py-1">
-      <div className="absolute inset-x-0 top-1/2 border-t border-transparent transition-colors group-hover/insert:border-border" />
+    <div className="group/insert relative flex items-center justify-center py-1.5">
+      <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-border/40 transition-colors group-hover/insert:border-border" />
       <DropdownMenu>
         <DropdownMenuTrigger
           disabled={disabled}
-          className="relative z-10 flex items-center gap-1 rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/insert:opacity-100 disabled:pointer-events-none disabled:opacity-0"
+          className="relative z-10 flex items-center gap-1.5 rounded-full border border-border/60 bg-background px-3 py-1 text-[11px] font-medium text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/insert:opacity-100 disabled:pointer-events-none disabled:opacity-0"
         >
           <Plus className="size-3" />
           Add cell
@@ -223,8 +223,16 @@ export function CellList({
 
   if (cells.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed bg-muted/10 px-6 py-12 text-center text-sm text-muted-foreground">
-        This notebook is empty. Add an analysis or text cell to get started.
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 px-6 py-20 text-center">
+        <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-muted/30">
+          <FileText className="size-5 text-muted-foreground/50" />
+        </div>
+        <h3 className="mb-1 text-base font-semibold tracking-tight text-foreground">
+          Empty workbook
+        </h3>
+        <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
+          Add an analysis or text cell to get started.
+        </p>
       </div>
     );
   }
