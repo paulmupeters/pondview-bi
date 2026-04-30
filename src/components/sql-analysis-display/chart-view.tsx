@@ -127,56 +127,48 @@ export function ChartView({
           onTakeawayChange={(value) => updateCardMeta("takeaway", value)}
           className="mx-auto my-2 w-fit border-0 shadow-none py-6"
         />
-      ) : (
-        <>
-          {selectedForChart && selectedForChart.rows.length > 0 ? (
-            <div
-              className={
-                showVisualOptions
-                  ? "flex flex-col lg:flex-row lg:gap-0"
-                  : undefined
+      ) : selectedForChart && selectedForChart.rows.length > 0 ? (
+        <div
+          className={
+            showVisualOptions ? "flex flex-col lg:flex-row lg:gap-0" : undefined
+          }
+        >
+          {/* Chart on the left */}
+          <div className="flex-1 min-w-0">
+            <SqlChart
+              customChartConfig={effectiveChartConfig}
+              dataOverride={selectedForChart}
+              onTitleChange={(value) => updateChartMeta("title", value)}
+              onDescriptionChange={(value) =>
+                updateChartMeta("description", value)
               }
-            >
-              {/* Chart on the left */}
-              <div className="flex-1 min-w-0">
-                <SqlChart
-                  customChartConfig={effectiveChartConfig}
-                  dataOverride={selectedForChart}
-                  onTitleChange={(value) => updateChartMeta("title", value)}
-                  onDescriptionChange={(value) =>
-                    updateChartMeta("description", value)
-                  }
-                  onTakeawayChange={(value) =>
-                    updateChartMeta("takeaway", value)
-                  }
-                />
-              </div>
+              onTakeawayChange={(value) => updateChartMeta("takeaway", value)}
+            />
+          </div>
 
-              {/* Options panel on the right */}
-              {columnsForDialog.length > 0 && showVisualOptions && (
-                <div
-                  id="chart-visual-options"
-                  className="w-full shrink-0 lg:w-52 lg:border-l lg:border-border/60 lg:overflow-y-auto lg:max-h-[70vh]"
-                >
-                  <InlineChartConfig
-                    chartConfig={chartConfig}
-                    defaultChartConfig={defaultChartConfig}
-                    onChartConfigChange={onChartConfigChange}
-                    columns={columnsForDialog}
-                    rows={selectedForChart?.rows}
-                    showAdvancedConfig={showAdvanced}
-                    onToggleAdvanced={() => setShowAdvanced((s) => !s)}
-                    hideNarrativeFields={true}
-                    sidebar
-                  />
-                </div>
-              )}
+          {/* Options panel on the right */}
+          {columnsForDialog.length > 0 && showVisualOptions && (
+            <div
+              id="chart-visual-options"
+              className="w-full shrink-0 lg:w-52 lg:border-l lg:border-border/60 lg:overflow-y-auto lg:max-h-[70vh]"
+            >
+              <InlineChartConfig
+                chartConfig={chartConfig}
+                defaultChartConfig={defaultChartConfig}
+                onChartConfigChange={onChartConfigChange}
+                columns={columnsForDialog}
+                rows={selectedForChart?.rows}
+                showAdvancedConfig={showAdvanced}
+                onToggleAdvanced={() => setShowAdvanced((s) => !s)}
+                hideNarrativeFields={true}
+                sidebar
+              />
             </div>
-          ) : !selectedForChart && !selectedForCard ? (
-            <div className="min-h-[200px]" />
-          ) : null}
-        </>
-      )}
+          )}
+        </div>
+      ) : !selectedForChart && !selectedForCard ? (
+        <div className="min-h-[200px]" />
+      ) : null}
     </div>
   );
 }

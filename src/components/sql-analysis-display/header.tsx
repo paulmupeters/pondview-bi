@@ -1,7 +1,4 @@
-import {
-  ChatBubbleBottomCenterTextIcon,
-  PlusCircleIcon,
-} from "@heroicons/react/24/outline";
+import { PlusCircleIcon } from "@heroicons/react/24/outline";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";

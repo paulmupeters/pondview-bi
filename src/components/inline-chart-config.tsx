@@ -1,9 +1,6 @@
 import { AreaChart, BarChart3, LineChart, PieChart } from "lucide-react";
 import { useMemo } from "react";
-import {
-  Collapsible,
-  CollapsibleContent,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -87,9 +84,7 @@ export function InlineChartConfig({
 
   const getDistinctValues = (columnName: string): string[] => {
     if (!rows || rows.length === 0) return [];
-    const values = rows
-      .map((row) => String(row[columnName]))
-      .filter(Boolean);
+    const values = rows.map((row) => String(row[columnName])).filter(Boolean);
     return Array.from(new Set(values)).sort();
   };
 
@@ -273,28 +268,37 @@ export function InlineChartConfig({
 
       {/* Quick toggles */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-1.5 border-t border-border/40">
-        <MiniToggle
+        <MiniSwitch
           label="Legend"
           value={effectiveChartConfig.legend}
           onChange={(v) =>
             updateChartConfig((config) => ({ ...config, legend: v }))
           }
         />
-        <MiniToggle
+        <MiniSwitch
           label="Grid"
           value={effectiveChartConfig.showGrid !== false}
           onChange={(v) =>
             updateChartConfig((config) => ({ ...config, showGrid: v }))
           }
         />
-        <MiniToggle
+        <MiniSwitch
           label="Dots"
           value={effectiveChartConfig.showDots !== false}
           onChange={(v) =>
             updateChartConfig((config) => ({ ...config, showDots: v }))
           }
         />
-        <MiniToggle
+        {effectiveChartConfig.type === "line" && (
+          <MiniSwitch
+            label="Line"
+            value={effectiveChartConfig.showLine !== false}
+            onChange={(v) =>
+              updateChartConfig((config) => ({ ...config, showLine: v }))
+            }
+          />
+        )}
+        <MiniSwitch
           label="Tooltip"
           value={effectiveChartConfig.showTooltip !== false}
           onChange={(v) =>
@@ -306,7 +310,12 @@ export function InlineChartConfig({
       {/* Advanced */}
       <Collapsible open={showAdvancedConfig} onOpenChange={onToggleAdvanced}>
         <CollapsibleContent>
-          <div className={cn("gap-3 px-4 py-3 border-t border-border/40 bg-card/20", sidebar ? "flex flex-col" : "grid grid-cols-2 sm:grid-cols-4")}>
+          <div
+            className={cn(
+              "gap-3 px-4 py-3 border-t border-border/40 bg-card/20",
+              sidebar ? "flex flex-col" : "grid grid-cols-2 sm:grid-cols-4",
+            )}
+          >
             {!hideNarrativeFields && (
               <>
                 <ControlGroup label="Title">
@@ -364,7 +373,7 @@ export function InlineChartConfig({
               />
             </ControlGroup>
 
-            <MiniToggle
+            <MiniSwitch
               label="X Axis"
               value={effectiveChartConfig.showXAxis !== false}
               onChange={(v) =>
@@ -374,7 +383,7 @@ export function InlineChartConfig({
                 }))
               }
             />
-            <MiniToggle
+            <MiniSwitch
               label="Y Axis"
               value={effectiveChartConfig.showYAxis !== false}
               onChange={(v) =>
@@ -429,7 +438,7 @@ export function InlineChartConfig({
               <>
                 <div className="col-span-2 sm:col-span-4">
                   <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-                    <MiniToggle
+                    <MiniSwitch
                       label="Multi-line"
                       value={!!effectiveChartConfig.multipleLines}
                       onChange={(v) =>
@@ -461,9 +470,7 @@ export function InlineChartConfig({
                     {effectiveChartConfig.multipleLines && (
                       <ControlGroup label="Measure">
                         <CompactSelect
-                          value={
-                            effectiveChartConfig.measurementColumn || ""
-                          }
+                          value={effectiveChartConfig.measurementColumn || ""}
                           onChange={(e) => {
                             const col = e.target.value || undefined;
                             updateChartConfig((config) => ({
@@ -529,45 +536,48 @@ export function InlineChartConfig({
                     </div>
                   )}
 
-                <div className="col-span-2 sm:col-span-4">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                    Y Columns
-                  </span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {columns.map((col) => {
-                      const isSelected =
-                        effectiveChartConfig.yKeys.includes(col.name);
-                      return (
-                        <label
-                          key={col.name}
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] cursor-pointer transition-colors",
-                            isSelected
-                              ? "border-primary/30 bg-primary/5 text-foreground"
-                              : "border-border/60 bg-card text-muted-foreground hover:border-border",
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {
-                              updateChartConfig((config) => {
-                                const newYKeys = isSelected
-                                  ? config.yKeys.filter((k) => k !== col.name)
-                                  : [...config.yKeys, col.name];
-                                return { ...config, yKeys: newYKeys };
-                              });
-                            }}
-                            className="size-3 rounded-sm"
-                          />
-                          {col.name}
-                        </label>
-                      );
-                    })}
+                {effectiveChartConfig.multipleLines && (
+                  <div className="col-span-2 sm:col-span-4">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                      Y Columns
+                    </span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {columns.map((col) => {
+                        const isSelected = effectiveChartConfig.yKeys.includes(
+                          col.name,
+                        );
+                        return (
+                          <label
+                            key={col.name}
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] cursor-pointer transition-colors",
+                              isSelected
+                                ? "border-primary/30 bg-primary/5 text-foreground"
+                                : "border-border/60 bg-card text-muted-foreground hover:border-border",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                updateChartConfig((config) => {
+                                  const newYKeys = isSelected
+                                    ? config.yKeys.filter((k) => k !== col.name)
+                                    : [...config.yKeys, col.name];
+                                  return { ...config, yKeys: newYKeys };
+                                });
+                              }}
+                              className="size-3 rounded-sm"
+                            />
+                            {col.name}
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <MiniToggle
+                <MiniSwitch
                   label="Count mode"
                   value={!!effectiveChartConfig.countMode}
                   onChange={(v) =>
@@ -649,9 +659,7 @@ function CompactSelect({
   );
 }
 
-function CompactInput(
-  props: React.InputHTMLAttributes<HTMLInputElement>,
-) {
+function CompactInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
@@ -660,7 +668,7 @@ function CompactInput(
   );
 }
 
-function MiniToggle({
+function MiniSwitch({
   label,
   value,
   onChange,
@@ -671,32 +679,33 @@ function MiniToggle({
 }) {
   return (
     <ControlGroup label={label}>
-      <div className="flex rounded-md border border-border/60 bg-card overflow-hidden">
-        <button
-          type="button"
-          onClick={() => onChange(true)}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        onClick={() => onChange(!value)}
+        className={cn(
+          "inline-flex h-7 w-fit items-center gap-2 rounded-md border border-border/60 bg-card px-2 text-[11px] transition-colors",
+          value
+            ? "border-primary/30 bg-primary/5 text-primary"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <span
           className={cn(
-            "px-2 py-0.5 text-[11px] transition-colors",
-            value
-              ? "bg-primary/10 text-primary font-medium"
-              : "text-muted-foreground hover:text-foreground",
+            "relative inline-flex h-3.5 w-6 items-center rounded-full transition-colors",
+            value ? "bg-primary" : "bg-muted-foreground/30",
           )}
         >
-          Show
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange(false)}
-          className={cn(
-            "px-2 py-0.5 text-[11px] transition-colors border-l border-border/40",
-            !value
-              ? "bg-primary/10 text-primary font-medium"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Hide
-        </button>
-      </div>
+          <span
+            className={cn(
+              "size-2.5 rounded-full bg-background shadow-sm transition-transform",
+              value ? "translate-x-3" : "translate-x-0.5",
+            )}
+          />
+        </span>
+        {label}
+      </button>
     </ControlGroup>
   );
 }
