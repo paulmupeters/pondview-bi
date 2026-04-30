@@ -10,13 +10,6 @@ import {
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -47,7 +40,7 @@ function getStatusMeta(status: AnalysisCellState["status"]): {
     case "running":
       return {
         icon: Loader2,
-        className: "text-muted-foreground",
+        className: "text-primary",
       };
     case "complete":
       return {
@@ -62,7 +55,7 @@ function getStatusMeta(status: AnalysisCellState["status"]): {
     default:
       return {
         icon: Circle,
-        className: "text-muted-foreground",
+        className: "text-muted-foreground/40",
       };
   }
 }
@@ -79,61 +72,66 @@ export function CellFrame({
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    <Card
+    <div
       className={cn(
-        "gap-0 py-0 transition-colors",
-        isSelected && "border-primary/30 ring-primary/15 ring-2",
+        "group/cell relative overflow-hidden rounded-lg border border-border bg-card transition-all",
+        isSelected && "ring-1 ring-primary/15 shadow-sm",
       )}
     >
-      <CardHeader className="grid-rows-[auto] items-center gap-0 px-4 py-1 pb-0">
-        <div className="flex min-w-0 w-full items-center gap-2">
+      {/* Collapse, select, and delete row */}
+      <div className="flex items-center gap-1.5 px-2 py-1.5">
+        <button
+          type="button"
+          className="shrink-0 rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground"
+          aria-label={isCollapsed ? "Expand cell" : "Collapse cell"}
+          onClick={() => setIsCollapsed((previous) => !previous)}
+        >
+          {isCollapsed ? (
+            <ChevronRight className="size-3.5" />
+          ) : (
+            <ChevronDown className="size-3.5" />
+          )}
+        </button>
+
+        <span className="font-mono text-[10px] tabular-nums text-muted-foreground/40">
+          {String(cell.position + 1).padStart(2, "0")}
+        </span>
+
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="sr-only">Status: {cell.status}</span>
+          <StatusIcon
+            cell={cell}
+            className={statusMeta.className}
+            statusMessage={statusMessage}
+          />
           <button
             type="button"
-            className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-            aria-label={isCollapsed ? "Expand cell" : "Collapse cell"}
-            onClick={() => setIsCollapsed((previous) => !previous)}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            aria-pressed={isSelected}
+            onClick={onSelect}
           >
-            {isCollapsed ? (
-              <ChevronRight className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
-            )}
+            <span className="text-xs font-medium text-muted-foreground">
+              {cell.kind === "text" ? "Text" : "Cell"} {cell.position + 1}
+            </span>
           </button>
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="sr-only">Status: {cell.status}</span>
-            <StatusIcon
-              cell={cell}
-              className={statusMeta.className}
-              statusMessage={statusMessage}
-            />
-            <button
-              type="button"
-              className="flex min-w-0 flex-1 items-center gap-2 text-left"
-              aria-pressed={isSelected}
-              onClick={onSelect}
-            >
-              <CardTitle className="shrink-0 font-thin text-sm">
-                {cell.kind === "text" ? "Text" : "Cell"} {cell.position + 1}
-              </CardTitle>
-            </button>
-          </div>
         </div>
-        <CardAction className="row-span-1 flex items-center gap-2">
+
+        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover/cell:opacity-100 focus-within:opacity-100">
           <Button
             type="button"
             size="icon"
             variant="ghost"
+            className="h-7 w-7 text-muted-foreground/50 hover:text-destructive"
             aria-label="Delete cell"
             onClick={onDelete}
           >
-            <Trash2 />
+            <Trash2 className="size-3.5" />
           </Button>
-        </CardAction>
-      </CardHeader>
-      {!isCollapsed && (
-        <CardContent className="px-4 pt-1 pb-4">{children}</CardContent>
-      )}
-    </Card>
+        </div>
+      </div>
+
+      {!isCollapsed && <div className="px-3 pb-4 pt-0.5">{children}</div>}
+    </div>
   );
 }
 
@@ -143,11 +141,14 @@ function StatusIcon({ cell, className, statusMessage }: StatusIconProps) {
   const iconMarkup = (
     <span
       data-status-icon={cell.status}
-      className={cn("shrink-0", className)}
+      className={cn(
+        "shrink-0 inline-flex items-center justify-center",
+        className,
+      )}
       aria-hidden="true"
     >
       <IconComponent
-        className={cn("size-4", cell.status === "running" && "animate-spin")}
+        className={cn("size-3.5", cell.status === "running" && "animate-spin")}
       />
     </span>
   );
@@ -159,9 +160,8 @@ function StatusIcon({ cell, className, statusMessage }: StatusIconProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <span
-          role="button"
-          tabIndex={0}
+        <button
+          type="button"
           className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           aria-label="Show error details"
           onClick={(event) => event.stopPropagation()}
@@ -173,7 +173,7 @@ function StatusIcon({ cell, className, statusMessage }: StatusIconProps) {
           }}
         >
           {iconMarkup}
-        </span>
+        </button>
       </PopoverTrigger>
       <PopoverContent
         className="w-80 px-3 py-2 text-sm"

@@ -106,6 +106,33 @@ describe("analysis reducer", () => {
     });
   });
 
+  test("does not duplicate a cell added by both optimistic and session updates", () => {
+    const initial = createInitialAnalysisState("notebook-1");
+    const cell = toAnalysisCellState(
+      makeCell({
+        id: "cell-1",
+        position: 0,
+        createdAt: 1,
+      }),
+    );
+
+    const added = analysisReducer(initial, {
+      type: "cellAdded",
+      cell,
+    });
+    const addedAgain = analysisReducer(added, {
+      type: "cellAdded",
+      cell: {
+        ...cell,
+        updatedAt: 2,
+      },
+    });
+
+    expect(addedAgain.cells.map((nextCell) => nextCell.id)).toEqual(["cell-1"]);
+    expect(addedAgain.cells[0]?.updatedAt).toBe(2);
+    expect(addedAgain.selectedCellId).toBe("cell-1");
+  });
+
   test("reselects the next remaining cell after deleting the selected cell", () => {
     const loaded = analysisReducer(createInitialAnalysisState("notebook-1"), {
       type: "workspaceLoaded",

@@ -1,5 +1,5 @@
 import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { Database } from "lucide-react";
+import { Database, PanelLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   PromptInputHoverCard,
@@ -38,6 +38,7 @@ import {
 } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
+import type { DraftSqlQuery } from "@/lib/workspace/sql-editor-drafts-repo";
 import { Separator } from "./ui/separator";
 
 type ExplorerTableGroup = {
@@ -45,6 +46,10 @@ type ExplorerTableGroup = {
   schema: string;
   tables: string[];
 };
+
+function getExplorerToggleLabel(isCollapsed: boolean): string {
+  return isCollapsed ? "Show explorer" : "Hide explorer";
+}
 
 export function getConnectedEntryCatalog(
   entry: ConnectedTable,
@@ -289,11 +294,16 @@ interface ConnectedDataPanelProps {
   showCollapseToggle?: boolean;
   refreshToken?: number;
   sqlBackend?: SqlBackend;
+  draftSqlQueries?: DraftSqlQuery[];
+  onSelectDraftSqlQuery?: (draftId: string) => void;
+  onDeleteDraftSqlQuery?: (draftId: string) => void;
+  onRenameDraftSqlQuery?: (draftId: string) => void;
   storedSqlQueries?: SavedSqlQuery[];
   onSelectStoredSqlQuery?: (queryId: string) => void;
   onDeleteStoredSqlQuery?: (queryId: string) => void;
   onRenameStoredSqlQuery?: (queryId: string) => void;
   showStoredSqlQueries?: boolean;
+  toggleShortcutLabel?: string;
 }
 
 export function ConnectedDataPanel({
@@ -304,15 +314,20 @@ export function ConnectedDataPanel({
   mode = "popover",
   collapsed = false,
   collapsedBehavior = "inline",
-  onToggleCollapse: _onToggleCollapse,
-  showCollapseToggle: _showCollapseToggle = true,
+  onToggleCollapse,
+  showCollapseToggle = false,
   refreshToken,
   sqlBackend = "duckdb-wasm",
+  draftSqlQueries = [],
+  onSelectDraftSqlQuery,
+  onDeleteDraftSqlQuery,
+  onRenameDraftSqlQuery,
   storedSqlQueries = [],
   onSelectStoredSqlQuery,
   onDeleteStoredSqlQuery,
   onRenameStoredSqlQuery,
   showStoredSqlQueries = false,
+  toggleShortcutLabel,
 }: ConnectedDataPanelProps) {
   const {
     tables: wasmTables,
@@ -340,6 +355,7 @@ export function ConnectedDataPanel({
     remote: null,
     wasm: null,
   });
+  const canToggleCollapse = showCollapseToggle && Boolean(onToggleCollapse);
 
   useEffect(() => {
     if (refreshToken === undefined) {
@@ -530,24 +546,30 @@ export function ConnectedDataPanel({
         </div>
       ));
 
-  const renderStoredSqlQueries = () => {
-    if (!showStoredSqlQueries) {
-      return null;
-    }
+  const renderQuerySection = (params: {
+    title: string;
+    emptyMessage: string;
+    queries: Array<{ id: string; name: string }>;
+    onSelect?: (id: string) => void;
+    onRename?: (id: string) => void;
+    onDelete?: (id: string) => void;
+  }) => {
+    const { emptyMessage, onDelete, onRename, onSelect, queries, title } =
+      params;
 
     return (
       <div className="flex max-h-56 flex-col gap-2 p-2">
         <p className="px-1 text-[10px] font-bold uppercase tracking-widest text-[#5C6658]">
-          Stored SQL Queries
+          {title}
         </p>
         <div className="min-h-0 overflow-y-auto">
-          {storedSqlQueries.length === 0 ? (
+          {queries.length === 0 ? (
             <p className="px-1 py-2 text-xs text-muted-foreground">
-              No stored queries yet.
+              {emptyMessage}
             </p>
           ) : (
             <div className="space-y-1">
-              {storedSqlQueries.map((query) => (
+              {queries.map((query) => (
                 <div
                   key={query.id}
                   className="group flex items-center gap-1 rounded px-1 py-1 hover:bg-sidebar-accent/40"
@@ -555,29 +577,29 @@ export function ConnectedDataPanel({
                   <button
                     type="button"
                     className="flex-1 truncate text-left text-xs font-mono text-sidebar-foreground"
-                    onClick={() => onSelectStoredSqlQuery?.(query.id)}
+                    onClick={() => onSelect?.(query.id)}
                     title={query.name}
                   >
                     {query.name}
                   </button>
-                  {onDeleteStoredSqlQuery || onRenameStoredSqlQuery ? (
+                  {onDelete || onRename ? (
                     <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      {onRenameStoredSqlQuery ? (
+                      {onRename ? (
                         <button
                           type="button"
                           className="rounded p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                          aria-label={`Rename stored query ${query.name}`}
-                          onClick={() => onRenameStoredSqlQuery(query.id)}
+                          aria-label={`Rename ${title.toLowerCase()} ${query.name}`}
+                          onClick={() => onRename(query.id)}
                         >
                           <PencilSquareIcon className="h-3.5 w-3.5" />
                         </button>
                       ) : null}
-                      {onDeleteStoredSqlQuery ? (
+                      {onDelete ? (
                         <button
                           type="button"
                           className="rounded p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                          aria-label={`Delete stored query ${query.name}`}
-                          onClick={() => onDeleteStoredSqlQuery(query.id)}
+                          aria-label={`Delete ${title.toLowerCase()} ${query.name}`}
+                          onClick={() => onDelete(query.id)}
                         >
                           <TrashIcon className="h-3.5 w-3.5" />
                         </button>
@@ -590,6 +612,34 @@ export function ConnectedDataPanel({
           )}
         </div>
       </div>
+    );
+  };
+
+  const renderStoredSqlQueries = () => {
+    if (!showStoredSqlQueries) {
+      return null;
+    }
+
+    return (
+      <>
+        {renderQuerySection({
+          title: "Draft Queries",
+          emptyMessage: "No draft queries yet.",
+          queries: draftSqlQueries,
+          onSelect: onSelectDraftSqlQuery,
+          onRename: onRenameDraftSqlQuery,
+          onDelete: onDeleteDraftSqlQuery,
+        })}
+        <Separator />
+        {renderQuerySection({
+          title: "Saved Queries",
+          emptyMessage: "No saved queries yet.",
+          queries: storedSqlQueries,
+          onSelect: onSelectStoredSqlQuery,
+          onRename: onRenameStoredSqlQuery,
+          onDelete: onDeleteStoredSqlQuery,
+        })}
+      </>
     );
   };
 
@@ -721,11 +771,36 @@ export function ConnectedDataPanel({
         return (
           <div
             className={cn(
-              "absolute left-0 top-4 z-20 -translate-x-1/2 transition-all duration-200 ease-out",
+              "absolute left-4 top-4 z-20 transition-all duration-200 ease-out",
               className,
               "bg-transparent",
             )}
-          ></div>
+          >
+            {canToggleCollapse ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="rounded-lg bg-background/90 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80"
+                    onClick={onToggleCollapse}
+                    aria-label={getExplorerToggleLabel(true)}
+                  >
+                    <PanelLeft />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {getExplorerToggleLabel(true)}
+                  {toggleShortcutLabel ? (
+                    <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
+                      {toggleShortcutLabel}
+                    </kbd>
+                  ) : null}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+          </div>
         );
       }
 
@@ -746,10 +821,34 @@ export function ConnectedDataPanel({
           className,
         )}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 p-4">
+        <div className="flex h-14 items-center justify-between gap-2 border-b border-border px-4">
           <span className="text-xs font-bold tracking-widest text-[#5C6658] uppercase">
             Explorer
           </span>
+          {canToggleCollapse ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground hover:text-foreground"
+                  onClick={onToggleCollapse}
+                  aria-label={getExplorerToggleLabel(false)}
+                >
+                  <PanelLeft />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {getExplorerToggleLabel(false)}
+                {toggleShortcutLabel ? (
+                  <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
+                    {toggleShortcutLabel}
+                  </kbd>
+                ) : null}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto p-2">

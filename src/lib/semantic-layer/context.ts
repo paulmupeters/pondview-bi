@@ -1,9 +1,12 @@
 type ContextModuleLoader = () => Promise<string>;
 
-const contextModules = import.meta.glob("/docs/datasource-context/*.md", {
-  query: "?raw",
-  import: "default",
-}) as Record<string, ContextModuleLoader>;
+const contextModules =
+  typeof import.meta.glob === "function"
+    ? (import.meta.glob("/docs/datasource-context/*.md", {
+        query: "?raw",
+        import: "default",
+      }) as Record<string, ContextModuleLoader>)
+    : {};
 
 function parseFrontmatter(content: string): { name?: string; body: string } {
   const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);

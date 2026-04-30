@@ -219,6 +219,7 @@ export type SqlConsoleProps = {
   onNoticeAction?: (notice: QueryNotice | null) => void;
   onRunStateChangeAction?: (isRunning: boolean) => void;
   onCancelQueryAction?: () => Promise<void> | void;
+  onRunShortcutAction?: () => void;
   showInlineResults?: boolean;
   showRunControls?: boolean;
   showKeyboardHint?: boolean;
@@ -246,6 +247,7 @@ export function SqlConsole({
   onNoticeAction,
   onRunStateChangeAction,
   onCancelQueryAction,
+  onRunShortcutAction,
   showInlineResults = true,
   showRunControls = true,
   showKeyboardHint = true,
@@ -331,7 +333,9 @@ export function SqlConsole({
     setResults(null);
 
     const currentSql = sql.trim();
-    if (!currentSql) return;
+    if (!currentSql) {
+      return;
+    }
     addToHistory(currentSql);
 
     const controller = new AbortController();
@@ -494,7 +498,14 @@ export function SqlConsole({
               minHeight={editorMinHeight}
               maxHeight={editorMaxHeight}
               autoFocus
-              onRunQuery={() => void handleRunQuery()}
+              onRunQuery={() => {
+                if (onRunShortcutAction) {
+                  onRunShortcutAction();
+                  return;
+                }
+
+                void handleRunQuery();
+              }}
               onCancel={cancelRun}
               onHistoryPrev={handleHistoryPrev}
               onHistoryNext={handleHistoryNext}

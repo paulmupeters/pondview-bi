@@ -1,19 +1,32 @@
-import { LayoutDashboard, Plus, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import {
+  ArrowRight,
+  ClockIcon,
+  LayoutDashboard,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   createDashboard,
   deleteDashboard,
   listDashboards,
 } from "@/lib/workspace/dashboard-repo";
 import Link from "@/vite/next-link";
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                               */
+/* ------------------------------------------------------------------ */
 
 type DashboardLite = {
   id: string;
@@ -22,39 +35,159 @@ type DashboardLite = {
   storageStatus?: "shared" | "best-effort" | null;
 };
 
-function formatRelativeTime(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp;
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
+const EMPTY_INITIAL_DASHBOARDS: DashboardLite[] = [];
+const DASHBOARD_SKELETON_KEYS = [
+  "dashboard-skeleton-1",
+  "dashboard-skeleton-2",
+  "dashboard-skeleton-3",
+  "dashboard-skeleton-4",
+  "dashboard-skeleton-5",
+  "dashboard-skeleton-6",
+] as const;
 
-  if (days > 0) return `${days} day${days > 1 ? "s" : ""} ago`;
-  if (hours > 0) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
-  if (minutes > 0) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
-  return "Just now";
+/* ------------------------------------------------------------------ */
+/*  Time formatting                                                     */
+/* ------------------------------------------------------------------ */
+
+function useRelativeTimeFormatter() {
+  return useMemo(
+    () => new Intl.RelativeTimeFormat("en", { numeric: "auto" }),
+    [],
+  );
 }
 
+function formatRelativeTime(
+  rtf: Intl.RelativeTimeFormat,
+  timestamp: number,
+): string {
+  const diff = Date.now() - timestamp;
+  const seconds = Math.round(diff / 1000);
+  if (seconds < 10) return "Just now";
+
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 1) return rtf.format(-seconds, "second");
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 1) return rtf.format(-minutes, "minute");
+
+  const days = Math.round(hours / 24);
+  if (days < 1) return rtf.format(-hours, "hour");
+
+  const weeks = Math.round(days / 7);
+  if (weeks < 4) return rtf.format(-days, "day");
+
+  const months = Math.round(days / 30);
+  if (months < 12) return rtf.format(-months, "month");
+
+  return rtf.format(-Math.round(days / 365), "year");
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sub-components                                                      */
+/* ------------------------------------------------------------------ */
+
+function SkeletonGrid() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {DASHBOARD_SKELETON_KEYS.map((key) => (
+        <div
+          key={key}
+          className="h-36 animate-pulse rounded-lg border border-border bg-muted/40 border-l-[3px] border-l-primary/20"
+        />
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in zoom-in-95 duration-500">
+      <div className="relative mb-8">
+        <div className="absolute -inset-4 rounded-full bg-primary/10 blur-2xl" />
+        <div className="relative flex h-20 w-20 items-center justify-center rounded-full border-2 border-dashed border-primary/30 bg-primary/5">
+          <LayoutDashboard className="h-8 w-8 text-primary/60" />
+        </div>
+      </div>
+      <h2 className="text-2xl font-bold tracking-tight text-foreground">
+        No dashboards yet
+      </h2>
+      <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
+        Create your first dashboard to organize visuals from your analyses.
+      </p>
+      <Button
+        size="lg"
+        className="mt-8 gap-2 rounded-full px-6 shadow-lg shadow-primary/20"
+        onClick={onCreate}
+      >
+        <Plus className="h-4 w-4" />
+        Create Dashboard
+      </Button>
+    </div>
+  );
+}
+
+function ErrorState({
+  error,
+  onRetry,
+}: {
+  error: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="animate-in fade-in zoom-in-95 duration-500">
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-left border-l-4 border-l-destructive">
+        <h3 className="text-lg font-semibold text-destructive">
+          Dashboard storage unavailable
+        </h3>
+        <p className="mt-2 text-sm text-destructive/80">{error}</p>
+        <Button variant="outline" className="mt-6" onClick={onRetry}>
+          Retry
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main page                                                           */
+/* ------------------------------------------------------------------ */
+
 export default function DashboardsPage() {
-  const [dashboards, setDashboards] = useState<DashboardLite[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const rtf = useRelativeTimeFormatter();
+
+  const [dashboards, setDashboards] = useState<DashboardLite[]>(
+    EMPTY_INITIAL_DASHBOARDS,
+  );
+  const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const [gridVisible, setGridVisible] = useState(false);
+
+  const [isCreating, setIsCreating] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState("");
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [dashboardToDelete, setDashboardToDelete] =
+    useState<DashboardLite | null>(null);
+
+  const sortedDashboards = useMemo(
+    () => [...dashboards].sort((a, b) => b.updatedAt - a.updatedAt),
+    [dashboards],
+  );
+
   const load = useCallback(async () => {
-    setLoading(true);
+    setIsLoading(true);
     setLoadError(null);
     try {
-      const dashboardsList = await listDashboards();
-      setDashboards(dashboardsList);
+      const list = await listDashboards();
+      setDashboards(list);
     } catch (error) {
       setLoadError(
         error instanceof Error ? error.message : "Failed to load dashboards.",
       );
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }, []);
 
@@ -62,150 +195,266 @@ export default function DashboardsPage() {
     void load();
   }, [load]);
 
-  const handleCreate = async () => {
-    setCreating(true);
-    try {
-      const title = prompt("New dashboard title")?.trim();
-      if (!title) return;
-      await createDashboard(title);
-      await load();
-    } finally {
-      setCreating(false);
+  /* Staggered entrance */
+  useEffect(() => {
+    if (sortedDashboards.length > 0 && !isLoading) {
+      const id = requestAnimationFrame(() => setGridVisible(true));
+      return () => cancelAnimationFrame(id);
     }
-  };
+    if (isLoading) setGridVisible(false);
+  }, [sortedDashboards.length, isLoading]);
 
-  const handleDelete = async (
-    dashboardId: string,
-    dashboardTitle: string | null,
-  ) => {
-    if (
-      !confirm(
-        `Are you sure you want to delete "${dashboardTitle || "Untitled Dashboard"}"? This action cannot be undone.`,
-      )
-    )
-      return;
-    setDeleting(dashboardId);
+  const handleCreate = useCallback(async () => {
+    const title = createTitle.trim();
+    if (!title) return;
+    setIsCreating(true);
+    try {
+      await createDashboard(title);
+      setCreateTitle("");
+      setCreateDialogOpen(false);
+      await load();
+    } catch {
+      // silently fail; Dialog stays open so user can retry
+    } finally {
+      setIsCreating(false);
+    }
+  }, [createTitle, load]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!dashboardToDelete) return;
+    setDeletingId(dashboardToDelete.id);
     try {
       // Optimistically remove from UI
-      setDashboards((prev) => prev.filter((d) => d.id !== dashboardId));
-      await deleteDashboard(dashboardId);
+      setDashboards((prev) =>
+        prev.filter((d) => d.id !== dashboardToDelete.id),
+      );
+      await deleteDashboard(dashboardToDelete.id);
+      setDashboardToDelete(null);
     } catch {
-      // Reload list on error to restore
       await load();
+      setDashboardToDelete(null);
     } finally {
-      setDeleting(null);
+      setDeletingId(null);
     }
-  };
+  }, [dashboardToDelete, load]);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-8 overflow-y-auto px-6 py-10">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <LayoutDashboard className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Dashboards</h1>
-              <p className="text-sm text-muted-foreground">
-                Manage and view your analytics dashboards
-              </p>
-            </div>
-          </div>
-          <Button onClick={handleCreate} disabled={creating} size="default">
-            <Plus className="mr-2 h-4 w-4" />
-            {creating ? "Creating…" : "New Dashboard"}
-          </Button>
-        </div>
-      </div>
+    <div className="relative min-h-full w-full overflow-y-auto bg-background">
+      {/* Atmospheric top glow */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 40% at 50% 0%, hsl(var(--primary) / 0.06), transparent)",
+        }}
+      />
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
-            <p className="mt-4 text-sm text-muted-foreground">
-              Loading dashboards...
-            </p>
+      <div className="relative mx-auto max-w-7xl px-6 py-12 lg:px-8">
+        {/* Header */}
+        <header className="mb-16 flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-3">
+            <h1 className="text-5xl font-black tracking-tighter text-foreground sm:text-6xl">
+              Dashboards
+            </h1>
           </div>
-        </div>
-      ) : loadError ? (
-        <Card className="border-destructive/40">
-          <CardHeader>
-            <CardTitle>Dashboard storage unavailable</CardTitle>
-            <CardDescription>{loadError}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" onClick={() => void load()}>
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      ) : dashboards.length === 0 ? (
-        <Card className="border-dashed">
-          <CardHeader className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-              <LayoutDashboard className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <CardTitle>No dashboards yet</CardTitle>
-            <CardDescription className="max-w-sm">
-              Get started by creating your first dashboard. You can add visuals
-              from your chat conversations.
-            </CardDescription>
-            <Button onClick={handleCreate} disabled={creating} className="mt-6">
-              <Plus className="mr-2 h-4 w-4" />
-              Create Your First Dashboard
-            </Button>
-          </CardHeader>
-        </Card>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {dashboards.map((dashboard) => (
-            <Card
-              key={dashboard.id}
-              className="group relative overflow-hidden transition-all hover:shadow-md"
+
+          <div className="flex items-center gap-6">
+            {!isLoading && (
+              <div className="hidden text-right sm:block">
+                <p className="font-mono text-3xl font-bold leading-none text-foreground">
+                  {sortedDashboards.length}
+                </p>
+                <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {sortedDashboards.length === 1 ? "Dashboard" : "Dashboards"}
+                </p>
+              </div>
+            )}
+            <Button
+              size="lg"
+              className="gap-2 rounded-full px-6 shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-primary/35"
+              onClick={() => {
+                setCreateTitle("");
+                setCreateDialogOpen(true);
+              }}
+              disabled={isCreating}
             >
-              <Link
-                href={`/dashboards/view?id=${encodeURIComponent(dashboard.id)}`}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <CardTitle className="truncate text-lg">
+              <Plus className="h-4 w-4" />
+              New Dashboard
+            </Button>
+          </div>
+        </header>
+
+        {/* Content */}
+        {isLoading && dashboards.length === 0 ? (
+          <SkeletonGrid />
+        ) : loadError ? (
+          <ErrorState error={loadError} onRetry={() => void load()} />
+        ) : sortedDashboards.length === 0 ? (
+          <EmptyState onCreate={() => setCreateDialogOpen(true)} />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {sortedDashboards.map((dashboard, i) => {
+              const isFeatured = i === 0;
+              const delayMs = Math.min(i, 15) * 60;
+
+              return (
+                <article
+                  key={dashboard.id}
+                  className={cn(
+                    "group relative flex flex-col gap-5 rounded-lg border border-border bg-card p-5 text-left transition-[transform,box-shadow,background-color,border-color] ease-out hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/5 hover:bg-accent/[0.06]",
+                    isFeatured && "lg:col-span-2",
+                    i === 1 && "lg:col-start-1",
+                    isFeatured ? "border-l-[4px]" : "border-l-[3px]",
+                    "border-l-primary",
+                  )}
+                  style={{
+                    transitionProperty:
+                      "opacity, transform, box-shadow, background-color, border-color",
+                    transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+                    transitionDuration: gridVisible ? "600ms" : "0ms",
+                    transitionDelay: gridVisible ? `${delayMs}ms` : "0ms",
+                    opacity: gridVisible ? 1 : 0,
+                    transform: gridVisible
+                      ? "translateY(0)"
+                      : "translateY(12px)",
+                  }}
+                >
+                  {/* Stretched link for card-level navigation */}
+                  <Link
+                    href={`/dashboards/view?id=${encodeURIComponent(dashboard.id)}`}
+                    className="absolute inset-0 z-10 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    aria-label={`Open ${dashboard.title || "Untitled Dashboard"}`}
+                  />
+
+                  <div className="pointer-events-none relative z-20 flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary/70">
+                          {String(i + 1).padStart(2, "0")}
+                        </span>
+                        {isFeatured && (
+                          <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-primary">
+                            Latest
+                          </span>
+                        )}
+                        {dashboard.storageStatus === "best-effort" && (
+                          <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                            Local
+                          </span>
+                        )}
+                      </div>
+                      <h3
+                        className={cn(
+                          "font-semibold leading-snug text-card-foreground line-clamp-2",
+                          isFeatured ? "text-lg" : "text-base",
+                        )}
+                      >
                         {dashboard.title || "Untitled Dashboard"}
-                      </CardTitle>
-                      <CardDescription className="mt-2 text-xs">
-                        Updated {formatRelativeTime(dashboard.updatedAt)}
-                      </CardDescription>
-                      {dashboard.storageStatus === "best-effort" ? (
-                        <CardDescription className="mt-1 text-xs">
-                          Best-effort storage
-                        </CardDescription>
-                      ) : null}
+                      </h3>
                     </div>
-                    <Button
+
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void handleDelete(dashboard.id, dashboard.title);
-                      }}
-                      disabled={deleting === dashboard.id}
+                      className="pointer-events-auto relative z-20 mt-0.5 inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-0 ring-offset-background transition-all hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100"
+                      onClick={() => setDashboardToDelete(dashboard)}
+                      disabled={deletingId === dashboard.id}
                       aria-label="Delete dashboard"
                       title="Delete dashboard"
                     >
                       <Trash2 className="h-4 w-4" />
-                    </Button>
+                    </button>
                   </div>
-                </CardHeader>
-              </Link>
-              <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-primary/50 to-primary opacity-0 transition-opacity group-hover:opacity-100" />
-            </Card>
-          ))}
-        </div>
-      )}
+
+                  <div className="pointer-events-none relative z-20 mt-auto flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <ClockIcon className="h-3 w-3" />
+                      {formatRelativeTime(rtf, dashboard.updatedAt)}
+                    </div>
+                    <ArrowRight className="h-4 w-4 -translate-x-1 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Create dashboard dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>New Dashboard</DialogTitle>
+            <DialogDescription>
+              Give your dashboard a name to get started.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Input
+              placeholder="Dashboard title"
+              value={createTitle}
+              onChange={(e) => setCreateTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && createTitle.trim()) {
+                  void handleCreate();
+                }
+              }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setCreateDialogOpen(false)}
+              disabled={isCreating}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleCreate()}
+              disabled={!createTitle.trim() || isCreating}
+            >
+              {isCreating ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={!!dashboardToDelete}
+        onOpenChange={(open) => !open && setDashboardToDelete(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Dashboard</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete{" "}
+              <span className="font-semibold text-foreground">
+                &ldquo;
+                {dashboardToDelete?.title || "Untitled Dashboard"}
+                &rdquo;
+              </span>
+              ? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setDashboardToDelete(null)}
+              disabled={!!deletingId}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void confirmDelete()}
+              disabled={!!deletingId}
+            >
+              {deletingId ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

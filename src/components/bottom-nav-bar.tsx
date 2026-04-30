@@ -16,8 +16,8 @@ import {
 } from "@/components/ui/popover";
 import { useChatHistory } from "@/hooks/use-chat-history";
 import {
-  getChatHistoryDisplayTitle,
   type ChatHistoryEntry,
+  getChatHistoryDisplayTitle,
 } from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 import { deleteAnalysisNotebook } from "@/lib/workspace/analysis-notebook-repo";
@@ -30,7 +30,7 @@ import {
 } from "@/vite/next-navigation";
 
 const navButtonClassName =
-  "h-auto flex-col gap-0.5 rounded-lg px-2 py-1.5 text-[10px] font-medium leading-tight min-w-0";
+  "h-auto flex-col gap-0.5 rounded-lg px-2 py-1.5 text-[10px] font-medium leading-tight min-w-0 transition-colors";
 
 interface BottomNavBarProps {
   initialChats?: ChatHistoryEntry[];
@@ -44,7 +44,9 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
     pathname === "/analysis" || pathname === "/chat"
       ? (searchParams.get("id") ?? null)
       : null;
-  const { chats, isLoading, error, loadChats } = useChatHistory(initialChats);
+  const { chats, isLoading, error, loadChats } = useChatHistory(initialChats, {
+    limit: 5,
+  });
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const isDashboardsRoute = pathname?.startsWith("/dashboards");
@@ -105,8 +107,9 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
             className={cn(
               navButtonClassName,
               "w-full",
-              isChatRoute &&
-                "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
+              isChatRoute
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             <Plus className="h-5 w-5" />
@@ -122,8 +125,9 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
                 className={cn(
                   navButtonClassName,
                   "w-full",
-                  isHistoryOpen &&
-                    "bg-sidebar-accent text-sidebar-accent-foreground",
+                  isHistoryOpen
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <ClockIcon className="h-5 w-5" />
@@ -132,59 +136,70 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
             </div>
           </PopoverTrigger>
           <PopoverContent side="top" align="start" className="w-80 p-4 mb-2">
-            <div className="flex max-h-64 flex-col gap-2 overflow-y-auto">
-              {shouldShowBlockingLoading ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              ) : error ? (
-                <p className="text-sm text-muted-foreground">{error}</p>
-              ) : chats.length > 0 ? (
-                chats.map((chat) => (
-                  <div
-                    key={chat.id}
-                    className={cn(
-                      "group relative flex items-center gap-2 rounded-md p-2 pr-8 transition-colors hover:bg-sidebar-accent text-sidebar-foreground hover:text-sidebar-accent-foreground",
-                      activeChatId === chat.id &&
-                        "bg-sidebar-accent text-sidebar-accent-foreground",
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleChatClick(chat.id)}
-                      className="flex min-w-0 flex-1 cursor-pointer items-start justify-between gap-2 text-left"
+            <div className="flex flex-col gap-3">
+              <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+                {shouldShowBlockingLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : error ? (
+                  <p className="text-sm text-muted-foreground">{error}</p>
+                ) : chats.length > 0 ? (
+                  chats.map((chat) => (
+                    <div
+                      key={chat.id}
+                      className={cn(
+                        "group/row relative flex items-center gap-2 rounded-md p-2 pr-8 transition-colors hover:bg-muted",
+                        activeChatId === chat.id &&
+                          "bg-primary/5 border-l-2 border-l-primary",
+                      )}
                     >
-                      <p className="min-w-0 flex-1 truncate text-sm">
-                        {getChatHistoryDisplayTitle(chat)}
-                      </p>
-                      <p className="whitespace-nowrap text-xs text-muted-foreground">
-                        {formatDate(chat.updatedAt)}
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteChat(chat.id, e)}
-                      className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 rounded-md bg-background/80 p-1 text-muted-foreground opacity-0 backdrop-blur-sm transition-all duration-200 hover:text-destructive group-hover:opacity-100"
-                      aria-label="Delete chat"
-                    >
-                      <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                      <button
+                        type="button"
+                        onClick={() => handleChatClick(chat.id)}
+                        className="flex min-w-0 flex-1 cursor-pointer items-start justify-between gap-2 text-left"
                       >
-                        <title>Delete chat</title>
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No chats</p>
-              )}
+                        <p className="min-w-0 flex-1 truncate text-sm text-foreground">
+                          {getChatHistoryDisplayTitle(chat)}
+                        </p>
+                        <p className="whitespace-nowrap text-[11px] text-muted-foreground">
+                          {formatDate(chat.updatedAt)}
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteChat(chat.id, e)}
+                        className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 rounded-md bg-background/80 p-1 text-muted-foreground opacity-0 backdrop-blur-sm transition-all duration-200 hover:text-destructive group-hover/row:opacity-100"
+                        aria-label="Delete chat"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <title>Delete chat</title>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No chats</p>
+                )}
+              </div>
+              <div className="flex justify-end border-t border-border pt-2">
+                <Link
+                  href="/analysis/all"
+                  onClick={() => setIsHistoryOpen(false)}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  View all analyses
+                </Link>
+              </div>
             </div>
           </PopoverContent>
         </Popover>
@@ -195,8 +210,9 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
             className={cn(
               navButtonClassName,
               "w-full",
-              isDashboardsRoute &&
-                "bg-sidebar-accent text-sidebar-accent-foreground",
+              isDashboardsRoute
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             <LayoutGrid className="h-5 w-5" />
@@ -210,8 +226,9 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
             className={cn(
               navButtonClassName,
               "w-full",
-              isSqlEditorRoute &&
-                "bg-sidebar-accent text-sidebar-accent-foreground",
+              isSqlEditorRoute
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             <SquareTerminal className="h-5 w-5" />
@@ -225,7 +242,9 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
             className={cn(
               navButtonClassName,
               "w-full",
-              isDataRoute && "bg-sidebar-accent text-sidebar-accent-foreground",
+              isDataRoute
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             <Database className="h-5 w-5" />
@@ -239,8 +258,9 @@ export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
             className={cn(
               navButtonClassName,
               "w-full",
-              isSettingsRoute &&
-                "bg-sidebar-accent text-sidebar-accent-foreground",
+              isSettingsRoute
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             <Settings className="h-5 w-5" />

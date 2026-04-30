@@ -1,5 +1,7 @@
 import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
+import { getOpenProject } from "@/lib/project-store";
+import { deletePublishedNotebookProjectArtifact } from "@/lib/project-store/project-artifact-sync";
 import { getPreference, setPreference } from "@/lib/workspace/preferences-repo";
 import {
   deleteByKey,
@@ -23,6 +25,12 @@ import {
 
 const ANALYSIS_NOTEBOOK_MIGRATION_KEY =
   "workspace:analysis-notebooks:migrated:v1";
+
+type ListRecentAnalysisNotebooksOptions = {
+  limit?: number;
+  projectId?: string | null;
+  projectPaths?: readonly string[];
+};
 const EXECUTE_SQL_ARTIFACT_TYPE = "data-execute-sql";
 
 type MessagePart = {
@@ -344,6 +352,36 @@ function sortEntries(
   });
 }
 
+function normalizeOptionalString(
+  value: string | null | undefined,
+): string | null {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeProjectPath(path: string | null | undefined): string | null {
+  const normalized = normalizeOptionalString(path)?.replace(/\\/g, "/") ?? null;
+  return normalized ? normalized.replace(/\/+$/, "") : null;
+}
+
+function resolveListRecentOptions(
+  optionsOrLimit: ListRecentAnalysisNotebooksOptions | number,
+): Required<ListRecentAnalysisNotebooksOptions> {
+  if (typeof optionsOrLimit === "number") {
+    return {
+      limit: optionsOrLimit,
+      projectId: null,
+      projectPaths: [],
+    };
+  }
+
+  return {
+    limit: optionsOrLimit.limit ?? 12,
+    projectId: optionsOrLimit.projectId ?? null,
+    projectPaths: optionsOrLimit.projectPaths ?? [],
+  };
+}
+
 export function migrateLegacyChatsToNotebooks(input: {
   chats: WorkspaceChat[];
   messages: WorkspaceMessage[];
@@ -488,20 +526,50 @@ export async function ensureAnalysisNotebookMigration(): Promise<void> {
 }
 
 export async function listRecentAnalysisNotebooks(
-  limit = 12,
+  optionsOrLimit: ListRecentAnalysisNotebooksOptions | number = {},
 ): Promise<ChatHistoryEntry[]> {
   await ensureAnalysisNotebookMigration();
+  const options = resolveListRecentOptions(optionsOrLimit);
+  const projectPaths = new Set(
+    options.projectPaths
+      .map((path) => normalizeProjectPath(path))
+      .filter((path): path is string => path !== null),
+  );
+  const projectId = normalizeOptionalString(options.projectId);
+  const hasProjectScope = Boolean(projectId) || projectPaths.size > 0;
   const notebooks = await getAllFromStore<WorkspaceAnalysisNotebook>(
     STORE_ANALYSIS_NOTEBOOKS,
   );
   return notebooks
+    .filter((notebook) => {
+      if (!hasProjectScope) {
+        return true;
+      }
+
+      if (
+        projectId &&
+        normalizeOptionalString(notebook.projectId) === projectId
+      ) {
+        return true;
+      }
+
+      const projectPath = normalizeProjectPath(notebook.projectPath);
+      return projectPath ? projectPaths.has(projectPath) : false;
+    })
     .sort((left, right) => right.updatedAt - left.updatedAt)
-    .slice(0, Math.max(0, limit))
+    .slice(0, Math.max(0, options.limit))
     .map((item) => ({
       id: item.id,
       title: item.title,
       updatedAt: item.updatedAt,
     }));
+}
+
+export async function listAnalysisNotebooks(): Promise<
+  WorkspaceAnalysisNotebook[]
+> {
+  await ensureAnalysisNotebookMigration();
+  return getAllFromStore<WorkspaceAnalysisNotebook>(STORE_ANALYSIS_NOTEBOOKS);
 }
 
 export async function getAnalysisNotebookById(
@@ -587,7 +655,13 @@ export async function upsertAnalysisNotebook(
   notebook: WorkspaceAnalysisNotebook,
 ): Promise<void> {
   await ensureAnalysisNotebookMigration();
-  await putOne(STORE_ANALYSIS_NOTEBOOKS, notebook);
+  await putOne(STORE_ANALYSIS_NOTEBOOKS, {
+    ...notebook,
+    projectId:
+      typeof notebook.projectId === "string" ? notebook.projectId : null,
+    projectPath:
+      typeof notebook.projectPath === "string" ? notebook.projectPath : null,
+  });
 }
 
 export async function upsertAnalysisCell(
@@ -617,9 +691,12 @@ export async function ensureAnalysisNotebook(
   if (existing) {
     return;
   }
+  const project = await getOpenProject();
   await putOne(STORE_ANALYSIS_NOTEBOOKS, {
     id: notebookId,
     title,
+    projectId: project?.id ?? null,
+    projectPath: null,
     createdAt: now,
     updatedAt: now,
   });
@@ -643,6 +720,10 @@ export async function updateAnalysisNotebookTitle(
   await putOne(STORE_ANALYSIS_NOTEBOOKS, {
     ...existing,
     title: normalizedTitle,
+    projectId:
+      typeof existing.projectId === "string" ? existing.projectId : null,
+    projectPath:
+      typeof existing.projectPath === "string" ? existing.projectPath : null,
     updatedAt: now,
   });
 }
@@ -705,6 +786,17 @@ export async function deleteAnalysisCellEntry(entryId: string): Promise<void> {
 export async function deleteAnalysisNotebook(
   notebookId: string,
 ): Promise<void> {
+  const existing = await getByKey<WorkspaceAnalysisNotebook>(
+    STORE_ANALYSIS_NOTEBOOKS,
+    notebookId,
+  );
   await deleteAnalysisCellsByNotebookId(notebookId);
   await deleteByKey(STORE_ANALYSIS_NOTEBOOKS, notebookId);
+  if (existing) {
+    await deletePublishedNotebookProjectArtifact({
+      notebookId,
+      title: existing.title,
+      projectPath: existing.projectPath ?? null,
+    });
+  }
 }

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { getHomepageAiWarningMessage, runHomepageExampleCommand } from "@/app/page";
+import {
+  getHomepageAiWarningMessage,
+  runHomepageExampleCommand,
+} from "@/app/page";
 
 describe("getHomepageAiWarningMessage", () => {
   test("shows the missing AI configuration warning on AI landing", () => {

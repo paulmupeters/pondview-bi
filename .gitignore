@@ -9,6 +9,9 @@
 !.yarn/releases
 !.yarn/versions
 
+# brainstorms
+/brainstorms
+
 # testing
 /coverage
 
@@ -51,6 +54,9 @@ next-env.d.ts
 *.duckdb
 *db.wal
 
+# pondview project local bindings
+pondview.sources.local.json
+
 # semantic-layer
 semantic-layer/data
 semantic-layer/models
@@ -68,9 +74,17 @@ semantic-layer/models/sources.yml
 
 # ai
 .rules/
-
-# vitepress
-.vitepress/
+.worktrees/
+.claude/
+.cursor/
+.agents/
+.pi/
+skills-lock.json
+# vitepress build output and cache
+.vitepress/dist/
+.vitepress/cache/
+docs-site/.vitepress/dist/
+docs-site/.vitepress/cache/
 
 # analyzer
 stats.html
@@ -78,6 +92,3 @@ notes.md
 
 # local app state
 /state/
-.worktrees/
-.claude/
-.cursor/

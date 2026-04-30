@@ -1,7 +1,4 @@
-import {
-  ChatBubbleBottomCenterTextIcon,
-  PlusCircleIcon,
-} from "@heroicons/react/24/outline";
+import { PlusCircleIcon } from "@heroicons/react/24/outline";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -123,20 +120,6 @@ export function SqlAnalysisHeader({
             </TooltipContent>
           </Tooltip>
         )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Edit with AI</p>
-          </TooltipContent>
-        </Tooltip>
         {showClearButton ? (
           <Tooltip>
             <TooltipTrigger asChild>

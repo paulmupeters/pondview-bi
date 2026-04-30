@@ -92,6 +92,7 @@ export function DynamicChart({
     const showXAxis = chartConfig.showXAxis ?? true;
     const showYAxis = chartConfig.showYAxis ?? true;
     const showDots = chartConfig.showDots ?? true;
+    const showLine = chartConfig.showLine ?? true;
     const showTooltip = chartConfig.showTooltip ?? true;
     const lineSize = chartConfig.lineSize ?? 2;
     const labelYAngle = chartConfig.labelYAngle ?? -90;
@@ -186,7 +187,7 @@ export function DynamicChart({
                   type="monotone"
                   dataKey={key}
                   stroke={getColorForKey(key, index)}
-                  strokeWidth={lineSize}
+                  strokeWidth={showLine ? lineSize : 0}
                   dot={showDots}
                   activeDot={showDots}
                 />

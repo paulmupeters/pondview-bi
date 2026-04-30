@@ -28,7 +28,7 @@ Open **Settings** and configure:
 
 If AI is not configured, chat cannot generate analyses for you.
 
-If you are not sure where to do this, see the technical note on [AI Provider Configuration](/introduction/ai-provider-configuration).
+If you are not sure where to do this, see the technical note on [AI Provider Configuration](/guide/ai-provider-configuration).
 
 ## 2. Add data
 
@@ -65,7 +65,7 @@ In practice this usually means one of these setups:
 
 That makes it possible to work with data that already lives in DuckDB instead of re-importing everything as files.
 
-If you need the lower-level runtime details, see [SQL Runtime Backends](/introduction/sql-runtime-backends) and [DuckDB Usage Overview](/introduction/duckdb-usage-overview).
+If you need the lower-level runtime details, see [SQL Runtime Backends](/guide/sql-runtime-backends) and [DuckDB Usage Overview](/guide/duckdb-usage-overview).
 
 ## 3. Ask your first question
 

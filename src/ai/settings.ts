@@ -73,9 +73,19 @@ export function getProviderApiKeyFromStorage(provider: AiProvider): string {
     return "";
   }
 
-  return normalizeText(
-    window.localStorage.getItem(getApiKeyStorageKeyForProvider(provider)),
-  );
+  const key = getApiKeyStorageKeyForProvider(provider);
+  const sessionValue = normalizeText(window.sessionStorage.getItem(key));
+  if (sessionValue) {
+    window.localStorage.removeItem(key);
+    return sessionValue;
+  }
+
+  const legacyLocalValue = normalizeText(window.localStorage.getItem(key));
+  if (legacyLocalValue) {
+    window.sessionStorage.setItem(key, legacyLocalValue);
+    window.localStorage.removeItem(key);
+  }
+  return legacyLocalValue;
 }
 
 export function loadAiSettingsFromStorage(): AiSettings {
@@ -118,9 +128,12 @@ export function saveAiSettingsToStorage(settings: AiSettings): void {
 
   window.localStorage.setItem(AI_PROVIDER_STORAGE_KEY, settings.provider);
   window.localStorage.setItem(AI_MODEL_STORAGE_KEY, settings.model.trim());
-  window.localStorage.setItem(
+  window.sessionStorage.setItem(
     getApiKeyStorageKeyForProvider(settings.provider),
     settings.apiKey.trim(),
+  );
+  window.localStorage.removeItem(
+    getApiKeyStorageKeyForProvider(settings.provider),
   );
 
   window.localStorage.setItem(
@@ -132,6 +145,15 @@ export function saveAiSettingsToStorage(settings: AiSettings): void {
     (settings.openAiCompatibleName ?? "").trim(),
   );
 
+  window.dispatchEvent(new Event(AI_SETTINGS_UPDATED_EVENT));
+}
+
+export function clearAiProviderApiKeyFromSession(provider: AiProvider): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.removeItem(getApiKeyStorageKeyForProvider(provider));
   window.dispatchEvent(new Event(AI_SETTINGS_UPDATED_EVENT));
 }
 

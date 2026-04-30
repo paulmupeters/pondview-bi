@@ -1,4 +1,4 @@
-import { Check, LayoutDashboard, Loader2, PanelLeft } from "lucide-react";
+import { Check, LayoutDashboard, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,16 +7,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getAnalysisExplorerToggleLabel } from "@/features/analysis/analysis-explorer";
+import { getAnalysisShortcutLabel } from "@/features/analysis/analysis-shortcuts";
+import { cn } from "@/lib/utils";
 
 type AnalysisToolbarProps = {
   isBusy: boolean;
   title: string | null;
   onTitleChange: (title: string | null) => void;
   onCreateDashboard: () => void;
-  isExplorerCollapsed: boolean;
-  onToggleExplorer: () => void;
   lastSavedAt: number | null;
+  isExplorerCollapsed: boolean;
 };
 
 function formatRelativeTime(timestamp: number): string {
@@ -30,22 +30,17 @@ function formatRelativeTime(timestamp: number): string {
   return `${Math.floor(hoursAgo / 24)}d ago`;
 }
 
-const isMac =
-  typeof navigator !== "undefined" &&
-  /Mac|iPhone|iPad/.test(navigator.userAgent);
-const modKey = isMac ? "\u2318" : "Ctrl+";
-
 export function AnalysisToolbar({
   isBusy,
   title,
   onTitleChange,
   onCreateDashboard,
-  isExplorerCollapsed,
-  onToggleExplorer,
   lastSavedAt,
+  isExplorerCollapsed,
 }: AnalysisToolbarProps) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState<string>("");
+  const dashboardShortcutLabel = getAnalysisShortcutLabel("createDashboard");
 
   function handleTitleClick() {
     setTitleDraft(title ?? "");
@@ -67,26 +62,12 @@ export function AnalysisToolbar({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b px-6 py-4">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onToggleExplorer}
-            aria-label={getAnalysisExplorerToggleLabel(isExplorerCollapsed)}
-          >
-            <PanelLeft />
-            {getAnalysisExplorerToggleLabel(isExplorerCollapsed)}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          {getAnalysisExplorerToggleLabel(isExplorerCollapsed)}{" "}
-          <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
-            {modKey}B
-          </kbd>
-        </TooltipContent>
-      </Tooltip>
+    <div
+      className={cn(
+        "flex h-14 items-center gap-3 border-b border-border bg-background/80 backdrop-blur-sm pr-6 transition-[padding] duration-200 ease-out",
+        isExplorerCollapsed ? "pl-16" : "pl-6",
+      )}
+    >
       {editingTitle ? (
         <Input
           autoFocus
@@ -94,43 +75,45 @@ export function AnalysisToolbar({
           onChange={(e) => setTitleDraft(e.target.value)}
           onBlur={handleTitleBlur}
           onKeyDown={handleTitleKeyDown}
-          className="h-8 w-48 text-sm font-medium"
-          placeholder="Untitled notebook"
+          className="h-8 w-56 text-sm font-semibold tracking-tight"
+          placeholder="Untitled analysis"
         />
       ) : (
         <button
           type="button"
           onClick={handleTitleClick}
-          className="cursor-text rounded px-1 py-0.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="cursor-text rounded px-1.5 py-0.5 text-sm font-semibold tracking-tight text-foreground transition-colors hover:bg-muted"
         >
-          {title ?? "Untitled notebook"}
+          {title ?? "Untitled analysis"}
         </button>
       )}
+
       <div className="ml-auto flex items-center gap-3">
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground/70">
           {isBusy ? (
             <>
               <Loader2 className="size-3 animate-spin" />
-              Saving...
+              <span className="hidden sm:inline">Saving…</span>
             </>
           ) : lastSavedAt ? (
             <>
               <Check className="size-3" />
-              Saved {formatRelativeTime(lastSavedAt)}
+              <span>Saved {formatRelativeTime(lastSavedAt)}</span>
             </>
           ) : null}
         </span>
+
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="outline" size="sm" onClick={onCreateDashboard}>
-              <LayoutDashboard />
-              Create dashboard
+              <LayoutDashboard className="size-3.5" />
+              <span className="hidden sm:inline">Create dashboard</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
             Create dashboard{" "}
-            <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
-              {modKey}D
+            <kbd className="ml-1 rounded border border-border/40 bg-muted/40 px-1 py-0.5 font-mono text-[10px]">
+              {dashboardShortcutLabel}
             </kbd>
           </TooltipContent>
         </Tooltip>

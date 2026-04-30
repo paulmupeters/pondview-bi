@@ -231,6 +231,10 @@ export function SortableChartCard({
               const newJson = JSON.stringify(newConfig);
               await onConfigChange(newJson);
             }}
+            sql={chart.sql}
+            dbIdentifier={chart.dbIdentifier ?? undefined}
+            backendPreference={chart.sqlBackend ?? undefined}
+            onSqlSave={(newSql) => onSqlUpdate(chart.id, newSql)}
           />
           <button
             type="button"

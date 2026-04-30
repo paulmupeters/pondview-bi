@@ -7,6 +7,7 @@ const ATTACH_TYPE_BY_SOURCE: Record<string, string | undefined> = {
 };
 
 const DEFAULT_EXTENSION_BY_SOURCE: Record<string, string | undefined> = {
+  duckdb_remote: "httpfs",
   motherduck: "motherduck",
   postgres: "postgres",
   mysql: "mysql",
@@ -97,15 +98,20 @@ export interface AttachmentPlan {
   statements: string[];
 }
 
+export interface AttachmentPlanOptions {
+  skipExtensionLoad?: boolean;
+}
+
 export function buildAttachmentPlan(
   connection: SourceConnectionConfig,
+  options: AttachmentPlanOptions = {},
 ): AttachmentPlan {
   const alias = resolveAttachmentAlias(connection);
   const statements: string[] = [];
 
   const extension =
     connection.duckdbExtension || DEFAULT_EXTENSION_BY_SOURCE[connection.type];
-  if (extension && extension !== "duckdb") {
+  if (extension && extension !== "duckdb" && !options.skipExtensionLoad) {
     const sanitizedExtension = sanitizeExtensionName(extension);
     statements.push(`INSTALL ${sanitizedExtension};`);
     statements.push(`LOAD ${sanitizedExtension};`);

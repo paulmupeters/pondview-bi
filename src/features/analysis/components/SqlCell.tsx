@@ -1,4 +1,4 @@
-import { Play, Sparkles, Square } from "lucide-react";
+import { Code, MessageCircle, Play, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import {
@@ -29,8 +29,8 @@ import {
   updateSqlCellPayloadVisualType,
 } from "@/features/analysis/sql-cell-payload";
 import {
-  normalizeSqlDraft,
   isSqlResultStale,
+  normalizeSqlDraft,
   resolveCellStatusFromRunState,
   shouldPersistSqlDraftChange,
   shouldPersistVisualTypeChange,
@@ -66,6 +66,7 @@ export function SqlCell({
   ai,
 }: SqlCellProps) {
   const consoleApiRef = useRef<SqlConsoleApi | null>(null);
+  const [consoleApi, setConsoleApi] = useState<SqlConsoleApi | null>(null);
   const syncTimeoutRef = useRef<number | null>(null);
   const noticeRef = useRef<QueryNotice | null>(null);
   const runSucceededRef = useRef(false);
@@ -117,17 +118,17 @@ export function SqlCell({
   );
 
   useEffect(() => {
-    const api = consoleApiRef.current;
+    const api = consoleApi;
     const nextSql = cell.sqlDraft ?? "";
     if (!api || api.getQuery() === nextSql) {
       return;
     }
 
     api.setQuery(nextSql);
-  }, [cell.sqlDraft]);
+  }, [cell.sqlDraft, consoleApi]);
 
   useEffect(() => {
-    const api = consoleApiRef.current;
+    const api = consoleApi;
     if (!bootstrapSql || !api) {
       if (!bootstrapSql) {
         appliedBootstrapKeyRef.current = null;
@@ -154,7 +155,12 @@ export function SqlCell({
     }
 
     onBootstrapConsumed?.();
-  }, [bootstrapSql, cell.id, onBootstrapConsumed]);
+  }, [bootstrapSql, cell.id, consoleApi, onBootstrapConsumed]);
+
+  const handleConsoleApiChange = useCallback((api: SqlConsoleApi | null) => {
+    consoleApiRef.current = api;
+    setConsoleApi(api);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -365,24 +371,24 @@ export function SqlCell({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-lg border bg-background">
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
         {/* Toolbar row */}
-        <div className="flex items-center gap-2 border-b px-2 py-1.5">
-          <div className="inline-flex items-center gap-1 rounded-full border bg-muted/50 p-1">
+        <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
+          <div className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 p-0.5">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               aria-pressed={isChatMode}
               className={cn(
-                "h-7 gap-1.5 rounded-full px-3 text-xs",
+                "h-7 gap-1.5 rounded-sm px-3 text-xs",
                 isChatMode
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => handleSelectMode("ai")}
             >
-              <Sparkles className="size-3.5" />
+              <MessageCircle className="size-3.5" />
               Chat
             </Button>
             <Button
@@ -391,13 +397,14 @@ export function SqlCell({
               size="sm"
               aria-pressed={!isChatMode}
               className={cn(
-                "h-7 rounded-full px-3 text-xs",
+                "h-7 gap-1.5 rounded-sm px-3 text-xs",
                 !isChatMode
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => handleSelectMode("sql")}
             >
+              <Code className="size-3.5" />
               SQL
             </Button>
           </div>
@@ -405,7 +412,7 @@ export function SqlCell({
           <div className="ml-auto flex items-center gap-1.5">
             {!isChatMode && (
               <>
-                <span className="text-[11px] text-muted-foreground">
+                <span className="hidden text-[11px] text-muted-foreground/70 sm:inline">
                   Shift+Enter to run
                 </span>
                 {!isSqlRunning ? (
@@ -424,7 +431,7 @@ export function SqlCell({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="h-7 gap-1 px-2.5 text-xs font-mono bg-primary text-primary-foreground"
+                    className="h-7 gap-1 px-2.5 text-xs font-mono bg-primary text-primary-foreground hover:bg-primary/90"
                     onClick={() => consoleApiRef.current?.cancelQuery()}
                   >
                     <Square className="size-3" />
@@ -436,10 +443,14 @@ export function SqlCell({
           </div>
         </div>
 
-        {/* AI prompt input — shown when AI mode is active */}
-        {isChatMode && (
+        {/* Chat ↔ SQL cross-fade */}
+        <div className="grid">
           <form
-            className="p-0"
+            aria-hidden={!isChatMode}
+            className={cn(
+              "p-0 [grid-area:1/1] transition-opacity duration-200 ease-out",
+              isChatMode ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
             onSubmit={(event) => {
               event.preventDefault();
               if (ai) {
@@ -463,9 +474,10 @@ export function SqlCell({
                     }
                   }
                 }}
-                placeholder="Ask AI to refine this cell..."
+                placeholder="Ask AI to refine this cell…"
                 rows={4}
                 disabled={ai?.isAssistantThinking ?? false}
+                tabIndex={isChatMode ? undefined : -1}
                 autoFocus
               />
               <InputGroupAddon align="inline-end">
@@ -480,8 +492,9 @@ export function SqlCell({
                           (ai?.isAssistantThinking ?? false) ||
                           !ai?.promptDraft?.trim()
                         }
+                        tabIndex={isChatMode ? undefined : -1}
                       >
-                        {ai?.isAssistantThinking ? "Running..." : "Ask AI"}
+                        {ai?.isAssistantThinking ? "Running…" : "Ask AI"}
                       </InputGroupButton>
                     </span>
                   </PopoverTrigger>
@@ -519,32 +532,35 @@ export function SqlCell({
               </InputGroupAddon>
             </InputGroup>
           </form>
-        )}
 
-        {/* SQL editor — always mounted, hidden when AI mode is active */}
-        <div className={isChatMode ? "hidden" : undefined}>
-          <SqlConsole
-            className="py-0"
-            historyKey={`analysis-sql-history:${cell.id}`}
-            editorMinHeight="10rem"
-            executeQueryAction={executeQueryAction}
-            autocompleteAction={autocompleteAction}
-            showInlineResults={false}
-            showRunControls={false}
-            showKeyboardHint={false}
-            onApiChangeAction={(api) => {
-              consoleApiRef.current = api;
-            }}
-            onQueryChangeAction={handleQueryChange}
-            onSuccessAction={handleSuccess}
-            onNoticeAction={handleNotice}
-            onRunStateChangeAction={handleRunStateChange}
-          />
+          <div
+            aria-hidden={isChatMode}
+            className={cn(
+              "[grid-area:1/1] transition-opacity duration-200 ease-out",
+              isChatMode ? "pointer-events-none opacity-0" : "opacity-100",
+            )}
+          >
+            <SqlConsole
+              className="py-0"
+              historyKey={`analysis-sql-history:${cell.id}`}
+              editorMinHeight="10rem"
+              executeQueryAction={executeQueryAction}
+              autocompleteAction={autocompleteAction}
+              showInlineResults={false}
+              showRunControls={false}
+              showKeyboardHint={false}
+              onApiChangeAction={handleConsoleApiChange}
+              onQueryChangeAction={handleQueryChange}
+              onSuccessAction={handleSuccess}
+              onNoticeAction={handleNotice}
+              onRunStateChangeAction={handleRunStateChange}
+            />
+          </div>
         </div>
       </div>
 
       {hasFreshStoredPayload || isSqlRunning ? (
-        <div className="overflow-hidden rounded-lg border bg-background pb-4">
+        <div className="overflow-hidden rounded-lg border border-border bg-card pb-4">
           <SqlAnalysisDisplay
             data={storedPayload}
             stage={
@@ -558,7 +574,7 @@ export function SqlCell({
           />
         </div>
       ) : (
-        <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
           Run a query in this cell to persist its result and visualization.
         </div>
       )}

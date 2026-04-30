@@ -87,6 +87,10 @@ export const configSchema = z
       .boolean()
       .describe("For line charts: whether to display data point dots")
       .optional(),
+    showLine: z
+      .boolean()
+      .describe("For line charts: whether to display the connecting line")
+      .optional(),
     showTooltip: z
       .boolean()
       .describe("Whether to display the hover tooltip")

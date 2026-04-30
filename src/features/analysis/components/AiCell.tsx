@@ -103,7 +103,7 @@ export function AiResponseBanner({
   }
 
   return (
-    <div className="rounded-lg border bg-muted/30">
+    <div className="overflow-hidden rounded-lg border border-border bg-card/40 border-l-[3px] border-l-primary/40">
       {hasResponse && (
         <>
           <button
@@ -116,17 +116,19 @@ export function AiResponseBanner({
             ) : (
               <ChevronDown className="size-3.5" />
             )}
-            <span>AI Response</span>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">
+              AI Response
+            </span>
             {!isResponseExpanded && ai.latestAssistantText && (
-              <span className="ml-1 min-w-0 truncate text-muted-foreground/60">
-                — {ai.latestAssistantText.slice(0, 80)}...
+              <span className="ml-1 min-w-0 truncate text-muted-foreground/50">
+                — {ai.latestAssistantText.slice(0, 80)}…
               </span>
             )}
           </button>
           {isResponseExpanded && (
-            <div className="border-t px-3 py-2">
+            <div className="border-t border-border/60 px-3 py-2.5">
               {ai.latestAssistantText ? (
-                <Response className="text-sm">
+                <Response className="text-sm leading-relaxed">
                   {ai.latestAssistantText}
                 </Response>
               ) : (
@@ -134,7 +136,7 @@ export function AiResponseBanner({
                   aria-label="Assistant is working"
                   className="flex items-center gap-2 text-sm text-muted-foreground"
                 >
-                  <span className="font-mono text-foreground">
+                  <span className="font-mono text-xs text-foreground">
                     {streamingAnimationFrame}
                   </span>
                   <span>Streaming response</span>
@@ -146,13 +148,13 @@ export function AiResponseBanner({
       )}
 
       {shouldShowPromptError ? (
-        <div className="border-t">
+        <div className="border-t border-border/60">
           <PromptErrorBanner message={ai.promptError} />
         </div>
       ) : null}
 
-      {hasTranscript ? (
-        <div className="border-t px-3 py-1.5">
+      {hasTranscript && (!hasResponse || isResponseExpanded) ? (
+        <div className="border-t border-border/60 px-3 py-1.5">
           <Button
             type="button"
             variant="ghost"
@@ -165,13 +167,13 @@ export function AiResponseBanner({
               : `Show transcript (${transcriptEntries.length})`}
           </Button>
           {isTranscriptExpanded && (
-            <div className="mt-2 space-y-2 rounded-lg border bg-background/80 p-2">
+            <div className="mt-2 space-y-2 rounded-lg border border-border/60 bg-background/60 p-2">
               {transcriptEntries.map((entry) => (
                 <div
                   key={entry.id}
-                  className="rounded-md border bg-background px-3 py-2"
+                  className="rounded-md border border-border/50 bg-background px-3 py-2"
                 >
-                  <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
                     {entry.role}
                   </p>
                   <div className="space-y-2">
@@ -196,7 +198,7 @@ function TranscriptBlockView({ block }: { block: TranscriptMessageBlock }) {
 
   if (block.kind === "sql-result") {
     return (
-      <div className="overflow-hidden rounded-md border bg-background">
+      <div className="overflow-hidden rounded-md border border-border bg-background">
         <SqlAnalysisDisplay data={block.data} showStageIndicator={false} />
       </div>
     );
@@ -211,10 +213,10 @@ function TranscriptToolCall({
   block: Extract<TranscriptMessageBlock, { kind: "tool-call" }>;
 }) {
   return (
-    <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2">
-      <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="rounded-md border border-dashed border-border/70 bg-muted/20 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
         <span>Tool call</span>
-        <code className="rounded bg-background px-1.5 py-0.5 font-mono text-[11px] normal-case text-foreground">
+        <code className="rounded-sm border border-border/50 bg-background px-1.5 py-0.5 font-mono text-[11px] normal-case text-foreground">
           {block.toolName}
         </code>
       </div>
@@ -226,13 +228,13 @@ function TranscriptToolCall({
       ) : null}
 
       {block.sql ? (
-        <pre className="mt-2 overflow-x-auto rounded-md border bg-background px-3 py-2 text-xs font-mono text-foreground">
+        <pre className="mt-2 overflow-x-auto rounded-md border border-border bg-background px-3 py-2 text-xs font-mono text-foreground">
           <code>{block.sql}</code>
         </pre>
       ) : null}
 
       {block.errorText ? (
-        <div className="mt-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
+        <div className="mt-2 rounded-md border border-destructive/15 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
           {block.errorText}
         </div>
       ) : null}
@@ -250,7 +252,7 @@ function TranscriptToolCall({
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2">
-            <pre className="overflow-x-auto rounded-md border bg-background px-3 py-2 text-xs font-mono text-foreground">
+            <pre className="overflow-x-auto rounded-md border border-border bg-background px-3 py-2 text-xs font-mono text-foreground">
               <code>{block.rawOutputJson}</code>
             </pre>
           </CollapsibleContent>

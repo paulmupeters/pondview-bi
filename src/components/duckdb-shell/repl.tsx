@@ -197,6 +197,7 @@ type DuckdbReplProps = {
   onNoticeAction?: (notice: QueryNotice | null) => void;
   onRunStateChangeAction?: (isRunning: boolean) => void;
   onRunSuccessAction?: () => void;
+  onRunShortcutAction?: () => void;
   inlineResults?: boolean;
   onResultChangeAction?: (
     result: {
@@ -216,9 +217,12 @@ type DuckdbReplProps = {
   showSaveQueryButton?: boolean;
   onSaveQueryAction?: (sql: string) => void | Promise<void>;
   isSavingQuery?: boolean;
+  saveQueryLabel?: string;
   chartConfig?: Config | null;
   editorMinHeight?: string;
   editorMaxHeight?: string;
+  toolbarLeftSlot?: ReactNode;
+  toolbarRightSlot?: ReactNode;
 };
 
 const HISTORY_KEY = "bi.repl.history";
@@ -331,6 +335,7 @@ export function DuckdbRepl({
   onNoticeAction,
   onRunStateChangeAction,
   onRunSuccessAction,
+  onRunShortcutAction,
   inlineResults = true,
   onResultChangeAction,
   showRunControls = true,
@@ -340,9 +345,12 @@ export function DuckdbRepl({
   showSaveQueryButton = false,
   onSaveQueryAction,
   isSavingQuery = false,
+  saveQueryLabel = "Save Query",
   chartConfig: _chartConfig,
   editorMinHeight = "8rem",
   editorMaxHeight = inlineResults ? "20rem" : "14rem",
+  toolbarLeftSlot,
+  toolbarRightSlot,
 }: DuckdbReplProps) {
   const [lastResult, setLastResult] = useState<{
     sql: string;
@@ -669,7 +677,19 @@ export function DuckdbRepl({
       )}
 
       {/* Editor + Results area */}
-      <div className="relative flex-1 min-w-0 h-full p-4">
+      <div className="relative flex-1 min-w-0 h-full p-4 pt-12 items-center justify-center">
+        {toolbarLeftSlot && (
+          <div
+            className={cn(
+              "absolute z-20 flex items-center text-xs",
+              layoutVariant === "page"
+                ? "top-2 left-2 right-[240px]"
+                : "top-4 left-4 right-[240px]",
+            )}
+          >
+            {toolbarLeftSlot}
+          </div>
+        )}
         {/* Toolbar Buttons */}
         <div
           className={cn(
@@ -677,6 +697,7 @@ export function DuckdbRepl({
             toolbarInsetClassName,
           )}
         >
+          {toolbarRightSlot}
           {lastResult && showClearButton && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -742,7 +763,7 @@ export function DuckdbRepl({
               onClick={handleSaveQuery}
               disabled={isSaveQueryDisabled}
             >
-              {isSavingQuery ? "Saving..." : "Save Query"}
+              {isSavingQuery ? "Saving..." : saveQueryLabel}
             </button>
           )}
 
@@ -778,6 +799,7 @@ export function DuckdbRepl({
             onNoticeAction={onNoticeAction}
             onRunStateChangeAction={onRunStateChangeAction}
             onCancelQueryAction={handleCancelQuery}
+            onRunShortcutAction={onRunShortcutAction}
             showInlineResults={inlineResults}
             showRunControls={false}
             onSuccessAction={({

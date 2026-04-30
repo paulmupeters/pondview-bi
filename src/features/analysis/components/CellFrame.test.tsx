@@ -69,21 +69,21 @@ describe("CellFrame", () => {
     expect(runningMarkup).toContain("animate-spin");
   });
 
-  test("renders a popover trigger when an error status message is available", () => {
+  test("renders an error details trigger when an error status message is available", () => {
     const markup = renderCellFrame(createCell({ status: "error" }), {
       statusMessage: "Provider request failed.",
     });
 
     expect(markup).toContain('data-status-icon="error"');
-    expect(markup).toContain('data-state="closed"');
-    expect(markup).toContain('aria-haspopup="dialog"');
+    expect(markup).toContain('aria-label="Show error details"');
+    expect(markup).toContain("<button");
   });
 
-  test("does not render a popover trigger without an error status message", () => {
+  test("does not render an error details trigger without an error status message", () => {
     const markup = renderCellFrame(createCell({ status: "error" }));
 
     expect(markup).toContain('data-status-icon="error"');
-    expect(markup).not.toContain('aria-haspopup="dialog"');
+    expect(markup).not.toContain('aria-label="Show error details"');
   });
 
   test("keeps the collapse, select, and delete actions separate", () => {

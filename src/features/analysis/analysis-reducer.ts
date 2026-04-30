@@ -240,7 +240,10 @@ export function analysisReducer(
       };
     }
     case "cellAdded": {
-      const cells = [...state.cells, action.cell].sort((left, right) => {
+      const cells = [
+        ...state.cells.filter((cell) => cell.id !== action.cell.id),
+        action.cell,
+      ].sort((left, right) => {
         if (left.position !== right.position) {
           return left.position - right.position;
         }

@@ -5,6 +5,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
+import AllAnalysesPage from "@/app/analysis/all/page";
 import AnalysisPage from "@/app/analysis/page";
 import DashboardsPage from "@/app/dashboards/page";
 import DashboardViewPage from "@/app/dashboards/view/page";
@@ -51,6 +52,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/analysis" element={<AnalysisPage />} />
+            <Route path="/analysis/all" element={<AllAnalysesPage />} />
             <Route path="/chat" element={<ChatRedirect />} />
             <Route path="/dashboards" element={<DashboardsPage />} />
             <Route path="/dashboards/view" element={<DashboardViewPage />} />

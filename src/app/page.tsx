@@ -17,6 +17,10 @@ import {
 import type { SqlConsoleApi } from "@/components/sql-console";
 import { getDefaultPromptModePreference } from "@/lib/default-prompt-mode";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
+import {
+  getProjectRuntimeDefaultCatalogContext,
+  getProjectRuntimeDefaultDbIdentifier,
+} from "@/lib/project-runtime";
 import { ensureSampleDataForEmptyRuntime } from "@/lib/sql/sample-data";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
@@ -82,11 +86,11 @@ export default function Home() {
   );
   const [areSuggestionsVisible, setAreSuggestionsVisible] = useState(false);
   const [selectedDb, setSelectedDb] = useState<string | undefined>(
-    DEFAULT_WASM_DB_IDENTIFIER,
+    () => getProjectRuntimeDefaultDbIdentifier() ?? DEFAULT_WASM_DB_IDENTIFIER,
   );
   const [selectedCatalogContext, setSelectedCatalogContext] = useState<
     string | null
-  >(null);
+  >(() => getProjectRuntimeDefaultCatalogContext());
   const [manualConsoleApi, setManualConsoleApi] =
     useState<SqlConsoleApi | null>(null);
   const [pendingSqlToInsert, setPendingSqlToInsert] = useState<string | null>(

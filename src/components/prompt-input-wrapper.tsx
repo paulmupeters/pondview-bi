@@ -512,6 +512,7 @@ export function PromptInputWrapper({
                       onNoticeAction={onManualRunNotice}
                       onRunStateChangeAction={onManualRunStateChange}
                       onRunSuccessAction={onManualRunSuccess}
+                      onRunShortcutAction={handleManualRun}
                       inlineResults={false}
                       editorMinHeight={
                         showMinimalManualShell ? "11rem" : "8rem"
