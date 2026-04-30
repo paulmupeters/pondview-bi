@@ -54,6 +54,14 @@ function normalizeText(value: string | null | undefined): string {
   return value?.trim() ?? "";
 }
 
+function getDevelopmentGatewayApiKey(): string {
+  if (typeof __DEV_AI_GATEWAY_API_KEY__ === "undefined") {
+    return "";
+  }
+
+  return normalizeText(__DEV_AI_GATEWAY_API_KEY__);
+}
+
 export function isAiProvider(
   value: string | null | undefined,
 ): value is AiProvider {
@@ -85,7 +93,11 @@ export function getProviderApiKeyFromStorage(provider: AiProvider): string {
     window.sessionStorage.setItem(key, legacyLocalValue);
     window.localStorage.removeItem(key);
   }
-  return legacyLocalValue;
+  if (legacyLocalValue) {
+    return legacyLocalValue;
+  }
+
+  return provider === "gateway" ? getDevelopmentGatewayApiKey() : "";
 }
 
 export function loadAiSettingsFromStorage(): AiSettings {
@@ -104,7 +116,9 @@ export function loadAiSettingsFromStorage(): AiSettings {
   const rawProvider = window.localStorage.getItem(AI_PROVIDER_STORAGE_KEY);
   const provider: AiProvider = isAiProvider(rawProvider)
     ? rawProvider
-    : "openai";
+    : getDevelopmentGatewayApiKey()
+      ? "gateway"
+      : "openai";
   const rawModel = window.localStorage.getItem(AI_MODEL_STORAGE_KEY);
   const model = rawModel === null ? fallbackModel : normalizeText(rawModel);
 

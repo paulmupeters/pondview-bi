@@ -1535,8 +1535,8 @@ export function ExportProjectDialog({
         <DialogHeader>
           <DialogTitle>Export Project</DialogTitle>
           <DialogDescription>
-            Download a project archive with artifacts, an offline HTML viewer,
-            and an optional DuckDB runtime snapshot.
+            Download a project archive with artifacts and an optional DuckDB
+            runtime snapshot.
           </DialogDescription>
         </DialogHeader>
 

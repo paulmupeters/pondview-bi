@@ -77,8 +77,6 @@ export const BROWSER_PROJECT_EXPORT_MANIFEST_PATH =
   ".pondview/export-manifest.json";
 export const BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH =
   "runtime/pondview-runtime.duckdb";
-export const BROWSER_PROJECT_VIEWER_HTML_PATH = "index.html";
-export const BROWSER_PROJECT_VIEWER_SCRIPT_PATH = "pondview-export.js";
 
 export function createBrowserProjectBundle(input: {
   project: OpenProjectState;
@@ -153,12 +151,6 @@ export function createBrowserProjectArchive(input: {
   archiveFiles[BROWSER_PROJECT_EXPORT_MANIFEST_PATH] = strToU8(
     JSON.stringify(manifest, null, 2),
   );
-  archiveFiles[BROWSER_PROJECT_VIEWER_HTML_PATH] = strToU8(
-    createBrowserProjectViewerHtml(bundle.project.name),
-  );
-  archiveFiles[BROWSER_PROJECT_VIEWER_SCRIPT_PATH] = strToU8(
-    createBrowserProjectViewerScript({ bundle, manifest }),
-  );
 
   return zipSync(archiveFiles, {
     level: 6,
@@ -215,9 +207,7 @@ export function parseBrowserProjectArchiveWithRuntime(
       !normalizedPath ||
       normalizedPath === BROWSER_PROJECT_ARCHIVE_METADATA_PATH ||
       normalizedPath === BROWSER_PROJECT_EXPORT_MANIFEST_PATH ||
-      normalizedPath === BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH ||
-      normalizedPath === BROWSER_PROJECT_VIEWER_HTML_PATH ||
-      normalizedPath === BROWSER_PROJECT_VIEWER_SCRIPT_PATH
+      normalizedPath === BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH
     ) {
       continue;
     }
@@ -257,236 +247,4 @@ export async function restoreBrowserProjectBundle(
   await getProjectStore().replaceProjectFiles(project.id, "", bundle.files);
 
   return project;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function createBrowserProjectViewerHtml(projectName: string): string {
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(projectName)} - Pondview Export</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-          "Segoe UI", sans-serif;
-        background: Canvas;
-        color: CanvasText;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-      }
-      header {
-        border-bottom: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
-        padding: 24px clamp(16px, 4vw, 40px);
-      }
-      main {
-        display: grid;
-        gap: 20px;
-        padding: 24px clamp(16px, 4vw, 40px) 40px;
-      }
-      h1,
-      h2,
-      h3 {
-        margin: 0;
-        line-height: 1.2;
-      }
-      h1 {
-        font-size: clamp(1.8rem, 4vw, 3rem);
-      }
-      h2 {
-        font-size: 1.1rem;
-      }
-      h3 {
-        font-size: 0.95rem;
-      }
-      p {
-        margin: 0;
-      }
-      .muted {
-        color: color-mix(in srgb, CanvasText 62%, transparent);
-      }
-      .grid {
-        display: grid;
-        gap: 14px;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      }
-      .panel,
-      details {
-        border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
-        border-radius: 8px;
-        padding: 16px;
-        background: color-mix(in srgb, Canvas 94%, CanvasText 6%);
-      }
-      .stack {
-        display: grid;
-        gap: 10px;
-      }
-      .row {
-        align-items: start;
-        display: flex;
-        gap: 10px;
-        justify-content: space-between;
-      }
-      .pill {
-        border: 1px solid color-mix(in srgb, CanvasText 16%, transparent);
-        border-radius: 999px;
-        font-size: 0.78rem;
-        padding: 3px 8px;
-        white-space: nowrap;
-      }
-      summary {
-        cursor: pointer;
-        font-weight: 650;
-      }
-      pre {
-        border-radius: 6px;
-        margin: 12px 0 0;
-        max-height: 360px;
-        overflow: auto;
-        padding: 12px;
-        white-space: pre-wrap;
-        word-break: break-word;
-        background: color-mix(in srgb, CanvasText 8%, transparent);
-      }
-      code {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", monospace;
-        font-size: 0.85rem;
-      }
-      .empty {
-        border: 1px dashed color-mix(in srgb, CanvasText 24%, transparent);
-        border-radius: 8px;
-        padding: 18px;
-      }
-    </style>
-  </head>
-  <body>
-    <header>
-      <p class="muted">Pondview project export</p>
-      <h1>${escapeHtml(projectName)}</h1>
-    </header>
-    <main id="app">
-      <p class="muted">Loading exported project...</p>
-    </main>
-    <script src="./pondview-export.js"></script>
-  </body>
-</html>
-`;
-}
-
-function createBrowserProjectViewerScript(input: {
-  bundle: BrowserProjectBundle;
-  manifest: ProjectExportManifest;
-}): string {
-  const payload = JSON.stringify(input);
-  return `"use strict";
-const pondviewExport = ${payload};
-
-const app = document.getElementById("app");
-const files = pondviewExport.bundle.files;
-const byPath = new Map(files.map((file) => [file.path, file]));
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function parseJson(path) {
-  const file = byPath.get(path);
-  if (!file) return null;
-  try {
-    return JSON.parse(file.content);
-  } catch {
-    return null;
-  }
-}
-
-function fileName(path) {
-  return path.split("/").filter(Boolean).at(-1) || path;
-}
-
-function pathsMatching(pattern) {
-  return files.map((file) => file.path).filter((path) => pattern.test(path)).sort();
-}
-
-function section(title, body, emptyMessage) {
-  return \`<section class="stack"><h2>\${escapeHtml(title)}</h2>\${body || \`<div class="empty muted">\${escapeHtml(emptyMessage)}</div>\`}</section>\`;
-}
-
-function renderDashboards() {
-  return pathsMatching(/(^|\\/)dashboard\\.json$/).map((path) => {
-    const dashboard = parseJson(path);
-    const root = path.replace(/\\/dashboard\\.json$/, "");
-    const visuals = Array.isArray(dashboard?.visuals) ? dashboard.visuals : [];
-    const measures = Array.isArray(dashboard?.measures) ? dashboard.measures : [];
-    const visualRows = visuals.map((visual) => {
-      const metadataPath = \`\${root}/\${visual.metadataFile}\`;
-      const sqlPath = \`\${root}/\${visual.sqlFile}\`;
-      const metadata = parseJson(metadataPath);
-      const title = metadata?.config?.title || metadata?.config?.label || visual.id;
-      return \`<details><summary>\${escapeHtml(title)}</summary><p class="muted">\${escapeHtml(sqlPath)}</p><pre><code>\${escapeHtml(byPath.get(sqlPath)?.content || "")}</code></pre></details>\`;
-    }).join("");
-    const measureRows = measures.map((measure) => {
-      const sqlPath = \`\${root}/\${measure.sqlFile}\`;
-      return \`<details><summary>\${escapeHtml(measure.id)}</summary><p class="muted">\${escapeHtml(sqlPath)}</p><pre><code>\${escapeHtml(byPath.get(sqlPath)?.content || "")}</code></pre></details>\`;
-    }).join("");
-    return \`<article class="panel stack"><div class="row"><h3>\${escapeHtml(dashboard?.title || fileName(root))}</h3><span class="pill">\${visuals.length} visuals</span></div><p class="muted">\${escapeHtml(path)}</p>\${visualRows}\${measureRows}</article>\`;
-  }).join("");
-}
-
-function renderQueries() {
-  return pathsMatching(/\\.query\\.json$/).map((path) => {
-    const query = parseJson(path);
-    const sqlPath = path.replace(/\\.query\\.json$/, ".sql");
-    return \`<article class="panel stack"><div class="row"><h3>\${escapeHtml(query?.name || fileName(sqlPath))}</h3><span class="pill">\${escapeHtml(query?.kind || "query")}</span></div><p class="muted">\${escapeHtml(sqlPath)}</p><pre><code>\${escapeHtml(byPath.get(sqlPath)?.content || "")}</code></pre></article>\`;
-  }).join("");
-}
-
-function renderNotebooks() {
-  return pathsMatching(/(^|\\/)notebook\\.json$/).map((path) => {
-    const notebook = parseJson(path);
-    const root = path.replace(/\\/notebook\\.json$/, "");
-    const cells = Array.isArray(notebook?.cells) ? notebook.cells : [];
-    const cellRows = cells.map((cell) => {
-      const contentPath = \`\${root}/\${cell.file}\`;
-      return \`<details><summary>\${escapeHtml(cell.kind)}: \${escapeHtml(cell.id)}</summary><p class="muted">\${escapeHtml(contentPath)}</p><pre><code>\${escapeHtml(byPath.get(contentPath)?.content || "")}</code></pre></details>\`;
-    }).join("");
-    return \`<article class="panel stack"><div class="row"><h3>\${escapeHtml(notebook?.title || fileName(root))}</h3><span class="pill">\${cells.length} cells</span></div><p class="muted">\${escapeHtml(path)}</p>\${cellRows}</article>\`;
-  }).join("");
-}
-
-function renderFiles() {
-  return files.map((file) => \`<details><summary>\${escapeHtml(file.path)}</summary><pre><code>\${escapeHtml(file.content)}</code></pre></details>\`).join("");
-}
-
-const snapshot = pondviewExport.manifest.runtimeSnapshot;
-app.innerHTML = \`
-  <section class="grid">
-    <div class="panel stack"><h2>Project</h2><p>\${escapeHtml(pondviewExport.bundle.project.name)}</p><p class="muted">\${escapeHtml(pondviewExport.bundle.project.id)}</p></div>
-    <div class="panel stack"><h2>Exported</h2><p>\${escapeHtml(pondviewExport.bundle.exportedAt)}</p><p class="muted">\${files.length} artifact files</p></div>
-    <div class="panel stack"><h2>Runtime Snapshot</h2><p>\${snapshot?.included ? "Included" : "Not included"}</p><p class="muted">\${escapeHtml(snapshot?.path || snapshot?.key || "")}</p></div>
-  </section>
-  \${section("Dashboards", renderDashboards(), "No dashboards were exported.")}
-  \${section("Queries", renderQueries(), "No shared queries were exported.")}
-  \${section("Notebooks", renderNotebooks(), "No published notebooks were exported.")}
-  \${section("Artifact Files", renderFiles(), "No artifact files were exported.")}
-\`;
-`;
 }
