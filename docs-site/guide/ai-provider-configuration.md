@@ -6,22 +6,24 @@ BI Chat uses a browser-first AI configuration flow for the primary chat UI. Prov
 
 Open **Settings -> AI Provider Configuration** and set:
 
-- Provider (`Gateway`, `OpenAI`, `Anthropic`, `Open Responses`)
+- Provider (`Gateway`, `OpenAI`, `Anthropic`, `xAI`, `Ollama`, `OpenAI Compatible`)
 - Model ID
-- Provider API key
-- For Open Responses only: base URL and provider name
+- Provider API key, except for Ollama
+- For Ollama: optional base URL, defaulting to `http://localhost:11434/v1`
+- For OpenAI Compatible: base URL and provider name
 
 All of these values are saved by `saveAiSettingsToStorage()` and reloaded by `loadAiSettingsFromStorage()`.
 
 ## Provider and required fields
 
-| Provider         | Required fields                    | Notes                                     |
-| ---------------- | ---------------------------------- | ----------------------------------------- |
-| `gateway`        | model, API key                     | Uses `createGateway(...)` in the browser. |
-| `openai`         | model, API key                     | Uses `createOpenAI(...)`.                 |
-| `anthropic`      | model, API key                     | Uses `createAnthropic(...)`.              |
-| `xai`            | model, API key                     | Uses `createXai(...)`.                    |
-| `open-responses` | model, API key, URL, provider name | Uses `createOpenResponses(...)`.          |
+| Provider            | Required fields                    | Notes                                               |
+| ------------------- | ---------------------------------- | --------------------------------------------------- |
+| `gateway`           | model, API key                     | Uses `createGateway(...)` in the browser.           |
+| `openai`            | model, API key                     | Uses `createOpenAI(...)`.                           |
+| `anthropic`         | model, API key                     | Uses `createAnthropic(...)`.                        |
+| `xai`               | model, API key                     | Uses `createOpenAICompatible(...)`.                 |
+| `ollama`            | model                              | Uses `createOpenAICompatible(...)` against Ollama.  |
+| `openai-compatible` | model, API key, URL, provider name | Uses `createOpenAICompatible(...)` for custom APIs. |
 
 Validation is enforced by `getMissingRequiredSetting()` before saving and when model resolution runs.
 
@@ -35,15 +37,18 @@ Validation is enforced by `getMissingRequiredSetting()` before saving and when m
   - `AI_GATEWAY_API_KEY`
   - `OPENAI_API_KEY`
   - `ANTHROPIC_API_KEY`
-  - `OPEN_RESPONSES_API_KEY`
-- Open Responses extras:
-  - `OPEN_RESPONSES_URL`
-  - `OPEN_RESPONSES_PROVIDER_NAME`
+  - `XAI_API_KEY`
+  - `OPENAI_COMPATIBLE_API_KEY`
+- Ollama extras:
+  - `OLLAMA_BASE_URL`
+- OpenAI Compatible extras:
+  - `OPENAI_COMPATIBLE_URL`
+  - `OPENAI_COMPATIBLE_PROVIDER_NAME`
 
 ### Defaults
 
 - Default provider: `openai`
-- Default model fallback: `CHAT_MODEL` from `src/ai/models.ts` (`openai/gpt-5.4`)
+- Default model fallback: `CHAT_MODEL` from `src/ai/models.ts`
 - If `AI_MODEL` is empty, the fallback model is used
 
 ## Runtime behavior: browser only

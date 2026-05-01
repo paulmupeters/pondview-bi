@@ -85,6 +85,7 @@ describe("resolveGatewayModel", () => {
       "gateway",
       "openai",
       "anthropic",
+      "ollama",
       "openai-compatible",
       "xai",
     ];
@@ -107,6 +108,16 @@ describe("resolveGatewayModel", () => {
     expect(() => resolveGatewayModel("fallback-model")).toThrow(
       "Missing OpenAI API key",
     );
+  });
+
+  test("does not require an api key for ollama", () => {
+    const storage = createStorage();
+    storage.setItem(AI_PROVIDER_STORAGE_KEY, "ollama");
+    storage.setItem(AI_MODEL_STORAGE_KEY, "llama3.2");
+    setBrowserStorage(storage, createStorage());
+
+    const model = resolveGatewayModel("fallback-model");
+    expect(model).toBeTruthy();
   });
 
   test("throws when model is missing", () => {

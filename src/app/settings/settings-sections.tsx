@@ -4,6 +4,7 @@ import {
   type AiProvider,
   getAiProviderDisplayName,
   getApiKeyStorageKeyForProvider,
+  OLLAMA_BASE_URL,
 } from "@/ai/settings";
 import { Button } from "@/components/ui/button";
 import {
@@ -116,6 +117,8 @@ type AiSettingsSectionsProps = {
   onModelChange: (value: string) => void;
   apiKey: string;
   onApiKeyChange: (value: string) => void;
+  ollamaBaseUrl: string;
+  onOllamaBaseUrlChange: (value: string) => void;
   openAiCompatibleUrl: string;
   onOpenAiCompatibleUrlChange: (value: string) => void;
   openAiCompatibleName: string;
@@ -137,6 +140,8 @@ export function AiSettingsSections({
   onModelChange,
   apiKey,
   onApiKeyChange,
+  ollamaBaseUrl,
+  onOllamaBaseUrlChange,
   openAiCompatibleUrl,
   onOpenAiCompatibleUrlChange,
   openAiCompatibleName,
@@ -150,6 +155,10 @@ export function AiSettingsSections({
   showExecuteSqlRawOutput,
   onShowExecuteSqlRawOutputChange,
 }: AiSettingsSectionsProps) {
+  const isOllamaProvider = aiProvider === "ollama";
+  const usesCustomCompatibleSettings =
+    aiProvider === "openai-compatible" || isOllamaProvider;
+
   return (
     <>
       <SettingsContentSection>
@@ -177,6 +186,7 @@ export function AiSettingsSections({
                   <SelectItem value="openai">OpenAI</SelectItem>
                   <SelectItem value="anthropic">Anthropic</SelectItem>
                   <SelectItem value="xai">xAI</SelectItem>
+                  <SelectItem value="ollama">Ollama</SelectItem>
                   <SelectItem value="openai-compatible">
                     OpenAI Compatible
                   </SelectItem>
@@ -197,62 +207,86 @@ export function AiSettingsSections({
               />
             </FormField>
 
-            <FormField
-              label={getApiKeyStorageKeyForProvider(aiProvider)}
-              htmlFor="api-key"
-              className="mb-4"
-            >
-              <Input
-                id="api-key"
-                type="password"
-                name="settings-ai-provider-secret"
-                autoComplete="off"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                data-form-type="other"
-                value={apiKey}
-                onChange={(event) => onApiKeyChange(event.target.value)}
-                placeholder="Enter your API key"
-              />
-            </FormField>
+            {!isOllamaProvider && (
+              <FormField
+                label={getApiKeyStorageKeyForProvider(aiProvider)}
+                htmlFor="api-key"
+                className="mb-4"
+              >
+                <Input
+                  id="api-key"
+                  type="password"
+                  name="settings-ai-provider-secret"
+                  autoComplete="off"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  data-form-type="other"
+                  value={apiKey}
+                  onChange={(event) => onApiKeyChange(event.target.value)}
+                  placeholder="Enter your API key"
+                />
+              </FormField>
+            )}
 
-            {aiProvider === "openai-compatible" && (
+            {usesCustomCompatibleSettings && (
               <>
                 <FormField
                   label="Base URL"
-                  htmlFor="openai-compatible-url"
+                  htmlFor={
+                    isOllamaProvider
+                      ? "ollama-base-url"
+                      : "openai-compatible-url"
+                  }
                   className="mb-4"
                 >
                   <Input
-                    id="openai-compatible-url"
-                    type="text"
-                    name="openai-compatible-url"
-                    autoComplete="off"
-                    value={openAiCompatibleUrl}
-                    onChange={(event) =>
-                      onOpenAiCompatibleUrlChange(event.target.value)
+                    id={
+                      isOllamaProvider
+                        ? "ollama-base-url"
+                        : "openai-compatible-url"
                     }
-                    placeholder="https://api.example.com/v1"
+                    type="text"
+                    name={
+                      isOllamaProvider
+                        ? "ollama-base-url"
+                        : "openai-compatible-url"
+                    }
+                    autoComplete="off"
+                    value={
+                      isOllamaProvider ? ollamaBaseUrl : openAiCompatibleUrl
+                    }
+                    onChange={(event) =>
+                      isOllamaProvider
+                        ? onOllamaBaseUrlChange(event.target.value)
+                        : onOpenAiCompatibleUrlChange(event.target.value)
+                    }
+                    placeholder={
+                      isOllamaProvider
+                        ? OLLAMA_BASE_URL
+                        : "https://api.example.com/v1"
+                    }
                   />
                 </FormField>
 
-                <FormField
-                  label="Provider Name"
-                  htmlFor="openai-compatible-name"
-                  className="mb-4"
-                >
-                  <Input
-                    id="openai-compatible-name"
-                    type="text"
-                    name="openai-compatible-provider-name"
-                    autoComplete="off"
-                    value={openAiCompatibleName}
-                    onChange={(event) =>
-                      onOpenAiCompatibleNameChange(event.target.value)
-                    }
-                    placeholder="my-provider"
-                  />
-                </FormField>
+                {!isOllamaProvider && (
+                  <FormField
+                    label="Provider Name"
+                    htmlFor="openai-compatible-name"
+                    className="mb-4"
+                  >
+                    <Input
+                      id="openai-compatible-name"
+                      type="text"
+                      name="openai-compatible-provider-name"
+                      autoComplete="off"
+                      value={openAiCompatibleName}
+                      onChange={(event) =>
+                        onOpenAiCompatibleNameChange(event.target.value)
+                      }
+                      placeholder="my-provider"
+                    />
+                  </FormField>
+                )}
               </>
             )}
 

@@ -229,6 +229,7 @@ export default function SettingsPage() {
   const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState("");
   const [openAiCompatibleUrl, setOpenAiCompatibleUrl] = useState("");
   const [openAiCompatibleName, setOpenAiCompatibleName] = useState("");
   const [cssCode, setCssCode] = useState("");
@@ -332,6 +333,7 @@ export default function SettingsPage() {
     setAiProvider(aiSettings.provider);
     setModel(aiSettings.model);
     setApiKey(aiSettings.apiKey);
+    setOllamaBaseUrl(aiSettings.ollamaBaseUrl ?? "");
     setOpenAiCompatibleUrl(aiSettings.openAiCompatibleUrl ?? "");
     setOpenAiCompatibleName(aiSettings.openAiCompatibleName ?? "");
     setCssCode(savedCss);
@@ -1037,6 +1039,7 @@ export default function SettingsPage() {
       provider: aiProvider,
       model,
       apiKey,
+      ollamaBaseUrl,
       openAiCompatibleUrl,
       openAiCompatibleName,
     };
@@ -1236,6 +1239,8 @@ export default function SettingsPage() {
                   onModelChange={setModel}
                   apiKey={apiKey}
                   onApiKeyChange={setApiKey}
+                  ollamaBaseUrl={ollamaBaseUrl}
+                  onOllamaBaseUrlChange={setOllamaBaseUrl}
                   openAiCompatibleUrl={openAiCompatibleUrl}
                   onOpenAiCompatibleUrlChange={setOpenAiCompatibleUrl}
                   openAiCompatibleName={openAiCompatibleName}

@@ -8,6 +8,8 @@ import {
   getAiProviderDisplayName,
   getMissingRequiredSetting,
   loadAiSettingsFromStorage,
+  OLLAMA_BASE_URL,
+  OLLAMA_PROVIDER_NAME,
   XAI_BASE_URL,
   XAI_PROVIDER_NAME,
 } from "@/ai/settings";
@@ -47,6 +49,14 @@ function resolveBrowserModel(
         name: XAI_PROVIDER_NAME,
       });
       return xaiProvider(modelId);
+    }
+    case "ollama": {
+      const ollamaProvider = createOpenAICompatible({
+        apiKey: "ollama",
+        baseURL: settings.ollamaBaseUrl || OLLAMA_BASE_URL,
+        name: OLLAMA_PROVIDER_NAME,
+      });
+      return ollamaProvider(modelId);
     }
     case "openai-compatible": {
       const compatibleProvider = createOpenAICompatible({
