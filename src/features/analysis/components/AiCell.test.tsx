@@ -45,4 +45,30 @@ describe("AiResponseBanner", () => {
     expect(markup).toContain("The streamed response is ready.");
     expect(markup).not.toContain(animations.bars.frames[0]);
   });
+
+  test("renders the latest user message above the assistant response", () => {
+    const markup = renderToStaticMarkup(
+      <AiResponseBanner
+        ai={createAiState({
+          latestAssistantText: "The assistant answered this prompt.",
+          transcriptMessages: [
+            {
+              id: "user-1",
+              role: "user",
+              parts: [{ type: "text", text: "Earlier user prompt" }],
+            },
+            {
+              id: "user-2",
+              role: "user",
+              parts: [{ type: "text", text: "Latest user prompt" }],
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(markup).toContain("User prompt");
+    expect(markup).toContain("Latest user prompt");
+    expect(markup).not.toContain("Earlier user prompt");
+  });
 });

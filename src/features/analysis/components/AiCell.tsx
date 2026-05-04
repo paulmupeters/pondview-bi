@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/collapsible";
 import {
   buildTranscriptMessageBlocks,
+  getLatestUserText,
   type TranscriptMessageBlock,
 } from "@/features/analysis/ai-cell-message-utils";
 import { animations, getAnimationFrame } from "@/lib/animations";
@@ -69,6 +70,8 @@ export function AiResponseBanner({
     });
   }
   const hasTranscript = transcriptEntries.length > 0;
+  const latestUserText = getLatestUserText(ai.transcriptMessages);
+  const hasUserPrompt = Boolean(latestUserText);
   const hasResponse = !!(ai.latestAssistantText || ai.isAssistantThinking);
   const shouldShowPromptError = showPromptError && Boolean(ai.promptError);
 
@@ -98,12 +101,28 @@ export function AiResponseBanner({
     };
   }, [ai.isAssistantThinking, ai.latestAssistantText]);
 
-  if (!hasResponse && !shouldShowPromptError && !hasTranscript) {
+  if (
+    !hasUserPrompt &&
+    !hasResponse &&
+    !shouldShowPromptError &&
+    !hasTranscript
+  ) {
     return null;
   }
 
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card/40 border-l-[3px] border-l-primary/40">
+      {latestUserText ? (
+        <div className="border-b border-border/60 px-3 py-2">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
+            User prompt
+          </p>
+          <Response className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+            {latestUserText}
+          </Response>
+        </div>
+      ) : null}
+
       {hasResponse && (
         <>
           <button
@@ -155,19 +174,8 @@ export function AiResponseBanner({
 
       {hasTranscript && (!hasResponse || isResponseExpanded) ? (
         <div className="border-t border-border/60 px-3 py-1.5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-6 px-1.5 text-xs text-muted-foreground"
-            onClick={() => setIsTranscriptExpanded((prev) => !prev)}
-          >
-            {isTranscriptExpanded
-              ? "Hide transcript"
-              : `Show transcript (${transcriptEntries.length})`}
-          </Button>
           {isTranscriptExpanded && (
-            <div className="mt-2 space-y-2 rounded-lg border border-border/60 bg-background/60 p-2">
+            <div className="mb-2 space-y-2 rounded-lg border border-border/60 bg-background/60 p-2">
               {transcriptEntries.map((entry) => (
                 <div
                   key={entry.id}
@@ -185,6 +193,17 @@ export function AiResponseBanner({
               ))}
             </div>
           )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 text-xs text-muted-foreground"
+            onClick={() => setIsTranscriptExpanded((prev) => !prev)}
+          >
+            {isTranscriptExpanded
+              ? "Hide transcript"
+              : `Show transcript (${transcriptEntries.length})`}
+          </Button>
         </div>
       ) : null}
     </div>

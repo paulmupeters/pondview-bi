@@ -9,6 +9,7 @@ import {
   seedJoinDraftGroups,
 } from "@/components/dashboard-builder-panel.joins";
 import type {
+  DashboardBuilderVisualType,
   JoinColumnState,
   VisualSnapshot,
 } from "@/components/dashboard-builder-panel.shared";
@@ -63,6 +64,9 @@ export function useDashboardBuilder({
   const router = useRouter();
   const [dashboardTitle, setDashboardTitle] = useState("New dashboard");
   const [selectedChartIds, setSelectedChartIds] = useState<string[]>([]);
+  const [visualTypeBySnapshotId, setVisualTypeBySnapshotId] = useState<
+    Record<string, DashboardBuilderVisualType>
+  >({});
   const [joinGroups, setJoinGroups] = useState<JoinDraftGroup[]>([]);
   const [columnStateByTable, setColumnStateByTable] = useState<
     Record<string, JoinColumnState>
@@ -115,6 +119,19 @@ export function useDashboardBuilder({
 
       return prev;
     });
+
+    setVisualTypeBySnapshotId((prev) => {
+      const nextEntries = visualSnapshots.map(
+        (snapshot) =>
+          [snapshot.id, prev[snapshot.id] ?? snapshot.type] as const,
+      );
+      const next = Object.fromEntries(nextEntries);
+      const prevKeys = Object.keys(prev);
+      const isSame =
+        prevKeys.length === nextEntries.length &&
+        nextEntries.every(([id, type]) => prev[id] === type);
+      return isSame ? prev : next;
+    });
   }, [visualSnapshots, open]);
 
   useEffect(() => {
@@ -125,24 +142,34 @@ export function useDashboardBuilder({
       setIsSaving(false);
       setError(null);
       setSelectedChartIds([]);
+      setVisualTypeBySnapshotId({});
       hasInitializedSelectionRef.current = false;
     }
   }, [open]);
 
+  const snapshotsWithSelectedTypes = useMemo(
+    () =>
+      visualSnapshots.map((snapshot) => ({
+        ...snapshot,
+        type: visualTypeBySnapshotId[snapshot.id] ?? snapshot.type,
+      })),
+    [visualSnapshots, visualTypeBySnapshotId],
+  );
+
   const selectedCharts = useMemo(
     () =>
-      visualSnapshots.filter((snapshot) =>
+      snapshotsWithSelectedTypes.filter((snapshot) =>
         selectedChartIds.includes(snapshot.id),
       ),
-    [visualSnapshots, selectedChartIds],
+    [snapshotsWithSelectedTypes, selectedChartIds],
   );
 
   const removedCharts = useMemo(
     () =>
-      visualSnapshots.filter(
+      snapshotsWithSelectedTypes.filter(
         (snapshot) => !selectedChartIds.includes(snapshot.id),
       ),
-    [visualSnapshots, selectedChartIds],
+    [snapshotsWithSelectedTypes, selectedChartIds],
   );
 
   const detectedTables = useMemo(
@@ -319,6 +346,19 @@ export function useDashboardBuilder({
     setSelectedChartIds((prev) => {
       if (prev.includes(id)) return prev;
       return [...prev, id];
+    });
+  };
+
+  const handleVisualTypeChange = (
+    id: string,
+    type: DashboardBuilderVisualType,
+  ) => {
+    setVisualTypeBySnapshotId((prev) => {
+      if (prev[id] === type) return prev;
+      return {
+        ...prev,
+        [id]: type,
+      };
     });
   };
 
@@ -530,6 +570,7 @@ export function useDashboardBuilder({
     setDashboardTitle,
     selectedChartIds,
     setSelectedChartIds,
+    visualTypeBySnapshotId,
     joinGroups,
     columnStateByTable,
     isSaving,
@@ -544,6 +585,7 @@ export function useDashboardBuilder({
     isJoinBuilderEditable,
     handleRemoveChart,
     handleRestoreChart,
+    handleVisualTypeChange,
     handleAddJoinGroup,
     handleRemoveJoinGroup,
     handleJoinGroupChange,

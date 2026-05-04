@@ -369,8 +369,29 @@ export function SqlCell({
     handleSelectMode("sql");
   }, [ai, cell.id, handleSelectMode, notebookSession, sqlIntentDraftSignature]);
 
+  const resultPanel =
+    hasFreshStoredPayload || isSqlRunning ? (
+      <div className="overflow-hidden rounded-lg border border-border bg-card pb-4">
+        <SqlAnalysisDisplay
+          data={storedPayload}
+          stage={storedPayload?.stage ?? (isSqlRunning ? "loading" : undefined)}
+          progress={storedPayload?.progress}
+          showStageIndicator={isSqlRunning}
+          className="w-full"
+          onConfigChange={handleConfigChange}
+          onVisualTypeChange={handleVisualTypeChange}
+        />
+      </div>
+    ) : (
+      <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
+        Run a query in this cell to persist its result and visualization.
+      </div>
+    );
+
   return (
     <div className="space-y-4">
+      {resultPanel}
+
       <div className="overflow-hidden rounded-lg border border-border bg-card">
         {/* Toolbar row */}
         <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
@@ -443,103 +464,94 @@ export function SqlCell({
           </div>
         </div>
 
-        {/* Chat ↔ SQL cross-fade */}
-        <div className="grid">
-          <form
-            aria-hidden={!isChatMode}
-            className={cn(
-              "p-0 [grid-area:1/1] transition-opacity duration-200 ease-out",
-              isChatMode ? "opacity-100" : "pointer-events-none opacity-0",
-            )}
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (ai) {
-                void ai.submitPrompt();
-              }
-            }}
-          >
-            <InputGroup className="border-0 shadow-none bg-transparent dark:bg-background items-end rounded-none">
-              <InputGroupTextarea
-                value={ai?.promptDraft ?? ""}
-                onChange={(event) => ai?.setPromptDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter" &&
-                    !event.shiftKey &&
-                    !event.nativeEvent.isComposing
-                  ) {
-                    event.preventDefault();
-                    if (ai?.promptDraft?.trim() && !ai?.isAssistantThinking) {
-                      void ai.submitPrompt();
+        <div>
+          {isChatMode ? (
+            <form
+              className="p-0"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (ai) {
+                  void ai.submitPrompt();
+                }
+              }}
+            >
+              <InputGroup className="border-0 shadow-none bg-transparent dark:bg-background items-end rounded-none">
+                <InputGroupTextarea
+                  value={ai?.promptDraft ?? ""}
+                  onChange={(event) => ai?.setPromptDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !event.shiftKey &&
+                      !event.nativeEvent.isComposing
+                    ) {
+                      event.preventDefault();
+                      if (ai?.promptDraft?.trim() && !ai?.isAssistantThinking) {
+                        void ai.submitPrompt();
+                      }
                     }
-                  }
-                }}
-                placeholder="Ask AI to refine this cell…"
-                rows={4}
-                disabled={ai?.isAssistantThinking ?? false}
-                tabIndex={isChatMode ? undefined : -1}
-                autoFocus
-              />
-              <InputGroupAddon align="inline-end">
-                <Popover open={showSqlIntentPopover}>
-                  <PopoverTrigger asChild>
-                    <span className="inline-flex">
-                      <InputGroupButton
-                        type="submit"
-                        size="sm"
-                        className="dark:bg-background"
-                        disabled={
-                          (ai?.isAssistantThinking ?? false) ||
-                          !ai?.promptDraft?.trim()
-                        }
-                        tabIndex={isChatMode ? undefined : -1}
-                      >
-                        {ai?.isAssistantThinking ? "Running…" : "Ask AI"}
-                      </InputGroupButton>
-                    </span>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    align="end"
-                    side="top"
-                    className="w-80 space-y-3 px-3 py-3"
-                  >
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">This looks like SQL</p>
-                      <p className="text-xs text-muted-foreground">
-                        Switch to SQL mode and move this query into the SQL
-                        editor?
-                      </p>
-                    </div>
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={handleKeepInChat}
-                      >
-                        Keep in Chat
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => void handleSwitchToSql()}
-                      >
-                        Switch to SQL
-                      </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </InputGroupAddon>
-            </InputGroup>
-          </form>
-
-          <div
-            aria-hidden={isChatMode}
-            className={cn(
-              "[grid-area:1/1] transition-opacity duration-200 ease-out",
-              isChatMode ? "pointer-events-none opacity-0" : "opacity-100",
-            )}
-          >
+                  }}
+                  placeholder="Ask AI to refine this cell…"
+                  rows={4}
+                  disabled={ai?.isAssistantThinking ?? false}
+                  tabIndex={isChatMode ? undefined : -1}
+                  autoFocus
+                />
+                <InputGroupAddon align="inline-end">
+                  <Popover open={showSqlIntentPopover}>
+                    <PopoverTrigger asChild>
+                      <span className="inline-flex">
+                        <InputGroupButton
+                          type="submit"
+                          size="sm"
+                          className="dark:bg-background"
+                          disabled={
+                            (ai?.isAssistantThinking ?? false) ||
+                            !ai?.promptDraft?.trim()
+                          }
+                          tabIndex={isChatMode ? undefined : -1}
+                        >
+                          {ai?.isAssistantThinking ? "Running…" : "Ask AI"}
+                        </InputGroupButton>
+                      </span>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="end"
+                      side="top"
+                      className="w-80 space-y-3 px-3 py-3"
+                    >
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">
+                          This looks like SQL
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Switch to SQL mode and move this query into the SQL
+                          editor?
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleKeepInChat}
+                        >
+                          Keep in Chat
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void handleSwitchToSql()}
+                        >
+                          Switch to SQL
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </InputGroupAddon>
+              </InputGroup>
+            </form>
+          ) : (
             <SqlConsole
               className="py-0"
               historyKey={`analysis-sql-history:${cell.id}`}
@@ -555,29 +567,9 @@ export function SqlCell({
               onNoticeAction={handleNotice}
               onRunStateChangeAction={handleRunStateChange}
             />
-          </div>
+          )}
         </div>
       </div>
-
-      {hasFreshStoredPayload || isSqlRunning ? (
-        <div className="overflow-hidden rounded-lg border border-border bg-card pb-4">
-          <SqlAnalysisDisplay
-            data={storedPayload}
-            stage={
-              storedPayload?.stage ?? (isSqlRunning ? "loading" : undefined)
-            }
-            progress={storedPayload?.progress}
-            showStageIndicator={isSqlRunning}
-            className="w-full"
-            onConfigChange={handleConfigChange}
-            onVisualTypeChange={handleVisualTypeChange}
-          />
-        </div>
-      ) : (
-        <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
-          Run a query in this cell to persist its result and visualization.
-        </div>
-      )}
     </div>
   );
 }

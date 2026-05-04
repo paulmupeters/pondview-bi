@@ -1,5 +1,7 @@
 import { runQuery } from "@/lib/sql/run-query";
 import {
+  classifyDbIdentifier,
+  DEFAULT_WASM_DB_IDENTIFIER,
   resolveDbIdentifierForSqlBackend,
   resolveSqlBackend,
   type SqlBackend,
@@ -42,6 +44,25 @@ export function deriveColumns(
   }));
 }
 
+export function resolveToolRuntimeTarget(databasePath?: string): {
+  backend: SqlBackend;
+  dbIdentifier?: string;
+} {
+  const backend = resolveSqlBackend({ dbIdentifier: databasePath });
+  const normalizedDatabasePath = databasePath?.trim();
+  const safeDatabasePath =
+    backend === "duckdb-wasm" &&
+    normalizedDatabasePath &&
+    classifyDbIdentifier(normalizedDatabasePath) === "unknown"
+      ? DEFAULT_WASM_DB_IDENTIFIER
+      : databasePath;
+
+  return {
+    backend,
+    dbIdentifier: resolveDbIdentifierForSqlBackend(safeDatabasePath, backend),
+  };
+}
+
 export async function executeSqlForRuntime(
   sql: string,
   databasePath?: string,
@@ -51,8 +72,7 @@ export async function executeSqlForRuntime(
   backend: SqlBackend;
   dbIdentifier?: string;
 }> {
-  const backend = resolveSqlBackend({ dbIdentifier: databasePath });
-  const dbIdentifier = resolveDbIdentifierForSqlBackend(databasePath, backend);
+  const { dbIdentifier } = resolveToolRuntimeTarget(databasePath);
   const response = await runQuery({ sql, dbIdentifier });
   return {
     rows: normalizeRows(response.rows),

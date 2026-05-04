@@ -1,9 +1,10 @@
-import { Pencil } from "lucide-react";
+import { ChevronDown, Pencil, SlidersHorizontal } from "lucide-react";
 import { type ReactNode, type RefObject, useState } from "react";
 import {
   type AiProvider,
   getAiProviderDisplayName,
   getApiKeyStorageKeyForProvider,
+  OLLAMA_BASE_URL,
 } from "@/ai/settings";
 import { Button } from "@/components/ui/button";
 import {
@@ -114,8 +115,12 @@ type AiSettingsSectionsProps = {
   onAiProviderChange: (provider: AiProvider) => void;
   model: string;
   onModelChange: (value: string) => void;
+  visualizationModel: string;
+  onVisualizationModelChange: (value: string) => void;
   apiKey: string;
   onApiKeyChange: (value: string) => void;
+  ollamaBaseUrl: string;
+  onOllamaBaseUrlChange: (value: string) => void;
   openAiCompatibleUrl: string;
   onOpenAiCompatibleUrlChange: (value: string) => void;
   openAiCompatibleName: string;
@@ -135,8 +140,12 @@ export function AiSettingsSections({
   onAiProviderChange,
   model,
   onModelChange,
+  visualizationModel,
+  onVisualizationModelChange,
   apiKey,
   onApiKeyChange,
+  ollamaBaseUrl,
+  onOllamaBaseUrlChange,
   openAiCompatibleUrl,
   onOpenAiCompatibleUrlChange,
   openAiCompatibleName,
@@ -150,6 +159,11 @@ export function AiSettingsSections({
   showExecuteSqlRawOutput,
   onShowExecuteSqlRawOutputChange,
 }: AiSettingsSectionsProps) {
+  const isOllamaProvider = aiProvider === "ollama";
+  const usesCustomCompatibleSettings =
+    aiProvider === "openai-compatible" || isOllamaProvider;
+  const [showAdvancedAiOptions, setShowAdvancedAiOptions] = useState(false);
+
   return (
     <>
       <SettingsContentSection>
@@ -177,6 +191,7 @@ export function AiSettingsSections({
                   <SelectItem value="openai">OpenAI</SelectItem>
                   <SelectItem value="anthropic">Anthropic</SelectItem>
                   <SelectItem value="xai">xAI</SelectItem>
+                  <SelectItem value="ollama">Ollama</SelectItem>
                   <SelectItem value="openai-compatible">
                     OpenAI Compatible
                   </SelectItem>
@@ -197,62 +212,135 @@ export function AiSettingsSections({
               />
             </FormField>
 
-            <FormField
-              label={getApiKeyStorageKeyForProvider(aiProvider)}
-              htmlFor="api-key"
-              className="mb-4"
-            >
-              <Input
-                id="api-key"
-                type="password"
-                name="settings-ai-provider-secret"
-                autoComplete="off"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                data-form-type="other"
-                value={apiKey}
-                onChange={(event) => onApiKeyChange(event.target.value)}
-                placeholder="Enter your API key"
-              />
-            </FormField>
+            <div className="mb-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setShowAdvancedAiOptions((isVisible) => !isVisible)
+                }
+                aria-expanded={showAdvancedAiOptions}
+                aria-controls="advanced-ai-options"
+                className="gap-2"
+              >
+                <SlidersHorizontal className="size-4" aria-hidden="true" />
+                Advanced options
+                <ChevronDown
+                  className={cn(
+                    "size-4 transition-transform",
+                    showAdvancedAiOptions && "rotate-180",
+                  )}
+                  aria-hidden="true"
+                />
+              </Button>
+            </div>
 
-            {aiProvider === "openai-compatible" && (
+            {showAdvancedAiOptions && (
+              <div
+                id="advanced-ai-options"
+                className="mb-4 rounded-md border bg-muted/20 p-4"
+              >
+                <FormField
+                  label="Visualization model"
+                  htmlFor="visualization-model-id"
+                  description="Used for chart and card configuration. Uses structured output. Some models can write SQL well but struggle with strict structured chart output."
+                >
+                  <Input
+                    id="visualization-model-id"
+                    type="text"
+                    name="ai-visualization-model-id"
+                    autoComplete="off"
+                    value={visualizationModel}
+                    onChange={(event) =>
+                      onVisualizationModelChange(event.target.value)
+                    }
+                    placeholder="google/gemini-3-flash"
+                  />
+                </FormField>
+              </div>
+            )}
+
+            {!isOllamaProvider && (
+              <FormField
+                label={getApiKeyStorageKeyForProvider(aiProvider)}
+                htmlFor="api-key"
+                className="mb-4"
+              >
+                <Input
+                  id="api-key"
+                  type="password"
+                  name="settings-ai-provider-secret"
+                  autoComplete="off"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  data-form-type="other"
+                  value={apiKey}
+                  onChange={(event) => onApiKeyChange(event.target.value)}
+                  placeholder="Enter your API key"
+                />
+              </FormField>
+            )}
+
+            {usesCustomCompatibleSettings && (
               <>
                 <FormField
                   label="Base URL"
-                  htmlFor="openai-compatible-url"
+                  htmlFor={
+                    isOllamaProvider
+                      ? "ollama-base-url"
+                      : "openai-compatible-url"
+                  }
                   className="mb-4"
                 >
                   <Input
-                    id="openai-compatible-url"
-                    type="text"
-                    name="openai-compatible-url"
-                    autoComplete="off"
-                    value={openAiCompatibleUrl}
-                    onChange={(event) =>
-                      onOpenAiCompatibleUrlChange(event.target.value)
+                    id={
+                      isOllamaProvider
+                        ? "ollama-base-url"
+                        : "openai-compatible-url"
                     }
-                    placeholder="https://api.example.com/v1"
+                    type="text"
+                    name={
+                      isOllamaProvider
+                        ? "ollama-base-url"
+                        : "openai-compatible-url"
+                    }
+                    autoComplete="off"
+                    value={
+                      isOllamaProvider ? ollamaBaseUrl : openAiCompatibleUrl
+                    }
+                    onChange={(event) =>
+                      isOllamaProvider
+                        ? onOllamaBaseUrlChange(event.target.value)
+                        : onOpenAiCompatibleUrlChange(event.target.value)
+                    }
+                    placeholder={
+                      isOllamaProvider
+                        ? OLLAMA_BASE_URL
+                        : "https://api.example.com/v1"
+                    }
                   />
                 </FormField>
 
-                <FormField
-                  label="Provider Name"
-                  htmlFor="openai-compatible-name"
-                  className="mb-4"
-                >
-                  <Input
-                    id="openai-compatible-name"
-                    type="text"
-                    name="openai-compatible-provider-name"
-                    autoComplete="off"
-                    value={openAiCompatibleName}
-                    onChange={(event) =>
-                      onOpenAiCompatibleNameChange(event.target.value)
-                    }
-                    placeholder="my-provider"
-                  />
-                </FormField>
+                {!isOllamaProvider && (
+                  <FormField
+                    label="Provider Name"
+                    htmlFor="openai-compatible-name"
+                    className="mb-4"
+                  >
+                    <Input
+                      id="openai-compatible-name"
+                      type="text"
+                      name="openai-compatible-provider-name"
+                      autoComplete="off"
+                      value={openAiCompatibleName}
+                      onChange={(event) =>
+                        onOpenAiCompatibleNameChange(event.target.value)
+                      }
+                      placeholder="my-provider"
+                    />
+                  </FormField>
+                )}
               </>
             )}
 
@@ -1535,8 +1623,8 @@ export function ExportProjectDialog({
         <DialogHeader>
           <DialogTitle>Export Project</DialogTitle>
           <DialogDescription>
-            Download a project archive with artifacts, an offline HTML viewer,
-            and an optional DuckDB runtime snapshot.
+            Download a project archive with artifacts and an optional DuckDB
+            runtime snapshot.
           </DialogDescription>
         </DialogHeader>
 

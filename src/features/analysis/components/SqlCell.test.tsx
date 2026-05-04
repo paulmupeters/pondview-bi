@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server.node";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
 import { SqlCell } from "@/features/analysis/components/SqlCell";
+import { createSqlCellPayload } from "@/features/analysis/sql-cell-payload";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
 
 function createCell(
@@ -65,21 +66,25 @@ function createNotebookSession(): NotebookSession {
   };
 }
 
+function installDomMocks() {
+  globalThis.document ??= {
+    body: {},
+    documentElement: {
+      classList: {
+        contains: () => false,
+      },
+    },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as never;
+  globalThis.window ??= {
+    document: globalThis.document,
+  } as never;
+}
+
 describe("SqlCell", () => {
   test("renders explicit Chat and SQL tabs for analysis cells", () => {
-    globalThis.document ??= {
-      body: {},
-      documentElement: {
-        classList: {
-          contains: () => false,
-        },
-      },
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    } as never;
-    globalThis.window ??= {
-      document: globalThis.document,
-    } as never;
+    installDomMocks();
 
     const markup = renderToStaticMarkup(
       <SqlCell
@@ -94,5 +99,37 @@ describe("SqlCell", () => {
     expect(markup).toContain(">Chat<");
     expect(markup).toContain(">SQL<");
     expect(markup).not.toContain(">AI<");
+  });
+
+  test("renders the result panel before the chat or SQL editor", () => {
+    installDomMocks();
+
+    const payload = createSqlCellPayload({
+      result: {
+        sql: "select region, revenue from revenue_by_region",
+        rows: [{ region: "West", revenue: 42 }],
+        columns: [
+          { name: "region", type: "VARCHAR" },
+          { name: "revenue", type: "INTEGER" },
+        ],
+        durationMs: 18,
+      },
+      selectedCatalogContext: null,
+    });
+
+    const markup = renderToStaticMarkup(
+      <SqlCell
+        cell={createCell({
+          resultPayloadJson: JSON.stringify(payload),
+          sqlDraft: payload.query,
+        })}
+        notebookSession={createNotebookSession()}
+        aiEnabled
+        onToggleAi={() => {}}
+        ai={createAiState()}
+      />,
+    );
+
+    expect(markup.indexOf(">Data<")).toBeLessThan(markup.indexOf(">Chat<"));
   });
 });

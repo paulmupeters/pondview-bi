@@ -46,6 +46,7 @@ export function DashboardBuilderPanel({
     handleRemoveJoinClause,
     handleCreateDashboard,
     loadColumnsForTable,
+    handleVisualTypeChange,
   } = useDashboardBuilder({
     open,
     onOpenChange,
@@ -102,6 +103,7 @@ export function DashboardBuilderPanel({
             removedCharts={removedCharts}
             onRemoveChart={handleRemoveChart}
             onRestoreChart={handleRestoreChart}
+            onVisualTypeChange={handleVisualTypeChange}
           />
         </div>
       </div>

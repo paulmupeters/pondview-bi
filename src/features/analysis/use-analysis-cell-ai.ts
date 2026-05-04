@@ -39,6 +39,7 @@ export function useAnalysisCellAi({
     () => entries.map(analysisCellEntryToUiMessage),
     [entries],
   );
+  const persistedAssistantMessageIdsRef = useRef<Set<string>>(new Set());
   const hydratedCellIdRef = useRef<string | null>(
     persistedMessages.length > 0 ? cell.id : null,
   );
@@ -90,6 +91,10 @@ export function useAnalysisCellAi({
       if (isAbort || isError || message.role !== "assistant") {
         return;
       }
+      if (persistedAssistantMessageIdsRef.current.has(message.id)) {
+        return;
+      }
+      persistedAssistantMessageIdsRef.current.add(message.id);
 
       const createdAt = Date.now();
       const partsJson = JSON.stringify(message.parts ?? []);
@@ -122,6 +127,14 @@ export function useAnalysisCellAi({
   useEffect(() => {
     setPromptDraft(cell.promptText);
   }, [cell.promptText]);
+
+  useEffect(() => {
+    for (const message of persistedMessages) {
+      if (message.role === "assistant") {
+        persistedAssistantMessageIdsRef.current.add(message.id);
+      }
+    }
+  }, [persistedMessages]);
 
   useEffect(() => {
     if (agentResult.error) {

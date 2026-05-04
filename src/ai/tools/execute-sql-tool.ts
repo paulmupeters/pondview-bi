@@ -2,13 +2,14 @@ import { tool } from "ai";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import type { CardConfig, Config, Result } from "@/lib/types";
+import { buildDeterministicChartConfig } from "./deterministic-chart-config";
 import { generateCardConfig } from "./generate-card-config-tool";
 import { generateChartConfig } from "./generate-chart-config-tool";
 import { deriveColumns, executeSqlForRuntime } from "./sql-tool-shared";
 
 export const executeFinalSqlTool = tool({
   description:
-    "Execute the exact SQL that should become the committed result for the current notebook cell. Use this only after the SQL draft is verified and ready to render.",
+    "Execute the exact final SQL for the current notebook cell and render the committed result. Pass userQuery when the user wants a chart or card so the tool can choose an appropriate visualization.",
   inputSchema: z.object({
     sql: z
       .string()
@@ -22,7 +23,9 @@ export const executeFinalSqlTool = tool({
     userQuery: z
       .string()
       .optional()
-      .describe("The original user question that led to this SQL"),
+      .describe(
+        "The original user question or visualization request that led to this SQL. Include this when a chart or card is desired.",
+      ),
     generateChart: z
       .boolean()
       .optional()
@@ -85,6 +88,7 @@ export const executeFinalSqlTool = tool({
     }
 
     const queryType = sql.trim().split(/\s+/)[0]?.toUpperCase() || "SELECT";
+    const visualizationQuery = userQuery?.trim() || sql;
     let chartConfig: Config | undefined;
     let cardConfig: CardConfig | undefined;
     let visualType: "table" | "chart" | "card" = "table";
@@ -104,13 +108,13 @@ export const executeFinalSqlTool = tool({
       debugContext,
     );
 
-    if (isSingleValue && userQuery) {
+    if (isSingleValue) {
       try {
         const singleValue = parsedResults[0]?.[columns[0].name];
         const cardResult = await generateCardConfig(
           singleValue,
           columns[0].name,
-          userQuery,
+          visualizationQuery,
         );
         cardConfig = cardResult.config;
         visualType = "card";
@@ -120,15 +124,31 @@ export const executeFinalSqlTool = tool({
         visualType = "card";
         insights.push("Card view enabled, but config generation failed");
       }
-    } else if (isChartWorthy && hasNumericData && userQuery && generateChart) {
+    } else if (isChartWorthy && hasNumericData && generateChart) {
       try {
-        const chartResult = await generateChartConfig(parsedResults, userQuery);
+        const chartResult = await generateChartConfig(
+          parsedResults,
+          visualizationQuery,
+        );
         chartConfig = chartResult.config;
         visualType = "chart";
         insights.push("Chart visualization generated based on data analysis");
       } catch (error) {
         console.error("Failed to generate chart config:", error);
-        insights.push("Chart generation failed, showing table view");
+        const fallbackChartConfig = buildDeterministicChartConfig({
+          rows: parsedResults,
+          userQuery: visualizationQuery,
+        });
+
+        if (fallbackChartConfig) {
+          chartConfig = fallbackChartConfig;
+          visualType = "chart";
+          insights.push(
+            "Chart config generation failed, using deterministic fallback chart",
+          );
+        } else {
+          insights.push("Chart generation failed, showing table view");
+        }
       }
     } else {
       visualType = "table";
