@@ -1,12 +1,18 @@
 import { Squares2X2Icon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AddToDashboardDialog } from "@/components/add-to-dashboard-dialog";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useOptionalArtifactMutation } from "@/components/artifact-mutation-context";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import type { CardConfig, Config, Result } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ChartView } from "./sql-analysis-display/chart-view";
 import { SqlAnalysisHeader } from "./sql-analysis-display/header";
 import {
   buildSqlAnalysisVisualState,
@@ -22,6 +28,18 @@ import type {
   SqlAnalysisDisplayProps,
   SqlAnalysisStage,
 } from "./sql-analysis-display.types";
+
+const AddToDashboardDialog = lazy(() =>
+  import("@/components/add-to-dashboard-dialog").then((module) => ({
+    default: module.AddToDashboardDialog,
+  })),
+);
+
+const ChartView = lazy(() =>
+  import("./sql-analysis-display/chart-view").then((module) => ({
+    default: module.ChartView,
+  })),
+);
 
 function normalizeChartConfigForRows(
   config: Config | null | undefined,
@@ -62,6 +80,10 @@ function normalizeChartConfigForRows(
     ...config,
     yKeys: validYKeys,
   };
+}
+
+function keepPreviousIfSame<T>(previous: T, next: T): T {
+  return Object.is(previous, next) ? previous : next;
 }
 
 export function resolveSqlAnalysisActiveView(input: {
@@ -128,9 +150,9 @@ export function SqlAnalysisDisplay({
   });
 
   const handleClear = () => {
-    setChartConfig(null);
-    setCardConfig(null);
-    setShowVisualOptions(false);
+    setChartConfig((previous) => keepPreviousIfSame(previous, null));
+    setCardConfig((previous) => keepPreviousIfSame(previous, null));
+    setShowVisualOptions((previous) => keepPreviousIfSame(previous, false));
   };
 
   // Wrapper functions to notify parent of config changes
@@ -166,23 +188,33 @@ export function SqlAnalysisDisplay({
   useEffect(() => {
     if (currentQuery !== lastQueryRef.current) {
       // Query changed - full reset to data's config
-      setChartConfig(data?.chartConfig ?? null);
-      setCardConfig(data?.cardConfig ?? null);
-      setShowVisualOptions(false);
-      setActiveView(
+      const nextChartConfig = data?.chartConfig ?? null;
+      const nextCardConfig = data?.cardConfig ?? null;
+      const nextActiveView =
         currentDataVisualType === "chart" || currentDataVisualType === "card"
           ? "chart"
-          : "table",
+          : "table";
+
+      setChartConfig((previous) =>
+        keepPreviousIfSame(previous, nextChartConfig),
       );
+      setCardConfig((previous) => keepPreviousIfSame(previous, nextCardConfig));
+      setShowVisualOptions((previous) => keepPreviousIfSame(previous, false));
+      setActiveView((previous) => keepPreviousIfSame(previous, nextActiveView));
       lastQueryRef.current = currentQuery;
       lastVisualTypeRef.current = currentDataVisualType;
     } else if (currentDataVisualType !== lastVisualTypeRef.current) {
       // Same query but visualType changed (data streaming completed)
       // Update activeView to match the new visualType
-      setActiveView(
+      const nextActiveView =
         currentDataVisualType === "chart" || currentDataVisualType === "card"
           ? "chart"
-          : "table",
+          : "table";
+      setActiveView((previous) => keepPreviousIfSame(previous, nextActiveView));
+      setShowVisualOptions((previous) =>
+        nextActiveView === "chart"
+          ? previous
+          : keepPreviousIfSame(previous, false),
       );
       // Also sync chartConfig/cardConfig if they weren't set yet
       if (data?.chartConfig) {
@@ -204,7 +236,7 @@ export function SqlAnalysisDisplay({
 
   useEffect(() => {
     if (resolvedActiveView !== "chart") {
-      setShowVisualOptions(false);
+      setShowVisualOptions((previous) => keepPreviousIfSame(previous, false));
     }
   }, [resolvedActiveView]);
 
@@ -429,30 +461,44 @@ export function SqlAnalysisDisplay({
             onVisualOptionsToggle={() => setShowVisualOptions((prev) => !prev)}
             addToDashboardTrigger={
               showAddToDashboardButton ? (
-                <AddToDashboardDialog
-                  trigger={
+                <Suspense
+                  fallback={
                     <Button
                       variant="outline"
                       size="sm"
                       className="flex items-center gap-2"
+                      disabled
                     >
                       <Squares2X2Icon className="h-4 w-4" />
                       Add to dashboard
                     </Button>
                   }
-                  sql={data.query ?? ""}
-                  sourceDescriptor={data.sourceDescriptor ?? null}
-                  dbIdentifier={data.dbIdentifier}
-                  catalogContext={data.catalogContext ?? null}
-                  sqlBackend={data.sqlBackend}
-                  defaultTitle={
-                    defaultDashboardVisualType === "card"
-                      ? (cardConfig?.title ?? data.cardConfig?.title)
-                      : effectiveChartConfig?.title
-                  }
-                  visualOptions={visualOptions}
-                  defaultVisualType={defaultDashboardVisualType}
-                />
+                >
+                  <AddToDashboardDialog
+                    trigger={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-2"
+                      >
+                        <Squares2X2Icon className="h-4 w-4" />
+                        Add to dashboard
+                      </Button>
+                    }
+                    sql={data.query ?? ""}
+                    sourceDescriptor={data.sourceDescriptor ?? null}
+                    dbIdentifier={data.dbIdentifier}
+                    catalogContext={data.catalogContext ?? null}
+                    sqlBackend={data.sqlBackend}
+                    defaultTitle={
+                      defaultDashboardVisualType === "card"
+                        ? (cardConfig?.title ?? data.cardConfig?.title)
+                        : effectiveChartConfig?.title
+                    }
+                    visualOptions={visualOptions}
+                    defaultVisualType={defaultDashboardVisualType}
+                  />
+                </Suspense>
               ) : undefined
             }
             showAddToChatButton={showAddToChatButton}
@@ -471,30 +517,38 @@ export function SqlAnalysisDisplay({
                 const dbIdentifier = data?.dbIdentifier;
                 const isSqlExpandedInitial = data?.isSqlExpandedInitial;
                 return (
-                  <ChartView
-                    data={
-                      data ?? {
-                        stage: "initial",
-                        progress: 0,
-                        executionTime: 0,
-                        rowCount: 0,
-                        columns: [],
-                        rows: [],
-                        dbIdentifier,
-                        visualType: "chart",
-                        isSqlExpandedInitial: isSqlExpandedInitial ?? false,
-                      }
+                  <Suspense
+                    fallback={
+                      <div className="min-h-[200px] px-4 py-3 text-sm text-muted-foreground">
+                        Loading visual…
+                      </div>
                     }
-                    selectedForChart={selectedForChart}
-                    selectedForCard={selectedForCard}
-                    chartConfig={chartConfig}
-                    cardConfig={cardConfig}
-                    columnsForDialog={columnsForDialog}
-                    onChartConfigChange={handleChartConfigChange}
-                    onCardConfigChange={handleCardConfigChange}
-                    showVisualOptions={showVisualOptions}
-                    onShowVisualOptionsChange={setShowVisualOptions}
-                  />
+                  >
+                    <ChartView
+                      data={
+                        data ?? {
+                          stage: "initial",
+                          progress: 0,
+                          executionTime: 0,
+                          rowCount: 0,
+                          columns: [],
+                          rows: [],
+                          dbIdentifier,
+                          visualType: "chart",
+                          isSqlExpandedInitial: isSqlExpandedInitial ?? false,
+                        }
+                      }
+                      selectedForChart={selectedForChart}
+                      selectedForCard={selectedForCard}
+                      chartConfig={chartConfig}
+                      cardConfig={cardConfig}
+                      columnsForDialog={columnsForDialog}
+                      onChartConfigChange={handleChartConfigChange}
+                      onCardConfigChange={handleCardConfigChange}
+                      showVisualOptions={showVisualOptions}
+                      onShowVisualOptionsChange={setShowVisualOptions}
+                    />
+                  </Suspense>
                 );
               })()}
 

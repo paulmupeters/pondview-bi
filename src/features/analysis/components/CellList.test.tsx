@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { renderToStaticMarkup } from "react-dom/server.node";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
-import { resolveDisplayedCellForMissingAiConfig } from "@/features/analysis/components/CellList";
+import {
+  CellList,
+  resolveDisplayedCellForMissingAiConfig,
+} from "@/features/analysis/components/CellList";
+import type { NotebookSession } from "@/hooks/use-notebook-session";
 
 function createCell(
   overrides: Partial<AnalysisCellState> = {},
@@ -26,6 +31,29 @@ function createCell(
   };
 }
 
+function createNotebookSession(): NotebookSession {
+  return {
+    isLoading: false,
+    hasLoaded: true,
+    error: null,
+    notebook: null,
+    cells: [],
+    cellEntriesByCellId: new Map(),
+    updateTitle: async () => {},
+    addCell: async () => {
+      throw new Error("not implemented");
+    },
+    appendCellEntry: async () => {
+      throw new Error("not implemented");
+    },
+    updateCell: async () => {},
+    deleteCell: async () => {},
+    deleteCellEntry: async () => {},
+    refreshUpdatedAt: async () => {},
+    reload: async () => {},
+  };
+}
+
 describe("resolveDisplayedCellForMissingAiConfig", () => {
   test("defaults analysis cells to SQL when AI configuration is missing", () => {
     const displayedCell = resolveDisplayedCellForMissingAiConfig({
@@ -45,5 +73,27 @@ describe("resolveDisplayedCellForMissingAiConfig", () => {
     });
 
     expect(displayedCell.activeMode).toBe("ai");
+  });
+});
+
+describe("CellList", () => {
+  test("renders an add cell control in the empty workbook state", () => {
+    const markup = renderToStaticMarkup(
+      <CellList
+        cells={[]}
+        selectedCellId={null}
+        pendingBootstrap={null}
+        notebookSession={createNotebookSession()}
+        onSelectCell={() => {}}
+        onBootstrapConsumed={() => {}}
+        onDeleteCell={() => {}}
+        onSelectCellMode={() => {}}
+        onAddCell={() => {}}
+        isBusy={false}
+      />,
+    );
+
+    expect(markup).toContain("Empty workbook");
+    expect(markup).toContain("Add cell");
   });
 });

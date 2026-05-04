@@ -43,6 +43,26 @@ function bootstrapTheme(): void {
 
 bootstrapTheme();
 
+if (import.meta.env.DEV) {
+  window.addEventListener("error", (event) => {
+    console.error("[pondview:window-error]", {
+      message: event.message,
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+      stack: event.error instanceof Error ? event.error.stack : event.error,
+    });
+  });
+
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event.reason;
+    console.error("[pondview:unhandled-rejection]", {
+      message: reason instanceof Error ? reason.message : String(reason),
+      stack: reason instanceof Error ? reason.stack : reason,
+    });
+  });
+}
+
 const root = document.getElementById("root");
 if (!root) {
   throw new Error("Missing #root element");

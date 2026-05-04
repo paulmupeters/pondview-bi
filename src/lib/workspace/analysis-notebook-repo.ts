@@ -790,9 +790,22 @@ export async function deleteAnalysisNotebook(
     STORE_ANALYSIS_NOTEBOOKS,
     notebookId,
   );
+  const existingProjectPath = normalizeProjectPath(existing?.projectPath);
+  const hasSharedProjectPath = existingProjectPath
+    ? (
+        await getAllFromStore<WorkspaceAnalysisNotebook>(
+          STORE_ANALYSIS_NOTEBOOKS,
+        )
+      ).some(
+        (notebook) =>
+          notebook.id !== notebookId &&
+          normalizeProjectPath(notebook.projectPath) === existingProjectPath,
+      )
+    : false;
+
   await deleteAnalysisCellsByNotebookId(notebookId);
   await deleteByKey(STORE_ANALYSIS_NOTEBOOKS, notebookId);
-  if (existing) {
+  if (existing && !hasSharedProjectPath) {
     await deletePublishedNotebookProjectArtifact({
       notebookId,
       title: existing.title,

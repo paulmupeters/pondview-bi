@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { resolveGatewayModel } from "@/ai/gateway-model";
+import {
+  resolveGatewayModel,
+  resolveVisualizationGatewayModel,
+} from "@/ai/gateway-model";
 import {
   AI_MODEL_STORAGE_KEY,
   AI_PROVIDER_STORAGE_KEY,
+  AI_VISUALIZATION_MODEL_STORAGE_KEY,
   type AiProvider,
   getApiKeyStorageKeyForProvider,
   loadAiSettingsFromStorage,
@@ -110,6 +114,44 @@ describe("resolveGatewayModel", () => {
     );
   });
 
+  test("uses the call-site fallback model when no model is stored", () => {
+    const localStorage = createStorage();
+    const sessionStorage = createStorage();
+    localStorage.setItem(AI_PROVIDER_STORAGE_KEY, "gateway");
+    sessionStorage.setItem(
+      getApiKeyStorageKeyForProvider("gateway"),
+      "test-key",
+    );
+    setBrowserStorage(localStorage, sessionStorage);
+
+    const model = resolveGatewayModel("google/gemini-3-flash") as {
+      modelId?: string;
+    };
+
+    expect(model.modelId).toBe("google/gemini-3-flash");
+  });
+
+  test("uses a separate visualization model when configured", () => {
+    const { localStorage, sessionStorage } = configureProvider("gateway", {
+      model: "openai/gpt-5.4",
+    });
+    localStorage.setItem(
+      AI_VISUALIZATION_MODEL_STORAGE_KEY,
+      "google/gemini-3-flash",
+    );
+    setBrowserStorage(localStorage, sessionStorage);
+
+    const chatModel = resolveGatewayModel("fallback-model") as {
+      modelId?: string;
+    };
+    const visualizationModel = resolveVisualizationGatewayModel(
+      "fallback-visualization-model",
+    ) as { modelId?: string };
+
+    expect(chatModel.modelId).toBe("openai/gpt-5.4");
+    expect(visualizationModel.modelId).toBe("google/gemini-3-flash");
+  });
+
   test("does not require an api key for ollama", () => {
     const storage = createStorage();
     storage.setItem(AI_PROVIDER_STORAGE_KEY, "ollama");
@@ -170,6 +212,7 @@ describe("resolveGatewayModel", () => {
     saveAiSettingsToStorage({
       provider: "openai",
       model: "gpt-4.1",
+      visualizationModel: "google/gemini-3-flash",
       apiKey: "sk-session",
       openAiCompatibleName: "",
       openAiCompatibleUrl: "",
@@ -184,6 +227,7 @@ describe("resolveGatewayModel", () => {
     expect(loadAiSettingsFromStorage()).toMatchObject({
       provider: "openai",
       model: "gpt-4.1",
+      visualizationModel: "google/gemini-3-flash",
       apiKey: "sk-session",
     });
   });

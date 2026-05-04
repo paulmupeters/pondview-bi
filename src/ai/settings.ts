@@ -1,4 +1,4 @@
-import { CHAT_MODEL } from "@/ai/models";
+import { CHAT_MODEL, VISUALIZATION_MODEL } from "@/ai/models";
 
 export type AiProvider =
   | "openai"
@@ -11,6 +11,7 @@ export type AiProvider =
 export interface AiSettings {
   provider: AiProvider;
   model: string;
+  visualizationModel: string;
   apiKey: string;
   ollamaBaseUrl?: string;
   openAiCompatibleUrl?: string;
@@ -19,6 +20,7 @@ export interface AiSettings {
 
 export const AI_PROVIDER_STORAGE_KEY = "AI_PROVIDER";
 export const AI_MODEL_STORAGE_KEY = "AI_MODEL";
+export const AI_VISUALIZATION_MODEL_STORAGE_KEY = "AI_VISUALIZATION_MODEL";
 export const OPENAI_COMPATIBLE_URL_STORAGE_KEY = "OPENAI_COMPATIBLE_URL";
 export const OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY =
   "OPENAI_COMPATIBLE_PROVIDER_NAME";
@@ -70,6 +72,14 @@ function getDevelopmentGatewayApiKey(): string {
   return normalizeText(__DEV_AI_GATEWAY_API_KEY__);
 }
 
+function hasBrowserStorage(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.localStorage !== "undefined" &&
+    typeof window.sessionStorage !== "undefined"
+  );
+}
+
 export function isAiProvider(
   value: string | null | undefined,
 ): value is AiProvider {
@@ -85,7 +95,7 @@ export function getApiKeyStorageKeyForProvider(provider: AiProvider): string {
 }
 
 export function getProviderApiKeyFromStorage(provider: AiProvider): string {
-  if (typeof window === "undefined") {
+  if (!hasBrowserStorage()) {
     return "";
   }
 
@@ -111,10 +121,11 @@ export function getProviderApiKeyFromStorage(provider: AiProvider): string {
 export function loadAiSettingsFromStorage(): AiSettings {
   const fallbackModel = CHAT_MODEL;
 
-  if (typeof window === "undefined") {
+  if (!hasBrowserStorage()) {
     return {
       provider: "openai",
       model: fallbackModel,
+      visualizationModel: VISUALIZATION_MODEL,
       apiKey: "",
       ollamaBaseUrl: OLLAMA_BASE_URL,
       openAiCompatibleName: "",
@@ -130,10 +141,18 @@ export function loadAiSettingsFromStorage(): AiSettings {
       : "openai";
   const rawModel = window.localStorage.getItem(AI_MODEL_STORAGE_KEY);
   const model = rawModel === null ? fallbackModel : normalizeText(rawModel);
+  const rawVisualizationModel = window.localStorage.getItem(
+    AI_VISUALIZATION_MODEL_STORAGE_KEY,
+  );
+  const visualizationModel =
+    rawVisualizationModel === null
+      ? VISUALIZATION_MODEL
+      : normalizeText(rawVisualizationModel);
 
   return {
     provider,
     model,
+    visualizationModel,
     apiKey: getProviderApiKeyFromStorage(provider),
     ollamaBaseUrl:
       normalizeText(window.localStorage.getItem(OLLAMA_BASE_URL_STORAGE_KEY)) ||
@@ -148,12 +167,21 @@ export function loadAiSettingsFromStorage(): AiSettings {
 }
 
 export function saveAiSettingsToStorage(settings: AiSettings): void {
-  if (typeof window === "undefined") {
+  if (!hasBrowserStorage()) {
     return;
   }
 
   window.localStorage.setItem(AI_PROVIDER_STORAGE_KEY, settings.provider);
   window.localStorage.setItem(AI_MODEL_STORAGE_KEY, settings.model.trim());
+  const visualizationModel = settings.visualizationModel.trim();
+  if (visualizationModel) {
+    window.localStorage.setItem(
+      AI_VISUALIZATION_MODEL_STORAGE_KEY,
+      visualizationModel,
+    );
+  } else {
+    window.localStorage.removeItem(AI_VISUALIZATION_MODEL_STORAGE_KEY);
+  }
   window.sessionStorage.setItem(
     getApiKeyStorageKeyForProvider(settings.provider),
     settings.apiKey.trim(),
@@ -179,7 +207,7 @@ export function saveAiSettingsToStorage(settings: AiSettings): void {
 }
 
 export function clearAiProviderApiKeyFromSession(provider: AiProvider): void {
-  if (typeof window === "undefined") {
+  if (!hasBrowserStorage()) {
     return;
   }
 
@@ -188,7 +216,7 @@ export function clearAiProviderApiKeyFromSession(provider: AiProvider): void {
 }
 
 export function hasRequiredAiConfigurationInStorage(): boolean {
-  if (typeof window === "undefined") {
+  if (!hasBrowserStorage()) {
     return false;
   }
 

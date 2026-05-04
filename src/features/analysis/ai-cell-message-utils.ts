@@ -499,6 +499,23 @@ export function getLatestAssistantText(messages: UIMessage[]): string | null {
   return null;
 }
 
+export function getLatestUserText(messages: UIMessage[]): string | null {
+  for (
+    let messageIndex = messages.length - 1;
+    messageIndex >= 0;
+    messageIndex -= 1
+  ) {
+    const message = messages[messageIndex];
+    if (message.role !== "user") {
+      continue;
+    }
+
+    return getMessageText(message);
+  }
+
+  return null;
+}
+
 export function getMessageText(message: UIMessage): string | null {
   const textParts = (message.parts ?? []).filter(
     (

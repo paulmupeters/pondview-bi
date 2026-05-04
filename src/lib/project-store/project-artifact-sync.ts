@@ -59,7 +59,7 @@ function getSavedQueryArtifactPaths(query: SavedSqlQuery): string[] {
   ];
 }
 
-function getNotebookArtifactId(input: {
+export function getPublishedNotebookProjectArtifactId(input: {
   notebookId: string;
   title: string | null;
   projectPath?: string | null;
@@ -74,15 +74,17 @@ function getNotebookArtifactId(input: {
     }
   }
 
-  return toProjectArtifactId(input.title, "notebook");
+  const titleId = toProjectArtifactId(input.title, "notebook");
+  const notebookId = toProjectArtifactId(input.notebookId, "notebook");
+  return titleId === notebookId ? titleId : `${titleId}-${notebookId}`;
 }
 
-function getNotebookScopePath(input: {
+export function getPublishedNotebookProjectScopePath(input: {
   notebookId: string;
   title: string | null;
   projectPath?: string | null;
 }): string {
-  return `pondview/notebooks/${getNotebookArtifactId(input)}`;
+  return `pondview/notebooks/${getPublishedNotebookProjectArtifactId(input)}`;
 }
 
 export async function syncSavedQueryProjectArtifact(
@@ -149,7 +151,7 @@ export async function syncPublishedNotebookProjectArtifact(
   }
 
   const previousScopePath = snapshot.notebook.projectPath?.trim() || null;
-  const nextScopePath = getNotebookScopePath({
+  const nextScopePath = getPublishedNotebookProjectScopePath({
     notebookId,
     title: snapshot.notebook.title,
     projectPath: snapshot.notebook.projectPath ?? null,
@@ -157,7 +159,7 @@ export async function syncPublishedNotebookProjectArtifact(
 
   const files = await exportPublishedNotebookProjectFiles({
     notebookId,
-    artifactId: getNotebookArtifactId({
+    artifactId: getPublishedNotebookProjectArtifactId({
       notebookId,
       title: snapshot.notebook.title,
       projectPath: snapshot.notebook.projectPath ?? null,
@@ -195,7 +197,11 @@ export async function deletePublishedNotebookProjectArtifact(input: {
     return;
   }
 
-  const scopePath = getNotebookScopePath(input);
+  if (!input.projectPath?.trim()) {
+    return;
+  }
+
+  const scopePath = getPublishedNotebookProjectScopePath(input);
   const pathsToDelete = (await listOpenProjectFiles())
     .map((file) => file.path)
     .filter((path) => path === scopePath || path.startsWith(`${scopePath}/`));

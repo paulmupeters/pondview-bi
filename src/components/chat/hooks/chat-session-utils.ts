@@ -9,7 +9,6 @@ const SUPPORTED_TOOL_NAMES = new Set([
   "get_table_schema",
   "list_tables",
   "run_preview",
-  "read_skills_md",
 ]);
 
 function safeJsonParse(value: string): unknown {

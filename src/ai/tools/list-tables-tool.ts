@@ -1,10 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { runQuery } from "@/lib/sql/run-query";
-import {
-  resolveDbIdentifierForSqlBackend,
-  resolveSqlBackend,
-} from "@/lib/sql/sql-runtime";
+import { resolveToolRuntimeTarget } from "./sql-tool-shared";
 
 export const listTablesTool = tool({
   description:
@@ -28,11 +25,7 @@ export const listTablesTool = tool({
       ORDER BY table_schema, table_name
     `;
 
-    const backend = resolveSqlBackend({ dbIdentifier: databasePath });
-    const dbIdentifier = resolveDbIdentifierForSqlBackend(
-      databasePath,
-      backend,
-    );
+    const { dbIdentifier } = resolveToolRuntimeTarget(databasePath);
     const result = await runQuery({ sql, dbIdentifier });
 
     const tables = result.rows.map((row) => ({

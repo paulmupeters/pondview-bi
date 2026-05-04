@@ -23,6 +23,8 @@ export type VisualSnapshot = {
   type: "chart" | "card" | "table" | "text";
 };
 
+export type DashboardBuilderVisualType = VisualSnapshot["type"];
+
 export type JoinColumnState = {
   status: "idle" | "loading" | "loaded" | "error";
   columns: string[];
@@ -96,6 +98,21 @@ export function buildFallbackChartConfig(
   };
 }
 
+export function buildFallbackTableConfig(
+  payload: SqlAnalysisData,
+): TableConfig {
+  return {
+    configType: "table",
+    title: payload.tableConfig?.title
+      ? payload.tableConfig.title
+      : payload.query
+        ? `Table: ${payload.query.substring(0, 50)}${payload.query.length > 50 ? "..." : ""}`
+        : "Data Table",
+    description:
+      payload.tableConfig?.description ?? payload.summary?.insights?.[0] ?? "",
+  };
+}
+
 export function normalizeVisualArtifact(
   artifact: ArtifactData<SqlAnalysisData>,
 ): VisualSnapshot | null {
@@ -126,6 +143,10 @@ export function normalizeVisualArtifact(
           (column: { name: string; type?: string }) => ({ ...column }),
         ),
         rows,
+        tableConfig:
+          (payload.columns?.length ?? 0) > 0
+            ? (payload.tableConfig ?? buildFallbackTableConfig(payload))
+            : payload.tableConfig,
       },
       rows,
       type: "chart",
@@ -168,19 +189,10 @@ export function normalizeVisualArtifact(
     const rows = Array.isArray(payload.rows)
       ? (payload.rows as Result[]).map((row) => ({ ...row }))
       : [];
+    const resolvedChartConfig =
+      payload.chartConfig ?? buildFallbackChartConfig(payload);
 
-    const defaultTableConfig: TableConfig = {
-      configType: "table",
-      title: payload.tableConfig?.title
-        ? payload.tableConfig.title
-        : payload.query
-          ? `Table: ${payload.query.substring(0, 50)}${payload.query.length > 50 ? "..." : ""}`
-          : "Data Table",
-      description:
-        payload.tableConfig?.description ??
-        payload.summary?.insights?.[0] ??
-        "",
-    };
+    const defaultTableConfig = buildFallbackTableConfig(payload);
 
     return {
       id: artifact.id,
@@ -193,6 +205,7 @@ export function normalizeVisualArtifact(
         ),
         rows,
         tableConfig: defaultTableConfig,
+        chartConfig: resolvedChartConfig ?? undefined,
       },
       rows,
       type: "table",

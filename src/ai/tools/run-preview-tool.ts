@@ -1,11 +1,8 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { runQuery } from "@/lib/sql/run-query";
-import {
-  resolveDbIdentifierForSqlBackend,
-  resolveSqlBackend,
-} from "@/lib/sql/sql-runtime";
 import type { Result } from "@/lib/types";
+import { resolveToolRuntimeTarget } from "./sql-tool-shared";
 
 function normalizeRows(rows: Record<string, unknown>[]): Result[] {
   return rows.map((row) => {
@@ -46,11 +43,7 @@ export const runPreviewTool = tool({
       ),
   }),
   execute: async ({ table, databasePath }) => {
-    const backend = resolveSqlBackend({ dbIdentifier: databasePath });
-    const dbIdentifier = resolveDbIdentifierForSqlBackend(
-      databasePath,
-      backend,
-    );
+    const { dbIdentifier } = resolveToolRuntimeTarget(databasePath);
     const result = await runQuery({
       sql: `SELECT * FROM ${table} LIMIT 5`,
       dbIdentifier,

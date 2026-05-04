@@ -1,5 +1,5 @@
 import { generateText, Output } from "ai";
-import { resolveGatewayModel } from "@/ai/gateway-model";
+import { resolveVisualizationGatewayModel } from "@/ai/gateway-model";
 import { VISUALIZATION_MODEL } from "@/ai/models";
 import { cardConfigSchema } from "@/lib/types";
 
@@ -9,7 +9,7 @@ export const generateCardConfig = async (
   userQuery: string,
 ) => {
   const { output: config } = await generateText({
-    model: resolveGatewayModel(VISUALIZATION_MODEL),
+    model: resolveVisualizationGatewayModel(VISUALIZATION_MODEL),
     system:
       "You are a data visualization expert specializing in KPI cards and metrics.",
     prompt: `Given a single value from a SQL query result, generate a card configuration that best presents this value to answer the user's query.

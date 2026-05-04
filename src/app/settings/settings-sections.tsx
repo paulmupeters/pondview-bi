@@ -1,4 +1,4 @@
-import { Pencil } from "lucide-react";
+import { ChevronDown, Pencil, SlidersHorizontal } from "lucide-react";
 import { type ReactNode, type RefObject, useState } from "react";
 import {
   type AiProvider,
@@ -115,6 +115,8 @@ type AiSettingsSectionsProps = {
   onAiProviderChange: (provider: AiProvider) => void;
   model: string;
   onModelChange: (value: string) => void;
+  visualizationModel: string;
+  onVisualizationModelChange: (value: string) => void;
   apiKey: string;
   onApiKeyChange: (value: string) => void;
   ollamaBaseUrl: string;
@@ -138,6 +140,8 @@ export function AiSettingsSections({
   onAiProviderChange,
   model,
   onModelChange,
+  visualizationModel,
+  onVisualizationModelChange,
   apiKey,
   onApiKeyChange,
   ollamaBaseUrl,
@@ -158,6 +162,7 @@ export function AiSettingsSections({
   const isOllamaProvider = aiProvider === "ollama";
   const usesCustomCompatibleSettings =
     aiProvider === "openai-compatible" || isOllamaProvider;
+  const [showAdvancedAiOptions, setShowAdvancedAiOptions] = useState(false);
 
   return (
     <>
@@ -206,6 +211,55 @@ export function AiSettingsSections({
                 placeholder="Enter model ID"
               />
             </FormField>
+
+            <div className="mb-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setShowAdvancedAiOptions((isVisible) => !isVisible)
+                }
+                aria-expanded={showAdvancedAiOptions}
+                aria-controls="advanced-ai-options"
+                className="gap-2"
+              >
+                <SlidersHorizontal className="size-4" aria-hidden="true" />
+                Advanced options
+                <ChevronDown
+                  className={cn(
+                    "size-4 transition-transform",
+                    showAdvancedAiOptions && "rotate-180",
+                  )}
+                  aria-hidden="true"
+                />
+              </Button>
+            </div>
+
+            {showAdvancedAiOptions && (
+              <div
+                id="advanced-ai-options"
+                className="mb-4 rounded-md border bg-muted/20 p-4"
+              >
+                <FormField
+                  label="Visualization model"
+                  htmlFor="visualization-model-id"
+                  description="Used for chart and card configuration. Uses structured output. Some models can write SQL well but struggle with strict structured chart output."
+                >
+                  <Input
+                    id="visualization-model-id"
+                    type="text"
+                    name="ai-visualization-model-id"
+                    autoComplete="off"
+                    value={visualizationModel}
+                    onChange={(event) =>
+                      onVisualizationModelChange(event.target.value)
+                    }
+                    placeholder="google/gemini-3-flash"
+                  />
+                </FormField>
+              </div>
+            )}
 
             {!isOllamaProvider && (
               <FormField

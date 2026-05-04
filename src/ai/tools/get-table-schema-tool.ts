@@ -1,11 +1,8 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { runQuery } from "@/lib/sql/run-query";
-import {
-  resolveDbIdentifierForSqlBackend,
-  resolveSqlBackend,
-} from "@/lib/sql/sql-runtime";
 import type { Result } from "@/lib/types";
+import { resolveToolRuntimeTarget } from "./sql-tool-shared";
 
 function normalizeRows(rows: Record<string, unknown>[]): Result[] {
   const normalizeValue = (value: unknown): string | number | boolean | Date => {
@@ -34,8 +31,7 @@ async function runSqlForRuntime(
   databasePath: string | undefined,
   sql: string,
 ): Promise<Result[]> {
-  const backend = resolveSqlBackend({ dbIdentifier: databasePath });
-  const dbIdentifier = resolveDbIdentifierForSqlBackend(databasePath, backend);
+  const { dbIdentifier } = resolveToolRuntimeTarget(databasePath);
   const result = await runQuery({ sql, dbIdentifier });
   return normalizeRows(result.rows);
 }

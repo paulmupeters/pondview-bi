@@ -5,7 +5,9 @@ import { SqlChart } from "@/components/sql-chart";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { CardConfig, Config, TableConfig, TextConfig } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 function getSnapshotTitle(snapshot: VisualSnapshot): string {
   if (snapshot.type === "text") {
@@ -42,10 +44,19 @@ function formatCardValue(value: unknown): string {
 function DashboardVisualPreview({
   snapshot,
   onRemove,
+  onVisualTypeChange,
 }: {
   snapshot: VisualSnapshot;
   onRemove: (id: string) => void;
+  onVisualTypeChange: (id: string, type: VisualSnapshot["type"]) => void;
 }) {
+  const canToggleTableChart = Boolean(
+    snapshot.payload.chartConfig &&
+      snapshot.payload.tableConfig &&
+      snapshot.payload.columns?.length &&
+      snapshot.rows.length,
+  );
+
   return (
     <div className="min-w-0 overflow-hidden rounded-md bg-card shadow-sm">
       <div className="flex min-w-0 items-center justify-between gap-3 px-3 py-2">
@@ -59,16 +70,52 @@ function DashboardVisualPreview({
             </span>
           )}
         </div>
-        <Button
-          type="button"
-          variant="destructive"
-          size="sm"
-          className="text-destructive-foreground hover:text-destructive"
-          onClick={() => onRemove(snapshot.id)}
-        >
-          <MinusCircleIcon className="h-4 w-4" />
-          <span className="sr-only">Remove {snapshot.type}</span>
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {canToggleTableChart && (
+            <ToggleGroup
+              type="single"
+              size="sm"
+              value={snapshot.type === "chart" ? "chart" : "table"}
+              onValueChange={(value) => {
+                if (value === "table" || value === "chart") {
+                  onVisualTypeChange(snapshot.id, value);
+                }
+              }}
+              className="gap-1"
+            >
+              <ToggleGroupItem
+                value="table"
+                size="sm"
+                className={cn(
+                  "h-7 rounded-sm px-2 text-xs",
+                  snapshot.type === "table" && "bg-background shadow-sm",
+                )}
+              >
+                Table
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="chart"
+                size="sm"
+                className={cn(
+                  "h-7 rounded-sm px-2 text-xs",
+                  snapshot.type === "chart" && "bg-background shadow-sm",
+                )}
+              >
+                Chart
+              </ToggleGroupItem>
+            </ToggleGroup>
+          )}
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            className="text-destructive-foreground hover:text-destructive"
+            onClick={() => onRemove(snapshot.id)}
+          >
+            <MinusCircleIcon className="h-4 w-4" />
+            <span className="sr-only">Remove {snapshot.type}</span>
+          </Button>
+        </div>
       </div>
 
       {snapshot.type === "text" ? (
@@ -177,12 +224,14 @@ export function SelectedVisualsSection({
   visualSnapshots,
   onRemoveChart,
   onRestoreChart,
+  onVisualTypeChange,
 }: {
   selectedCharts: VisualSnapshot[];
   removedCharts: VisualSnapshot[];
   visualSnapshots: VisualSnapshot[];
   onRemoveChart: (id: string) => void;
   onRestoreChart: (id: string) => void;
+  onVisualTypeChange: (id: string, type: VisualSnapshot["type"]) => void;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -207,6 +256,7 @@ export function SelectedVisualsSection({
                 key={snapshot.id}
                 snapshot={snapshot}
                 onRemove={onRemoveChart}
+                onVisualTypeChange={onVisualTypeChange}
               />
             ))
           )}

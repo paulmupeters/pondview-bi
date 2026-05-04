@@ -344,16 +344,9 @@ export default function ViewDataPage() {
           {/* Header */}
           <header className="mb-16 flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-3">
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
-                Data Sources
-              </p>
               <h1 className="text-5xl font-black tracking-tighter text-foreground sm:text-6xl">
                 Connected Data
               </h1>
-              <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">
-                Browse the databases and tables available to this project.
-                Configure connections and cross-table joins below.
-              </p>
             </div>
 
             <div className="flex items-center gap-3">

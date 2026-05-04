@@ -1,5 +1,5 @@
 import { generateText, Output } from "ai";
-import { resolveGatewayModel } from "@/ai/gateway-model";
+import { resolveVisualizationGatewayModel } from "@/ai/gateway-model";
 import { VISUALIZATION_MODEL } from "@/ai/models";
 import { configSchema, normalizeChartConfig, type Result } from "@/lib/types";
 
@@ -8,7 +8,7 @@ export const generateChartConfig = async (
   userQuery: string,
 ) => {
   const { output: config } = await generateText({
-    model: resolveGatewayModel(VISUALIZATION_MODEL),
+    model: resolveVisualizationGatewayModel(VISUALIZATION_MODEL),
     system: "You are a data visualization expert.",
     prompt: `Given the following data from a SQL query result, generate the chart config that best visualises the data and answers the users query.
       For multiple groups use multi-lines.

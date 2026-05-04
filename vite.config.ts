@@ -32,6 +32,44 @@ export default defineConfig(({ command, mode }) => {
     },
     build: {
       outDir: "dist",
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            minSize: 20_000,
+            maxSize: 450_000,
+            groups: [
+              {
+                name: "vendor-react",
+                test: /node_modules\/(react|react-dom|react-router-dom|scheduler)\//,
+              },
+              {
+                name: "vendor-ai",
+                test: /node_modules\/(@ai-sdk|ai)\//,
+              },
+              {
+                name: "vendor-duckdb",
+                test: /node_modules\/@duckdb\//,
+              },
+              {
+                name: "vendor-codemirror",
+                test: /node_modules\/(@codemirror|@uiw|codemirror|@lezer)\//,
+              },
+              {
+                name: "vendor-recharts",
+                test: /node_modules\/(recharts|d3-|d3|victory|redux)\//,
+              },
+              {
+                name: "vendor-radix",
+                test: /node_modules\/@radix-ui\//,
+              },
+              {
+                name: "vendor-aws",
+                test: /node_modules\/@aws-sdk\//,
+              },
+            ],
+          },
+        },
+      },
     },
   };
 });

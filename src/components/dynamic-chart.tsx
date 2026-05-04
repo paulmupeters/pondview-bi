@@ -1,4 +1,5 @@
 import { InfoIcon } from "lucide-react";
+import { useCallback, useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -40,6 +41,31 @@ function toTitleCase(value: unknown): string {
     .join(" ");
 }
 
+function coerceChartRows(chartData: Result[]): Result[] {
+  return chartData.map((item) => {
+    const parsedItem: { [key: string]: string | number | boolean | Date } = {};
+    for (const [key, value] of Object.entries(item)) {
+      parsedItem[key] = Number.isNaN(Number(value)) ? value : Number(value);
+    }
+    return parsedItem;
+  });
+}
+
+function legendEntriesToChartConfig(
+  legendEntries: string[],
+): Record<string, { label: string; color: string }> {
+  return legendEntries.reduce(
+    (acc, key, index) => {
+      acc[key] = {
+        label: key,
+        color: `var(--chart-${(index % 8) + 1})`,
+      };
+      return acc;
+    },
+    {} as Record<string, { label: string; color: string }>,
+  );
+}
+
 export function DynamicChart({
   chartData,
   chartConfig,
@@ -51,42 +77,108 @@ export function DynamicChart({
   className?: string;
   showMetadata?: boolean;
 }) {
-  const defaultColors = getChartColors();
+  const defaultColors = useMemo(() => getChartColors(), []);
+  const normalizedChartData = useMemo(
+    () => coerceChartRows(chartData),
+    [chartData],
+  );
+  const processedChartData = useMemo(() => {
+    let nextChartData =
+      chartConfig.type === "pie" && normalizedChartData.length > 8
+        ? normalizedChartData.slice(0, 20)
+        : normalizedChartData;
+
+    if (!chartConfig.countMode) {
+      return nextChartData;
+    }
+
+    const countsMap = new Map<
+      string,
+      { xValue: string | number | boolean | Date; count: number }
+    >();
+
+    for (const row of nextChartData) {
+      const xValue = row[chartConfig.xKey];
+      if (xValue === undefined || xValue === null) continue;
+      const key = String(xValue);
+      const existing = countsMap.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        countsMap.set(key, { xValue, count: 1 });
+      }
+    }
+
+    nextChartData = Array.from(countsMap.values()).map((entry) => ({
+      [chartConfig.xKey]: entry.xValue,
+      count: entry.count,
+    }));
+
+    const allNumericXValues = nextChartData.every(
+      (item) => typeof item[chartConfig.xKey] === "number",
+    );
+    return allNumericXValues
+      ? [...nextChartData].sort(
+          (a, b) =>
+            (a[chartConfig.xKey] as number) - (b[chartConfig.xKey] as number),
+        )
+      : nextChartData;
+  }, [
+    chartConfig.countMode,
+    chartConfig.type,
+    chartConfig.xKey,
+    normalizedChartData,
+  ]);
+  const resolvedYKeys = useMemo(
+    () => (chartConfig.countMode ? ["count"] : chartConfig.yKeys),
+    [chartConfig.countMode, chartConfig.yKeys],
+  );
+  const chartContainerConfig = useMemo(
+    () =>
+      chartConfig.countMode
+        ? { count: { label: "Count", color: "var(--chart-1)" } }
+        : legendEntriesToChartConfig(resolvedYKeys),
+    [chartConfig.countMode, resolvedYKeys],
+  );
+  const lineChartState = useMemo(() => {
+    if (chartConfig.type !== "line") {
+      return null;
+    }
+
+    const transformed = transformDataForMultiLineChart(
+      processedChartData,
+      chartConfig,
+    );
+    const useTransformedData =
+      !chartConfig.countMode &&
+      chartConfig.multipleLines &&
+      chartConfig.measurementColumn &&
+      chartConfig.yKeys.includes(chartConfig.measurementColumn);
+
+    return {
+      ...transformed,
+      useTransformedData,
+      data: useTransformedData ? transformed.data : processedChartData,
+      yAxisKey: useTransformedData
+        ? (chartConfig.measurementColumn ?? resolvedYKeys[0])
+        : resolvedYKeys[0],
+      lineKeys: useTransformedData ? transformed.lineFields : resolvedYKeys,
+    };
+  }, [chartConfig, processedChartData, resolvedYKeys]);
 
   // Use custom colors from chartConfig if available, otherwise use default colors
-  const getColorForKey = (key: string, index: number): string => {
-    if (chartConfig.colors?.[key]) {
-      return chartConfig.colors[key];
-    }
-    return defaultColors[index % defaultColors.length];
-  };
+  const getColorForKey = useCallback(
+    (key: string, index: number): string => {
+      if (chartConfig.colors?.[key]) {
+        return chartConfig.colors[key];
+      }
+      return defaultColors[index % defaultColors.length];
+    },
+    [chartConfig.colors, defaultColors],
+  );
 
   const renderChart = () => {
-    if (!chartData || !chartConfig) return <div>No chart data</div>;
-
-    const parsedChartData = chartData.map((item) => {
-      const parsedItem: { [key: string]: string | number | boolean | Date } =
-        {};
-      for (const [key, value] of Object.entries(item)) {
-        parsedItem[key] = Number.isNaN(Number(value)) ? value : Number(value);
-      }
-      return parsedItem;
-    });
-
-    chartData = parsedChartData;
-
-    const processChartData = (data: Result[], chartType: string) => {
-      if (chartType === "pie") {
-        if (data.length <= 8) {
-          return data;
-        }
-
-        const subset = data.slice(0, 20);
-        return subset;
-      }
-      return data;
-    };
-    chartData = processChartData(chartData, chartConfig.type);
+    if (!processedChartData || !chartConfig) return <div>No chart data</div>;
 
     const showGrid = chartConfig.showGrid ?? true;
     const showXAxis = chartConfig.showXAxis ?? true;
@@ -98,69 +190,25 @@ export function DynamicChart({
     const labelYAngle = chartConfig.labelYAngle ?? -90;
     const suffixLabelY = chartConfig.suffixLabelY ?? "";
 
-    if (chartConfig.countMode) {
-      const countsMap = new Map<
-        string,
-        { xValue: string | number | boolean | Date; count: number }
-      >();
-
-      for (const row of chartData) {
-        const xValue = row[chartConfig.xKey];
-        if (xValue === undefined || xValue === null) continue;
-        const key = String(xValue);
-        const existing = countsMap.get(key);
-        if (existing) {
-          existing.count += 1;
-        } else {
-          countsMap.set(key, { xValue, count: 1 });
-        }
-      }
-
-      chartData = Array.from(countsMap.values()).map((entry) => ({
-        [chartConfig.xKey]: entry.xValue,
-        count: entry.count,
-      }));
-
-      const allNumericXValues = chartData.every(
-        (item) => typeof item[chartConfig.xKey] === "number",
-      );
-      if (allNumericXValues) {
-        chartData.sort(
-          (a, b) =>
-            (a[chartConfig.xKey] as number) - (b[chartConfig.xKey] as number),
-        );
-      }
-    }
-
-    const resolvedYKeys = chartConfig.countMode ? ["count"] : chartConfig.yKeys;
-
     switch (chartConfig.type) {
       case "line": {
-        const { data, xAxisField, lineFields } = transformDataForMultiLineChart(
-          chartData,
-          chartConfig,
-        );
-        const useTransformedData =
-          !chartConfig.countMode &&
-          chartConfig.multipleLines &&
-          chartConfig.measurementColumn &&
-          chartConfig.yKeys.includes(chartConfig.measurementColumn);
-
-        const yAxisKey = useTransformedData
-          ? (chartConfig.measurementColumn ?? resolvedYKeys[0])
-          : resolvedYKeys[0];
+        if (!lineChartState) {
+          return null;
+        }
         const formattedYAxisLabel = (() => {
-          const base = toTitleCase(yAxisKey ?? "");
+          const base = toTitleCase(lineChartState.yAxisKey ?? "");
           return suffixLabelY ? `${base} (${suffixLabelY})` : base;
         })();
         return (
-          <LineChart data={useTransformedData ? data : chartData}>
+          <LineChart data={lineChartState.data}>
             {showGrid && <CartesianGrid strokeDasharray="3 3" />}
             <XAxis dataKey={chartConfig.xKey} hide={!showXAxis}>
               {showXAxis && (
                 <Label
                   value={toTitleCase(
-                    useTransformedData ? xAxisField : chartConfig.xKey,
+                    lineChartState.useTransformedData
+                      ? lineChartState.xAxisField
+                      : chartConfig.xKey,
                   )}
                   offset={0}
                   position="insideBottom"
@@ -180,25 +228,24 @@ export function DynamicChart({
             {chartConfig.legend && (
               <ChartLegend content={<ChartLegendContent />} />
             )}
-            {(useTransformedData ? lineFields : resolvedYKeys).map(
-              (key, index) => (
-                <Line
-                  key={key}
-                  type="monotone"
-                  dataKey={key}
-                  stroke={getColorForKey(key, index)}
-                  strokeWidth={showLine ? lineSize : 0}
-                  dot={showDots}
-                  activeDot={showDots}
-                />
-              ),
-            )}
+            {lineChartState.lineKeys.map((key, index) => (
+              <Line
+                key={key}
+                type="monotone"
+                dataKey={key}
+                stroke={getColorForKey(key, index)}
+                strokeWidth={showLine ? lineSize : 0}
+                dot={showDots}
+                activeDot={showDots}
+                isAnimationActive={false}
+              />
+            ))}
           </LineChart>
         );
       }
       case "area":
         return (
-          <AreaChart data={chartData}>
+          <AreaChart data={processedChartData}>
             {showGrid && <CartesianGrid strokeDasharray="3 3" />}
             <XAxis dataKey={chartConfig.xKey} hide={!showXAxis} />
             <YAxis hide={!showYAxis} unit={suffixLabelY || undefined}>
@@ -224,13 +271,14 @@ export function DynamicChart({
                 dataKey={key}
                 fill={getColorForKey(key, index)}
                 stroke={getColorForKey(key, index)}
+                isAnimationActive={false}
               />
             ))}
           </AreaChart>
         );
       case "bar":
         return (
-          <BarChart data={chartData}>
+          <BarChart data={processedChartData}>
             {showGrid && <CartesianGrid strokeDasharray="3 3" />}
             <XAxis dataKey={chartConfig.xKey} hide={!showXAxis}>
               {showXAxis && (
@@ -258,7 +306,12 @@ export function DynamicChart({
               <ChartLegend content={<ChartLegendContent />} />
             )}
             {resolvedYKeys.map((key, index) => (
-              <Bar key={key} dataKey={key} fill={getColorForKey(key, index)} />
+              <Bar
+                key={key}
+                dataKey={key}
+                fill={getColorForKey(key, index)}
+                isAnimationActive={false}
+              />
             ))}
           </BarChart>
         );
@@ -266,14 +319,15 @@ export function DynamicChart({
         return (
           <PieChart>
             <Pie
-              data={chartData}
+              data={processedChartData}
               dataKey={resolvedYKeys[0]}
               nameKey={chartConfig.xKey}
               cx="50%"
               cy="50%"
               outerRadius={120}
+              isAnimationActive={false}
             >
-              {chartData.map((entry, index) => (
+              {processedChartData.map((entry, index) => (
                 <Cell
                   // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
                   key={`cell-${index}`}
@@ -296,8 +350,7 @@ export function DynamicChart({
     }
   };
 
-  const legendEntries = chartConfig.countMode ? ["count"] : chartConfig.yKeys;
-  const hasYData = legendEntries.length > 0;
+  const hasYData = resolvedYKeys.length > 0;
 
   return (
     <div
@@ -309,22 +362,9 @@ export function DynamicChart({
       {showMetadata && (
         <h2 className="text-lg font-bold mb-2">{chartConfig.title}</h2>
       )}
-      {chartConfig && chartData.length > 0 && hasYData && (
+      {chartConfig && processedChartData.length > 0 && hasYData && (
         <ChartContainer
-          config={
-            chartConfig.countMode
-              ? { count: { label: "Count", color: "var(--chart-1)" } }
-              : legendEntries.reduce(
-                  (acc, key, index) => {
-                    acc[key] = {
-                      label: key,
-                      color: `var(--chart-${(index % 8) + 1})`,
-                    };
-                    return acc;
-                  },
-                  {} as Record<string, { label: string; color: string }>,
-                )
-          }
+          config={chartContainerConfig}
           className="w-full h-[320px] sm:h-[380px] lg:h-[420px]"
         >
           {renderChart()}

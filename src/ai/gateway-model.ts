@@ -4,6 +4,8 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createGateway, gateway, type LanguageModel } from "ai";
 import { createBrowserGatewayFetch } from "@/ai/browser-gateway-fetch";
 import {
+  AI_MODEL_STORAGE_KEY,
+  AI_VISUALIZATION_MODEL_STORAGE_KEY,
   type AiProvider,
   getAiProviderDisplayName,
   getMissingRequiredSetting,
@@ -80,7 +82,28 @@ export function resolveGatewayModel(fallbackModelId: string): LanguageModel {
   }
 
   const settings = loadAiSettingsFromStorage();
-  const modelId = settings.model.trim() || fallbackModelId;
+  const storedModel = window.localStorage.getItem(AI_MODEL_STORAGE_KEY);
+  const modelId =
+    storedModel === null ? fallbackModelId : settings.model.trim();
+
+  return resolveBrowserModel(settings.provider, modelId);
+}
+
+export function resolveVisualizationGatewayModel(
+  fallbackModelId: string,
+): LanguageModel {
+  if (typeof window === "undefined") {
+    return gateway(fallbackModelId);
+  }
+
+  const settings = loadAiSettingsFromStorage();
+  const storedModel = window.localStorage.getItem(
+    AI_VISUALIZATION_MODEL_STORAGE_KEY,
+  );
+  const modelId =
+    storedModel === null
+      ? fallbackModelId
+      : settings.visualizationModel.trim() || fallbackModelId;
 
   return resolveBrowserModel(settings.provider, modelId);
 }

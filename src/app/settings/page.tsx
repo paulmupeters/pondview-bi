@@ -228,6 +228,7 @@ export default function SettingsPage() {
     useState<SettingsSection>("projects");
   const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
   const [model, setModel] = useState("");
+  const [visualizationModel, setVisualizationModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("");
   const [openAiCompatibleUrl, setOpenAiCompatibleUrl] = useState("");
@@ -332,6 +333,7 @@ export default function SettingsPage() {
 
     setAiProvider(aiSettings.provider);
     setModel(aiSettings.model);
+    setVisualizationModel(aiSettings.visualizationModel);
     setApiKey(aiSettings.apiKey);
     setOllamaBaseUrl(aiSettings.ollamaBaseUrl ?? "");
     setOpenAiCompatibleUrl(aiSettings.openAiCompatibleUrl ?? "");
@@ -1038,6 +1040,7 @@ export default function SettingsPage() {
     const settings = {
       provider: aiProvider,
       model,
+      visualizationModel,
       apiKey,
       ollamaBaseUrl,
       openAiCompatibleUrl,
@@ -1237,6 +1240,8 @@ export default function SettingsPage() {
                   onAiProviderChange={handleAiProviderChange}
                   model={model}
                   onModelChange={setModel}
+                  visualizationModel={visualizationModel}
+                  onVisualizationModelChange={setVisualizationModel}
                   apiKey={apiKey}
                   onApiKeyChange={setApiKey}
                   ollamaBaseUrl={ollamaBaseUrl}

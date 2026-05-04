@@ -14,4 +14,4 @@ export const CHAT_MODEL = "gpt-5.4";
  * Model used for generating chart and card configurations
  * (lightweight tasks requiring structured output)
  */
-export const VISUALIZATION_MODEL = "gpt-5.4";
+export const VISUALIZATION_MODEL = "google/gemini-3-flash";

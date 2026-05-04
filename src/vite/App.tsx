@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import {
   Navigate,
   Route,
@@ -5,20 +6,21 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import AllAnalysesPage from "@/app/analysis/all/page";
-import AnalysisPage from "@/app/analysis/page";
-import DashboardsPage from "@/app/dashboards/page";
-import DashboardViewPage from "@/app/dashboards/view/page";
-import DataPage from "@/app/data/page";
-import HomePage from "@/app/page";
-import SettingsPage from "@/app/settings/page";
-import SqlEditorPage from "@/app/sql-editor/page";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CustomCssLoader } from "@/components/custom-css-loader";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { SqlRuntimeBootstrap } from "@/components/sql-runtime-bootstrap";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme-provider";
+
+const AllAnalysesPage = lazy(() => import("@/app/analysis/all/page"));
+const AnalysisPage = lazy(() => import("@/app/analysis/page"));
+const DashboardsPage = lazy(() => import("@/app/dashboards/page"));
+const DashboardViewPage = lazy(() => import("@/app/dashboards/view/page"));
+const DataPage = lazy(() => import("@/app/data/page"));
+const HomePage = lazy(() => import("@/app/page"));
+const SettingsPage = lazy(() => import("@/app/settings/page"));
+const SqlEditorPage = lazy(() => import("@/app/sql-editor/page"));
 
 function ChatRedirect() {
   const [searchParams] = useSearchParams();
@@ -49,22 +51,24 @@ export function App() {
         <SqlRuntimeBootstrap />
         <CommandPalette />
         <SidebarLayout>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/analysis" element={<AnalysisPage />} />
-            <Route path="/analysis/all" element={<AllAnalysesPage />} />
-            <Route path="/chat" element={<ChatRedirect />} />
-            <Route path="/dashboards" element={<DashboardsPage />} />
-            <Route path="/dashboards/view" element={<DashboardViewPage />} />
-            <Route
-              path="/dashboards/:dashboardId"
-              element={<LegacyDashboardDeepLinkRedirect />}
-            />
-            <Route path="/data" element={<DataPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/sql-editor" element={<SqlEditorPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <Suspense fallback={null}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/analysis" element={<AnalysisPage />} />
+              <Route path="/analysis/all" element={<AllAnalysesPage />} />
+              <Route path="/chat" element={<ChatRedirect />} />
+              <Route path="/dashboards" element={<DashboardsPage />} />
+              <Route path="/dashboards/view" element={<DashboardViewPage />} />
+              <Route
+                path="/dashboards/:dashboardId"
+                element={<LegacyDashboardDeepLinkRedirect />}
+              />
+              <Route path="/data" element={<DataPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/sql-editor" element={<SqlEditorPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </SidebarLayout>
       </TooltipProvider>
     </ThemeProvider>

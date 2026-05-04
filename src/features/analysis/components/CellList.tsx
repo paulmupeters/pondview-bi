@@ -4,6 +4,7 @@ import {
   AI_SETTINGS_UPDATED_EVENT,
   hasRequiredAiConfigurationInStorage,
 } from "@/ai/settings";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -93,6 +94,35 @@ function InsertCellDivider({
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+  );
+}
+
+function AddCellMenu({
+  onAddCell,
+  disabled,
+}: {
+  onAddCell: (kind: WorkspaceAnalysisCellKind) => void;
+  disabled: boolean;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button disabled={disabled} size="sm">
+          <Plus className="size-3.5" />
+          Add cell
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="center">
+        <DropdownMenuItem onClick={() => onAddCell("ai")}>
+          <ChartNetwork className="size-4" />
+          Analysis cell
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onAddCell("text")}>
+          <Type className="size-4" />
+          Text cell
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -233,6 +263,9 @@ export function CellList({
         <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
           Add an analysis or text cell to get started.
         </p>
+        <div className="mt-6">
+          <AddCellMenu onAddCell={onAddCell} disabled={isBusy} />
+        </div>
       </div>
     );
   }
