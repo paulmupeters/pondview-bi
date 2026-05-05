@@ -50,7 +50,7 @@
         "react-dom": "19.2.5",
         "react-markdown": "^10.1.0",
         "react-native-purchases": "^10.0.0",
-        "react-native-purchases-ui": "^9.15.2",
+        "react-native-purchases-ui": "^10.0.1",
         "react-router-dom": "^7.14.1",
         "recharts": "3.8.0",
         "remark-gfm": "^4.0.1",
@@ -1465,7 +1465,7 @@
 
     "react-native-purchases": ["react-native-purchases@10.0.0", "", { "dependencies": { "@revenuecat/purchases-js-hybrid-mappings": "18.0.0", "@revenuecat/purchases-typescript-internal": "18.0.0" }, "peerDependencies": { "react": ">= 16.6.3", "react-native": ">= 0.73.0", "react-native-web": "*" }, "optionalPeers": ["react-native-web"] }, "sha512-zNRb6VYoozlg7cpajrTWakeDJcxNYZ9botetlV61LmLxagKwQ4ohgIVjPMjPN5ErzlM+f0TQQe6cHssapoVWbQ=="],
 
-    "react-native-purchases-ui": ["react-native-purchases-ui@9.15.2", "", { "dependencies": { "@revenuecat/purchases-typescript-internal": "17.55.1" }, "peerDependencies": { "react": "*", "react-native": ">= 0.73.0", "react-native-purchases": "9.15.2", "react-native-web": "*" }, "optionalPeers": ["react-native-web"] }, "sha512-KAB/kcRhLLUs8A4udSY2vCjlKmTQJJK6g+jH+OL2T2Rejvny1NnUCcEAAgwoq7vIV5xrPiAQdP6gsM5fus6c0g=="],
+    "react-native-purchases-ui": ["react-native-purchases-ui@10.0.1", "", { "dependencies": { "@revenuecat/purchases-typescript-internal": "18.1.0" }, "peerDependencies": { "react": "*", "react-native": ">= 0.73.0", "react-native-purchases": "10.0.1", "react-native-web": "*" }, "optionalPeers": ["react-native-web"] }, "sha512-sCwtdyucZbCSg6RVfpexALzSHtKByyPfFB8lgpWB1S9z8q0zLBZ0oqs5TzyI3b5ohT+h+S7Ez8j5t1z1fGxNtw=="],
 
     "react-redux": ["react-redux@9.2.0", "", { "dependencies": { "@types/use-sync-external-store": "^0.0.6", "use-sync-external-store": "^1.4.0" }, "peerDependencies": { "@types/react": "^18.2.25 || ^19", "react": "^18.0 || ^19", "redux": "^5.0.0" }, "optionalPeers": ["@types/react", "redux"] }, "sha512-ROY9fvHhwOD9ySfrF0wmvu//bKCQ6AeZZq1nJNtbDC+kk5DuSuNX/n6YWYF/SYy7bSba4D4FSz8DJeKY/S/r+g=="],
 
@@ -1881,7 +1881,7 @@
 
     "react-native/yargs": ["yargs@17.7.2", "", { "dependencies": { "cliui": "^8.0.1", "escalade": "^3.1.1", "get-caller-file": "^2.0.5", "require-directory": "^2.1.1", "string-width": "^4.2.3", "y18n": "^5.0.5", "yargs-parser": "^21.1.1" } }, "sha512-7dSzzRQ++CKnNI/krKnYRV7JKKPUXMEh61soaHKg9mrWEhzFWhFnxPxGl+69cD1Ou63C13NUPCnmIcrvqCuM6w=="],
 
-    "react-native-purchases-ui/@revenuecat/purchases-typescript-internal": ["@revenuecat/purchases-typescript-internal@17.55.1", "", {}, "sha512-t49IP5hdlLEi+csqH8J8fo+DvCucWBwDnv+bVQca1Ogdry6VnY0HVdH1z743h9F4vKwFGTJ3XK5TUcahlK+U3Q=="],
+    "react-native-purchases-ui/@revenuecat/purchases-typescript-internal": ["@revenuecat/purchases-typescript-internal@18.1.0", "", {}, "sha512-aoXmrvDSCVStXAbv+yfUkb1BEIga2hXYiUSLHOoGMX6luXXlSLNMeG7nhvMa7gXTgjnEZXDYOG59en4NNBtJ6A=="],
 
     "rolldown/@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-rc.9", "", {}, "sha512-w6oiRWgEBl04QkFZgmW+jnU1EC9b57Oihi2ot3HNWIQRqgHp5PnYDia5iZ5FF7rpa4EQdiqMDXjlqKGXBhsoXw=="],
 

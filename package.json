@@ -70,7 +70,7 @@
     "react-dom": "19.2.5",
     "react-markdown": "^10.1.0",
     "react-native-purchases": "^10.0.0",
-    "react-native-purchases-ui": "^9.15.2",
+    "react-native-purchases-ui": "^10.0.1",
     "react-router-dom": "^7.14.1",
     "recharts": "3.8.0",
     "remark-gfm": "^4.0.1",
