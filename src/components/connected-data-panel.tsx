@@ -810,7 +810,32 @@ export function ConnectedDataPanel({
             "flex h-full w-11 flex-col items-center border-r border-border bg-background p-2 transition-all duration-200 ease-out",
             className,
           )}
-        ></div>
+        >
+          {canToggleCollapse ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground hover:text-foreground mt-2"
+                  onClick={onToggleCollapse}
+                  aria-label={getExplorerToggleLabel(true)}
+                >
+                  <PanelLeft />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {getExplorerToggleLabel(true)}
+                {toggleShortcutLabel ? (
+                  <kbd className="ml-1 rounded border border-border/40 bg-background/20 px-1 py-0.5 font-mono text-[10px]">
+                    {toggleShortcutLabel}
+                  </kbd>
+                ) : null}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+        </div>
       );
     }
 

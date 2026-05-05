@@ -45,6 +45,7 @@ export default defineConfig(({ command, mode }) => {
               {
                 name: "vendor-ai",
                 test: /node_modules\/(@ai-sdk|ai)\//,
+                maxSize: 2_000_000,
               },
               {
                 name: "vendor-duckdb",

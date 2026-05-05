@@ -664,19 +664,6 @@ export function DashboardDataCardDialog({
                     </div>
 
                     <div className="space-y-4">
-                      <div className="rounded-xl border border-border bg-background p-4">
-                        <MetaFields
-                          titleId="existing-measure-card-title"
-                          descriptionId="existing-measure-card-description"
-                          takeawayId="existing-measure-card-takeaway"
-                          meta={measureCardMeta}
-                          onChange={setMeasureCardMeta}
-                          showTakeaway={true}
-                          titlePlaceholder="Metric title"
-                          descriptionPlaceholder="What this metric represents"
-                        />
-                      </div>
-
                       <div className="rounded-2xl border border-border bg-muted/20 p-4">
                         <MetricCard
                           value={measurePreviewValue}
@@ -695,6 +682,19 @@ export function DashboardDataCardDialog({
                               : undefined
                           }
                           className="border-0 bg-transparent shadow-none"
+                        />
+                      </div>
+
+                      <div className="rounded-xl border border-border bg-background p-4">
+                        <MetaFields
+                          titleId="existing-measure-card-title"
+                          descriptionId="existing-measure-card-description"
+                          takeawayId="existing-measure-card-takeaway"
+                          meta={measureCardMeta}
+                          onChange={setMeasureCardMeta}
+                          showTakeaway={true}
+                          titlePlaceholder="Metric title"
+                          descriptionPlaceholder="What this metric represents"
                         />
                       </div>
                     </div>
@@ -744,11 +744,12 @@ export function DashboardDataCardDialog({
                       onToggleCollapse={() =>
                         setIsExplorerCollapsed((prev) => !prev)
                       }
+                      showCollapseToggle
                       className="hidden shrink-0 bg-background md:flex"
                       sqlBackend={resolvedSqlBackend}
                     />
 
-                    <div className="min-w-0 flex-1 p-4">
+                    <div className="min-w-0 flex-1 px-4 pt-4 pb-2">
                       <SqlPreviewPanel
                         ref={sqlPreviewRef}
                         query={sql}
@@ -772,6 +773,7 @@ export function DashboardDataCardDialog({
                         onRun={(result) => {
                           setRunResult(result);
                           setExplorerRefreshToken((prev) => prev + 1);
+                          setIsExplorerCollapsed(true);
                         }}
                         onCancel={() => {
                           setRunResult(null);
@@ -783,39 +785,93 @@ export function DashboardDataCardDialog({
 
                 {runResult ? (
                   <div className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Tabs
-                        value={sqlVisualType}
-                        onValueChange={(nextValue) => {
-                          if (
-                            nextValue === "card" ||
-                            nextValue === "chart" ||
-                            nextValue === "table"
-                          ) {
-                            setSqlVisualType(nextValue);
-                            setShowVisualOptions(nextValue === "chart");
-                            setError(null);
-                          }
-                        }}
-                      >
-                        <TabsList>
-                          {sqlVisualOptions.map((option) => (
-                            <TabsTrigger key={option} value={option}>
-                              {option === "card"
-                                ? "Metric"
-                                : option.charAt(0).toUpperCase() +
-                                  option.slice(1)}
-                            </TabsTrigger>
-                          ))}
-                        </TabsList>
-                      </Tabs>
-                      <p className="text-sm text-muted-foreground">
-                        {sqlCardAllowed
-                          ? "Single-value result detected, so metric mode is available automatically."
-                          : chartAllowed
-                            ? "Chart and table views are available for this result."
-                            : "This result is best saved as a table."}
-                      </p>
+                    <div className="overflow-hidden rounded-xl border border-border bg-background">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2">
+                        <Tabs
+                          value={sqlVisualType}
+                          onValueChange={(nextValue) => {
+                            if (
+                              nextValue === "card" ||
+                              nextValue === "chart" ||
+                              nextValue === "table"
+                            ) {
+                              setSqlVisualType(nextValue);
+                              setShowVisualOptions(nextValue === "chart");
+                              setError(null);
+                            }
+                          }}
+                        >
+                          <TabsList>
+                            {sqlVisualOptions.map((option) => (
+                              <TabsTrigger key={option} value={option}>
+                                {option === "card"
+                                  ? "Metric"
+                                  : option.charAt(0).toUpperCase() +
+                                    option.slice(1)}
+                              </TabsTrigger>
+                            ))}
+                          </TabsList>
+                        </Tabs>
+                        <p className="text-xs text-muted-foreground">
+                          {sqlCardAllowed
+                            ? "Single-value result — metric mode available"
+                            : chartAllowed
+                              ? "Chart and table views available"
+                              : "Best saved as a table"}
+                        </p>
+                      </div>
+
+                      <div className="bg-muted/20 p-4">
+                        {sqlVisualType === "card" ? (
+                          <MetricCard
+                            value={sqlPreviewValue}
+                            title={sqlCardMeta.title.trim() || "Metric"}
+                            description={
+                              sqlCardMeta.description.trim() || "Metric preview"
+                            }
+                            takeaway={
+                              sqlCardMeta.takeaway?.trim()
+                                ? sqlCardMeta.takeaway.trim()
+                                : undefined
+                            }
+                            className="border-0 bg-transparent shadow-none"
+                          />
+                        ) : sqlVisualType === "chart" ? (
+                          chartAllowed ? (
+                            <div className="min-h-90 overflow-auto rounded-xl bg-background p-4">
+                              <DynamicChart
+                                chartData={rows}
+                                chartConfig={{
+                                  ...(chartConfig ?? defaultChartConfig),
+                                  title: chartMeta.title,
+                                  description: chartMeta.description,
+                                }}
+                                className="w-full"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex min-h-[320px] items-center justify-center text-sm text-muted-foreground">
+                              Run a query with at least two columns to preview a
+                              chart.
+                            </div>
+                          )
+                        ) : (
+                          <div className="min-h-[320px] overflow-auto rounded-xl bg-background p-4">
+                            <SqlResultsTable
+                              dataOverride={{
+                                stage: "complete",
+                                columns,
+                                rows: runResult.rows as Record<
+                                  string,
+                                  unknown
+                                >[],
+                              }}
+                              dbIdentifier={resolvedDbIdentifier ?? undefined}
+                              backendPreference={resolvedSqlBackend}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="rounded-xl border border-border bg-background p-4">
@@ -867,8 +923,7 @@ export function DashboardDataCardDialog({
                                   Visual options
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                  Tweak the chart setup without squeezing the
-                                  preview.
+                                  Tweak the chart setup
                                 </div>
                               </div>
                               <ChevronDown
@@ -893,55 +948,6 @@ export function DashboardDataCardDialog({
                         </div>
                       </Collapsible>
                     ) : null}
-
-                    <div className="rounded-2xl border border-border bg-muted/20 p-4">
-                      {sqlVisualType === "card" ? (
-                        <MetricCard
-                          value={sqlPreviewValue}
-                          title={sqlCardMeta.title.trim() || "Metric"}
-                          description={
-                            sqlCardMeta.description.trim() || "Metric preview"
-                          }
-                          takeaway={
-                            sqlCardMeta.takeaway?.trim()
-                              ? sqlCardMeta.takeaway.trim()
-                              : undefined
-                          }
-                          className="border-0 bg-transparent shadow-none"
-                        />
-                      ) : sqlVisualType === "chart" ? (
-                        chartAllowed ? (
-                          <div className="min-h-90 overflow-auto rounded-xl bg-background p-4">
-                            <DynamicChart
-                              chartData={rows}
-                              chartConfig={{
-                                ...(chartConfig ?? defaultChartConfig),
-                                title: chartMeta.title,
-                                description: chartMeta.description,
-                              }}
-                              className="w-full"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex min-h-[320px] items-center justify-center text-sm text-muted-foreground">
-                            Run a query with at least two columns to preview a
-                            chart.
-                          </div>
-                        )
-                      ) : (
-                        <div className="min-h-[320px] overflow-auto rounded-xl bg-background p-4">
-                          <SqlResultsTable
-                            dataOverride={{
-                              stage: "complete",
-                              columns,
-                              rows: runResult.rows as Record<string, unknown>[],
-                            }}
-                            dbIdentifier={resolvedDbIdentifier ?? undefined}
-                            backendPreference={resolvedSqlBackend}
-                          />
-                        </div>
-                      )}
-                    </div>
                   </div>
                 ) : (
                   <div className="rounded-xl border border-dashed border-border bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
