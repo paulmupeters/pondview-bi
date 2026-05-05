@@ -264,7 +264,10 @@ export const SqlPreviewPanel = forwardRef<
           )}
           placeholder="SELECT * FROM ..."
           onKeyDown={(event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+            if (
+              ((event.metaKey || event.ctrlKey) && event.key === "Enter") ||
+              (event.shiftKey && event.key === "Enter")
+            ) {
               event.preventDefault();
               if (!isBusy) {
                 void handleRun();
@@ -275,7 +278,7 @@ export const SqlPreviewPanel = forwardRef<
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-muted-foreground">
-              Cmd/Ctrl + Enter to run
+              Cmd/Ctrl/Shift + Enter to run
             </span>
             {lastRunDuration !== null && (
               <span className="text-[11px] text-muted-foreground">
