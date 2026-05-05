@@ -12,6 +12,7 @@ export type WasmTableEntry = {
   schema: string;
   name: string;
   type: string;
+  columns?: { name: string; type?: string }[];
 };
 
 const LIST_WASM_TABLES_SQL = `
@@ -20,6 +21,68 @@ const LIST_WASM_TABLES_SQL = `
   WHERE table_schema NOT IN (${RUNTIME_SCHEMA_EXCLUSION_SQL})
   ORDER BY table_catalog, table_schema, table_name
 `;
+
+const LIST_WASM_COLUMNS_SQL = `
+  SELECT table_catalog, table_schema, table_name, column_name, data_type, ordinal_position
+  FROM information_schema.columns
+  WHERE table_schema NOT IN (${RUNTIME_SCHEMA_EXCLUSION_SQL})
+  ORDER BY table_catalog, table_schema, table_name, ordinal_position
+`;
+
+function tableKey(entry: {
+  catalog?: string;
+  schema: string;
+  name: string;
+}): string {
+  return `${entry.catalog ?? ""}.${entry.schema}.${entry.name}`;
+}
+
+function attachWasmColumnMetadata(
+  tables: WasmTableEntry[],
+  rows: Record<string, unknown>[],
+): WasmTableEntry[] {
+  const columnsByTable = new Map<
+    string,
+    { name: string; type?: string; ordinal: number }[]
+  >();
+
+  for (const row of rows) {
+    const schema = String(row.table_schema ?? "").trim();
+    const name = String(row.table_name ?? "").trim();
+    const columnName = String(row.column_name ?? "").trim();
+
+    if (
+      schema.length === 0 ||
+      name.length === 0 ||
+      columnName.length === 0 ||
+      isHiddenRuntimeSchema(schema)
+    ) {
+      continue;
+    }
+
+    const catalog = String(row.table_catalog ?? "").trim();
+    const key = tableKey({ catalog, schema, name });
+    const existing = columnsByTable.get(key) ?? [];
+    existing.push({
+      name: columnName,
+      type: String(row.data_type ?? row.column_type ?? "").trim() || undefined,
+      ordinal:
+        typeof row.ordinal_position === "number"
+          ? row.ordinal_position
+          : Number(row.ordinal_position ?? existing.length + 1),
+    });
+    columnsByTable.set(key, existing);
+  }
+
+  return tables.map((table) => {
+    const columns = columnsByTable
+      .get(tableKey(table))
+      ?.sort((a, b) => a.ordinal - b.ordinal)
+      .map(({ name, type }) => ({ name, type }));
+
+    return columns ? { ...table, columns } : table;
+  });
+}
 
 export function parseWasmTables(
   rows: Record<string, unknown>[],
@@ -73,12 +136,19 @@ export function useWasmTables(
         executeWasmSql(LIST_WASM_TABLES_SQL),
         resolveCurrentCatalog(executeWasmSql),
       ]);
+      let tables = parseWasmTables(result.rows);
+      try {
+        const columnsResult = await executeWasmSql(LIST_WASM_COLUMNS_SQL);
+        tables = attachWasmColumnMetadata(tables, columnsResult.rows);
+      } catch (error) {
+        console.warn("[useWasmTables] Failed to load columns:", error);
+      }
 
       if (!isMountedRef.current) {
         return;
       }
 
-      setTables(parseWasmTables(result.rows));
+      setTables(tables);
       setCurrentCatalog(nextCurrentCatalog);
     } catch (err) {
       if (!isMountedRef.current) {

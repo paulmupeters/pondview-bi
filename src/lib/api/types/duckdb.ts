@@ -9,6 +9,7 @@ export type DuckdbTableEntry = {
   schema: string;
   name: string;
   type: string;
+  columns?: { name: string; type?: string }[];
 };
 
 export type DuckdbTablesResponse = {
