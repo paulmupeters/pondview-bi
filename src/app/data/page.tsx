@@ -1,7 +1,12 @@
-import { FileJson, Plug, RefreshCw, Table2 } from "lucide-react";
+import { ChevronDown, FileJson, Plug, RefreshCw, Table2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
 import { useWasmTables } from "@/hooks/use-wasm-tables";
@@ -25,7 +30,12 @@ import { cn } from "@/lib/utils";
 /*  Types                                                               */
 /* ------------------------------------------------------------------ */
 
-type TableEntry = { name: string; type: string };
+type TableEntry = {
+  catalog?: string;
+  name: string;
+  type: string;
+  columns?: { name: string; type?: string }[];
+};
 type SchemaGroup = { schema: string; tables: TableEntry[] };
 
 const SCHEMA_SKELETON_KEYS = [
@@ -90,6 +100,7 @@ function TableCatalog({
     <div className="space-y-3">
       {groups.map((group, i) => {
         const delayMs = Math.min(i, 10) * 50;
+
         return (
           <div
             key={group.schema}
@@ -104,32 +115,79 @@ function TableCatalog({
           >
             {/* Schema header */}
             <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-2.5">
-              <div className="flex items-center gap-2.5">
+              <div className="flex min-w-0 items-center gap-2.5">
                 <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary/70">
                   Schema
                 </span>
-                <span className="font-mono text-sm font-semibold text-foreground">
+                <span className="truncate font-mono text-sm font-semibold text-foreground">
                   {group.schema}
                 </span>
               </div>
-              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                {group.tables.length}
+              <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+                {group.tables.length} table
+                {group.tables.length !== 1 ? "s" : ""} ·{" "}
+                {group.tables.reduce(
+                  (acc, table) => acc + (table.columns?.length ?? 0),
+                  0,
+                )}{" "}
+                columns
               </span>
             </div>
             {/* Table rows */}
             <div className="divide-y divide-border">
               {group.tables.map((table) => (
-                <div
-                  key={`${group.schema}.${table.name}`}
-                  className="flex items-center justify-between px-4 py-2 transition-colors hover:bg-accent/[0.04]"
+                <Collapsible
+                  key={`${table.catalog ?? "default"}.${group.schema}.${table.name}`}
                 >
-                  <span className="text-sm font-medium text-card-foreground">
-                    {table.name}
-                  </span>
-                  <span className="inline-flex rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
-                    {table.type}
-                  </span>
-                </div>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="group flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/[0.04]"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=closed]:-rotate-90" />
+                        <span className="min-w-0 truncate text-sm font-medium text-card-foreground">
+                          {table.name}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                          {table.columns?.length ?? 0} columns
+                        </span>
+                        <span className="inline-flex rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+                          {table.type}
+                        </span>
+                      </div>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    {table.columns && table.columns.length > 0 ? (
+                      <div className="border-t border-border/60 bg-muted/10 px-10 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {table.columns.map((column) => (
+                            <span
+                              key={`${table.catalog ?? "default"}.${group.schema}.${table.name}.${column.name}`}
+                              className="inline-flex max-w-full items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                            >
+                              <span className="truncate text-foreground">
+                                {column.name}
+                              </span>
+                              {column.type && (
+                                <span className="shrink-0 uppercase text-muted-foreground/70">
+                                  {column.type}
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="border-t border-border/60 bg-muted/10 px-10 py-3 font-mono text-[10px] text-muted-foreground">
+                        Columns unavailable
+                      </p>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
               ))}
             </div>
           </div>
@@ -245,9 +303,21 @@ export default function ViewDataPage() {
 
       const existing = grouped.get(schema);
       if (existing) {
-        existing.push({ name: table.name, type: table.type });
+        existing.push({
+          catalog,
+          name: table.name,
+          type: table.type,
+          columns: table.columns,
+        });
       } else {
-        grouped.set(schema, [{ name: table.name, type: table.type }]);
+        grouped.set(schema, [
+          {
+            catalog,
+            name: table.name,
+            type: table.type,
+            columns: table.columns,
+          },
+        ]);
       }
     }
 

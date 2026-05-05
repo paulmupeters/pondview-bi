@@ -26,6 +26,68 @@ const LIST_TABLES_SQL = `
   ORDER BY table_catalog, table_schema, table_name
 `;
 
+const LIST_COLUMNS_SQL = `
+  SELECT table_catalog, table_schema, table_name, column_name, data_type, ordinal_position
+  FROM information_schema.columns
+  WHERE table_schema NOT IN (${RUNTIME_SCHEMA_EXCLUSION_SQL})
+  ORDER BY table_catalog, table_schema, table_name, ordinal_position
+`;
+
+function tableKey(entry: {
+  catalog?: string;
+  schema: string;
+  name: string;
+}): string {
+  return `${entry.catalog ?? ""}.${entry.schema}.${entry.name}`;
+}
+
+export function attachColumnMetadata(
+  tables: DuckdbTableEntry[],
+  rows: Record<string, unknown>[],
+): DuckdbTableEntry[] {
+  const columnsByTable = new Map<
+    string,
+    { name: string; type?: string; ordinal: number }[]
+  >();
+
+  for (const row of rows) {
+    const schema = String(row.table_schema ?? "").trim();
+    const name = String(row.table_name ?? "").trim();
+    const columnName = String(row.column_name ?? "").trim();
+
+    if (
+      schema.length === 0 ||
+      name.length === 0 ||
+      columnName.length === 0 ||
+      isHiddenRuntimeSchema(schema)
+    ) {
+      continue;
+    }
+
+    const catalog = String(row.table_catalog ?? "").trim();
+    const key = tableKey({ catalog, schema, name });
+    const existing = columnsByTable.get(key) ?? [];
+    existing.push({
+      name: columnName,
+      type: String(row.data_type ?? row.column_type ?? "").trim() || undefined,
+      ordinal:
+        typeof row.ordinal_position === "number"
+          ? row.ordinal_position
+          : Number(row.ordinal_position ?? existing.length + 1),
+    });
+    columnsByTable.set(key, existing);
+  }
+
+  return tables.map((table) => {
+    const columns = columnsByTable
+      .get(tableKey(table))
+      ?.sort((a, b) => a.ordinal - b.ordinal)
+      .map(({ name, type }) => ({ name, type }));
+
+    return columns ? { ...table, columns } : table;
+  });
+}
+
 export function mapInformationSchemaRows(
   rows: Record<string, unknown>[],
 ): DuckdbTableEntry[] {
@@ -114,8 +176,18 @@ export function useDuckdbHttpTables(
             runBridgeSql(LIST_TABLES_SQL),
             resolveCurrentCatalog(runBridgeSql),
           ]);
+          let tables = mapInformationSchemaRows(result.rows);
+          try {
+            const columns = await runBridgeSql(LIST_COLUMNS_SQL);
+            tables = attachColumnMetadata(tables, columns.rows);
+          } catch (error) {
+            console.warn(
+              "[useDuckdbHttpTables] Failed to load columns:",
+              error,
+            );
+          }
           if (!isStale()) {
-            setTables(mapInformationSchemaRows(result.rows));
+            setTables(tables);
             setCurrentCatalog(nextCurrentCatalog);
           }
         } catch {
@@ -156,8 +228,15 @@ export function useDuckdbHttpTables(
           runDuckDbHttpSql(LIST_TABLES_SQL),
           resolveCurrentCatalog(runDuckDbHttpSql),
         ]);
+        let tables = mapInformationSchemaRows(result.rows);
+        try {
+          const columns = await runDuckDbHttpSql(LIST_COLUMNS_SQL);
+          tables = attachColumnMetadata(tables, columns.rows);
+        } catch (error) {
+          console.warn("[useDuckdbHttpTables] Failed to load columns:", error);
+        }
         if (!isStale()) {
-          setTables(mapInformationSchemaRows(result.rows));
+          setTables(tables);
           setCurrentCatalog(nextCurrentCatalog);
         }
       } catch {

@@ -49,14 +49,17 @@ export default defineConfig(({ command, mode }) => {
               {
                 name: "vendor-duckdb",
                 test: /node_modules\/@duckdb\//,
+                maxSize: 2_000_000,
               },
               {
                 name: "vendor-codemirror",
                 test: /node_modules\/(@codemirror|@uiw|codemirror|@lezer)\//,
+                maxSize: 2_000_000,
               },
               {
                 name: "vendor-recharts",
                 test: /node_modules\/(recharts|d3-|d3|victory|redux)\//,
+                maxSize: 2_000_000,
               },
               {
                 name: "vendor-radix",

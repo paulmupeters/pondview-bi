@@ -1412,7 +1412,7 @@ export function ConnectDataDialog({
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="size-8 rounded-full text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+                className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
                 aria-label="Close"
               >
                 <XMarkIcon className="size-4" />

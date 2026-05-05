@@ -1,0 +1,3 @@
+[   30119ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:4173/ping:0
+[   45113ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:4173/ping:0
+[   55635ms] [LOG] DuckDB-Wasm instance destroyed. @ http://127.0.0.1:4173/assets/run-query-Ba9dWoz7.js:0
