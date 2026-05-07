@@ -86,6 +86,9 @@ skills-lock.json
 docs-site/.vitepress/dist/
 docs-site/.vitepress/cache/
 
+# bridge bundled UI output
+packages/bridge/dist/
+
 # analyzer
 stats.html
 notes.md

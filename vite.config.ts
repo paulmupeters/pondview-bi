@@ -68,7 +68,13 @@ export default defineConfig(({ command, mode }) => {
               },
               {
                 name: "vendor-aws",
-                test: /node_modules\/@aws-sdk\//,
+                // Keep the AWS SDK and Smithy runtime in a single chunk. The S3
+                // client has circular references between generated AWS modules
+                // and Smithy base classes; splitting those modules can evaluate
+                // a subclass before its superclass is initialized in preview
+                // builds ("class heritage undefined").
+                test: /node_modules\/(@aws-sdk|@smithy|@aws-crypto)\//,
+                maxSize: 2_000_000,
               },
             ],
           },

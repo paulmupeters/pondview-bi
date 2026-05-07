@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository.
 
 ## Project overview
 
-Pondview is a Vite + React + TypeScript single-page BI app powered by DuckDB. It supports AI-assisted analysis, manual SQL workflows, connected data sources, charts, and dashboards.
+Pondview is a Vite + React + TypeScript single-page BI app powered by DuckDB. It supports AI-assisted analysis, manual SQL workflows, connected data sources, charts, dashboards, and a Bun-based Pondview bridge CLI/local runtime.
 
 Key technologies:
 
@@ -13,8 +13,9 @@ Key technologies:
 - Build: Vite
 - Language: TypeScript with `strict` enabled
 - Formatting/linting: Biome
-- Data/runtime: DuckDB WASM, DuckDB HTTP, Pondview bridge runtime
+- Data/runtime: DuckDB WASM, DuckDB HTTP, Pondview bridge runtime, DuckDB Node API
 - AI: AI SDK providers and browser-configured AI settings
+- CLI/workspaces: `pondview` bin, `packages/bridge`, `packages/bridge-protocol`
 
 ## Important commands
 
@@ -28,6 +29,17 @@ bun run typecheck
 bun run lint
 bun run test
 bun run format
+```
+
+Bridge CLI/runtime commands:
+
+```bash
+bun run bridge -- help
+bun run bridge -- bridge
+bun run bridge -- serve
+bun run bridge:build-ui
+bun run bridge:typecheck
+bun run bridge-protocol:typecheck
 ```
 
 Docs site commands:
@@ -56,6 +68,8 @@ bun run test
 - `src/lib/` — application logic, DuckDB/runtime code, project/workspace stores, SQL helpers
 - `src/features/` — feature-specific modules
 - `src/themes/` — theme definitions
+- `packages/bridge/` — Bun CLI and local Pondview bridge server backed by DuckDB Node API
+- `packages/bridge-protocol/` — shared bridge client, schemas, and protocol types
 - `docs-site/` — VitePress documentation
 - `scripts/` — repository maintenance scripts
 - `public/` — static assets
@@ -75,6 +89,7 @@ bun run test
 ## React/UI guidance
 
 - Use function components and hooks.
+- Keep browser UI code separate from Bun/Node-only bridge package code.
 - Follow existing design language and shared components before adding new primitives.
 - Prefer accessible Radix UI primitives and semantic HTML.
 - Biome a11y rules are warnings; still address accessibility issues when touching related UI.
@@ -87,7 +102,7 @@ Pondview supports multiple SQL backends:
 
 - `duckdb-wasm` for browser-local execution
 - `duckdb-http` for remote DuckDB HTTP execution
-- `bridge` for the Pondview bridge runtime
+- `bridge` for the Pondview bridge runtime and CLI-served local app
 
 When changing SQL execution, dashboard execution, source attachment, or materialization code:
 
@@ -95,7 +110,26 @@ When changing SQL execution, dashboard execution, source attachment, or material
 - Avoid backend-specific SQL unless guarded or adapted in the appropriate runtime layer.
 - Preserve DuckDB WASM as the local fallback path.
 - Add or update tests for SQL transformation, materialization, runtime selection, and backend-specific behavior.
-- Consult existing docs in `docs-site/introduction/` and `docs-site/guide/` when behavior changes.
+- Consult existing docs in `docs-site/guide/` when behavior changes.
+
+## Bridge CLI/runtime guidance
+
+The repository includes a Bun CLI exposed as the `pondview` bin and developed via `bun run bridge -- ...`.
+
+Current commands include:
+
+- `pondview bridge` — start the bridge API server.
+- `pondview serve` — start the bridge API server, serve the built Pondview UI from `packages/bridge/dist`, and open the browser unless `--no-open` is passed.
+- `pondview attach <file.duckdb|s3://...> --as <alias>` — attach a DuckDB database source.
+- `pondview list-sources`, `pondview detach <source-id-or-alias>`, and `pondview query <sql>` — client commands against a running bridge.
+
+When changing the bridge CLI/server/protocol:
+
+- Keep shared request/response contracts in `packages/bridge-protocol` and validate with Zod schemas.
+- Update both server tests and browser bridge client tests when auth, config discovery, or query response shapes change.
+- Treat `--token`, `--token-env`, `PONDVIEW_TOKEN`, connection strings, and source identifiers as sensitive in logs and docs.
+- Run focused checks such as `bun test packages/bridge/src/*.test.ts`, `bun test packages/bridge/src/runtime/*.test.ts`, `bun run bridge:typecheck`, and `bun run bridge-protocol:typecheck`.
+- If `pondview serve` behavior changes, rebuild or document the bundled UI with `bun run bridge:build-ui`.
 
 ## AI feature guidance
 
@@ -126,9 +160,9 @@ Useful docs entry points:
 - `README.md`
 - `CONTRIBUTING.md`
 - `docs-site/user/index.md`
-- `docs-site/introduction/sql-runtime-backends.md`
-- `docs-site/introduction/connected-data-sources.md`
-- `docs-site/introduction/ai-provider-configuration.md`
+- `docs-site/guide/sql-runtime-backends.md`
+- `docs-site/guide/connected-data-sources.md`
+- `docs-site/guide/ai-provider-configuration.md`
 - `docs-site/guide/dashboards.md`
 
 ## Environment and secrets

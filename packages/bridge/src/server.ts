@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   bridgeAttachSourceRequestSchema,
   bridgeQueryRequestSchema,
@@ -10,6 +12,8 @@ export interface BridgeServerOptions {
   port?: number;
   token?: string;
   readonly?: boolean;
+  serveUi?: boolean;
+  staticDir?: string;
 }
 
 export interface BridgeServerHandle {
@@ -38,7 +42,7 @@ export async function startBridgeServer(
   };
 }
 
-async function handleRequest(
+export async function handleBridgeRequest(
   request: Request,
   runtime: DuckDbRuntime,
   options: BridgeServerOptions,
@@ -47,13 +51,25 @@ async function handleRequest(
     return json(null, { status: 204 });
   }
 
-  if (!isAuthorized(request, options.token)) {
-    return errorResponse("Unauthorized", 401, "unauthorized");
-  }
-
   const url = new URL(request.url);
 
   try {
+    if (request.method === "GET" && url.pathname === "/ping") {
+      return json({ status: "ok" });
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/duckdb/config") {
+      return json({
+        host: options.host ?? "127.0.0.1",
+        port: options.port ?? 17817,
+        requires_auth: Boolean(options.token),
+      });
+    }
+
+    if (!isAuthorized(request, options.token)) {
+      return errorResponse("Unauthorized", 401, "unauthorized");
+    }
+
     if (request.method === "GET" && url.pathname === "/health") {
       return json({
         ok: true,
@@ -113,11 +129,31 @@ async function handleRequest(
   }
 }
 
+async function handleRequest(
+  request: Request,
+  runtime: DuckDbRuntime,
+  options: BridgeServerOptions,
+): Promise<Response> {
+  const apiResponse = await handleBridgeRequest(request, runtime, options);
+  if (
+    !options.serveUi ||
+    apiResponse.status !== 404 ||
+    request.method !== "GET"
+  ) {
+    return apiResponse;
+  }
+
+  return serveStaticUi(request, options.staticDir);
+}
+
 function isAuthorized(request: Request, token: string | undefined): boolean {
   if (!token) {
     return true;
   }
-  return request.headers.get("authorization") === `Bearer ${token}`;
+  return (
+    request.headers.get("authorization") === `Bearer ${token}` ||
+    request.headers.get("x-api-key") === token
+  );
 }
 
 function json(body: unknown, init: ResponseInit = {}): Response {
@@ -148,4 +184,63 @@ function errorResponse(
     },
     { status },
   );
+}
+
+async function serveStaticUi(
+  request: Request,
+  staticDir = defaultStaticDir(),
+): Promise<Response> {
+  const root = resolve(staticDir);
+  const url = new URL(request.url);
+  const pathname = decodeURIComponent(url.pathname);
+  const requestedPath = pathname === "/" ? "/index.html" : pathname;
+  const filePath = resolve(root, `.${requestedPath}`);
+
+  if (!filePath.startsWith(root)) {
+    return errorResponse("Not found", 404, "not_found");
+  }
+
+  if (existsSync(filePath)) {
+    const file = Bun.file(filePath);
+    if (await file.exists()) {
+      return new Response(file, {
+        headers: {
+          "content-type": contentTypeForPath(filePath),
+        },
+      });
+    }
+  }
+
+  const indexPath = resolve(root, "index.html");
+  const indexFile = Bun.file(indexPath);
+  if (await indexFile.exists()) {
+    return new Response(indexFile, {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+      },
+    });
+  }
+
+  return errorResponse(
+    `Bundled Pondview UI was not found at ${indexPath}. Run bun run bridge:build-ui to build packages/bridge/dist first.`,
+    404,
+    "ui_not_built",
+  );
+}
+
+function defaultStaticDir(): string {
+  return resolve(import.meta.dirname, "../dist");
+}
+
+function contentTypeForPath(path: string): string {
+  if (path.endsWith(".html")) return "text/html; charset=utf-8";
+  if (path.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (path.endsWith(".css")) return "text/css; charset=utf-8";
+  if (path.endsWith(".json")) return "application/json; charset=utf-8";
+  if (path.endsWith(".svg")) return "image/svg+xml";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+  if (path.endsWith(".ico")) return "image/x-icon";
+  if (path.endsWith(".wasm")) return "application/wasm";
+  return "application/octet-stream";
 }

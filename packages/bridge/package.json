@@ -3,10 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "files": [
+    "src",
+    "dist",
+    "package.json",
+    "README.md"
+  ],
   "bin": {
     "pondview": "./src/cli.ts"
   },
   "scripts": {
+    "prepack": "bun run --cwd ../.. bridge:build-ui",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test"
   },

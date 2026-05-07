@@ -24,6 +24,12 @@ export interface PondviewJsonCompactResponse {
   };
 }
 
+export interface PondviewBridgeQueryResponse {
+  columns: Array<{ name: string; type?: string }>;
+  rows: Record<string, unknown>[];
+  rowCount: number;
+}
+
 export interface BridgeQueryResult {
   rows: Record<string, unknown>[];
   columns: { name: string; type?: string }[];
@@ -112,15 +118,66 @@ function toRowObjects(payload: PondviewJsonCompactResponse): {
   return { rows, columns };
 }
 
+function parseQueryPayload(payload: unknown): {
+  rows: Record<string, unknown>[];
+  columns: { name: string; type?: string }[];
+} {
+  if (isBridgeQueryResponse(payload)) {
+    return {
+      rows: payload.rows,
+      columns: payload.columns,
+    };
+  }
+
+  if (isCompactQueryResponse(payload)) {
+    return toRowObjects(payload);
+  }
+
+  throw new Error("Bridge query response is invalid.");
+}
+
+function isBridgeQueryResponse(
+  payload: unknown,
+): payload is PondviewBridgeQueryResponse {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const candidate = payload as Partial<PondviewBridgeQueryResponse>;
+  return Array.isArray(candidate.columns) && Array.isArray(candidate.rows);
+}
+
+function isCompactQueryResponse(
+  payload: unknown,
+): payload is PondviewJsonCompactResponse {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const candidate = payload as Partial<PondviewJsonCompactResponse>;
+  return (
+    Array.isArray(candidate.meta) &&
+    Array.isArray(candidate.data) &&
+    typeof candidate.rows === "number"
+  );
+}
+
 async function parseError(response: Response): Promise<string> {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     const payload = (await response.json().catch(() => ({}))) as {
-      error?: string;
+      error?: string | { message?: string };
       message?: string;
     };
-    if (payload.error?.trim()) {
+    if (typeof payload.error === "string" && payload.error.trim()) {
       return payload.error;
+    }
+    if (
+      typeof payload.error === "object" &&
+      typeof payload.error.message === "string" &&
+      payload.error.message.trim()
+    ) {
+      return payload.error.message;
     }
     if (payload.message?.trim()) {
       return payload.message;
@@ -349,8 +406,8 @@ export async function runBridgeQuery(
     throw new Error(message);
   }
 
-  const payload = (await response.json()) as PondviewJsonCompactResponse;
-  const converted = toRowObjects(payload);
+  const payload = (await response.json()) as unknown;
+  const converted = parseQueryPayload(payload);
   const durationMs = Math.max(0, Math.round(nowMs() - startedAt));
 
   return {

@@ -6,6 +6,7 @@ import {
   getBridgeSession,
   hasSessionSecret,
   refreshBridgeConfig,
+  runBridgeQuery,
   setSessionSecret,
 } from "@/lib/bridge/pondview-bridge";
 
@@ -168,5 +169,27 @@ describe("pondview bridge browser state", () => {
     expect(session.hasSecret).toBe(false);
     expect(session.requiresAuth).toBe(false);
     expect(session.isQueryReady).toBe(true);
+  });
+
+  test("reads modern bridge query responses", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          columns: [{ name: "answer", type: "INTEGER" }],
+          rows: [{ answer: 42 }],
+          rowCount: 1,
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      )) as unknown as typeof fetch;
+
+    const result = await runBridgeQuery("SELECT 42 AS answer;");
+
+    expect(result.columns).toEqual([{ name: "answer", type: "INTEGER" }]);
+    expect(result.rows).toEqual([{ answer: 42 }]);
   });
 });

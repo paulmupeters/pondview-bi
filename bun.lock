@@ -10,6 +10,7 @@
         "@ai-sdk/react": "^3.0.155",
         "@aws-sdk/client-s3": "^3.1037.0",
         "@codemirror/lang-sql": "^6.10.0",
+        "@codemirror/language": "^6.11.3",
         "@codemirror/state": "^6.6.0",
         "@codemirror/theme-one-dark": "^6.1.3",
         "@codemirror/view": "^6.41.0",
@@ -48,7 +49,6 @@
         "react": "19.2.5",
         "react-dom": "19.2.5",
         "react-markdown": "^10.1.0",
-        "react-native-purchases": "^10.0.0",
         "react-native-purchases-ui": "^9.15.2",
         "react-router-dom": "^7.14.1",
         "recharts": "3.8.0",
@@ -566,7 +566,7 @@
 
     "@revenuecat/purchases-js-hybrid-mappings": ["@revenuecat/purchases-js-hybrid-mappings@18.0.0", "", { "dependencies": { "@revenuecat/purchases-js": "1.32.0" } }, "sha512-4JBXFdVukkozyJPIyR6ICHkfsQ/Q8uDRhmjPeUmrEo8MCe+0nPkhM6Zs6fN6C3jq3PyTC9Psua2BMMYfYmtN/A=="],
 
-    "@revenuecat/purchases-typescript-internal": ["@revenuecat/purchases-typescript-internal@18.0.0", "", {}, "sha512-8pDeNs1KmtS+0L0LATUQ1i5Y7OvViBY+Xsd8BGiplX2iqIIhdOoBcmhqaFymbcn8aEOIw7SeNScMJ7wydH+l1g=="],
+    "@revenuecat/purchases-typescript-internal": ["@revenuecat/purchases-typescript-internal@17.55.1", "", {}, "sha512-t49IP5hdlLEi+csqH8J8fo+DvCucWBwDnv+bVQca1Ogdry6VnY0HVdH1z743h9F4vKwFGTJ3XK5TUcahlK+U3Q=="],
 
     "@rolldown/binding-android-arm64": ["@rolldown/binding-android-arm64@1.0.0-rc.9", "", { "os": "android", "cpu": "arm64" }, "sha512-lcJL0bN5hpgJfSIz/8PIf02irmyL43P+j1pTCfbD1DbLkmGRuFIA4DD3B3ZOvGqG0XiVvRznbKtN0COQVaKUTg=="],
 
@@ -1910,7 +1910,7 @@
 
     "react-native/yargs": ["yargs@17.7.2", "", { "dependencies": { "cliui": "^8.0.1", "escalade": "^3.1.1", "get-caller-file": "^2.0.5", "require-directory": "^2.1.1", "string-width": "^4.2.3", "y18n": "^5.0.5", "yargs-parser": "^21.1.1" } }, "sha512-7dSzzRQ++CKnNI/krKnYRV7JKKPUXMEh61soaHKg9mrWEhzFWhFnxPxGl+69cD1Ou63C13NUPCnmIcrvqCuM6w=="],
 
-    "react-native-purchases-ui/@revenuecat/purchases-typescript-internal": ["@revenuecat/purchases-typescript-internal@17.55.1", "", {}, "sha512-t49IP5hdlLEi+csqH8J8fo+DvCucWBwDnv+bVQca1Ogdry6VnY0HVdH1z743h9F4vKwFGTJ3XK5TUcahlK+U3Q=="],
+    "react-native-purchases/@revenuecat/purchases-typescript-internal": ["@revenuecat/purchases-typescript-internal@18.0.0", "", {}, "sha512-8pDeNs1KmtS+0L0LATUQ1i5Y7OvViBY+Xsd8BGiplX2iqIIhdOoBcmhqaFymbcn8aEOIw7SeNScMJ7wydH+l1g=="],
 
     "rolldown/@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-rc.9", "", {}, "sha512-w6oiRWgEBl04QkFZgmW+jnU1EC9b57Oihi2ot3HNWIQRqgHp5PnYDia5iZ5FF7rpa4EQdiqMDXjlqKGXBhsoXw=="],
 

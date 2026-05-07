@@ -35,6 +35,28 @@ In `runQuery(...)`, `md:` identifiers are a special case: they route to `/api/du
 - Health probe: `pingBridge()` against `/ping`
 - Secret: session-only via Settings (`setSessionSecret(...)`)
 
+#### CLI autostart
+
+Bridge-backed CLI commands share the same bridge runtime state as the local UI.
+When no local bridge is running, these commands automatically start
+`pondview bridge`, wait for it to become healthy, and retry the original
+request:
+
+```bash
+pondview attach ./stations.duckdb --as stations
+pondview list-sources
+pondview detach stations
+pondview query "SELECT 42 AS answer"
+```
+
+Autostart runs the API bridge only; it does not run `pondview serve` or open the
+browser. Use `--no-autostart` to keep the old fail-fast behavior. Passing an
+explicit `--url` also disables autostart, because Pondview should not guess how
+to start a custom or remote endpoint.
+
+For the full CLI command reference, including `pondview serve` for the bundled
+local UI, see [Pondview CLI](/guide/cli).
+
 ### DuckDB over HTTP
 
 - Availability for selection fallback: config exists (`host`, `port`)
