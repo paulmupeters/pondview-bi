@@ -47,7 +47,7 @@ describe("resolveSqlBackend", () => {
     expect(backend).toBe("duckdb-wasm");
   });
 
-  test("uses duckdb-http when bridge is unavailable and http is configured", () => {
+  test("uses duckdb-wasm when bridge is unavailable even if http is configured", () => {
     const backend = resolveSqlBackend(
       {
         backendPreference: "auto",
@@ -58,7 +58,7 @@ describe("resolveSqlBackend", () => {
       }),
     );
 
-    expect(backend).toBe("duckdb-http");
+    expect(backend).toBe("duckdb-wasm");
   });
 
   test("uses bridge only when secret exists and bridge is online", () => {
@@ -130,7 +130,7 @@ describe("resolveSqlBackend", () => {
           getDuckDbHttpHealthStatus: () => "online",
         }),
       ),
-    ).toBe("duckdb-http");
+    ).toBe("duckdb-wasm");
 
     expect(
       resolveSqlBackend(
@@ -224,7 +224,7 @@ describe("resolveSelectedSqlBackend", () => {
     expect(backend).toBe("bridge");
   });
 
-  test("defaults selection to duckdb-http when bridge is not query-ready", () => {
+  test("defaults selection to duckdb-wasm when bridge is not query-ready", () => {
     const backend = resolveSelectedSqlBackend(
       {
         backendPreference: "auto",
@@ -237,7 +237,7 @@ describe("resolveSelectedSqlBackend", () => {
       }),
     );
 
-    expect(backend).toBe("duckdb-http");
+    expect(backend).toBe("duckdb-wasm");
   });
 });
 

@@ -1,3 +1,8 @@
+import {
+  bridgeConfigResponseSchema,
+  bridgeQueryResponseSchema,
+} from "@pondview/bridge-protocol";
+
 export interface PondviewBridgeConfig {
   host: string;
   port: number;
@@ -24,12 +29,6 @@ export interface PondviewJsonCompactResponse {
   };
 }
 
-export interface PondviewBridgeQueryResponse {
-  columns: Array<{ name: string; type?: string }>;
-  rows: Record<string, unknown>[];
-  rowCount: number;
-}
-
 export interface BridgeQueryResult {
   rows: Record<string, unknown>[];
   columns: { name: string; type?: string }[];
@@ -37,6 +36,7 @@ export interface BridgeQueryResult {
 }
 
 const BRIDGE_SESSION_SECRET_KEY = "bi.bridge.session-secret";
+const BRIDGE_ENDPOINT_KEY = "bi.bridge.endpoint";
 const BRIDGE_CONFIG_EVENT = "bi:bridge-config-change";
 const BRIDGE_SESSION_SECRET_EVENT = "bi:bridge-session-secret-change";
 
@@ -91,8 +91,27 @@ function getAuthHeaders(): Record<string, string> {
   }
 
   return {
-    "X-API-Key": sessionSecret,
+    Authorization: `Bearer ${sessionSecret}`,
   };
+}
+
+function normalizeBridgeEndpoint(endpoint: string): string {
+  return endpoint.trim().replace(/\/+$/, "");
+}
+
+function getBridgeEndpointFromStorage(): string | null {
+  if (!isBrowser() || typeof window.localStorage === "undefined") {
+    return null;
+  }
+
+  const value = window.localStorage.getItem(BRIDGE_ENDPOINT_KEY);
+  const endpoint = value ? normalizeBridgeEndpoint(value) : "";
+  return endpoint.length ? endpoint : null;
+}
+
+function bridgeUrl(pathname: string): string {
+  const endpoint = getBridgeEndpointFromStorage();
+  return endpoint ? `${endpoint}${pathname}` : pathname;
 }
 
 function toRowObjects(payload: PondviewJsonCompactResponse): {
@@ -122,10 +141,11 @@ function parseQueryPayload(payload: unknown): {
   rows: Record<string, unknown>[];
   columns: { name: string; type?: string }[];
 } {
-  if (isBridgeQueryResponse(payload)) {
+  const parsed = bridgeQueryResponseSchema.safeParse(payload);
+  if (parsed.success) {
     return {
-      rows: payload.rows,
-      columns: payload.columns,
+      rows: parsed.data.rows,
+      columns: parsed.data.columns,
     };
   }
 
@@ -134,17 +154,6 @@ function parseQueryPayload(payload: unknown): {
   }
 
   throw new Error("Bridge query response is invalid.");
-}
-
-function isBridgeQueryResponse(
-  payload: unknown,
-): payload is PondviewBridgeQueryResponse {
-  if (!payload || typeof payload !== "object") {
-    return false;
-  }
-
-  const candidate = payload as Partial<PondviewBridgeQueryResponse>;
-  return Array.isArray(candidate.columns) && Array.isArray(candidate.rows);
 }
 
 function isCompactQueryResponse(
@@ -224,37 +233,48 @@ export function clearSessionSecret(): void {
   }
 }
 
+export function getBridgeEndpoint(): string {
+  return getBridgeEndpointFromStorage() ?? "";
+}
+
+export function setBridgeEndpoint(endpoint: string): void {
+  if (!isBrowser() || typeof window.localStorage === "undefined") {
+    return;
+  }
+
+  const previousEndpoint = getBridgeEndpointFromStorage();
+  const nextEndpoint = normalizeBridgeEndpoint(endpoint);
+
+  if (nextEndpoint.length) {
+    window.localStorage.setItem(BRIDGE_ENDPOINT_KEY, nextEndpoint);
+  } else {
+    window.localStorage.removeItem(BRIDGE_ENDPOINT_KEY);
+  }
+
+  if (previousEndpoint !== (nextEndpoint || null)) {
+    clearBridgeConfigCache();
+    notifyBridgeConfigChange();
+  }
+}
+
+export function clearBridgeEndpoint(): void {
+  setBridgeEndpoint("");
+}
+
 export function hasSessionSecret(): boolean {
   return Boolean(getSessionSecret());
 }
 
 function parseBridgeConfig(payload: unknown): PondviewBridgeConfig | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  const candidate = payload as {
-    host?: unknown;
-    port?: unknown;
-    requires_auth?: unknown;
-  };
-  const host = typeof candidate.host === "string" ? candidate.host.trim() : "";
-  const port =
-    typeof candidate.port === "number"
-      ? candidate.port
-      : typeof candidate.port === "string"
-        ? Number.parseInt(candidate.port, 10)
-        : Number.NaN;
-  const requiresAuth = candidate.requires_auth === true;
-
-  if (!host || !Number.isFinite(port) || port < 1 || port > 65535) {
+  const parsed = bridgeConfigResponseSchema.safeParse(payload);
+  if (!parsed.success) {
     return null;
   }
 
   return {
-    host,
-    port,
-    requiresAuth,
+    host: parsed.data.host,
+    port: parsed.data.port,
+    requiresAuth: parsed.data.requires_auth,
   };
 }
 
@@ -285,7 +305,7 @@ export function clearBridgeConfigCache(): void {
 export async function refreshBridgeConfig(
   signal?: AbortSignal,
 ): Promise<PondviewBridgeConfig> {
-  const response = await fetch("/api/duckdb/config", {
+  const response = await fetch(bridgeUrl("/api/duckdb/config"), {
     method: "GET",
     cache: "no-store",
     signal,
@@ -359,7 +379,7 @@ export async function getBridgeSession(): Promise<PondviewBridgeSession> {
 }
 
 export async function pingBridge(signal?: AbortSignal): Promise<boolean> {
-  const response = await fetch("/ping", {
+  const response = await fetch(bridgeUrl("/ping"), {
     method: "GET",
     cache: "no-store",
     signal,
@@ -386,7 +406,7 @@ export async function runBridgeQuery(
 
   const startedAt = nowMs();
 
-  const response = await fetch("/query", {
+  const response = await fetch(bridgeUrl("/query"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -421,7 +441,7 @@ export async function cancelBridgeQuery(signal?: AbortSignal): Promise<{
   status: string;
   cancelled: boolean;
 }> {
-  const response = await fetch("/cancel", {
+  const response = await fetch(bridgeUrl("/cancel"), {
     method: "POST",
     headers: {
       ...getAuthHeaders(),

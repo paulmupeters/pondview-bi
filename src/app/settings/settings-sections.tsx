@@ -459,11 +459,14 @@ type RuntimeSettingsSectionProps = {
   effectiveRuntimeLabel: string;
   selectedSqlBackend: SqlBackend;
   onSqlBackendChange: (backend: SqlBackend) => void;
-  isBridgeDiscoverable: boolean;
   bridgeOptionLabel: string;
   runtimeSettingsError: string | null;
   runtimeSettingsSuccess: string | null;
   bridgeHealthSummary: string;
+  bridgeEndpoint: string;
+  onBridgeEndpointChange: (value: string) => void;
+  onSaveBridgeEndpoint: () => void;
+  onClearBridgeEndpoint: () => void;
   bridgeSecret: string;
   onBridgeSecretChange: (value: string) => void;
   onSetBridgeSecret: () => void;
@@ -490,11 +493,14 @@ export function RuntimeSettingsSection({
   effectiveRuntimeLabel,
   selectedSqlBackend,
   onSqlBackendChange,
-  isBridgeDiscoverable,
   bridgeOptionLabel,
   runtimeSettingsError,
   runtimeSettingsSuccess,
   bridgeHealthSummary,
+  bridgeEndpoint,
+  onBridgeEndpointChange,
+  onSaveBridgeEndpoint,
+  onClearBridgeEndpoint,
   bridgeSecret,
   onBridgeSecretChange,
   onSetBridgeSecret,
@@ -521,9 +527,8 @@ export function RuntimeSettingsSection({
         <div>
           <h3 className="text-lg font-semibold">SQL runtime</h3>
           <p className="text-sm text-muted-foreground">
-            Choose where SQL runs. Bridge uses Pondview endpoints, while DuckDB
-            over HTTP connects directly from the browser to a DuckDB{" "}
-            `httpserver` instance.
+            Choose where SQL runs. Bridge uses Pondview endpoints for local or
+            remote DuckDB execution.
           </p>
         </div>
 
@@ -550,10 +555,7 @@ export function RuntimeSettingsSection({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="duckdb-wasm">DuckDB WASM</SelectItem>
-              <SelectItem value="bridge" disabled={!isBridgeDiscoverable}>
-                {bridgeOptionLabel}
-              </SelectItem>
-              <SelectItem value="duckdb-http">DuckDB over HTTP</SelectItem>
+              <SelectItem value="bridge">{bridgeOptionLabel}</SelectItem>
             </SelectContent>
           </Select>
         </FormField>
@@ -566,19 +568,49 @@ export function RuntimeSettingsSection({
         )}
 
         {selectedSqlBackend === "bridge" && (
-          <div className="space-y-3 border-t pt-5">
-            <div>
-              <h4 className="text-sm font-semibold">Bridge auth</h4>
-              <p className="text-sm text-muted-foreground">
-                Optional session-only Pondview secret for authenticated bridge
-                queries. Leave empty when Pondview is started with an empty
-                secret.
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {bridgeHealthSummary}
-              </p>
+          <div className="space-y-5 border-t pt-5">
+            <div className="space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold">Bridge endpoint</h4>
+                <p className="text-sm text-muted-foreground">
+                  Override the Pondview bridge URL when the bridge is not served
+                  from the same origin as this app. Leave empty to use this app
+                  origin.
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {bridgeHealthSummary}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  type="url"
+                  value={bridgeEndpoint}
+                  onChange={(event) =>
+                    onBridgeEndpointChange(event.target.value)
+                  }
+                  placeholder="http://127.0.0.1:17817"
+                />
+                <Button onClick={onSaveBridgeEndpoint}>Save Endpoint</Button>
+                <Button
+                  variant="outline"
+                  onClick={onClearBridgeEndpoint}
+                  disabled={!bridgeEndpoint.trim().length}
+                >
+                  Reset
+                </Button>
+              </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
+
+            <div className="space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold">Bridge auth</h4>
+                <p className="text-sm text-muted-foreground">
+                  Optional session-only Pondview secret for authenticated bridge
+                  queries. Leave empty when Pondview is started with an empty
+                  secret.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 type="password"
                 name="settings-bridge-secret"
@@ -603,6 +635,7 @@ export function RuntimeSettingsSection({
               >
                 Clear
               </Button>
+              </div>
             </div>
           </div>
         )}

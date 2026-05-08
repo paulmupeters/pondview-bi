@@ -6,6 +6,7 @@ import {
   type BridgeServerHandle,
   type BridgeServerOptions,
   startBridgeServer,
+  startBridgeUiServer,
 } from "./server";
 
 const handles: BridgeServerHandle[] = [];
@@ -77,6 +78,35 @@ describe("bridge server modes", () => {
     });
   });
 
+  test("UI server proxies bridge API routes to an existing bridge", async () => {
+    const staticDir = createStaticDir();
+    const bridge = await startTrackedServer({ token: "secret" });
+    const ui = await startTrackedUiServer({
+      bridgeUrl: bridge.url,
+      staticDir,
+    });
+
+    const root = await fetch(`${ui.url}/`);
+    expect(root.status).toBe(200);
+    expect(await root.text()).toContain("Pondview test shell");
+
+    const config = await fetch(`${ui.url}/api/duckdb/config`);
+    expect(await config.json()).toMatchObject({ requires_auth: true });
+
+    const query = await fetch(`${ui.url}/query`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "secret",
+      },
+      body: JSON.stringify({ sql: "SELECT 9 AS value;" }),
+    });
+    expect(await query.json()).toMatchObject({
+      rows: [{ value: 9 }],
+      rowCount: 1,
+    });
+  });
+
   test("token auth accepts bearer and X-API-Key credentials", async () => {
     const server = await startTrackedServer({ token: "secret" });
 
@@ -116,6 +146,15 @@ async function startTrackedServer(
   options: BridgeServerOptions = {},
 ): Promise<BridgeServerHandle> {
   const server = await startBridgeServer({ ...options, port: 0 });
+  handles.push(server);
+  return server;
+}
+
+async function startTrackedUiServer(options: {
+  bridgeUrl: string;
+  staticDir: string;
+}): Promise<BridgeServerHandle> {
+  const server = await startBridgeUiServer({ ...options, port: 0 });
   handles.push(server);
   return server;
 }

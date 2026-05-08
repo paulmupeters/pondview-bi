@@ -28,6 +28,7 @@
     "docs:preview": "vitepress preview docs-site",
     "lint": "biome check . && bun run lint:deadcode",
     "lint:deadcode": "node scripts/check-dead-files.mjs",
+    "check": "bun run typecheck && bun run bridge-protocol:typecheck && bun run bridge:typecheck && bun run lint && bun run test",
     "format": "biome format --write",
     "typecheck": "tsc --noEmit"
   },
@@ -51,6 +52,7 @@
     "@duckdb/duckdb-wasm": "^1.32.0",
     "@duckdb/node-api": "^1.4.1-r.5",
     "@heroicons/react": "^2.2.0",
+    "@pondview/bridge-protocol": "workspace:*",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",

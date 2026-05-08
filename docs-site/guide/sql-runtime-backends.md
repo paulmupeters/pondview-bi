@@ -10,20 +10,22 @@ Backend selection is controlled by Settings and resolved by `resolveSqlBackend(.
 
 ## Backend overview
 
-| Backend | Where execution happens | Typical use |
-| --- | --- | --- |
-| `duckdb-wasm` | Browser | Local uploads, local exploration, no remote DB attachment. |
-| `bridge` | Remote service (Pondview) | Remote/external data, extension attachment flows, bridge-managed auth. |
-| `duckdb-http` | Remote DuckDB HTTP server | Remote DuckDB query execution from browser with host/port config. |
+| Backend       | Where execution happens   | Typical use                                                            |
+| ------------- | ------------------------- | ---------------------------------------------------------------------- |
+| `duckdb-wasm` | Browser                   | Local uploads, local exploration, no remote DB attachment.             |
+| `bridge`      | Remote service (Pondview) | Remote/external data, extension attachment flows, bridge-managed auth. |
+| `duckdb-http` | Remote DuckDB HTTP server | Remote DuckDB query execution from browser with host/port config.      |
 
 ## Selection rules
 
-Backend resolution combines user preference and runtime availability:
+Backend resolution combines the saved user preference and runtime availability:
 
-1. If `dbIdentifier` is explicitly local (`wasm:local` or empty), force `duckdb-wasm`.
-2. If preference is `bridge` but bridge is unavailable, fallback to `duckdb-wasm`.
-3. If preference is `duckdb-http` but HTTP config is missing, fallback to `duckdb-wasm`.
-4. If preference is `auto`, pick `bridge` when available, otherwise `duckdb-wasm`.
+1. Settings always lets you save an explicit runtime preference, including `bridge`, even if the bridge health probe currently reports unavailable.
+2. If preference is `bridge` but bridge is not query-ready, query execution falls back to `duckdb-wasm` until the bridge becomes available.
+3. If preference is `duckdb-http` but HTTP config is missing, query execution falls back to `duckdb-wasm`.
+4. If preference is `auto`, Pondview picks `bridge` when query-ready, otherwise `duckdb-wasm`.
+
+The Settings page distinguishes the selected runtime preference from the active runtime. For example, you may see `Bridge` in the selector while the active runtime shows DuckDB WASM; after bridge health/config/auth become ready, the same saved preference resolves to Bridge automatically.
 
 In `runQuery(...)`, `md:` identifiers are a special case: they route to `/api/duckdb/query` and return backend label `bridge`.
 
@@ -31,8 +33,10 @@ In `runQuery(...)`, `md:` identifiers are a special case: they route to `/api/du
 
 ### Bridge
 
-- Availability: session secret exists and bridge health is `online`
+- Availability for query execution: bridge health is `online`, bridge config is discoverable, and either auth is not required or a session secret exists.
 - Health probe: `pingBridge()` against `/ping`
+- Config probe: `refreshBridgeConfig()` against `/api/duckdb/config`
+- Endpoint: defaults to the current app origin. When running only the Vite/frontend app against a separately started bridge, set the Bridge endpoint in Settings to the bridge URL, for example `http://127.0.0.1:17817`.
 - Secret: session-only via Settings (`setSessionSecret(...)`)
 
 #### CLI autostart
@@ -53,6 +57,12 @@ Autostart runs the API bridge only; it does not run `pondview serve` or open the
 browser. Use `--no-autostart` to keep the old fail-fast behavior. Passing an
 explicit `--url` also disables autostart, because Pondview should not guess how
 to start a custom or remote endpoint.
+
+To stop an auto-started local bridge, run:
+
+```bash
+pondview stop
+```
 
 For the full CLI command reference, including `pondview serve` for the bundled
 local UI, see [Pondview CLI](/guide/cli).
@@ -88,7 +98,7 @@ When runtime changes, cache keys tied to this fingerprint should be treated as d
 
 ## Troubleshooting checklist
 
-- Query unexpectedly ran in WASM: check selected backend availability and fallback conditions.
-- Bridge selected but offline: verify session secret and bridge `/ping`.
-- HTTP selected but unavailable: verify host/port config and auth, then test connection.
+- Query unexpectedly ran in WASM: check selected backend availability and fallback conditions. A saved Bridge preference can still execute on WASM while Bridge is not query-ready.
+- Bridge selected but unavailable in a frontend-only dev server: set the Bridge endpoint in Settings to the separately running bridge origin, then verify `/ping` and `/api/duckdb/config` are reachable from the browser.
+- Bridge selected but offline: verify the endpoint, session secret, and bridge `/ping`.
 - Remote identifier error in WASM: switch runtime to Bridge or DuckDB over HTTP.

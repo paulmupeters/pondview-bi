@@ -12,11 +12,36 @@ function createNoopClient() {
         duckdb: "test",
       },
     }),
+    capabilities: async () => ({
+      runtimeBackend: "bridge" as const,
+      query: true,
+      catalog: true,
+      attachDuckDb: true,
+      importFiles: false,
+      projects: false,
+      readonly: false,
+    }),
     attachSource: async () => ({ sources: [] }),
     sources: async () => ({ sources: [] }),
     detachSource: async () => ({ sources: [] }),
     query: async () => ({ columns: [], rows: [], rowCount: 0 }),
   };
+}
+
+async function captureStdout(operation: () => Promise<void>): Promise<string> {
+  const originalLog = console.log;
+  const output: string[] = [];
+  console.log = (...values: unknown[]) => {
+    output.push(values.map(String).join(" "));
+  };
+
+  try {
+    await operation();
+  } finally {
+    console.log = originalLog;
+  }
+
+  return output.join("\n");
 }
 
 describe("bridge CLI serve browser behavior", () => {
@@ -45,6 +70,65 @@ describe("bridge CLI serve browser behavior", () => {
     });
 
     expect(openedUrls).toEqual([]);
+  });
+});
+
+describe("bridge CLI serve --use-existing", () => {
+  test("opens a local UI server for the configured bridge port", async () => {
+    const openedUrls: string[] = [];
+    const uiServers: Array<{ host?: string; port?: number; bridgeUrl: string }> =
+      [];
+
+    await runCli(
+      ["serve", "--use-existing", "--port", "18000", "--ui-port", "0"],
+      {
+        createClient: () => createNoopClient(),
+        startBridgeUiServer: async (options) => {
+          uiServers.push(options);
+          return {
+            url: "http://127.0.0.1:56789",
+            stop: async () => {},
+          };
+        },
+        openBrowser: async (url) => {
+          openedUrls.push(url);
+        },
+        waitForShutdown: async () => {},
+      },
+    );
+
+    expect(uiServers).toEqual([
+      {
+        host: "127.0.0.1",
+        port: 0,
+        bridgeUrl: "http://127.0.0.1:18000",
+      },
+    ]);
+    expect(openedUrls).toEqual(["http://127.0.0.1:56789"]);
+  });
+
+  test("fails when the configured bridge is unreachable", async () => {
+    let startedUi = false;
+
+    await expect(
+      runCli(["serve", "--use-existing", "--port", "18000"], {
+        createClient: () => ({
+          ...createNoopClient(),
+          health: async () => {
+            throw new TypeError("fetch failed");
+          },
+        }),
+        startBridgeUiServer: async () => {
+          startedUi = true;
+          return {
+            url: "http://127.0.0.1:56789",
+            stop: async () => {},
+          };
+        },
+      }),
+    ).rejects.toThrow("fetch failed");
+
+    expect(startedUi).toBe(false);
   });
 });
 
@@ -163,5 +247,92 @@ describe("bridge CLI client autostart", () => {
       "token-env": "PONDVIEW_TEST_TOKEN",
       readonly: true,
     });
+  });
+});
+
+describe("bridge CLI stop", () => {
+  test("kills processes listening on the configured port", async () => {
+    const killedPids: number[] = [];
+    const output = await captureStdout(() =>
+      runCli(["stop", "--port", "18000"], {
+        findProcessIdsByPort: async (port) => {
+          expect(port).toBe(18000);
+          return [123, 456];
+        },
+        killProcess: (pid) => {
+          killedPids.push(pid);
+        },
+      }),
+    );
+
+    expect(killedPids).toEqual([123, 456]);
+    expect(output).toBe(
+      "Stopped processes listening on port 18000: 123, 456",
+    );
+  });
+
+  test("reports when no process is listening on the configured port", async () => {
+    const output = await captureStdout(() =>
+      runCli(["stop"], {
+        findProcessIdsByPort: async (port) => {
+          expect(port).toBe(17817);
+          return [];
+        },
+        killProcess: () => {
+          throw new Error("should not kill when no process is listening");
+        },
+      }),
+    );
+
+    expect(output).toBe("No process is listening on port 17817.");
+  });
+});
+
+describe("bridge CLI doctor", () => {
+  test("prints bridge health and capabilities as JSON", async () => {
+    const output = await captureStdout(() =>
+      runCli(["doctor"], {
+        createClient: () => createNoopClient(),
+      }),
+    );
+
+    expect(JSON.parse(output)).toMatchObject({
+      ok: true,
+      url: "http://127.0.0.1:17817",
+      reachable: true,
+      health: {
+        ok: true,
+        service: "pondview-bridge",
+      },
+      capabilities: {
+        runtimeBackend: "bridge",
+        query: true,
+      },
+    });
+  });
+
+  test("reports connection failures without autostarting", async () => {
+    let started = false;
+    const output = await captureStdout(() =>
+      runCli(["doctor"], {
+        createClient: () => ({
+          ...createNoopClient(),
+          health: async () => {
+            throw new TypeError("fetch failed");
+          },
+        }),
+        startBridgeProcess: () => {
+          started = true;
+        },
+      }),
+    );
+
+    expect(JSON.parse(output)).toMatchObject({
+      ok: false,
+      url: "http://127.0.0.1:17817",
+      reachable: false,
+      error: "fetch failed",
+    });
+    expect(started).toBe(false);
   });
 });

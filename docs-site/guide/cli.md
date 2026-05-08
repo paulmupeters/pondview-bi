@@ -64,6 +64,8 @@ pondview attach ./analytics.duckdb --as analytics
 pondview list-sources
 pondview query "SELECT 42 AS answer"
 pondview detach analytics
+pondview doctor
+pondview stop
 ```
 
 If no bridge is running, client commands automatically start `pondview bridge`,
@@ -82,12 +84,36 @@ a custom or remote endpoint:
 pondview query "SELECT 42 AS answer" --url http://127.0.0.1:17818
 ```
 
+`pondview doctor` checks the configured bridge URL and prints a machine-readable
+JSON diagnostic report. It does not autostart a bridge, so it is safe to use in
+scripts and diagnostics:
+
+```bash
+pondview doctor
+pondview doctor --url http://127.0.0.1:17818
+```
+
+### `pondview stop`
+
+Stops a locally running bridge by finding the process listening on the configured
+port and sending it `SIGTERM`.
+
+```bash
+pondview stop
+pondview stop --port 17818
+```
+
+Use this after a client command auto-starts the bridge in the background, or
+when you need to stop a bridge that was started outside the current terminal.
+By default, it checks port `17817`. If no process is listening on the port, the
+command prints a message and exits successfully.
+
 ## Flags
 
 | Flag | Applies to | Description |
 | --- | --- | --- |
 | `--host <host>` | `serve`, `bridge`, client commands | Host for the local bridge. Defaults to `127.0.0.1`. |
-| `--port <port>` | `serve`, `bridge`, client commands | Port for the local bridge. Defaults to `17817`. |
+| `--port <port>` | `serve`, `bridge`, `stop`, client commands | Port for the local bridge. Defaults to `17817`. |
 | `--readonly` | `serve`, `bridge`, `attach` | Starts readonly bridge mode, or attaches a DuckDB source readonly. |
 | `--token <token>` | all bridge/client commands | Requires or sends a bridge auth token. |
 | `--token-env <name>` | all bridge/client commands | Reads the bridge auth token from an environment variable. |
@@ -97,7 +123,7 @@ pondview query "SELECT 42 AS answer" --url http://127.0.0.1:17818
 
 ## Bundled UI assets
 
-`pondview serve` serves the UI from `packages/bridge/static`. Build those assets
+`pondview serve` serves the UI from `packages/bridge/dist`. Build those assets
 before using local serve from a fresh checkout:
 
 ```bash
@@ -139,4 +165,3 @@ runtime.
 - TODO: Add file import commands for CSV and Parquet staging, for example
   `pondview import ./customers.csv --table uploads.customers`.
 - TODO: Add persistent local source binding files for project handoff.
-- TODO: Add a machine-readable `pondview doctor` command for diagnostics.

@@ -310,7 +310,7 @@ function getBackendFallbackOrder(
   preference: SqlBackendPreference,
 ): SqlBackend[] {
   if (preference === "bridge") {
-    return ["bridge", "duckdb-http", "duckdb-wasm"];
+    return ["bridge", "duckdb-wasm"];
   }
 
   if (preference === "duckdb-http") {
@@ -318,10 +318,10 @@ function getBackendFallbackOrder(
   }
 
   if (preference === "duckdb-wasm") {
-    return ["duckdb-wasm", "bridge", "duckdb-http"];
+    return ["duckdb-wasm", "bridge"];
   }
 
-  return ["bridge", "duckdb-http", "duckdb-wasm"];
+  return ["bridge", "duckdb-wasm"];
 }
 
 function pickAvailableBackend(

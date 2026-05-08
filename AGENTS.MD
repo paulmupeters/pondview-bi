@@ -60,6 +60,9 @@ bun run test
 
 ## Repository structure
 
+- Root `package.json` defines a Bun workspace monorepo with `packages/*`.
+- The current web app intentionally remains at the repository root in `src/`; do not move it to `apps/web` until package boundaries are stable enough to justify the migration.
+- Move code into packages when there are multiple real consumers. Keep web-only code in `src/`, bridge-only code in `packages/bridge/`, and shared bridge contracts in `packages/bridge-protocol/`.
 - `src/app/` — route/page-level React code
 - `src/components/` — reusable UI and feature components
 - `src/components/ui/` — shared low-level UI primitives

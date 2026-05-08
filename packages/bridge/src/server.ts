@@ -16,6 +16,13 @@ export interface BridgeServerOptions {
   staticDir?: string;
 }
 
+export interface BridgeUiServerOptions {
+  host?: string;
+  port?: number;
+  bridgeUrl: string;
+  staticDir?: string;
+}
+
 export interface BridgeServerHandle {
   url: string;
   stop: () => Promise<void>;
@@ -33,6 +40,27 @@ export async function startBridgeServer(
     port,
     async fetch(request) {
       return handleRequest(request, runtime, options);
+    },
+  });
+
+  return {
+    url: `http://${server.hostname}:${server.port}`,
+    stop: () => Promise.resolve(server.stop(true)),
+  };
+}
+
+export async function startBridgeUiServer(
+  options: BridgeUiServerOptions,
+): Promise<BridgeServerHandle> {
+  const host = options.host ?? "127.0.0.1";
+  const port = options.port ?? 0;
+  const bridgeUrl = new URL(options.bridgeUrl).toString().replace(/\/$/, "");
+
+  const server = Bun.serve({
+    hostname: host,
+    port,
+    async fetch(request) {
+      return handleUiRequest(request, bridgeUrl, options.staticDir);
     },
   });
 
@@ -144,6 +172,55 @@ async function handleRequest(
   }
 
   return serveStaticUi(request, options.staticDir);
+}
+
+async function handleUiRequest(
+  request: Request,
+  bridgeUrl: string,
+  staticDir?: string,
+): Promise<Response> {
+  if (shouldProxyToBridge(request)) {
+    return proxyBridgeRequest(request, bridgeUrl);
+  }
+
+  if (request.method === "GET") {
+    return serveStaticUi(request, staticDir);
+  }
+
+  return errorResponse("Not found", 404, "not_found");
+}
+
+function shouldProxyToBridge(request: Request): boolean {
+  const url = new URL(request.url);
+  return (
+    url.pathname === "/ping" ||
+    url.pathname === "/api/duckdb/config" ||
+    url.pathname === "/health" ||
+    url.pathname === "/capabilities" ||
+    url.pathname === "/catalog" ||
+    url.pathname === "/query" ||
+    url.pathname === "/cancel" ||
+    url.pathname === "/sources" ||
+    /^\/sources\/[^/]+$/.test(url.pathname)
+  );
+}
+
+async function proxyBridgeRequest(
+  request: Request,
+  bridgeUrl: string,
+): Promise<Response> {
+  const incomingUrl = new URL(request.url);
+  const upstreamUrl = `${bridgeUrl}${incomingUrl.pathname}${incomingUrl.search}`;
+  const init: RequestInit = {
+    method: request.method,
+    headers: request.headers,
+  };
+
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    init.body = request.body;
+  }
+
+  return fetch(upstreamUrl, init);
 }
 
 function isAuthorized(request: Request, token: string | undefined): boolean {

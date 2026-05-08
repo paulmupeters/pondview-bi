@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/select";
 import {
   clearSessionSecret,
+  getBridgeEndpoint,
+  setBridgeEndpoint,
   setSessionSecret,
 } from "@/lib/bridge/pondview-bridge";
 import {
@@ -239,6 +241,7 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [bridgeSecret, setBridgeSecret] = useState("");
+  const [bridgeEndpoint, setBridgeEndpointInput] = useState("");
   const [duckDbHttpHost, setDuckDbHttpHost] = useState("");
   const [duckDbHttpPort, setDuckDbHttpPort] = useState("");
   const [duckDbHttpAuth, setDuckDbHttpAuth] = useState("");
@@ -341,6 +344,7 @@ export default function SettingsPage() {
     setCssCode(savedCss);
     setSelectedTheme(savedTheme || (savedCss ? CUSTOM_THEME_VALUE : "default"));
     setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
+    setBridgeEndpoint(getBridgeEndpoint());
 
     const savedS3Config = readS3BackupConfigFromStorage();
     setSavedS3BackupConfig(savedS3Config);
@@ -413,6 +417,45 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveBridgeEndpoint = () => {
+    const endpoint = bridgeEndpoint.trim();
+    if (endpoint.length) {
+      try {
+        const url = new URL(endpoint);
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+          setRuntimeSettingsError("Bridge endpoint must use http or https.");
+          setRuntimeSettingsSuccess(null);
+          return;
+        }
+      } catch {
+        setRuntimeSettingsError("Bridge endpoint must be a valid URL.");
+        setRuntimeSettingsSuccess(null);
+        return;
+      }
+    }
+
+    setBridgeEndpoint(endpoint);
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(
+      endpoint
+        ? "Bridge endpoint saved."
+        : "Bridge endpoint reset to this app origin.",
+    );
+    void refreshBridgeHealth();
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleClearBridgeEndpoint = () => {
+    setBridgeEndpointInput("");
+    setBridgeEndpoint("");
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess("Bridge endpoint reset to this app origin.");
+    void refreshBridgeHealth();
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
   const handleSetBridgeSecret = () => {
     setSessionSecret(bridgeSecret);
     setRuntimeSettingsError(null);
@@ -433,10 +476,6 @@ export default function SettingsPage() {
   };
 
   const handleSqlBackendChange = (backend: SqlBackend) => {
-    if (backend === "bridge" && !isBridgeDiscoverable) {
-      return;
-    }
-
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(null);
     setSqlBackendPreferenceInStorage(backend);
@@ -1269,11 +1308,14 @@ export default function SettingsPage() {
                   effectiveRuntimeLabel={effectiveRuntimeLabel}
                   selectedSqlBackend={selectedSqlBackend}
                   onSqlBackendChange={handleSqlBackendChange}
-                  isBridgeDiscoverable={isBridgeDiscoverable}
                   bridgeOptionLabel={bridgeOptionLabel}
                   runtimeSettingsError={runtimeSettingsError}
                   runtimeSettingsSuccess={runtimeSettingsSuccess}
                   bridgeHealthSummary={bridgeHealthSummary}
+                  bridgeEndpoint={bridgeEndpoint}
+                  onBridgeEndpointChange={setBridgeEndpointInput}
+                  onSaveBridgeEndpoint={handleSaveBridgeEndpoint}
+                  onClearBridgeEndpoint={handleClearBridgeEndpoint}
                   bridgeSecret={bridgeSecret}
                   onBridgeSecretChange={setBridgeSecret}
                   onSetBridgeSecret={handleSetBridgeSecret}

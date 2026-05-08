@@ -22,6 +22,12 @@ export const bridgeCapabilitiesResponseSchema = z.object({
   readonly: z.boolean(),
 });
 
+export const bridgeConfigResponseSchema = z.object({
+  host: z.string().min(1),
+  port: z.number().int().min(1).max(65535),
+  requires_auth: z.boolean(),
+});
+
 export const bridgeColumnSchema = z.object({
   name: z.string(),
   type: z.string(),
@@ -98,6 +104,7 @@ export type BridgeHealthResponse = z.infer<typeof bridgeHealthResponseSchema>;
 export type BridgeCapabilitiesResponse = z.infer<
   typeof bridgeCapabilitiesResponseSchema
 >;
+export type BridgeConfigResponse = z.infer<typeof bridgeConfigResponseSchema>;
 export type BridgeColumn = z.infer<typeof bridgeColumnSchema>;
 export type BridgeCatalogResponse = z.infer<typeof bridgeCatalogResponseSchema>;
 export type BridgeQueryRequest = z.infer<typeof bridgeQueryRequestSchema>;

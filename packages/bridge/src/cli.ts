@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { BridgeClient } from "@pondview/bridge-protocol";
 import { type BrowserOpener, openBrowser } from "./open-browser";
-import { startBridgeServer } from "./server";
+import { startBridgeServer, startBridgeUiServer } from "./server";
 
 interface ParsedArgs {
   command: string;
@@ -16,6 +16,7 @@ const AUTOSTART_POLL_INTERVAL_MS = 100;
 
 interface BridgeApiClient {
   health: BridgeClient["health"];
+  capabilities: BridgeClient["capabilities"];
   attachSource: BridgeClient["attachSource"];
   sources: BridgeClient["sources"];
   detachSource: BridgeClient["detachSource"];
@@ -27,6 +28,9 @@ interface CliDeps {
   waitForShutdown?: () => Promise<void>;
   createClient?: (args: ParsedArgs) => BridgeApiClient;
   startBridgeProcess?: (args: ParsedArgs) => void;
+  startBridgeUiServer?: typeof startBridgeUiServer;
+  findProcessIdsByPort?: (port: number) => Promise<number[]>;
+  killProcess?: (pid: number) => void;
   sleep?: (ms: number) => Promise<void>;
 }
 
@@ -35,6 +39,9 @@ const defaultDeps = {
   waitForShutdown,
   createClient,
   startBridgeProcess,
+  startBridgeUiServer,
+  findProcessIdsByPort,
+  killProcess,
   sleep,
 } satisfies Required<CliDeps>;
 
@@ -63,6 +70,12 @@ export async function runCli(
       break;
     case "query":
       await runQuery(args, resolvedDeps);
+      break;
+    case "stop":
+      await runStop(args, resolvedDeps);
+      break;
+    case "doctor":
+      await runDoctor(args, resolvedDeps);
       break;
     case "help":
     case "--help":
@@ -101,6 +114,12 @@ async function runServe(
 ): Promise<void> {
   const host = readStringFlag(args, "host") ?? DEFAULT_HOST;
   const port = readNumberFlag(args, "port") ?? DEFAULT_PORT;
+
+  if (args.flags.has("use-existing")) {
+    await runServeWithExistingBridge(args, deps, host);
+    return;
+  }
+
   const token = readToken(args);
   const readonly = args.flags.has("readonly");
 
@@ -112,6 +131,36 @@ async function runServe(
     serveUi: true,
   });
   console.log(`Pondview local app listening at ${server.url}`);
+  console.log("Press Ctrl+C to stop.");
+
+  if (!args.flags.has("no-open")) {
+    await deps.openBrowser(server.url).catch((error) => {
+      console.warn(
+        `Could not open browser: ${error instanceof Error ? error.message : error}`,
+      );
+    });
+  }
+
+  await deps.waitForShutdown();
+  await server.stop();
+}
+
+async function runServeWithExistingBridge(
+  args: ParsedArgs,
+  deps: Required<CliDeps>,
+  host: string,
+): Promise<void> {
+  const bridgeUrl = getClientBaseUrl(args);
+
+  await deps.createClient(args).health();
+
+  const server = await deps.startBridgeUiServer({
+    host,
+    port: readNumberFlag(args, "ui-port") ?? 0,
+    bridgeUrl,
+  });
+  console.log(`Pondview local app listening at ${server.url}`);
+  console.log(`Connected to existing Pondview bridge at ${bridgeUrl}`);
   console.log("Press Ctrl+C to stop.");
 
   if (!args.flags.has("no-open")) {
@@ -181,6 +230,58 @@ async function runQuery(
   printJson(
     await runClientCommand(args, deps, (client) => client.query({ sql })),
   );
+}
+
+async function runStop(
+  args: ParsedArgs,
+  deps: Required<CliDeps>,
+): Promise<void> {
+  const port = readNumberFlag(args, "port") ?? DEFAULT_PORT;
+  const pids = await deps.findProcessIdsByPort(port);
+
+  if (pids.length === 0) {
+    console.log(`No process is listening on port ${port}.`);
+    return;
+  }
+
+  for (const pid of pids) {
+    deps.killProcess(pid);
+  }
+
+  console.log(
+    `Stopped ${pids.length === 1 ? "process" : "processes"} listening on port ${port}: ${pids.join(", ")}`,
+  );
+}
+
+async function runDoctor(
+  args: ParsedArgs,
+  deps: Required<CliDeps>,
+): Promise<void> {
+  const url = getClientBaseUrl(args);
+  const client = deps.createClient(args);
+  const result: {
+    ok: boolean;
+    url: string;
+    reachable: boolean;
+    health?: Awaited<ReturnType<BridgeApiClient["health"]>>;
+    capabilities?: Awaited<ReturnType<BridgeApiClient["capabilities"]>>;
+    error?: string;
+  } = {
+    ok: false,
+    url,
+    reachable: false,
+  };
+
+  try {
+    result.health = await client.health();
+    result.reachable = true;
+    result.capabilities = await client.capabilities();
+    result.ok = true;
+  } catch (error) {
+    result.error = formatError(error);
+  }
+
+  printJson(result);
 }
 
 async function runClientCommand<T>(
@@ -277,6 +378,24 @@ function appendFlag(target: string[], args: ParsedArgs, name: string): void {
   }
 }
 
+async function findProcessIdsByPort(port: number): Promise<number[]> {
+  const proc = Bun.spawn(["lsof", "-ti", `tcp:${port}`, "-sTCP:LISTEN"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const output = await new Response(proc.stdout).text();
+  await proc.exited;
+
+  return output
+    .split(/\s+/)
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value));
+}
+
+function killProcess(pid: number): void {
+  process.kill(pid, "SIGTERM");
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -367,13 +486,18 @@ function printHelp(): void {
 Usage:
   pondview bridge [--host 127.0.0.1] [--port 17817] [--readonly]
   pondview serve [--host 127.0.0.1] [--port 17817] [--readonly] [--no-open]
+  pondview serve --use-existing [--host 127.0.0.1] [--port 17817] [--ui-port 0] [--no-open]
   pondview attach <file.duckdb|s3://...> --as <alias> [--readonly]
   pondview list-sources
   pondview detach <source-id-or-alias>
   pondview query <sql>
+  pondview stop [--port 17817]
+  pondview doctor
 
 Client flags:
   --url <url>             Bridge URL for client commands
+  --use-existing          Serve UI for an already-running bridge
+  --ui-port <port>        UI server port with --use-existing (default: free port)
   --token <token>         Bearer token
   --token-env <name>      Read bearer token from an environment variable
   --no-autostart          Do not start a local bridge for client commands
