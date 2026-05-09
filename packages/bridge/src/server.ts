@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
   bridgeAttachSourceRequestSchema,
   bridgeQueryRequestSchema,
@@ -57,13 +57,15 @@ export async function startBridgeServer(
     resolveSource: (id) => secrets.getSource(id),
   });
 
+  let boundOptions = { ...options, host, port };
   const server = Bun.serve({
     hostname: host,
     port,
     async fetch(request) {
-      return handleRequest(request, runtime, options, secrets);
+      return handleRequest(request, runtime, boundOptions, secrets);
     },
   });
+  boundOptions = { ...boundOptions, port: readBoundPort(server, port) };
 
   return {
     url: `http://${server.hostname}:${server.port}`,
@@ -80,14 +82,16 @@ export async function startBridgeUiServer(
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 0;
   const bridgeUrl = new URL(options.bridgeUrl).toString().replace(/\/$/, "");
+  let boundOptions = { ...options, host, port };
 
   const server = Bun.serve({
     hostname: host,
     port,
     async fetch(request) {
-      return handleUiRequest(request, bridgeUrl, options);
+      return handleUiRequest(request, bridgeUrl, boundOptions);
     },
   });
+  boundOptions = { ...boundOptions, port: readBoundPort(server, port) };
 
   return {
     url: `http://${server.hostname}:${server.port}`,
@@ -400,8 +404,14 @@ function isAuthorized(request: Request, token: string | undefined): boolean {
 function json(body: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   headers.set("access-control-allow-origin", "*");
-  headers.set("access-control-allow-methods", "GET, POST, DELETE, OPTIONS");
-  headers.set("access-control-allow-headers", "content-type, authorization");
+  headers.set(
+    "access-control-allow-methods",
+    "GET, POST, PUT, DELETE, OPTIONS",
+  );
+  headers.set(
+    "access-control-allow-headers",
+    "content-type, authorization, x-api-key",
+  );
   if (body !== null) {
     headers.set("content-type", "application/json");
   }
@@ -437,7 +447,12 @@ async function serveStaticUi(
   const requestedPath = pathname === "/" ? "/index.html" : pathname;
   const filePath = resolve(root, `.${requestedPath}`);
 
-  if (!filePath.startsWith(root)) {
+  const pathFromRoot = relative(root, filePath);
+  if (
+    pathFromRoot === ".." ||
+    pathFromRoot.startsWith(`..${sep}`) ||
+    isAbsolute(pathFromRoot)
+  ) {
     return errorResponse("Not found", 404, "not_found");
   }
 
@@ -471,6 +486,13 @@ async function serveStaticUi(
 
 function defaultStaticDir(): string {
   return resolve(import.meta.dirname, "../dist");
+}
+
+function readBoundPort(
+  server: { port?: number },
+  fallbackPort: number,
+): number {
+  return server.port ?? fallbackPort;
 }
 
 function contentTypeForPath(path: string): string {

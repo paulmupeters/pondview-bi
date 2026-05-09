@@ -31,6 +31,7 @@ interface CliDeps {
   startBridgeProcess?: (args: ParsedArgs) => void;
   startBridgeUiServer?: typeof startBridgeUiServer;
   findProcessIdsByPort?: (port: number) => Promise<number[]>;
+  isPondviewBridgePort?: (args: ParsedArgs) => Promise<boolean>;
   killProcess?: (pid: number) => void;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -42,6 +43,7 @@ const defaultDeps = {
   startBridgeProcess,
   startBridgeUiServer,
   findProcessIdsByPort,
+  isPondviewBridgePort,
   killProcess,
   sleep,
 } satisfies Required<CliDeps>;
@@ -260,6 +262,12 @@ async function runStop(
     return;
   }
 
+  if (!args.flags.has("force") && !(await deps.isPondviewBridgePort(args))) {
+    throw new Error(
+      `Port ${port} is in use, but it does not appear to be a Pondview bridge. Pass --force to stop it anyway.`,
+    );
+  }
+
   for (const pid of pids) {
     deps.killProcess(pid);
   }
@@ -409,6 +417,20 @@ async function findProcessIdsByPort(port: number): Promise<number[]> {
     .filter((value) => Number.isFinite(value));
 }
 
+async function isPondviewBridgePort(args: ParsedArgs): Promise<boolean> {
+  const response = await fetch(`${getClientBaseUrl(args)}/ping`, {
+    cache: "no-store",
+  }).catch(() => null);
+  if (!response?.ok) {
+    return false;
+  }
+
+  const payload = (await response.json().catch(() => null)) as {
+    status?: string;
+  } | null;
+  return payload?.status === "ok";
+}
+
 function killProcess(pid: number): void {
   process.kill(pid, "SIGTERM");
 }
@@ -432,9 +454,20 @@ function readToken(args: ParsedArgs): string | undefined {
     return token;
   }
 
+  const tokenEnvValue = args.flags.get("token-env");
+  if (tokenEnvValue === true) {
+    throw new Error("Missing required value for --token-env <name>.");
+  }
+
   const tokenEnv = readStringFlag(args, "token-env");
   if (tokenEnv) {
-    return process.env[tokenEnv];
+    const envToken = process.env[tokenEnv]?.trim();
+    if (!envToken) {
+      throw new Error(
+        `Environment variable ${tokenEnv} is not set or is empty.`,
+      );
+    }
+    return envToken;
   }
 
   return process.env.PONDVIEW_TOKEN;
@@ -486,8 +519,11 @@ function readNumberFlag(args: ParsedArgs, name: string): number | undefined {
   if (!value) {
     return undefined;
   }
+  if (!/^\d+$/.test(value)) {
+    throw new Error(`Invalid --${name} value: ${value}`);
+  }
   const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) {
+  if ((name === "port" || name === "ui-port") && parsed > 65_535) {
     throw new Error(`Invalid --${name} value: ${value}`);
   }
   return parsed;
@@ -515,7 +551,7 @@ Usage:
   pondview list-sources
   pondview detach <source-id-or-alias>
   pondview query <sql>
-  pondview stop [--port 17817]
+  pondview stop [--port 17817] [--force]
   pondview doctor
 
 Client flags:
@@ -528,6 +564,7 @@ Client flags:
   --dashboard-mode        Open a view-only dashboards UI
   --no-autostart          Do not start a local bridge for client commands
   --no-open               Do not open the browser for pondview serve
+  --force                 Stop whatever is listening on the configured port
 `);
 }
 

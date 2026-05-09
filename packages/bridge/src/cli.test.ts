@@ -320,6 +320,7 @@ describe("bridge CLI stop", () => {
           expect(port).toBe(18000);
           return [123, 456];
         },
+        isPondviewBridgePort: async () => true,
         killProcess: (pid) => {
           killedPids.push(pid);
         },
@@ -328,6 +329,36 @@ describe("bridge CLI stop", () => {
 
     expect(killedPids).toEqual([123, 456]);
     expect(output).toBe("Stopped processes listening on port 18000: 123, 456");
+  });
+
+  test("does not kill a non-Pondview process without --force", async () => {
+    const killedPids: number[] = [];
+
+    await expect(
+      runCli(["stop", "--port", "18000"], {
+        findProcessIdsByPort: async () => [123],
+        isPondviewBridgePort: async () => false,
+        killProcess: (pid) => {
+          killedPids.push(pid);
+        },
+      }),
+    ).rejects.toThrow("does not appear to be a Pondview bridge");
+
+    expect(killedPids).toEqual([]);
+  });
+
+  test("--force kills a non-Pondview process", async () => {
+    const killedPids: number[] = [];
+
+    await runCli(["stop", "--port", "18000", "--force"], {
+      findProcessIdsByPort: async () => [123],
+      isPondviewBridgePort: async () => false,
+      killProcess: (pid) => {
+        killedPids.push(pid);
+      },
+    });
+
+    expect(killedPids).toEqual([123]);
   });
 
   test("reports when no process is listening on the configured port", async () => {
@@ -344,6 +375,33 @@ describe("bridge CLI stop", () => {
     );
 
     expect(output).toBe("No process is listening on port 17817.");
+  });
+});
+
+describe("bridge CLI validation", () => {
+  test("fails fast when --token-env is explicit but unset", async () => {
+    const originalValue = process.env.PONDVIEW_MISSING_TEST_TOKEN;
+    delete process.env.PONDVIEW_MISSING_TEST_TOKEN;
+
+    try {
+      await expect(
+        runCli(["doctor", "--token-env", "PONDVIEW_MISSING_TEST_TOKEN"]),
+      ).rejects.toThrow(
+        "Environment variable PONDVIEW_MISSING_TEST_TOKEN is not set or is empty.",
+      );
+    } finally {
+      if (originalValue === undefined) {
+        delete process.env.PONDVIEW_MISSING_TEST_TOKEN;
+      } else {
+        process.env.PONDVIEW_MISSING_TEST_TOKEN = originalValue;
+      }
+    }
+  });
+
+  test("rejects partial numeric port values", async () => {
+    await expect(runCli(["doctor", "--port", "123abc"])).rejects.toThrow(
+      "Invalid --port value: 123abc",
+    );
   });
 });
 

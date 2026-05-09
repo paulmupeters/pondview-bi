@@ -54,6 +54,24 @@ describe("bridge server modes", () => {
     expect(await fallback.text()).toContain("Pondview test shell");
   });
 
+  test("serve mode rejects encoded static path traversal", async () => {
+    const rootDir = createTempDir();
+    const staticDir = join(rootDir, "app");
+    const siblingDir = join(rootDir, "app2");
+    mkdirSync(staticDir);
+    mkdirSync(siblingDir);
+    writeFileSync(
+      join(staticDir, "index.html"),
+      "<h1>Pondview test shell</h1>",
+    );
+    writeFileSync(join(siblingDir, "secret.txt"), "leaked");
+    const server = await startTrackedServer({ serveUi: true, staticDir });
+
+    const escaped = await fetch(`${server.url}/%2e%2e%2fapp2%2fsecret.txt`);
+    expect(escaped.status).toBe(404);
+    expect(await escaped.text()).not.toContain("leaked");
+  });
+
   test("dashboard mode redirects the root URL into dashboards", async () => {
     const staticDir = createStaticDir();
     const server = await startTrackedServer({
@@ -85,6 +103,7 @@ describe("bridge server modes", () => {
     const config = await fetch(`${server.url}/api/duckdb/config`);
     expect(await config.json()).toMatchObject({
       host: "127.0.0.1",
+      port: Number(new URL(server.url).port),
       requires_auth: false,
     });
 
@@ -207,6 +226,27 @@ describe("bridge server modes", () => {
       body: JSON.stringify({ sql: "SELECT 2 AS ok;" }),
     });
     expect(apiKey.status).toBe(200);
+  });
+
+  test("CORS preflight allows documented auth headers and secret mutations", async () => {
+    const server = await startTrackedServer({ token: "secret" });
+
+    const preflight = await fetch(`${server.url}/secrets/ai`, {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://pondview.example.test",
+        "access-control-request-method": "PUT",
+        "access-control-request-headers": "content-type, x-api-key",
+      },
+    });
+
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-methods")).toContain(
+      "PUT",
+    );
+    expect(preflight.headers.get("access-control-allow-headers")).toContain(
+      "x-api-key",
+    );
   });
 
   test("secret endpoints are auth protected and redacted", async () => {

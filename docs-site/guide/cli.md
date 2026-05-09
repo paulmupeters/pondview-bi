@@ -115,7 +115,10 @@ pondview stop --port 17818
 Use this after a client command auto-starts the bridge in the background, or
 when you need to stop a bridge that was started outside the current terminal.
 By default, it checks port `17817`. If no process is listening on the port, the
-command prints a message and exits successfully.
+command prints a message and exits successfully. To avoid stopping unrelated
+local services, `stop` verifies that the port responds like a Pondview bridge;
+pass `--force` only when you intentionally want to stop whatever is listening on
+that port.
 
 ## Flags
 
@@ -130,6 +133,7 @@ command prints a message and exits successfully.
 | `--url <url>` | client commands | Uses an explicit bridge URL and disables autostart. |
 | `--no-autostart` | client commands | Fails when no bridge is reachable instead of starting one. |
 | `--no-open` | `serve` | Does not open the browser after starting the local app. |
+| `--force` | `stop` | Stops whatever is listening on the configured port without checking whether it is a Pondview bridge. |
 
 ## Bundled UI assets
 
