@@ -119,6 +119,8 @@ type AiSettingsSectionsProps = {
   onVisualizationModelChange: (value: string) => void;
   apiKey: string;
   onApiKeyChange: (value: string) => void;
+  hasStoredBridgeAiKey: boolean;
+  bridgeAiStoredKeyLabel: string;
   ollamaBaseUrl: string;
   onOllamaBaseUrlChange: (value: string) => void;
   openAiCompatibleUrl: string;
@@ -144,6 +146,8 @@ export function AiSettingsSections({
   onVisualizationModelChange,
   apiKey,
   onApiKeyChange,
+  hasStoredBridgeAiKey,
+  bridgeAiStoredKeyLabel,
   ollamaBaseUrl,
   onOllamaBaseUrlChange,
   openAiCompatibleUrl,
@@ -277,7 +281,11 @@ export function AiSettingsSections({
                   data-form-type="other"
                   value={apiKey}
                   onChange={(event) => onApiKeyChange(event.target.value)}
-                  placeholder="Enter your API key"
+                  placeholder={
+                    hasStoredBridgeAiKey
+                      ? `Bridge has ${bridgeAiStoredKeyLabel || "this provider"} saved; leave blank to keep it`
+                      : "Enter your API key"
+                  }
                 />
               </FormField>
             )}
@@ -588,7 +596,6 @@ export function RuntimeSettingsSection({
                   onChange={(event) =>
                     onBridgeEndpointChange(event.target.value)
                   }
-                  placeholder="http://127.0.0.1:17817"
                 />
                 <Button onClick={onSaveBridgeEndpoint}>Save Endpoint</Button>
                 <Button

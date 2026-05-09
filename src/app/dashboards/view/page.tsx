@@ -97,6 +97,10 @@ import {
 const DASHBOARD_AUTH_ERROR_MESSAGE =
   "Dashboard queries need DuckDB HTTP authentication. Re-enter your DuckDB HTTP auth in Settings to load data.";
 
+function DashboardLoadingPlaceholder() {
+  return <div className="h-full w-full" aria-busy="true" />;
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
@@ -111,11 +115,7 @@ function isUnauthorizedMessage(message: string | null | undefined): boolean {
 
 export default function DashboardViewPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="p-6 text-sm text-muted-foreground">Loading...</div>
-      }
-    >
+    <Suspense fallback={<DashboardLoadingPlaceholder />}>
       <DashboardViewPageContent />
     </Suspense>
   );
@@ -773,8 +773,7 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   ]);
   const dashboardWarningMessage = chartQueryError ?? measureQueryError;
 
-  if (loading)
-    return <div className="p-6 text-sm text-muted-foreground">Loading...</div>;
+  if (loading) return <DashboardLoadingPlaceholder />;
   if (!dashboard)
     return (
       <div className="p-6 text-sm text-muted-foreground">

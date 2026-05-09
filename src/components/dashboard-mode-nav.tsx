@@ -12,6 +12,7 @@ type DashboardModeNavItem = {
 };
 
 const DASHBOARD_MODE_PARAM = "pondviewMode=dashboard";
+const DASHBOARD_LOAD_RETRY_DELAYS_MS = [250, 750, 1500, 3000] as const;
 
 function dashboardModeHref(path: string): string {
   return `${path}${path.includes("?") ? "&" : "?"}${DASHBOARD_MODE_PARAM}`;
@@ -21,27 +22,60 @@ export function DashboardModeNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeDashboardId = searchParams.get("id");
+  const routeKey = `${pathname}?${searchParams.toString()}`;
   const [dashboards, setDashboards] = useState<DashboardModeNavItem[]>([]);
 
   useEffect(() => {
+    void routeKey;
     let cancelled = false;
+    const timeoutIds: number[] = [];
 
-    void listDashboards()
-      .then((items) => {
-        if (!cancelled) {
-          setDashboards(items);
+    const load = async (retryIndex = 0) => {
+      try {
+        const items = await listDashboards();
+        if (cancelled) {
+          return;
         }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDashboards([]);
+
+        setDashboards(items);
+
+        const shouldRetry =
+          items.length === 0 &&
+          retryIndex < DASHBOARD_LOAD_RETRY_DELAYS_MS.length;
+        if (shouldRetry) {
+          timeoutIds.push(
+            window.setTimeout(
+              () => void load(retryIndex + 1),
+              DASHBOARD_LOAD_RETRY_DELAYS_MS[retryIndex],
+            ),
+          );
         }
-      });
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setDashboards([]);
+        if (retryIndex < DASHBOARD_LOAD_RETRY_DELAYS_MS.length) {
+          timeoutIds.push(
+            window.setTimeout(
+              () => void load(retryIndex + 1),
+              DASHBOARD_LOAD_RETRY_DELAYS_MS[retryIndex],
+            ),
+          );
+        }
+      }
+    };
+
+    void load();
 
     return () => {
       cancelled = true;
+      for (const timeoutId of timeoutIds) {
+        window.clearTimeout(timeoutId);
+      }
     };
-  }, []);
+  }, [routeKey]);
 
   const sortedDashboards = useMemo(
     () => [...dashboards].sort((a, b) => b.updatedAt - a.updatedAt),

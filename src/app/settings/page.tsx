@@ -9,8 +9,10 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AiProvider,
+  getAiProviderDisplayName,
   getMissingRequiredSetting,
   getProviderApiKeyFromStorage,
+  isAiProvider,
   loadAiSettingsFromStorage,
   saveAiSettingsToStorage,
 } from "@/ai/settings";
@@ -29,6 +31,7 @@ import {
   getBridgeEndpoint,
   getBridgeSecretsStatus,
   listBridgeS3Backup,
+  type PondviewBridgeConfig,
   saveBridgeAiSecret,
   saveBridgeS3BackupSecret,
   setBridgeEndpoint,
@@ -213,6 +216,26 @@ function createBrowserProjectState(name: string): OpenProjectState {
   };
 }
 
+function getDefaultBridgeEndpoint(
+  config?: PondviewBridgeConfig | null,
+): string {
+  if (config) {
+    const host =
+      config.host === "0.0.0.0" || config.host === "::"
+        ? "127.0.0.1"
+        : config.host;
+    const protocol =
+      typeof window === "undefined" ? "http:" : window.location.protocol;
+    return `${protocol}//${host}:${config.port}`;
+  }
+
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return window.location.origin;
+}
+
 function formatSnapshotSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) {
     return "0 B";
@@ -256,6 +279,8 @@ export default function SettingsPage() {
   const [hasDuckDbHttpAuth, setHasDuckDbHttpAuth] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
+  const [bridgeAiConfigured, setBridgeAiConfigured] = useState(false);
+  const [bridgeAiStoredKeyLabel, setBridgeAiStoredKeyLabel] = useState("");
   const [runtimeSettingsError, setRuntimeSettingsError] = useState<
     string | null
   >(null);
@@ -354,7 +379,7 @@ export default function SettingsPage() {
     setCssCode(savedCss);
     setSelectedTheme(savedTheme || (savedCss ? CUSTOM_THEME_VALUE : "default"));
     setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
-    setBridgeEndpoint(getBridgeEndpoint());
+    setBridgeEndpointInput(getBridgeEndpoint() || getDefaultBridgeEndpoint());
 
     const savedS3Config = readS3BackupConfigFromStorage();
     setSavedS3BackupConfig(savedS3Config);
@@ -399,6 +424,23 @@ export default function SettingsPage() {
         if (cancelled) {
           return;
         }
+        setBridgeAiConfigured(status.ai?.configured === true);
+        if (status.ai?.configured && isAiProvider(status.ai.provider)) {
+          setAiProvider(status.ai.provider);
+          setModel(status.ai.model ?? "");
+          setVisualizationModel(status.ai.visualizationModel ?? "");
+          setApiKey("");
+          setBridgeAiStoredKeyLabel(
+            [
+              getAiProviderDisplayName(status.ai.provider),
+              status.ai.model ? `model ${status.ai.model}` : null,
+            ]
+              .filter(Boolean)
+              .join(", "),
+          );
+        } else {
+          setBridgeAiStoredKeyLabel("");
+        }
         setBridgeS3BackupConfigured(status.s3Backup?.configured === true);
         if (status.s3Backup?.configured) {
           setSavedS3BackupConfig((previous) => ({
@@ -418,6 +460,8 @@ export default function SettingsPage() {
       .catch(() => {
         if (!cancelled) {
           setBridgeS3BackupConfigured(false);
+          setBridgeAiConfigured(false);
+          setBridgeAiStoredKeyLabel("");
         }
       });
     return () => {
@@ -458,6 +502,25 @@ export default function SettingsPage() {
     };
   }, [isDuckDbHttpConfigured]);
 
+  useEffect(() => {
+    const storedEndpoint = getBridgeEndpoint();
+    if (storedEndpoint) {
+      return;
+    }
+
+    setBridgeEndpointInput((currentEndpoint) => {
+      const previousDefault = getDefaultBridgeEndpoint();
+      if (
+        currentEndpoint.trim() &&
+        currentEndpoint.trim() !== previousDefault
+      ) {
+        return currentEndpoint;
+      }
+
+      return getDefaultBridgeEndpoint(bridgeConfig);
+    });
+  }, [bridgeConfig]);
+
   const navigateToSection = (id: SettingsSection) => {
     setActiveSection(id);
     if (typeof window !== "undefined") {
@@ -482,12 +545,15 @@ export default function SettingsPage() {
       }
     }
 
-    setBridgeEndpoint(endpoint);
+    const defaultEndpoint = getDefaultBridgeEndpoint(bridgeConfig);
+    const shouldUseDefaultEndpoint = endpoint === defaultEndpoint;
+    setBridgeEndpoint(shouldUseDefaultEndpoint ? "" : endpoint);
+    setBridgeEndpointInput(endpoint || defaultEndpoint);
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(
-      endpoint
+      endpoint && !shouldUseDefaultEndpoint
         ? "Bridge endpoint saved."
-        : "Bridge endpoint reset to this app origin.",
+        : "Bridge endpoint reset to the current Bridge endpoint.",
     );
     void refreshBridgeHealth();
     setShowSuccessMessage(true);
@@ -495,10 +561,12 @@ export default function SettingsPage() {
   };
 
   const handleClearBridgeEndpoint = () => {
-    setBridgeEndpointInput("");
+    setBridgeEndpointInput(getDefaultBridgeEndpoint(bridgeConfig));
     setBridgeEndpoint("");
     setRuntimeSettingsError(null);
-    setRuntimeSettingsSuccess("Bridge endpoint reset to this app origin.");
+    setRuntimeSettingsSuccess(
+      "Bridge endpoint reset to the current Bridge endpoint.",
+    );
     void refreshBridgeHealth();
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
@@ -1186,7 +1254,12 @@ export default function SettingsPage() {
       openAiCompatibleName,
     };
     const missingSetting = getMissingRequiredSetting(settings);
-    if (missingSetting) {
+    const bridgeKeepsExistingSecret =
+      effectiveSqlBackend === "bridge" &&
+      isBridgeQueryReady &&
+      bridgeAiConfigured &&
+      missingSetting === `${getAiProviderDisplayName(aiProvider)} API key`;
+    if (missingSetting && !bridgeKeepsExistingSecret) {
       setAiSettingsError(`Missing ${missingSetting}.`);
       return;
     }
@@ -1194,7 +1267,20 @@ export default function SettingsPage() {
     setIsSaving(true);
     try {
       if (effectiveSqlBackend === "bridge" && isBridgeQueryReady) {
-        await saveBridgeAiSecret(settings);
+        await saveBridgeAiSecret(
+          bridgeKeepsExistingSecret
+            ? { ...settings, apiKey: undefined }
+            : settings,
+        );
+        setBridgeAiConfigured(true);
+        setBridgeAiStoredKeyLabel(
+          [
+            getAiProviderDisplayName(settings.provider),
+            settings.model ? `model ${settings.model}` : null,
+          ]
+            .filter(Boolean)
+            .join(", "),
+        );
         saveAiSettingsToStorage({ ...settings, apiKey: "" });
       } else {
         saveAiSettingsToStorage(settings);
@@ -1388,6 +1474,12 @@ export default function SettingsPage() {
                   onVisualizationModelChange={setVisualizationModel}
                   apiKey={apiKey}
                   onApiKeyChange={setApiKey}
+                  hasStoredBridgeAiKey={
+                    effectiveSqlBackend === "bridge" &&
+                    isBridgeQueryReady &&
+                    bridgeAiConfigured
+                  }
+                  bridgeAiStoredKeyLabel={bridgeAiStoredKeyLabel}
                   ollamaBaseUrl={ollamaBaseUrl}
                   onOllamaBaseUrlChange={setOllamaBaseUrl}
                   openAiCompatibleUrl={openAiCompatibleUrl}

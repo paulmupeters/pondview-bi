@@ -115,7 +115,12 @@ export class BridgeSecretStore {
 
   saveAi(ai: BridgeSecretAi): void {
     const data = this.read();
-    data.ai = bridgeSecretAiSchema.parse(ai);
+    const input = bridgeSecretAiSchema.parse(ai);
+    const existingApiKey = data.ai?.apiKey?.trim();
+    data.ai = {
+      ...input,
+      apiKey: input.apiKey?.trim() || existingApiKey,
+    };
     this.write(data);
   }
 
