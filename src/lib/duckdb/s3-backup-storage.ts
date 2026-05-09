@@ -10,6 +10,7 @@ export type S3BackupConfig = {
   bucket: string;
   accessKeyId: string;
   secretAccessKey: string;
+  credentialsStored?: boolean;
   prefix: string;
   forcePathStyle: boolean;
 };
@@ -20,6 +21,7 @@ export const EMPTY_S3_BACKUP_CONFIG: S3BackupConfig = {
   bucket: "",
   accessKeyId: "",
   secretAccessKey: "",
+  credentialsStored: false,
   prefix: "",
   forcePathStyle: false,
 };
@@ -147,8 +149,8 @@ export function isS3BackupConfigComplete(config: S3BackupConfig): boolean {
     config.endpoint &&
       config.region &&
       config.bucket &&
-      config.accessKeyId &&
-      config.secretAccessKey,
+      (config.credentialsStored ||
+        (config.accessKeyId && config.secretAccessKey)),
   );
 }
 
@@ -164,6 +166,7 @@ export function parseS3BackupConfigPayload(payload: unknown): S3BackupConfig {
     bucket: toTrimmedString(candidate.bucket),
     accessKeyId: toTrimmedString(candidate.accessKeyId),
     secretAccessKey: toTrimmedString(candidate.secretAccessKey),
+    credentialsStored: candidate.credentialsStored === true,
     prefix: toTrimmedString(candidate.prefix),
     forcePathStyle: candidate.forcePathStyle === true,
   });
@@ -176,6 +179,7 @@ function normalizeS3BackupConfig(config: S3BackupConfig): S3BackupConfig {
     bucket: config.bucket.trim(),
     accessKeyId: config.accessKeyId.trim(),
     secretAccessKey: config.secretAccessKey.trim(),
+    credentialsStored: config.credentialsStored === true ? true : undefined,
     prefix: normalizePrefix(config.prefix),
     forcePathStyle: config.forcePathStyle,
   };

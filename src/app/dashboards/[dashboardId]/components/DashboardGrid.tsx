@@ -48,6 +48,7 @@ type DashboardGridProps = {
   selectedChartId: string | null;
   onChartSelect: (chartId: string) => void;
   onPreviewChart: (chartId: string) => void;
+  readOnly?: boolean;
 };
 
 export function DashboardGrid({
@@ -73,6 +74,7 @@ export function DashboardGrid({
   selectedChartId,
   onChartSelect,
   onPreviewChart,
+  readOnly = false,
 }: DashboardGridProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -81,7 +83,7 @@ export function DashboardGrid({
   );
 
   return (
-    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+    <DndContext sensors={sensors} onDragEnd={readOnly ? undefined : onDragEnd}>
       <SortableContext
         items={charts.map((c) => c.id)}
         strategy={rectSortingStrategy}
@@ -96,7 +98,9 @@ export function DashboardGrid({
             g.items.map((item) => item.id),
           );
           const isRowResizing =
-            resizingChart && rowChartIds.includes(resizingChart.chartId);
+            !readOnly &&
+            resizingChart &&
+            rowChartIds.includes(resizingChart.chartId);
           const previewItems = isRowResizing ? resizingChart.previewSpans : [];
           const previewMap = new Map(
             previewItems
@@ -228,6 +232,7 @@ export function DashboardGrid({
                         selectedChartId={selectedChartId}
                         onChartSelect={onChartSelect}
                         onPreviewChart={onPreviewChart}
+                        readOnly={readOnly}
                       />
                     );
                   }
@@ -277,6 +282,7 @@ export function DashboardGrid({
                       isSelected={selectedChartId === chart.id}
                       onSelect={onChartSelect}
                       onPreviewChart={onPreviewChart}
+                      readOnly={readOnly}
                     />
                   );
                 })}

@@ -611,30 +611,30 @@ export function RuntimeSettingsSection({
                 </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                type="password"
-                name="settings-bridge-secret"
-                autoComplete="off"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                data-form-type="other"
-                value={bridgeSecret}
-                onChange={(event) => onBridgeSecretChange(event.target.value)}
-                placeholder="Enter Pondview secret"
-              />
-              <Button
-                onClick={onSetBridgeSecret}
-                disabled={!bridgeSecret.trim().length}
-              >
-                Set Session Secret
-              </Button>
-              <Button
-                variant="outline"
-                onClick={onClearBridgeSecret}
-                disabled={!hasBridgeSessionSecret}
-              >
-                Clear
-              </Button>
+                <Input
+                  type="password"
+                  name="settings-bridge-secret"
+                  autoComplete="off"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  data-form-type="other"
+                  value={bridgeSecret}
+                  onChange={(event) => onBridgeSecretChange(event.target.value)}
+                  placeholder="Enter Pondview secret"
+                />
+                <Button
+                  onClick={onSetBridgeSecret}
+                  disabled={!bridgeSecret.trim().length}
+                >
+                  Set Session Secret
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={onClearBridgeSecret}
+                  disabled={!hasBridgeSessionSecret}
+                >
+                  Clear
+                </Button>
               </div>
             </div>
           </div>

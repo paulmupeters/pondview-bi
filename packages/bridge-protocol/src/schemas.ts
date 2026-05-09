@@ -2,6 +2,11 @@ import { z } from "zod";
 
 export const bridgeRuntimeBackendSchema = z.literal("bridge");
 
+export const bridgeDatabaseInfoSchema = z.object({
+  mode: z.enum(["memory", "file"]),
+  id: z.string(),
+});
+
 export const bridgeHealthResponseSchema = z.object({
   ok: z.boolean(),
   service: z.literal("pondview-bridge"),
@@ -9,6 +14,7 @@ export const bridgeHealthResponseSchema = z.object({
   runtime: z.object({
     backend: bridgeRuntimeBackendSchema,
     duckdb: z.string().nullable(),
+    database: bridgeDatabaseInfoSchema.optional(),
   }),
 });
 
@@ -20,12 +26,16 @@ export const bridgeCapabilitiesResponseSchema = z.object({
   importFiles: z.boolean(),
   projects: z.boolean(),
   readonly: z.boolean(),
+  secrets: z.boolean().optional(),
+  ai: z.boolean().optional(),
+  s3Backup: z.boolean().optional(),
 });
 
 export const bridgeConfigResponseSchema = z.object({
   host: z.string().min(1),
   port: z.number().int().min(1).max(65535),
   requires_auth: z.boolean(),
+  database: bridgeDatabaseInfoSchema.optional(),
 });
 
 export const bridgeColumnSchema = z.object({
@@ -78,15 +88,19 @@ export const bridgeQueryResponseSchema = z.object({
 export const bridgeSourceSchema = z.object({
   id: z.string(),
   alias: z.string(),
-  identifier: z.string(),
+  identifier: z.string().optional(),
+  connectionId: z.string().optional(),
   readonly: z.boolean(),
-  type: z.enum(["duckdb", "duckdb_remote"]),
+  type: z.string(),
 });
 
 export const bridgeAttachSourceRequestSchema = z.object({
-  identifier: z.string().min(1),
+  identifier: z.string().min(1).optional(),
+  connectionId: z.string().min(1).optional(),
+  type: z.string().optional(),
   alias: z.string().min(1),
   readonly: z.boolean().optional(),
+  duckdbExtension: z.string().optional(),
 });
 
 export const bridgeSourcesResponseSchema = z.object({
@@ -100,10 +114,117 @@ export const bridgeErrorResponseSchema = z.object({
   }),
 });
 
+export const bridgeSecretSourceSchema = z.object({
+  type: z.string().min(1),
+  identifier: z.string().min(1),
+  alias: z.string().optional(),
+  readonly: z.boolean().optional(),
+  duckdbExtension: z.string().optional(),
+});
+
+export const bridgeSecretAiSchema = z.object({
+  provider: z.enum([
+    "openai",
+    "gateway",
+    "anthropic",
+    "ollama",
+    "openai-compatible",
+    "xai",
+  ]),
+  model: z.string().min(1),
+  visualizationModel: z.string().optional(),
+  apiKey: z.string().optional(),
+  ollamaBaseUrl: z.string().optional(),
+  openAiCompatibleUrl: z.string().optional(),
+  openAiCompatibleName: z.string().optional(),
+});
+
+export const bridgeSecretS3BackupSchema = z.object({
+  endpoint: z.string().min(1),
+  region: z.string().min(1),
+  bucket: z.string().min(1),
+  accessKeyId: z.string().min(1),
+  secretAccessKey: z.string().min(1),
+  prefix: z.string().optional(),
+  forcePathStyle: z.boolean().optional(),
+});
+
+export const bridgeSecretsStatusResponseSchema = z.object({
+  path: z.string(),
+  sources: z.array(
+    z.object({
+      id: z.string(),
+      type: z.string(),
+      alias: z.string().optional(),
+      readonly: z.boolean().optional(),
+      duckdbExtension: z.string().optional(),
+    }),
+  ),
+  ai: z
+    .object({
+      configured: z.boolean(),
+      provider: z.string().optional(),
+      model: z.string().optional(),
+      visualizationModel: z.string().optional(),
+    })
+    .optional(),
+  s3Backup: z
+    .object({
+      configured: z.boolean(),
+      endpoint: z.string().optional(),
+      region: z.string().optional(),
+      bucket: z.string().optional(),
+      prefix: z.string().optional(),
+      forcePathStyle: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+export const bridgeSecretMutationResponseSchema = z.object({
+  ok: z.literal(true),
+});
+
+export const bridgeS3BackupObjectSchema = z.object({
+  key: z.string(),
+  size: z.number(),
+  lastModified: z.string().nullable(),
+});
+
+export const bridgeS3BackupTestResponseSchema = z.union([
+  z.object({ ok: z.literal(true) }),
+  z.object({
+    ok: z.literal(false),
+    error: z.string(),
+    likelyCors: z.boolean().optional(),
+  }),
+]);
+
+export const bridgeS3BackupListResponseSchema = z.object({
+  objects: z.array(bridgeS3BackupObjectSchema),
+});
+
+export const bridgeS3BackupUploadRequestSchema = z.object({
+  bytesBase64: z.string().min(1),
+  key: z.string().optional(),
+});
+
+export const bridgeS3BackupUploadResponseSchema = z.object({
+  key: z.string(),
+});
+
+export const bridgeS3BackupDownloadRequestSchema = z.object({
+  key: z.string().min(1),
+});
+
+export const bridgeS3BackupDownloadResponseSchema = z.object({
+  bytesBase64: z.string(),
+});
+
 export type BridgeHealthResponse = z.infer<typeof bridgeHealthResponseSchema>;
 export type BridgeCapabilitiesResponse = z.infer<
   typeof bridgeCapabilitiesResponseSchema
 >;
+export type BridgeDatabaseInfo = z.infer<typeof bridgeDatabaseInfoSchema>;
 export type BridgeConfigResponse = z.infer<typeof bridgeConfigResponseSchema>;
 export type BridgeColumn = z.infer<typeof bridgeColumnSchema>;
 export type BridgeCatalogResponse = z.infer<typeof bridgeCatalogResponseSchema>;
@@ -114,3 +235,31 @@ export type BridgeAttachSourceRequest = z.infer<
   typeof bridgeAttachSourceRequestSchema
 >;
 export type BridgeSourcesResponse = z.infer<typeof bridgeSourcesResponseSchema>;
+export type BridgeSecretSource = z.infer<typeof bridgeSecretSourceSchema>;
+export type BridgeSecretAi = z.infer<typeof bridgeSecretAiSchema>;
+export type BridgeSecretS3Backup = z.infer<typeof bridgeSecretS3BackupSchema>;
+export type BridgeSecretsStatusResponse = z.infer<
+  typeof bridgeSecretsStatusResponseSchema
+>;
+export type BridgeSecretMutationResponse = z.infer<
+  typeof bridgeSecretMutationResponseSchema
+>;
+export type BridgeS3BackupObject = z.infer<typeof bridgeS3BackupObjectSchema>;
+export type BridgeS3BackupTestResponse = z.infer<
+  typeof bridgeS3BackupTestResponseSchema
+>;
+export type BridgeS3BackupListResponse = z.infer<
+  typeof bridgeS3BackupListResponseSchema
+>;
+export type BridgeS3BackupUploadRequest = z.infer<
+  typeof bridgeS3BackupUploadRequestSchema
+>;
+export type BridgeS3BackupUploadResponse = z.infer<
+  typeof bridgeS3BackupUploadResponseSchema
+>;
+export type BridgeS3BackupDownloadRequest = z.infer<
+  typeof bridgeS3BackupDownloadRequestSchema
+>;
+export type BridgeS3BackupDownloadResponse = z.infer<
+  typeof bridgeS3BackupDownloadResponseSchema
+>;

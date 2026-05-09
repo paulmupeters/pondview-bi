@@ -2,6 +2,7 @@ import { type UIMessage, useChat } from "@ai-sdk/react";
 import { type ChatTransport, DirectChatTransport } from "ai";
 import { nanoid } from "nanoid";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { canUseBridgeAi, createBridgeChatTransport } from "@/ai/bridge-chat";
 import { createPondviewAgent } from "@/ai/client/agent";
 import { toPromptErrorMessage } from "@/components/chat/hooks/chat-session-utils";
 import {
@@ -35,6 +36,7 @@ export function useAnalysisCellAi({
   const connectedTables = useConnectedTables();
   const [promptDraft, setPromptDraft] = useState(cell.promptText);
   const [promptError, setPromptError] = useState<string | null>(null);
+  const [useBridgeAi, setUseBridgeAi] = useState(false);
   const persistedMessages = useMemo(
     () => entries.map(analysisCellEntryToUiMessage),
     [entries],
@@ -60,6 +62,10 @@ export function useAnalysisCellAi({
     }
   }, [connectedTables]);
   const directTransport = useMemo<ChatTransport<UIMessage> | null>(() => {
+    if (useBridgeAi) {
+      return createBridgeChatTransport(connectedTables, "analysis");
+    }
+
     if (!agentResult.agent) {
       return null;
     }
@@ -69,7 +75,19 @@ export function useAnalysisCellAi({
       sendReasoning: false,
       sendSources: false,
     }) as unknown as ChatTransport<UIMessage>;
-  }, [agentResult.agent]);
+  }, [agentResult.agent, connectedTables, useBridgeAi]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void canUseBridgeAi().then((available) => {
+      if (!cancelled) {
+        setUseBridgeAi(available);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const { messages, setMessages, sendMessage, status } = useChat<UIMessage>({
     id: `analysis-cell:${cell.id}`,

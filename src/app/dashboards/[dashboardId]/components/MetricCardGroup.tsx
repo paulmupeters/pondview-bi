@@ -17,6 +17,7 @@ export function MetricCardGroup({
   selectedChartId,
   onChartSelect,
   onPreviewChart,
+  readOnly = false,
 }: MetricCardGroupProps) {
   const colSpanClass = getColSpanClass(
     Math.min(charts.length, totalColumns),
@@ -67,6 +68,7 @@ export function MetricCardGroup({
           isSelected={selectedChartId === chart.id}
           onSelect={onChartSelect}
           onPreviewChart={onPreviewChart}
+          readOnly={readOnly}
         />
       ))}
     </div>

@@ -55,6 +55,7 @@ export function SortableChartCard({
   isSelected = false,
   onSelect,
   onPreviewChart,
+  readOnly = false,
 }: SortableChartCardProps) {
   const appliedFilterCount = chart.appliedFiltersCount ?? 0;
   const [editedSql, setEditedSql] = useState(chart.sql);
@@ -87,7 +88,7 @@ export function SortableChartCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: chart.id });
+  } = useSortable({ id: chart.id, disabled: readOnly });
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -162,16 +163,18 @@ export function SortableChartCard({
       className={`group relative flex flex-col rounded-xl border border-border bg-card shadow-md p-4 md:p-2 ring-1 ring-inset ${colSpanClass} ${previewColSpan !== null ? "ring-primary/50" : isSelected ? "ring-primary bg-primary/5" : "ring-transparent"}`}
     >
       <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
-        <button
-          type="button"
-          aria-label="Reorder chart"
-          title="Drag to reorder"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-input bg-background text-muted-foreground hover:bg-muted"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
+        {!readOnly ? (
+          <button
+            type="button"
+            aria-label="Reorder chart"
+            title="Drag to reorder"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-input bg-background text-muted-foreground hover:bg-muted"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        ) : null}
         {canPreview ? (
           <button
             type="button"
@@ -210,143 +213,151 @@ export function SortableChartCard({
       !isCardConfig(config) &&
       !isTableConfig(config) &&
       !isTextConfig(config) ? (
-        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-20">
-          <ChartConfigDialog
-            trigger={
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Configure chart"
-                title="Configure chart"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            }
-            config={config as Config}
-            columns={Object.keys(rows[0] || {}).map((name) => ({
-              name,
-            }))}
-            rows={rows}
-            onConfigChange={async (newConfig) => {
-              const newJson = JSON.stringify(newConfig);
-              await onConfigChange(newJson);
-            }}
-            sql={chart.sql}
-            dbIdentifier={chart.dbIdentifier ?? undefined}
-            backendPreference={chart.sqlBackend ?? undefined}
-            onSqlSave={(newSql) => onSqlUpdate(chart.id, newSql)}
-          />
-          <button
-            type="button"
-            onClick={onDelete}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Delete chart"
-            title="Delete chart"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+        !readOnly ? (
+          <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-20">
+            <ChartConfigDialog
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="Configure chart"
+                  title="Configure chart"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              }
+              config={config as Config}
+              columns={Object.keys(rows[0] || {}).map((name) => ({
+                name,
+              }))}
+              rows={rows}
+              onConfigChange={async (newConfig) => {
+                const newJson = JSON.stringify(newConfig);
+                await onConfigChange(newJson);
+              }}
+              sql={chart.sql}
+              dbIdentifier={chart.dbIdentifier ?? undefined}
+              backendPreference={chart.sqlBackend ?? undefined}
+              onSqlSave={(newSql) => onSqlUpdate(chart.id, newSql)}
+            />
+            <button
+              type="button"
+              onClick={onDelete}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Delete chart"
+              title="Delete chart"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null
       ) : config && rows.length > 0 && isTableConfig(config) ? (
-        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
-          <TableConfigDialog
-            trigger={
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Configure table"
-                title="Configure table"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            }
-            config={config as TableConfig}
-            columns={Object.keys(rows[0] || {}).map((name) => ({
-              name,
-            }))}
-            onConfigChange={async (newConfig) => {
-              const newJson = JSON.stringify(newConfig);
-              await onConfigChange(newJson);
-            }}
-          />
-          <button
-            type="button"
-            onClick={onDelete}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Delete table"
-            title="Delete table"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+        !readOnly ? (
+          <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
+            <TableConfigDialog
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="Configure table"
+                  title="Configure table"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              }
+              config={config as TableConfig}
+              columns={Object.keys(rows[0] || {}).map((name) => ({
+                name,
+              }))}
+              onConfigChange={async (newConfig) => {
+                const newJson = JSON.stringify(newConfig);
+                await onConfigChange(newJson);
+              }}
+            />
+            <button
+              type="button"
+              onClick={onDelete}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Delete table"
+              title="Delete table"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null
       ) : config && rows.length > 0 && isCardConfig(config) ? (
-        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <MetricCardSettingsDialog
-            trigger={
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Configure card"
-                title="Configure card"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            }
-            config={config as CardConfig}
-            measure={measure}
-            currentMeasureValue={measureValue}
-            onConfigChange={async (newConfig) => {
-              const newJson = JSON.stringify(newConfig);
-              await onConfigChange(newJson);
-            }}
-            onMeasureChange={
-              measure && onMeasureChange
-                ? async (updates) => {
-                    await onMeasureChange(measure.id, updates);
-                  }
-                : undefined
-            }
-          />
-          <button
-            type="button"
-            onClick={onDelete}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            aria-label="Delete card"
-            title="Delete card"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+        !readOnly ? (
+          <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <MetricCardSettingsDialog
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="Configure card"
+                  title="Configure card"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              }
+              config={config as CardConfig}
+              measure={measure}
+              currentMeasureValue={measureValue}
+              onConfigChange={async (newConfig) => {
+                const newJson = JSON.stringify(newConfig);
+                await onConfigChange(newJson);
+              }}
+              onMeasureChange={
+                measure && onMeasureChange
+                  ? async (updates) => {
+                      await onMeasureChange(measure.id, updates);
+                    }
+                  : undefined
+              }
+            />
+            <button
+              type="button"
+              onClick={onDelete}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              aria-label="Delete card"
+              title="Delete card"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null
       ) : config && isTextConfig(config) ? (
-        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
-          <TextConfigDialog
-            trigger={
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Configure text card"
-                title="Configure text card"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            }
-            config={config as TextConfig}
-            measures={measures}
-            measureOptions={measureOptions}
-            onConfigChange={async (newConfig) => {
-              const newJson = JSON.stringify(newConfig);
-              await onConfigChange(newJson);
-            }}
-          />
-          <button
-            type="button"
-            onClick={onDelete}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            aria-label="Delete text card"
-            title="Delete text card"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+        !readOnly ? (
+          <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 z-30">
+            <TextConfigDialog
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="Configure text card"
+                  title="Configure text card"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              }
+              config={config as TextConfig}
+              measures={measures}
+              measureOptions={measureOptions}
+              onConfigChange={async (newConfig) => {
+                const newJson = JSON.stringify(newConfig);
+                await onConfigChange(newJson);
+              }}
+            />
+            <button
+              type="button"
+              onClick={onDelete}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              aria-label="Delete text card"
+              title="Delete text card"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null
       ) : null}
       {config ? (
         isCardConfig(config) && rows.length > 0 ? (
@@ -389,7 +400,7 @@ export function SortableChartCard({
       ) : (
         <div className={emptyStateClassName}>{emptyStateMessage}</div>
       )}
-      {isResizable && (
+      {isResizable && !readOnly && (
         <button
           type="button"
           onClick={(event) => {
@@ -403,7 +414,7 @@ export function SortableChartCard({
           <MoveDiagonal2 className="h-4 w-4 text-muted-foreground" />
         </button>
       )}
-      {isExpanded && (
+      {isExpanded && !readOnly && (
         <div className="mt-4 border-t pt-4 transition-all duration-200">
           <div className="flex flex-col gap-3">
             <label

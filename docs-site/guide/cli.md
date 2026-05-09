@@ -35,6 +35,7 @@ Runs the local Pondview app and bridge API together.
 pondview serve
 pondview serve --port 17818
 pondview serve --host 127.0.0.1 --port 17817 --no-open
+pondview serve --database ./analytics.duckdb
 pondview serve --readonly
 ```
 
@@ -49,11 +50,19 @@ Runs the bridge API only.
 ```bash
 pondview bridge
 pondview bridge --port 17817
+pondview bridge --database ./analytics.duckdb
 pondview bridge --readonly
 ```
 
 Use this when the hosted Pondview app should connect to a local bridge, or when
 CLI client commands need a background API runtime without opening the UI.
+
+By default, `serve` and `bridge` use an in-memory DuckDB database as the primary
+catalog. Pass `--database <file.duckdb>` to open a DuckDB file as the primary
+database instead, so unqualified queries such as `SELECT * FROM my_table` run
+against that file. This is different from `pondview attach`, which keeps the
+primary database in memory and exposes the file as an attached catalog that you
+query with its alias, for example `analytics.main.my_table`.
 
 ### Client commands
 
@@ -114,6 +123,7 @@ command prints a message and exits successfully.
 | --- | --- | --- |
 | `--host <host>` | `serve`, `bridge`, client commands | Host for the local bridge. Defaults to `127.0.0.1`. |
 | `--port <port>` | `serve`, `bridge`, `stop`, client commands | Port for the local bridge. Defaults to `17817`. |
+| `--database <file>` | `serve`, `bridge`, client autostart | Opens a DuckDB file as the bridge's primary database instead of using an in-memory database. |
 | `--readonly` | `serve`, `bridge`, `attach` | Starts readonly bridge mode, or attaches a DuckDB source readonly. |
 | `--token <token>` | all bridge/client commands | Requires or sends a bridge auth token. |
 | `--token-env <name>` | all bridge/client commands | Reads the bridge auth token from an environment variable. |
@@ -148,12 +158,23 @@ app compatibility routes:
 - `/query`
 - `/sources`
 - `/sources/attach`
+- `/secrets/status`
+- `/secrets/source/:id`
+- `/secrets/ai`
+- `/secrets/s3-backup`
+- `/ai/chat`
+- `/s3-backup/test`
+- `/s3-backup/list`
+- `/s3-backup/upload`
+- `/s3-backup/download`
 - `/ping`
 - `/api/duckdb/config`
 
 When auth is enabled, the bridge accepts both `Authorization: Bearer <token>`
 and `X-API-Key: <token>` so CLI clients and the browser app can use the same
 runtime.
+
+Bridge-managed secrets are stored in `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json` with restrictive filesystem permissions. Use `PONDVIEW_SECRETS_PATH` to override the file path.
 
 ## TODO: future improvements
 

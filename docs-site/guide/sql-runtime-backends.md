@@ -38,6 +38,8 @@ In `runQuery(...)`, `md:` identifiers are a special case: they route to `/api/du
 - Config probe: `refreshBridgeConfig()` against `/api/duckdb/config`
 - Endpoint: defaults to the current app origin. When running only the Vite/frontend app against a separately started bridge, set the Bridge endpoint in Settings to the bridge URL, for example `http://127.0.0.1:17817`.
 - Secret: session-only via Settings (`setSessionSecret(...)`)
+- Server-side secrets: Bridge stores data-source, AI provider, and S3 backup credentials in `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json`, or `PONDVIEW_SECRETS_PATH` when set. The directory is created with `0700` permissions and the file with `0600`.
+- Secret-backed browser state stores opaque references such as `connectionId` and non-secret metadata only. Bridge status endpoints report whether secrets are configured but do not return secret values.
 
 #### CLI autostart
 
@@ -77,6 +79,7 @@ local UI, see [Pondview CLI](/guide/cli).
 
 - Always available as local fallback
 - Rejects remote identifiers via `assertWasmCompatibleDbIdentifier(...)`
+- Does not provide a server-side secret boundary. Credentials required by browser-local execution must be browser-visible, so external source attachment remains a Bridge/HTTP-runtime workflow.
 
 ## Backend preference storage
 

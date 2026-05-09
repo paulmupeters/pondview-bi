@@ -1,26 +1,78 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { DuckDBInstance, type DuckDBResultReader } from "@duckdb/node-api";
+import {
+  type DuckDBConnection,
+  DuckDBInstance,
+  type DuckDBResultReader,
+} from "@duckdb/node-api";
 import type {
   BridgeCatalogResponse,
   BridgeColumn,
   BridgeQueryResponse,
+  BridgeSecretSource,
   BridgeSource,
 } from "@pondview/bridge-protocol";
 
 interface DuckDbRuntimeOptions {
   readonly?: boolean;
+  databasePath?: string;
+  resolveSource?: (id: string) => BridgeSecretSource | undefined;
+}
+
+export interface DuckDbRuntimeDatabaseInfo {
+  mode: "memory" | "file";
+  id: string;
 }
 
 export class DuckDbRuntime {
   private connectionPromise: ReturnType<typeof this.createConnection> | null =
     null;
+  private connectionHandle: DuckDBConnection | null = null;
+  private instance: DuckDBInstance | null = null;
   private readonly sources = new Map<string, BridgeSource>();
   private readonly readonly: boolean;
+  private readonly databasePath: string | null;
+  private readonly databaseId: string;
+  private readonly resolveSource?: (
+    id: string,
+  ) => BridgeSecretSource | undefined;
 
   constructor(options: DuckDbRuntimeOptions = {}) {
     this.readonly = options.readonly ?? false;
+    this.databasePath = options.databasePath
+      ? resolve(options.databasePath.trim())
+      : null;
+    this.databaseId = this.databasePath
+      ? createHash("sha256").update(this.databasePath).digest("hex")
+      : "memory";
+    this.resolveSource = options.resolveSource;
+  }
+
+  databaseInfo(): DuckDbRuntimeDatabaseInfo {
+    return {
+      mode: this.databasePath ? "file" : "memory",
+      id: this.databaseId,
+    };
+  }
+
+  async close(): Promise<void> {
+    const connectionPromise = this.connectionPromise;
+    this.connectionPromise = null;
+    const connection = connectionPromise
+      ? await connectionPromise.catch(() => null)
+      : this.connectionHandle;
+
+    if (connection) {
+      connection.closeSync();
+    }
+    this.connectionHandle = null;
+
+    if (this.instance) {
+      this.instance.closeSync();
+      this.instance = null;
+    }
+    this.sources.clear();
   }
 
   async version(): Promise<string | null> {
@@ -38,7 +90,9 @@ export class DuckDbRuntime {
       throw new Error("Readonly bridge mode allows only read-only SQL.");
     }
 
-    const reader = await (await this.connection()).runAndReadAll(sql);
+    const reader = await (await this.connection()).runAndReadAll(
+      this.resolveSecretAttachmentSql(sql),
+    );
     const columns = getColumns(reader);
     const rows = reader.getRowObjectsJson();
     const limitedRows = typeof limit === "number" ? rows.slice(0, limit) : rows;
@@ -64,15 +118,26 @@ export class DuckDbRuntime {
   }
 
   async attachDuckDb(input: {
-    identifier: string;
+    identifier?: string;
+    connectionId?: string;
+    type?: string;
     alias: string;
     readonly?: boolean;
+    duckdbExtension?: string;
   }): Promise<BridgeSource> {
     if (this.readonly && input.readonly === false) {
       throw new Error("Readonly bridge mode cannot attach writable sources.");
     }
 
-    const normalizedIdentifier = normalizeDuckDbIdentifier(input.identifier);
+    const resolvedSource = input.connectionId
+      ? this.resolveSource?.(input.connectionId)
+      : undefined;
+    const sourceIdentifier = resolvedSource?.identifier ?? input.identifier;
+    if (!sourceIdentifier) {
+      throw new Error("Source identifier is required.");
+    }
+
+    const normalizedIdentifier = normalizeDuckDbIdentifier(sourceIdentifier);
     if (isLocalDuckDbIdentifier(normalizedIdentifier)) {
       const absolutePath = resolve(normalizedIdentifier);
       if (!existsSync(absolutePath)) {
@@ -90,11 +155,13 @@ export class DuckDbRuntime {
     const source: BridgeSource = {
       id: randomUUID(),
       alias,
-      identifier: normalizedIdentifier,
+      identifier: input.connectionId ? undefined : normalizedIdentifier,
+      connectionId: input.connectionId,
       readonly,
-      type: normalizedIdentifier.startsWith("s3://")
-        ? "duckdb_remote"
-        : "duckdb",
+      type:
+        resolvedSource?.type ??
+        input.type ??
+        (normalizedIdentifier.startsWith("s3://") ? "duckdb_remote" : "duckdb"),
     };
     this.sources.set(source.id, source);
     return source;
@@ -127,8 +194,31 @@ export class DuckDbRuntime {
   }
 
   private async createConnection() {
-    const instance = await DuckDBInstance.create(":memory:");
-    return instance.connect();
+    const instance = await DuckDBInstance.create(
+      this.databasePath ?? ":memory:",
+      this.readonly && this.databasePath ? { access_mode: "READ_ONLY" } : {},
+    );
+    const connection = await instance.connect();
+    this.instance = instance;
+    this.connectionHandle = connection;
+    return connection;
+  }
+
+  private resolveSecretAttachmentSql(sql: string): string {
+    if (!this.resolveSource) {
+      return sql;
+    }
+
+    return sql.replace(
+      /(ATTACH\s+)'([^']+)'(\s+AS\s+"?[^";\s]+"?(?:\s*\([^;]*\))?\s*;?)/gi,
+      (match, prefix: string, candidate: string, suffix: string) => {
+        const source = this.resolveSource?.(candidate);
+        if (!source) {
+          return match;
+        }
+        return `${prefix}${quoteString(source.identifier)}${suffix}`;
+      },
+    );
   }
 }
 

@@ -5,12 +5,29 @@ import {
   type BridgeHealthResponse,
   type BridgeQueryRequest,
   type BridgeQueryResponse,
+  type BridgeS3BackupDownloadRequest,
+  type BridgeS3BackupDownloadResponse,
+  type BridgeS3BackupListResponse,
+  type BridgeS3BackupTestResponse,
+  type BridgeS3BackupUploadRequest,
+  type BridgeS3BackupUploadResponse,
+  type BridgeSecretAi,
+  type BridgeSecretMutationResponse,
+  type BridgeSecretS3Backup,
+  type BridgeSecretSource,
+  type BridgeSecretsStatusResponse,
   type BridgeSourcesResponse,
   bridgeCapabilitiesResponseSchema,
   bridgeCatalogResponseSchema,
   bridgeErrorResponseSchema,
   bridgeHealthResponseSchema,
   bridgeQueryResponseSchema,
+  bridgeS3BackupDownloadResponseSchema,
+  bridgeS3BackupListResponseSchema,
+  bridgeS3BackupTestResponseSchema,
+  bridgeS3BackupUploadResponseSchema,
+  bridgeSecretMutationResponseSchema,
+  bridgeSecretsStatusResponseSchema,
   bridgeSourcesResponseSchema,
 } from "./schemas";
 
@@ -71,6 +88,97 @@ export class BridgeClient {
       `/sources/${encodeURIComponent(id)}`,
       bridgeSourcesResponseSchema,
       { method: "DELETE" },
+    );
+  }
+
+  secretsStatus(): Promise<BridgeSecretsStatusResponse> {
+    return this.request("/secrets/status", bridgeSecretsStatusResponseSchema);
+  }
+
+  saveSourceSecret(
+    id: string,
+    input: BridgeSecretSource,
+  ): Promise<BridgeSecretMutationResponse> {
+    return this.request(
+      `/secrets/source/${encodeURIComponent(id)}`,
+      bridgeSecretMutationResponseSchema,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  }
+
+  deleteSourceSecret(id: string): Promise<BridgeSecretMutationResponse> {
+    return this.request(
+      `/secrets/source/${encodeURIComponent(id)}`,
+      bridgeSecretMutationResponseSchema,
+      { method: "DELETE" },
+    );
+  }
+
+  saveAiSecret(input: BridgeSecretAi): Promise<BridgeSecretMutationResponse> {
+    return this.request("/secrets/ai", bridgeSecretMutationResponseSchema, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteAiSecret(): Promise<BridgeSecretMutationResponse> {
+    return this.request("/secrets/ai", bridgeSecretMutationResponseSchema, {
+      method: "DELETE",
+    });
+  }
+
+  saveS3BackupSecret(
+    input: BridgeSecretS3Backup,
+  ): Promise<BridgeSecretMutationResponse> {
+    return this.request(
+      "/secrets/s3-backup",
+      bridgeSecretMutationResponseSchema,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  }
+
+  deleteS3BackupSecret(): Promise<BridgeSecretMutationResponse> {
+    return this.request(
+      "/secrets/s3-backup",
+      bridgeSecretMutationResponseSchema,
+      {
+        method: "DELETE",
+      },
+    );
+  }
+
+  testS3Backup(): Promise<BridgeS3BackupTestResponse> {
+    return this.request("/s3-backup/test", bridgeS3BackupTestResponseSchema, {
+      method: "POST",
+    });
+  }
+
+  listS3Backup(): Promise<BridgeS3BackupListResponse> {
+    return this.request("/s3-backup/list", bridgeS3BackupListResponseSchema, {
+      method: "POST",
+    });
+  }
+
+  uploadS3Backup(
+    input: BridgeS3BackupUploadRequest,
+  ): Promise<BridgeS3BackupUploadResponse> {
+    return this.request(
+      "/s3-backup/upload",
+      bridgeS3BackupUploadResponseSchema,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+  }
+
+  downloadS3Backup(
+    input: BridgeS3BackupDownloadRequest,
+  ): Promise<BridgeS3BackupDownloadResponse> {
+    return this.request(
+      "/s3-backup/download",
+      bridgeS3BackupDownloadResponseSchema,
+      { method: "POST", body: JSON.stringify(input) },
     );
   }
 

@@ -72,7 +72,8 @@ function buildAttachStatement(
   connection: SourceConnectionConfig,
   alias: string,
 ): string {
-  if (!connection.identifier) {
+  const identifier = connection.identifier ?? connection.connectionId;
+  if (!identifier) {
     throw new Error(
       `Cannot build ATTACH statement: no identifier resolved for connection (type=${connection.type}, connectionId=${connection.connectionId ?? "none"}).`,
     );
@@ -90,7 +91,7 @@ function buildAttachStatement(
 
   const optionsClause =
     attachParts.length > 0 ? ` (${attachParts.join(", ")})` : "";
-  return `ATTACH ${quoteString(connection.identifier)} AS ${quoteIdentifier(alias)}${optionsClause};`;
+  return `ATTACH ${quoteString(identifier)} AS ${quoteIdentifier(alias)}${optionsClause};`;
 }
 
 export interface AttachmentPlan {

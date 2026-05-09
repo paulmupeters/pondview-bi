@@ -30,7 +30,8 @@ export async function resolveSqlRuntimeFingerprint(
 
   try {
     const session = await getBridgeSession();
-    return `bridge:${normalizeHost(session.host)}:${session.port}`;
+    const databaseId = session.database?.id ?? "unknown";
+    return `bridge:${normalizeHost(session.host)}:${session.port}:${databaseId}`;
   } catch {
     return "bridge:unknown";
   }

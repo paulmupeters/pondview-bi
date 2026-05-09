@@ -71,13 +71,32 @@ describe("bridge CLI serve browser behavior", () => {
 
     expect(openedUrls).toEqual([]);
   });
+
+  test("serve --dashboard-mode opens the dashboards UI", async () => {
+    const openedUrls: string[] = [];
+
+    await runCli(["serve", "--port", "0", "--dashboard-mode"], {
+      openBrowser: async (url) => {
+        openedUrls.push(url);
+      },
+      waitForShutdown: async () => {},
+    });
+
+    expect(openedUrls).toHaveLength(1);
+    expect(openedUrls[0]).toStartWith("http://127.0.0.1:");
+    expect(openedUrls[0]).toEndWith("/dashboards?pondviewMode=dashboard");
+  });
 });
 
 describe("bridge CLI serve --use-existing", () => {
   test("opens a local UI server for the configured bridge port", async () => {
     const openedUrls: string[] = [];
-    const uiServers: Array<{ host?: string; port?: number; bridgeUrl: string }> =
-      [];
+    const uiServers: Array<{
+      host?: string;
+      port?: number;
+      bridgeUrl: string;
+      dashboardMode?: boolean;
+    }> = [];
 
     await runCli(
       ["serve", "--use-existing", "--port", "18000", "--ui-port", "0"],
@@ -102,9 +121,48 @@ describe("bridge CLI serve --use-existing", () => {
         host: "127.0.0.1",
         port: 0,
         bridgeUrl: "http://127.0.0.1:18000",
+        dashboardMode: false,
       },
     ]);
     expect(openedUrls).toEqual(["http://127.0.0.1:56789"]);
+  });
+
+  test("opens dashboard mode for an existing bridge", async () => {
+    const openedUrls: string[] = [];
+    const uiServers: Array<{ dashboardMode?: boolean }> = [];
+
+    await runCli(
+      [
+        "serve",
+        "--use-existing",
+        "--port",
+        "18000",
+        "--ui-port",
+        "0",
+        "--dashboard-mode",
+      ],
+      {
+        createClient: () => createNoopClient(),
+        startBridgeUiServer: async (options) => {
+          uiServers.push(options);
+          return {
+            url: "http://127.0.0.1:56789",
+            stop: async () => {},
+          };
+        },
+        openBrowser: async (url) => {
+          openedUrls.push(url);
+        },
+        waitForShutdown: async () => {},
+      },
+    );
+
+    expect(uiServers).toEqual([
+      expect.objectContaining({ dashboardMode: true }),
+    ]);
+    expect(openedUrls).toEqual([
+      "http://127.0.0.1:56789/dashboards?pondviewMode=dashboard",
+    ]);
   });
 
   test("fails when the configured bridge is unreachable", async () => {
@@ -200,7 +258,7 @@ describe("bridge CLI client autostart", () => {
     expect(started).toBe(false);
   });
 
-  test("autostart receives host, port, token, token-env, and readonly flags", async () => {
+  test("autostart receives host, port, token, token-env, database, and readonly flags", async () => {
     const startedFlags: Record<string, string | boolean> = {};
     let attachCalls = 0;
 
@@ -218,6 +276,8 @@ describe("bridge CLI client autostart", () => {
         "secret",
         "--token-env",
         "PONDVIEW_TEST_TOKEN",
+        "--database",
+        "./analytics.duckdb",
         "--readonly",
       ],
       {
@@ -245,6 +305,7 @@ describe("bridge CLI client autostart", () => {
       port: "18000",
       token: "secret",
       "token-env": "PONDVIEW_TEST_TOKEN",
+      database: "./analytics.duckdb",
       readonly: true,
     });
   });
@@ -266,9 +327,7 @@ describe("bridge CLI stop", () => {
     );
 
     expect(killedPids).toEqual([123, 456]);
-    expect(output).toBe(
-      "Stopped processes listening on port 18000: 123, 456",
-    );
+    expect(output).toBe("Stopped processes listening on port 18000: 123, 456");
   });
 
   test("reports when no process is listening on the configured port", async () => {

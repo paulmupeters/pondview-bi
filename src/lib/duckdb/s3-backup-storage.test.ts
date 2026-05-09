@@ -128,6 +128,18 @@ describe("s3 backup storage", () => {
         forcePathStyle: false,
       }),
     ).toBe(true);
+    expect(
+      isS3BackupConfigComplete({
+        endpoint: "https://account.r2.cloudflarestorage.com",
+        region: "auto",
+        bucket: "pondview-backups",
+        accessKeyId: "",
+        secretAccessKey: "",
+        prefix: "pondview/",
+        forcePathStyle: false,
+        credentialsStored: true,
+      }),
+    ).toBe(true);
   });
 
   test("clears bucket config and session credentials", () => {

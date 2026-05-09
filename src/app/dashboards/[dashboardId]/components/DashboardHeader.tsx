@@ -8,11 +8,13 @@ import type { Dashboard } from "../types";
 type DashboardHeaderProps = {
   dashboard: Dashboard;
   onTitleUpdate: (newTitle: string) => Promise<void>;
+  readOnly?: boolean;
 };
 
 export function DashboardHeader({
   dashboard,
   onTitleUpdate,
+  readOnly = false,
 }: DashboardHeaderProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(dashboard.title);
@@ -129,17 +131,19 @@ export function DashboardHeader({
               {dashboard.title}
             </h1>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={startEditingTitle}
-            aria-label="Edit dashboard title"
-            title="Edit title"
-            className="opacity-0 transition-opacity group-hover:opacity-100"
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
+          {!readOnly ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={startEditingTitle}
+              aria-label="Edit dashboard title"
+              title="Edit title"
+              className="opacity-0 transition-opacity group-hover:opacity-100"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
       )}
     </div>

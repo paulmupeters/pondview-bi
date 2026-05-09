@@ -13,6 +13,7 @@ const DEFAULT_PORT = 17817;
 const DEFAULT_HOST = "127.0.0.1";
 const AUTOSTART_TIMEOUT_MS = 5_000;
 const AUTOSTART_POLL_INTERVAL_MS = 100;
+const DASHBOARD_MODE_PATH = "/dashboards?pondviewMode=dashboard";
 
 interface BridgeApiClient {
   health: BridgeClient["health"];
@@ -99,8 +100,15 @@ async function runBridge(
   const port = readNumberFlag(args, "port") ?? DEFAULT_PORT;
   const token = readToken(args);
   const readonly = args.flags.has("readonly");
+  const databasePath = readStringFlag(args, "database");
 
-  const server = await startBridgeServer({ host, port, token, readonly });
+  const server = await startBridgeServer({
+    host,
+    port,
+    token,
+    readonly,
+    databasePath,
+  });
   console.log(`Pondview bridge listening at ${server.url}`);
   console.log("Press Ctrl+C to stop.");
 
@@ -122,23 +130,28 @@ async function runServe(
 
   const token = readToken(args);
   const readonly = args.flags.has("readonly");
+  const databasePath = readStringFlag(args, "database");
 
   const server = await startBridgeServer({
     host,
     port,
     token,
     readonly,
+    databasePath,
     serveUi: true,
+    dashboardMode: args.flags.has("dashboard-mode"),
   });
   console.log(`Pondview local app listening at ${server.url}`);
   console.log("Press Ctrl+C to stop.");
 
   if (!args.flags.has("no-open")) {
-    await deps.openBrowser(server.url).catch((error) => {
-      console.warn(
-        `Could not open browser: ${error instanceof Error ? error.message : error}`,
-      );
-    });
+    await deps
+      .openBrowser(resolveServeOpenUrl(server.url, args))
+      .catch((error) => {
+        console.warn(
+          `Could not open browser: ${error instanceof Error ? error.message : error}`,
+        );
+      });
   }
 
   await deps.waitForShutdown();
@@ -158,17 +171,20 @@ async function runServeWithExistingBridge(
     host,
     port: readNumberFlag(args, "ui-port") ?? 0,
     bridgeUrl,
+    dashboardMode: args.flags.has("dashboard-mode"),
   });
   console.log(`Pondview local app listening at ${server.url}`);
   console.log(`Connected to existing Pondview bridge at ${bridgeUrl}`);
   console.log("Press Ctrl+C to stop.");
 
   if (!args.flags.has("no-open")) {
-    await deps.openBrowser(server.url).catch((error) => {
-      console.warn(
-        `Could not open browser: ${error instanceof Error ? error.message : error}`,
-      );
-    });
+    await deps
+      .openBrowser(resolveServeOpenUrl(server.url, args))
+      .catch((error) => {
+        console.warn(
+          `Could not open browser: ${error instanceof Error ? error.message : error}`,
+        );
+      });
   }
 
   await deps.waitForShutdown();
@@ -359,6 +375,7 @@ function startBridgeProcess(args: ParsedArgs): void {
   appendFlag(childArgs, args, "port");
   appendFlag(childArgs, args, "token");
   appendFlag(childArgs, args, "token-env");
+  appendFlag(childArgs, args, "database");
   if (args.flags.has("readonly")) {
     childArgs.push("--readonly");
   }
@@ -480,13 +497,20 @@ function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
 }
 
+function resolveServeOpenUrl(baseUrl: string, args: ParsedArgs): string {
+  if (!args.flags.has("dashboard-mode")) {
+    return baseUrl;
+  }
+  return new URL(DASHBOARD_MODE_PATH, baseUrl).toString();
+}
+
 function printHelp(): void {
   console.log(`Pondview CLI
 
 Usage:
-  pondview bridge [--host 127.0.0.1] [--port 17817] [--readonly]
-  pondview serve [--host 127.0.0.1] [--port 17817] [--readonly] [--no-open]
-  pondview serve --use-existing [--host 127.0.0.1] [--port 17817] [--ui-port 0] [--no-open]
+  pondview bridge [--host 127.0.0.1] [--port 17817] [--database file.duckdb] [--readonly]
+  pondview serve [--host 127.0.0.1] [--port 17817] [--database file.duckdb] [--readonly] [--dashboard-mode] [--no-open]
+  pondview serve --use-existing [--host 127.0.0.1] [--port 17817] [--ui-port 0] [--dashboard-mode] [--no-open]
   pondview attach <file.duckdb|s3://...> --as <alias> [--readonly]
   pondview list-sources
   pondview detach <source-id-or-alias>
@@ -500,6 +524,8 @@ Client flags:
   --ui-port <port>        UI server port with --use-existing (default: free port)
   --token <token>         Bearer token
   --token-env <name>      Read bearer token from an environment variable
+  --database <file>       Open a DuckDB file as the bridge's primary database
+  --dashboard-mode        Open a view-only dashboards UI
   --no-autostart          Do not start a local bridge for client commands
   --no-open               Do not open the browser for pondview serve
 `);

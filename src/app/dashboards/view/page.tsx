@@ -44,6 +44,7 @@ import {
   formatFirstRowMeasureValue,
   type MeasurePrimitive,
 } from "@/lib/dashboard/measures";
+import { resolveDashboardMode } from "@/lib/dashboard-mode";
 import type {
   CardConfig,
   Config,
@@ -144,6 +145,9 @@ function DashboardDetailPageContent({ dashboardId }: { dashboardId: string }) {
 }
 
 function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
+  const isDashboardMode = resolveDashboardMode(
+    typeof window === "undefined" ? "" : window.location.search,
+  );
   const { dashboardFilters, chartFiltersById } = useFilters();
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [charts, setCharts] = useState<DashboardChart[]>([]);
@@ -787,35 +791,40 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         <DashboardHeader
           dashboard={dashboard}
           onTitleUpdate={handleTitleUpdate}
+          readOnly={isDashboardMode}
         />
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="default">
-                Add Card
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onSelect={() => setIsDataCardDialogOpen(true)}>
-                Metric / Visual card
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isAddingTextCard}
-                onSelect={() => setIsTextCardDialogOpen(true)}
-              >
-                Text card
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DashboardSettingsDialog
-            isOpen={isSettingsOpen}
-            onOpenChange={setIsSettingsOpen}
-            columns={columns}
-            onColumnsChange={handleColumnsChange}
-            autoFitRows={autoFitRows}
-            onAutoFitChange={handleAutoFitChange}
-          />
-        </div>
+        {!isDashboardMode ? (
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="default">
+                  Add Card
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem
+                  onSelect={() => setIsDataCardDialogOpen(true)}
+                >
+                  Metric / Visual card
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={isAddingTextCard}
+                  onSelect={() => setIsTextCardDialogOpen(true)}
+                >
+                  Text card
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DashboardSettingsDialog
+              isOpen={isSettingsOpen}
+              onOpenChange={setIsSettingsOpen}
+              columns={columns}
+              onColumnsChange={handleColumnsChange}
+              autoFitRows={autoFitRows}
+              onAutoFitChange={handleAutoFitChange}
+            />
+          </div>
+        ) : null}
       </div>
 
       <DashboardSlicersBar
@@ -827,7 +836,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       {dashboardWarningMessage ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <div>{dashboardWarningMessage}</div>
-          {isUnauthorizedMessage(dashboardWarningMessage) ? (
+          {isUnauthorizedMessage(dashboardWarningMessage) &&
+          !isDashboardMode ? (
             <div className="mt-3">
               <Button asChild size="sm" variant="outline">
                 <Link href="/settings">Open Settings</Link>
@@ -863,29 +873,34 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
           setPreviewRunRows(null);
           setPreviewChartId(chartId);
         }}
+        readOnly={isDashboardMode}
       />
-      <DashboardDataCardDialog
-        open={isDataCardDialogOpen}
-        onOpenChange={setIsDataCardDialogOpen}
-        dashboardId={dashboardId}
-        existingMeasures={measureOptions}
-        onSaved={async () => {
-          await Promise.all([
-            refreshDashboardData(),
-            refreshDashboardMeasures(),
-          ]);
-        }}
-      />
-      <TextConfigDialog
-        open={isTextCardDialogOpen}
-        onOpenChange={setIsTextCardDialogOpen}
-        config={null}
-        measures={allMeasuresByName}
-        measureOptions={measureOptions}
-        onConfigChange={(newConfig) => {
-          void handleAddTextCard(newConfig);
-        }}
-      />
+      {!isDashboardMode ? (
+        <>
+          <DashboardDataCardDialog
+            open={isDataCardDialogOpen}
+            onOpenChange={setIsDataCardDialogOpen}
+            dashboardId={dashboardId}
+            existingMeasures={measureOptions}
+            onSaved={async () => {
+              await Promise.all([
+                refreshDashboardData(),
+                refreshDashboardMeasures(),
+              ]);
+            }}
+          />
+          <TextConfigDialog
+            open={isTextCardDialogOpen}
+            onOpenChange={setIsTextCardDialogOpen}
+            config={null}
+            measures={allMeasuresByName}
+            measureOptions={measureOptions}
+            onConfigChange={(newConfig) => {
+              void handleAddTextCard(newConfig);
+            }}
+          />
+        </>
+      ) : null}
       <Dialog
         open={Boolean(previewChartId)}
         onOpenChange={(open) => {

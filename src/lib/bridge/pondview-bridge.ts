@@ -1,18 +1,35 @@
 import {
+  type BridgeSecretAi,
+  type BridgeSecretS3Backup,
+  type BridgeSecretSource,
+  type BridgeSecretsStatusResponse,
   bridgeConfigResponseSchema,
   bridgeQueryResponseSchema,
+  bridgeS3BackupDownloadResponseSchema,
+  bridgeS3BackupListResponseSchema,
+  bridgeS3BackupTestResponseSchema,
+  bridgeS3BackupUploadResponseSchema,
+  bridgeSecretMutationResponseSchema,
+  bridgeSecretsStatusResponseSchema,
 } from "@pondview/bridge-protocol";
+
+export interface PondviewBridgeDatabaseInfo {
+  mode: "memory" | "file";
+  id: string;
+}
 
 export interface PondviewBridgeConfig {
   host: string;
   port: number;
   requiresAuth: boolean;
+  database?: PondviewBridgeDatabaseInfo;
 }
 
 export interface PondviewBridgeSession {
   host: string;
   port: number;
   requiresAuth: boolean;
+  database?: PondviewBridgeDatabaseInfo;
   secret?: string;
   hasSecret: boolean;
   isQueryReady: boolean;
@@ -93,6 +110,10 @@ function getAuthHeaders(): Record<string, string> {
   return {
     Authorization: `Bearer ${sessionSecret}`,
   };
+}
+
+export function getBridgeAuthHeaders(): Record<string, string> {
+  return getAuthHeaders();
 }
 
 function normalizeBridgeEndpoint(endpoint: string): string {
@@ -275,6 +296,7 @@ function parseBridgeConfig(payload: unknown): PondviewBridgeConfig | null {
     host: parsed.data.host,
     port: parsed.data.port,
     requiresAuth: parsed.data.requires_auth,
+    database: parsed.data.database,
   };
 }
 
@@ -285,7 +307,9 @@ function bridgeConfigChanged(
   return (
     previousConfig?.host !== nextConfig?.host ||
     previousConfig?.port !== nextConfig?.port ||
-    previousConfig?.requiresAuth !== nextConfig?.requiresAuth
+    previousConfig?.requiresAuth !== nextConfig?.requiresAuth ||
+    previousConfig?.database?.mode !== nextConfig?.database?.mode ||
+    previousConfig?.database?.id !== nextConfig?.database?.id
   );
 }
 
@@ -372,6 +396,7 @@ export async function getBridgeSession(): Promise<PondviewBridgeSession> {
     host: config.host,
     port: config.port,
     requiresAuth: config.requiresAuth,
+    database: config.database,
     secret,
     hasSecret,
     isQueryReady: !config.requiresAuth || hasSecret,
@@ -462,4 +487,177 @@ export async function cancelBridgeQuery(signal?: AbortSignal): Promise<{
     status: payload.status ?? "unknown",
     cancelled: payload.cancelled ?? false,
   };
+}
+
+export async function getBridgeSecretsStatus(
+  signal?: AbortSignal,
+): Promise<BridgeSecretsStatusResponse> {
+  const response = await fetch(bridgeUrl("/secrets/status"), {
+    method: "GET",
+    headers: getAuthHeaders(),
+    cache: "no-store",
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return bridgeSecretsStatusResponseSchema.parse(await response.json());
+}
+
+export async function saveBridgeSourceSecret(
+  id: string,
+  source: BridgeSecretSource,
+  signal?: AbortSignal,
+): Promise<void> {
+  await mutateBridgeSecret(
+    `/secrets/source/${encodeURIComponent(id)}`,
+    source,
+    signal,
+  );
+}
+
+export async function deleteBridgeSourceSecret(
+  id: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await deleteBridgeSecret(`/secrets/source/${encodeURIComponent(id)}`, signal);
+}
+
+export async function saveBridgeAiSecret(
+  ai: BridgeSecretAi,
+  signal?: AbortSignal,
+): Promise<void> {
+  await mutateBridgeSecret("/secrets/ai", ai, signal);
+}
+
+export async function deleteBridgeAiSecret(
+  signal?: AbortSignal,
+): Promise<void> {
+  await deleteBridgeSecret("/secrets/ai", signal);
+}
+
+export async function saveBridgeS3BackupSecret(
+  config: BridgeSecretS3Backup,
+  signal?: AbortSignal,
+): Promise<void> {
+  await mutateBridgeSecret("/secrets/s3-backup", config, signal);
+}
+
+export async function deleteBridgeS3BackupSecret(
+  signal?: AbortSignal,
+): Promise<void> {
+  await deleteBridgeSecret("/secrets/s3-backup", signal);
+}
+
+export async function testBridgeS3Backup(signal?: AbortSignal): Promise<
+  | { ok: true }
+  | {
+      ok: false;
+      error: string;
+      likelyCors?: boolean;
+    }
+> {
+  const response = await postBridgeJson("/s3-backup/test", undefined, signal);
+  return bridgeS3BackupTestResponseSchema.parse(response);
+}
+
+export async function listBridgeS3Backup(signal?: AbortSignal): Promise<{
+  objects: Array<{ key: string; size: number; lastModified: string | null }>;
+}> {
+  const response = await postBridgeJson("/s3-backup/list", undefined, signal);
+  return bridgeS3BackupListResponseSchema.parse(response);
+}
+
+export async function uploadBridgeS3Backup(
+  bytes: Uint8Array,
+  key?: string,
+  signal?: AbortSignal,
+): Promise<{ key: string }> {
+  const response = await postBridgeJson(
+    "/s3-backup/upload",
+    { bytesBase64: bytesToBase64(bytes), key },
+    signal,
+  );
+  return bridgeS3BackupUploadResponseSchema.parse(response);
+}
+
+export async function downloadBridgeS3Backup(
+  key: string,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  const response = await postBridgeJson("/s3-backup/download", { key }, signal);
+  const parsed = bridgeS3BackupDownloadResponseSchema.parse(response);
+  return base64ToBytes(parsed.bytesBase64);
+}
+
+async function mutateBridgeSecret(
+  pathname: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(bridgeUrl(pathname), {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  bridgeSecretMutationResponseSchema.parse(await response.json());
+}
+
+async function deleteBridgeSecret(
+  pathname: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(bridgeUrl(pathname), {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  bridgeSecretMutationResponseSchema.parse(await response.json());
+}
+
+async function postBridgeJson(
+  pathname: string,
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const response = await fetch(bridgeUrl(pathname), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(body ?? {}),
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return response.json();
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }

@@ -26,6 +26,7 @@ export function MetricCardInGroup({
   isSelected,
   onSelect,
   onPreviewChart,
+  readOnly = false,
 }: MetricCardInGroupProps) {
   const appliedFilterCount = chart.appliedFiltersCount ?? 0;
   const {
@@ -35,7 +36,7 @@ export function MetricCardInGroup({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: chart.id });
+  } = useSortable({ id: chart.id, disabled: readOnly });
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -68,16 +69,18 @@ export function MetricCardInGroup({
       }`}
     >
       <div className="absolute left-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-30">
-        <button
-          type="button"
-          aria-label="Reorder card"
-          title="Drag to reorder"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-input bg-background text-muted-foreground hover:bg-muted"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
+        {!readOnly ? (
+          <button
+            type="button"
+            aria-label="Reorder card"
+            title="Drag to reorder"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-input bg-background text-muted-foreground hover:bg-muted"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        ) : null}
         <button
           type="button"
           aria-label="View chart"
@@ -109,43 +112,45 @@ export function MetricCardInGroup({
           </span>
         </div>
       )}
-      <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-20">
-        <MetricCardSettingsDialog
-          trigger={
-            <button
-              type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Configure card"
-              title="Configure card"
-            >
-              <Settings className="h-4 w-4" />
-            </button>
-          }
-          config={config as CardConfig}
-          measure={measure}
-          currentMeasureValue={measureValue}
-          onConfigChange={async (newConfig) => {
-            const newJson = JSON.stringify(newConfig);
-            await onConfigChange(chart.id, newJson);
-          }}
-          onMeasureChange={
-            measure
-              ? async (updates) => {
-                  await onMeasureChange(measure.id, updates);
-                }
-              : undefined
-          }
-        />
-        <button
-          type="button"
-          onClick={() => onDelete(chart.id)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          aria-label="Delete card"
-          title="Delete card"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
+      {!readOnly ? (
+        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 z-20">
+          <MetricCardSettingsDialog
+            trigger={
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Configure card"
+                title="Configure card"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            }
+            config={config as CardConfig}
+            measure={measure}
+            currentMeasureValue={measureValue}
+            onConfigChange={async (newConfig) => {
+              const newJson = JSON.stringify(newConfig);
+              await onConfigChange(chart.id, newJson);
+            }}
+            onMeasureChange={
+              measure
+                ? async (updates) => {
+                    await onMeasureChange(measure.id, updates);
+                  }
+                : undefined
+            }
+          />
+          <button
+            type="button"
+            onClick={() => onDelete(chart.id)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            aria-label="Delete card"
+            title="Delete card"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
       {config && rows.length > 0 && isCardConfig(config) ? (
         <MetricCard
           value={rows[0]?.[Object.keys(rows[0] || {})[0]]}
@@ -157,7 +162,7 @@ export function MetricCardInGroup({
       ) : (
         <div className={emptyStateClassName}>{emptyStateMessage}</div>
       )}
-      {isExpanded && (
+      {isExpanded && !readOnly && (
         <div className="mt-4 border-t pt-4 transition-all duration-200">
           <MetricCardSqlEditor
             chart={chart}

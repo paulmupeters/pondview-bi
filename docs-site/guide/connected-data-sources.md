@@ -68,7 +68,11 @@ This allows migration from legacy `databasePath` entries to opaque `connectionId
 
 ## Credentials and `connectionId`
 
-`connectionId` is designed to map to credentials stored server-side in `.env.local` (`CONNECTION_<id>=...`). This keeps secrets out of browser-local source metadata while preserving selectable source references.
+`connectionId` maps to credentials stored server-side by the Pondview Bridge. By default Bridge writes those credentials to `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json`; set `PONDVIEW_SECRETS_PATH` to override the location for tests or local experiments.
+
+When the active runtime is Bridge, the Connect Data flow saves the raw source identifier in the Bridge secret store and persists only the opaque `connectionId`, schema/table selections, attach alias, and other non-secret metadata in browser storage. Later `ATTACH` statements use the same `connectionId`; Bridge resolves it to the real identifier before DuckDB sees the statement.
+
+DuckDB WASM does not have this server-side boundary. Do not use WASM for credential-backed external sources.
 
 ## Known limitations
 

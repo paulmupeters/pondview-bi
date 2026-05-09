@@ -83,8 +83,13 @@
         "pondview": "./src/cli.ts",
       },
       "dependencies": {
+        "@ai-sdk/anthropic": "^3.0.72",
+        "@ai-sdk/openai": "^3.0.53",
+        "@ai-sdk/openai-compatible": "^2.0.41",
+        "@aws-sdk/client-s3": "^3.1037.0",
         "@duckdb/node-api": "^1.4.1-r.5",
         "@pondview/bridge-protocol": "workspace:*",
+        "ai": "^6.0.154",
         "zod": "^4.3.6",
       },
       "devDependencies": {

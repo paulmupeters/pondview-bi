@@ -48,6 +48,8 @@ Examples of browser storage keys outside IndexedDB:
 - Uploaded file metadata (`uploadedFiles`)
 - Dashboard join defs (`bi.dashboard.joinDefs.v1`)
 
+When Bridge is the active runtime, data-source credentials, AI provider keys, and S3 backup access keys are stored outside browser storage in the Bridge secret store at `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json` unless `PONDVIEW_SECRETS_PATH` overrides it. Browser storage keeps only non-secret metadata and opaque references.
+
 ## Dashboard Persistence Model
 
 Saved charts and measures persist:

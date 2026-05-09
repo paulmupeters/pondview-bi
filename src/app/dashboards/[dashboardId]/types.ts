@@ -97,6 +97,7 @@ export type SortableChartCardProps = {
   isSelected?: boolean;
   onSelect?: (chartId: string) => void;
   onPreviewChart?: (chartId: string) => void;
+  readOnly?: boolean;
 };
 
 export type MetricCardGroupProps = {
@@ -117,6 +118,7 @@ export type MetricCardGroupProps = {
   selectedChartId: string | null;
   onChartSelect: (chartId: string) => void;
   onPreviewChart: (chartId: string) => void;
+  readOnly?: boolean;
 };
 
 export type MetricCardInGroupProps = {
@@ -138,6 +140,7 @@ export type MetricCardInGroupProps = {
   isSelected: boolean;
   onSelect: (chartId: string) => void;
   onPreviewChart: (chartId: string) => void;
+  readOnly?: boolean;
 };
 
 export type MetricCardSqlEditorProps = {

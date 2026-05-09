@@ -16,7 +16,8 @@ import {
   X,
 } from "lucide-react";
 import { nanoid } from "nanoid";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { canUseBridgeAi, createBridgeChatTransport } from "@/ai/bridge-chat";
 import { createSqlEditorAssistAgent } from "@/ai/client/agent";
 import { Response } from "@/components/ai-elements/response";
 import { toPromptErrorMessage } from "@/components/chat/hooks/chat-session-utils";
@@ -119,6 +120,7 @@ export function SqlEditorAiAssist({
   const [promptDraft, setPromptDraft] = useState("");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [assistantText, setAssistantText] = useState<string | null>(null);
+  const [useBridgeAi, setUseBridgeAi] = useState(false);
   const [pendingSuggestion, setPendingSuggestion] =
     useState<PendingSuggestion | null>(null);
   const [showInput, setShowInput] = useState(false);
@@ -143,6 +145,10 @@ export function SqlEditorAiAssist({
   }, [connectedTables]);
 
   const transport = useMemo<ChatTransport<UIMessage> | null>(() => {
+    if (useBridgeAi) {
+      return createBridgeChatTransport(connectedTables, "sql-editor");
+    }
+
     if (!agentResult.agent) {
       return null;
     }
@@ -152,7 +158,19 @@ export function SqlEditorAiAssist({
       sendReasoning: false,
       sendSources: false,
     }) as unknown as ChatTransport<UIMessage>;
-  }, [agentResult.agent]);
+  }, [agentResult.agent, connectedTables, useBridgeAi]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void canUseBridgeAi().then((available) => {
+      if (!cancelled) {
+        setUseBridgeAi(available);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const { sendMessage, status } = useChat<UIMessage>({
     id: "sql-editor-ai-assist",

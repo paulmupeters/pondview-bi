@@ -7,7 +7,11 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
+import {
+  runBridgeQuery,
+  saveBridgeSourceSecret,
+} from "@/lib/bridge/pondview-bridge";
+import { appendConnectedTable } from "@/lib/connected-tables";
 import {
   buildAttachmentPlan,
   buildDetachStatement,
@@ -125,6 +129,14 @@ type ConnectDataDialogProps = {
 };
 
 type MotherDuckConnectionState = "idle" | "auth_pending" | "confirmed";
+type PendingSourceConnection = {
+  type: string;
+  identifier: string;
+  alias: string;
+  readOnly: boolean;
+  duckdbExtension?: string;
+  connectionId?: string;
+};
 
 const MOTHERDUCK_ALIAS = "motherduck";
 
@@ -287,6 +299,7 @@ export function ConnectDataDialog({
   const [hasConnected, setHasConnected] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const motherDuckAttachPromiseRef = useRef<Promise<void> | null>(null);
+  const pendingSourceRef = useRef<PendingSourceConnection | null>(null);
 
   const isWasmActive = effectiveSqlBackend === "duckdb-wasm";
 
@@ -323,6 +336,7 @@ export function ConnectDataDialog({
     setHasConnected(false);
     setErrorMessage(null);
     motherDuckAttachPromiseRef.current = null;
+    pendingSourceRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -413,6 +427,40 @@ export function ConnectDataDialog({
       duckdbExtension: "httpfs",
     };
   }, [remoteDuckdbUrl, remoteDuckdbAlias]);
+
+  const buildSourceConnectionId = useCallback(
+    (type: string, alias: string): string =>
+      `${type}:${alias.trim() || "source"}`.replace(/[^A-Za-z0-9:_-]/g, "_"),
+    [],
+  );
+
+  const prepareConnectionForRuntime = useCallback(
+    async (
+      connection: PendingSourceConnection,
+    ): Promise<PendingSourceConnection> => {
+      if (effectiveSqlBackend !== "bridge") {
+        return connection;
+      }
+
+      const connectionId = buildSourceConnectionId(
+        connection.type,
+        connection.alias,
+      );
+      await saveBridgeSourceSecret(connectionId, {
+        type: connection.type,
+        identifier: connection.identifier,
+        alias: connection.alias,
+        readonly: connection.readOnly,
+        duckdbExtension: connection.duckdbExtension,
+      });
+      return {
+        ...connection,
+        identifier: connectionId,
+        connectionId,
+      };
+    },
+    [buildSourceConnectionId, effectiveSqlBackend],
+  );
 
   const buildRemoteDuckdbSecretStatement = useCallback((): string | null => {
     const url = remoteDuckdbUrl.trim().toLowerCase();
@@ -631,7 +679,7 @@ export function ConnectDataDialog({
 
       // Build a SourceConnectionConfig and use buildAttachmentPlan for INSTALL/LOAD/ATTACH
       const extension = resolveDuckdbExtension(selectedDatabase);
-      const connection =
+      const rawConnection =
         selectedDatabase === "duckdb_remote"
           ? buildRemoteDuckdbConnection()
           : {
@@ -648,6 +696,8 @@ export function ConnectDataDialog({
               readOnly: true,
               duckdbExtension: extension,
             };
+      const connection = await prepareConnectionForRuntime(rawConnection);
+      pendingSourceRef.current = connection;
 
       const plan = buildAttachmentPlan(connection, {
         skipExtensionLoad: isWasmActive,
@@ -718,6 +768,7 @@ export function ConnectDataDialog({
     sqlitePath,
     sqliteAlias,
     effectiveSqlBackend,
+    prepareConnectionForRuntime,
     runMotherDuckAttachSequence,
   ]);
 
@@ -742,7 +793,7 @@ export function ConnectDataDialog({
         }
 
         const extension = resolveDuckdbExtension(selectedDatabase);
-        const connection =
+        const rawConnection =
           selectedDatabase === "duckdb_remote"
             ? buildRemoteDuckdbConnection()
             : {
@@ -759,6 +810,8 @@ export function ConnectDataDialog({
                 readOnly: true,
                 duckdbExtension: extension,
               };
+        const connection = await prepareConnectionForRuntime(rawConnection);
+        pendingSourceRef.current = connection;
         const plan = buildAttachmentPlan(connection, {
           skipExtensionLoad: isWasmActive,
         });
@@ -818,6 +871,7 @@ export function ConnectDataDialog({
       sqliteAlias,
       sqlitePath,
       effectiveSqlBackend,
+      prepareConnectionForRuntime,
     ],
   );
 
@@ -845,7 +899,7 @@ export function ConnectDataDialog({
         }
 
         const extension = resolveDuckdbExtension(selectedDatabase);
-        const connection =
+        const rawConnection =
           selectedDatabase === "duckdb_remote"
             ? buildRemoteDuckdbConnection()
             : {
@@ -862,6 +916,8 @@ export function ConnectDataDialog({
                 readOnly: true,
                 duckdbExtension: extension,
               };
+        const connection = await prepareConnectionForRuntime(rawConnection);
+        pendingSourceRef.current = connection;
 
         const plan = buildAttachmentPlan(connection, {
           skipExtensionLoad: isWasmActive,
@@ -885,6 +941,31 @@ export function ConnectDataDialog({
         for (const stmt of plan.statements) {
           await runRuntimeSql(effectiveSqlBackend, stmt);
         }
+      }
+
+      const source = pendingSourceRef.current;
+      if (source) {
+        await appendConnectedTable({
+          type: source.type,
+          connectionId:
+            source.connectionId ??
+            (effectiveSqlBackend === "bridge" ? source.identifier : undefined),
+          databaseName:
+            selectedDatabase === "postgres"
+              ? postgresDatabase.trim()
+              : selectedDatabase === "mysql"
+                ? mysqlDatabase.trim()
+                : selectedDatabase === "sqlite"
+                  ? sqlitePath.trim()
+                  : selectedDatabase === "duckdb_remote"
+                    ? remoteDuckdbUrl.trim()
+                    : databasePath.trim(),
+          schema: selectedSchema || undefined,
+          tables: schemaTablesPreview,
+          attachAs: source.alias,
+          readOnly: source.readOnly,
+          duckdbExtension: source.duckdbExtension,
+        });
       }
 
       onConnected?.();
@@ -915,6 +996,9 @@ export function ConnectDataDialog({
     sqlitePath,
     sqliteAlias,
     effectiveSqlBackend,
+    prepareConnectionForRuntime,
+    selectedSchema,
+    schemaTablesPreview,
   ]);
 
   const isAddDisabled = useMemo(() => {

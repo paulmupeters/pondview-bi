@@ -24,9 +24,17 @@ import {
 } from "@/components/ui/select";
 import {
   clearSessionSecret,
+  deleteBridgeS3BackupSecret,
+  downloadBridgeS3Backup,
   getBridgeEndpoint,
+  getBridgeSecretsStatus,
+  listBridgeS3Backup,
+  saveBridgeAiSecret,
+  saveBridgeS3BackupSecret,
   setBridgeEndpoint,
   setSessionSecret,
+  testBridgeS3Backup,
+  uploadBridgeS3Backup,
 } from "@/lib/bridge/pondview-bridge";
 import {
   setExecuteSqlRawOutputPreference,
@@ -262,6 +270,8 @@ export default function SettingsPage() {
     useState<S3BackupConfig>(EMPTY_S3_BACKUP_CONFIG);
   const [s3BackupError, setS3BackupError] = useState<string | null>(null);
   const [s3BackupSuccess, setS3BackupSuccess] = useState<string | null>(null);
+  const [bridgeS3BackupConfigured, setBridgeS3BackupConfigured] =
+    useState(false);
   const [isTestingS3Connection, setIsTestingS3Connection] = useState(false);
   const [isListingS3Snapshots, setIsListingS3Snapshots] = useState(false);
   const [isRestoringFromS3, setIsRestoringFromS3] = useState(false);
@@ -376,6 +386,44 @@ export default function SettingsPage() {
       }
     })();
   }, [refreshOpenProjectSummary]);
+
+  useEffect(() => {
+    if (!isBridgeQueryReady) {
+      setBridgeS3BackupConfigured(false);
+      return;
+    }
+
+    let cancelled = false;
+    void getBridgeSecretsStatus()
+      .then((status) => {
+        if (cancelled) {
+          return;
+        }
+        setBridgeS3BackupConfigured(status.s3Backup?.configured === true);
+        if (status.s3Backup?.configured) {
+          setSavedS3BackupConfig((previous) => ({
+            ...previous,
+            endpoint: status.s3Backup?.endpoint ?? previous.endpoint,
+            region: status.s3Backup?.region ?? previous.region,
+            bucket: status.s3Backup?.bucket ?? previous.bucket,
+            accessKeyId: "",
+            secretAccessKey: "",
+            credentialsStored: true,
+            prefix: status.s3Backup?.prefix ?? previous.prefix,
+            forcePathStyle:
+              status.s3Backup?.forcePathStyle ?? previous.forcePathStyle,
+          }));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBridgeS3BackupConfigured(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isBridgeQueryReady]);
 
   useEffect(() => {
     const hash = window.location.hash.replace(/^#/, "");
@@ -630,7 +678,7 @@ export default function SettingsPage() {
     setTimeout(() => setShowSuccessMessage(false), 3000);
   };
 
-  const handleSaveS3BackupConfig = () => {
+  const handleSaveS3BackupConfig = async () => {
     if (!isS3BackupConfigComplete(s3BackupForm)) {
       setS3BackupError(
         "Endpoint, region, bucket, access key, and secret are all required.",
@@ -639,19 +687,50 @@ export default function SettingsPage() {
       return;
     }
 
-    saveS3BackupConfigToStorage(s3BackupForm);
+    if (effectiveSqlBackend === "bridge" && isBridgeQueryReady) {
+      await saveBridgeS3BackupSecret({
+        endpoint: s3BackupForm.endpoint,
+        region: s3BackupForm.region,
+        bucket: s3BackupForm.bucket,
+        accessKeyId: s3BackupForm.accessKeyId,
+        secretAccessKey: s3BackupForm.secretAccessKey,
+        prefix: s3BackupForm.prefix,
+        forcePathStyle: s3BackupForm.forcePathStyle,
+      });
+      setBridgeS3BackupConfigured(true);
+      saveS3BackupConfigToStorage({
+        ...s3BackupForm,
+        accessKeyId: "",
+        secretAccessKey: "",
+        credentialsStored: true,
+      });
+    } else {
+      saveS3BackupConfigToStorage(s3BackupForm);
+    }
     const stored = readS3BackupConfigFromStorage();
-    setSavedS3BackupConfig(stored);
+    setSavedS3BackupConfig(
+      effectiveSqlBackend === "bridge" && isBridgeQueryReady
+        ? { ...stored, credentialsStored: true }
+        : stored,
+    );
     setS3BackupForm(stored);
     setS3BackupError(null);
     setS3CorsError(false);
-    setS3BackupSuccess("S3 backup configuration saved.");
+    setS3BackupSuccess(
+      effectiveSqlBackend === "bridge" && isBridgeQueryReady
+        ? "S3 backup configuration saved to Bridge."
+        : "S3 backup configuration saved.",
+    );
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
   };
 
-  const handleClearS3BackupConfig = () => {
+  const handleClearS3BackupConfig = async () => {
+    if (isBridgeQueryReady) {
+      await deleteBridgeS3BackupSecret().catch(() => undefined);
+    }
     clearS3BackupConfigInStorage();
+    setBridgeS3BackupConfigured(false);
     setSavedS3BackupConfig(EMPTY_S3_BACKUP_CONFIG);
     setS3BackupForm(EMPTY_S3_BACKUP_CONFIG);
     setS3SnapshotList(null);
@@ -664,7 +743,10 @@ export default function SettingsPage() {
   };
 
   const handleTestS3BackupConnection = async () => {
-    if (!isS3BackupConfigComplete(s3BackupForm)) {
+    if (
+      !(effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured) &&
+      !isS3BackupConfigComplete(s3BackupForm)
+    ) {
       setS3BackupError("Fill in all S3 fields before testing the connection.");
       setS3BackupSuccess(null);
       return;
@@ -675,20 +757,26 @@ export default function SettingsPage() {
     setS3BackupSuccess(null);
     setS3CorsError(false);
 
-    const result = await testS3BackupConnection(s3BackupForm);
+    const result =
+      effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured
+        ? await testBridgeS3Backup()
+        : await testS3BackupConnection(s3BackupForm);
     if (result.ok) {
       setS3BackupSuccess("Connection successful — bucket is reachable.");
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } else {
-      setS3CorsError(result.likelyCors);
+      setS3CorsError(result.likelyCors ?? false);
       setS3BackupError(`Connection failed: ${result.error}`);
     }
     setIsTestingS3Connection(false);
   };
 
   const handleRefreshS3SnapshotList = async () => {
-    if (!isS3BackupConfigComplete(savedS3BackupConfig)) {
+    if (
+      !(effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured) &&
+      !isS3BackupConfigComplete(savedS3BackupConfig)
+    ) {
       setS3BackupError(
         "Save the S3 configuration and enter credentials for this browser session before listing snapshots.",
       );
@@ -699,7 +787,15 @@ export default function SettingsPage() {
     setS3BackupError(null);
 
     try {
-      const snapshots = await listSnapshotsInS3(savedS3BackupConfig);
+      const snapshots =
+        effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured
+          ? (await listBridgeS3Backup()).objects.map((object) => ({
+              ...object,
+              lastModified: object.lastModified
+                ? new Date(object.lastModified)
+                : null,
+            }))
+          : await listSnapshotsInS3(savedS3BackupConfig);
       setS3SnapshotList(snapshots);
       if (snapshots.length === 0) {
         setS3BackupSuccess("No snapshots found at the configured prefix.");
@@ -730,7 +826,10 @@ export default function SettingsPage() {
     setS3BackupSuccess(null);
 
     try {
-      const bytes = await downloadSnapshotFromS3(savedS3BackupConfig, key);
+      const bytes =
+        effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured
+          ? await downloadBridgeS3Backup(key)
+          : await downloadSnapshotFromS3(savedS3BackupConfig, key);
       await new DuckdbWasmClient().importDatabaseSnapshot(bytes);
       setSqlBackendPreferenceInStorage("duckdb-wasm");
       location.reload();
@@ -772,6 +871,7 @@ export default function SettingsPage() {
 
     if (
       uploadSnapshotToS3Backup &&
+      !(effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured) &&
       !isS3BackupConfigComplete(savedS3BackupConfig)
     ) {
       setS3BackupError(
@@ -815,10 +915,10 @@ export default function SettingsPage() {
       }
 
       if (uploadSnapshotToS3Backup && snapshotBytes) {
-        const result = await uploadSnapshotToS3(
-          savedS3BackupConfig,
-          snapshotBytes,
-        );
+        const result =
+          effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured
+            ? await uploadBridgeS3Backup(snapshotBytes)
+            : await uploadSnapshotToS3(savedS3BackupConfig, snapshotBytes);
         s3Key = result.key;
       }
 
@@ -1093,7 +1193,12 @@ export default function SettingsPage() {
 
     setIsSaving(true);
     try {
-      saveAiSettingsToStorage(settings);
+      if (effectiveSqlBackend === "bridge" && isBridgeQueryReady) {
+        await saveBridgeAiSecret(settings);
+        saveAiSettingsToStorage({ ...settings, apiKey: "" });
+      } else {
+        saveAiSettingsToStorage(settings);
+      }
       setAiSettingsError(null);
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
