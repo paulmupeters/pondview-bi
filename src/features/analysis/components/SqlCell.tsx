@@ -310,6 +310,7 @@ export function SqlCell({
     [cell.id, notebookSession, storedPayload],
   );
   const isChatMode = aiEnabled;
+  const hasSqlDraft = Boolean(cell.sqlDraft?.trim());
   const sqlIntentDraftSignature = useMemo(
     () => getSqlIntentDraftSignature(ai.promptDraft),
     [ai.promptDraft],
@@ -491,7 +492,11 @@ export function SqlCell({
                       }
                     }
                   }}
-                  placeholder="Ask AI to refine this cell…"
+                  placeholder={
+                    hasSqlDraft
+                      ? "Ask AI to refine this cell…"
+                      : "Ask anything about your data…"
+                  }
                   rows={4}
                   disabled={ai?.isAssistantThinking ?? false}
                   tabIndex={isChatMode ? undefined : -1}

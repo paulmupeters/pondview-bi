@@ -1,5 +1,3 @@
-import type { DragEndEvent } from "@dnd-kit/core";
-import { arrayMove } from "@dnd-kit/sortable";
 import {
   Suspense,
   useCallback,
@@ -58,11 +56,10 @@ import {
   listDashboards,
   listMeasuresByDashboard,
   removeChartFromDashboard,
-  reorderDashboardCharts,
   updateChartConfig,
+  updateChartLayout,
   updateChartSql,
   updateDashboardMeasure,
-  updateDashboardSettings,
   updateDashboardTitle,
 } from "@/lib/workspace/dashboard-repo";
 import type { WorkspaceDashboardMeasure } from "@/lib/workspace/workspace-db";
@@ -77,25 +74,17 @@ import { FilterProvider, useFilters } from "../[dashboardId]/filter-context";
 import type {
   Dashboard,
   DashboardChart,
-  ResizeState,
+  DashboardChartLayout,
 } from "../[dashboardId]/types";
 import {
-  buildResizePreview,
-  buildRows,
-  canEqualizeRow,
-  canFitRow,
-  findLayoutRowForChart,
-  getChartColSpan,
-  groupConsecutiveMetricCards,
   isCardConfig,
-  isResizableConfig,
   isTableConfig,
   isTextConfig,
-  parseChartConfig,
 } from "../[dashboardId]/utils";
 
 const DASHBOARD_AUTH_ERROR_MESSAGE =
   "Dashboard queries need DuckDB HTTP authentication. Re-enter your DuckDB HTTP auth in Settings to load data.";
+const DEFAULT_DASHBOARD_COLUMNS = 4;
 
 function DashboardLoadingPlaceholder() {
   return <div className="h-full w-full" aria-busy="true" />;
@@ -153,13 +142,10 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   const [charts, setCharts] = useState<DashboardChart[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState<Record<string, Result[]>>({});
-  const [columns, setColumns] = useState<number>(3);
-  const [autoFitRows, setAutoFitRows] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [expandedSqlChartId, setExpandedSqlChartId] = useState<string | null>(
     null,
   );
-  const [resizingChart, setResizingChart] = useState<ResizeState>(null);
   const [selectedChartId, setSelectedChartId] = useState<string | null>(null);
   const dashboardContentRef = useRef<HTMLDivElement>(null);
   const [previewChartId, setPreviewChartId] = useState<string | null>(null);
@@ -191,8 +177,6 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
           dashboards.find((item) => item.id === dashboardId) ?? null;
         if (!cancelled) {
           setDashboard(selected as Dashboard | null);
-          setColumns(selected?.columns ?? 3);
-          setAutoFitRows(selected?.autoFitRows ?? false);
         }
       } finally {
         if (!cancelled) {
@@ -337,43 +321,46 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     [dashboardId],
   );
 
-  const persistOrder = useCallback(
-    async (previousOrder: DashboardChart[], nextOrder: DashboardChart[]) => {
-      try {
-        await reorderDashboardCharts(
-          dashboardId,
-          nextOrder.map((chart) => chart.id),
-        );
-      } catch (error) {
-        console.error(error);
-        setCharts(previousOrder);
-      }
-    },
-    [dashboardId],
-  );
+  const handleLayoutCommit = useCallback(
+    (
+      layoutUpdates: Array<{
+        chartId: string;
+        layout: DashboardChartLayout;
+        position: number;
+      }>,
+    ) => {
+      const updateByChartId = new Map(
+        layoutUpdates.map((update) => [update.chartId, update]),
+      );
 
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-      setCharts((prev) => {
-        const oldIndex = prev.findIndex((item) => item.id === active.id);
-        const newIndex = prev.findIndex((item) => item.id === over.id);
-        if (oldIndex === -1 || newIndex === -1) return prev;
-        const previousOrder = prev.map((chart, index) => ({
-          ...chart,
-          position: index,
-        }));
-        const moved = arrayMove(prev, oldIndex, newIndex);
-        const nextOrder = moved.map((chart, index) => ({
-          ...chart,
-          position: index,
-        }));
-        void persistOrder(previousOrder, nextOrder);
-        return nextOrder;
+      setCharts((prev) =>
+        prev
+          .map((chart) => {
+            const update = updateByChartId.get(chart.id);
+            if (!update) return chart;
+
+            return {
+              ...chart,
+              position: update.position,
+              layoutX: update.layout.x,
+              layoutY: update.layout.y,
+              layoutW: update.layout.w,
+              layoutH: update.layout.h,
+            };
+          })
+          .sort((left, right) => left.position - right.position),
+      );
+
+      void Promise.all(
+        layoutUpdates.map((update) =>
+          updateChartLayout(update.chartId, update.layout, update.position),
+        ),
+      ).catch((error) => {
+        console.error("Failed to persist dashboard layout:", error);
+        void refreshDashboardData();
       });
     },
-    [persistOrder],
+    [refreshDashboardData],
   );
 
   const handleChartConfigChange = useCallback(
@@ -441,42 +428,6 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       console.error(error);
     }
   }, []);
-
-  const handleColumnsChange = useCallback(
-    (value: string) => {
-      const newColumns = parseInt(value, 10);
-      setColumns(newColumns);
-      setDashboard((prev) =>
-        prev
-          ? {
-              ...prev,
-              columns: newColumns,
-              updatedAt: Date.now(),
-            }
-          : prev,
-      );
-      void updateDashboardSettings(dashboardId, { columns: newColumns });
-      setIsSettingsOpen(false);
-    },
-    [dashboardId],
-  );
-
-  const handleAutoFitChange = useCallback(
-    (checked: boolean) => {
-      setAutoFitRows(checked);
-      setDashboard((prev) =>
-        prev
-          ? {
-              ...prev,
-              autoFitRows: checked,
-              updatedAt: Date.now(),
-            }
-          : prev,
-      );
-      void updateDashboardSettings(dashboardId, { autoFitRows: checked });
-    },
-    [dashboardId],
-  );
 
   const handleToggleSql = useCallback((chartId: string) => {
     setExpandedSqlChartId((prev) => (prev === chartId ? null : chartId));
@@ -565,10 +516,6 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     };
   }, [selectedChartId]);
 
-  const chartGroups = useMemo(
-    () => groupConsecutiveMetricCards(charts, chartData),
-    [charts, chartData],
-  );
   const legacyMeasureOptions = useMemo(
     () => extractLegacyMeasureOptionsFromMetricCards(charts, chartData),
     [charts, chartData],
@@ -603,103 +550,6 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
       ),
     [dashboardMeasures],
   );
-
-  const layoutRows = useMemo(
-    () => buildRows(chartGroups, columns, autoFitRows),
-    [chartGroups, columns, autoFitRows],
-  );
-
-  const buildResizeState = useCallback(
-    (
-      chartId: string,
-      mode: "single" | "equalize" | "fit" = "single",
-      targetColSpan?: number,
-    ): ResizeState => {
-      const row = findLayoutRowForChart(layoutRows, chartId);
-      if (!row) return null;
-
-      return {
-        chartId,
-        mode,
-        previewSpans: buildResizePreview(
-          row,
-          chartId,
-          mode,
-          columns,
-          targetColSpan,
-        ),
-        canFit: canFitRow(row),
-        canEqualize: canEqualizeRow(row),
-      };
-    },
-    [columns, layoutRows],
-  );
-
-  const persistResizeState = useCallback(
-    async (resizeState: NonNullable<ResizeState>) => {
-      const updates = resizeState.previewSpans
-        .filter((item) => item.kind === "single" && item.chartId)
-        .map((item) => {
-          const targetChart = charts.find((chart) => chart.id === item.chartId);
-          if (!targetChart) return null;
-
-          const config = parseChartConfig(targetChart);
-          if (!config || !isResizableConfig(config)) return null;
-
-          const currentSpan = getChartColSpan(
-            targetChart,
-            Number.MAX_SAFE_INTEGER,
-          );
-          if (currentSpan === item.colSpan) return null;
-
-          return handleChartConfigChange(
-            targetChart.id,
-            JSON.stringify({
-              ...config,
-              colSpan: item.colSpan,
-            }),
-          );
-        })
-        .filter(
-          (update): update is ReturnType<typeof handleChartConfigChange> =>
-            Boolean(update),
-        );
-
-      await Promise.all(updates);
-    },
-    [charts, handleChartConfigChange],
-  );
-
-  const handleResizeOpen = useCallback(
-    (chartId: string) => {
-      const nextState = buildResizeState(chartId);
-      if (!nextState) return;
-      setResizingChart(nextState);
-    },
-    [buildResizeState],
-  );
-
-  const handleResizeSelect = useCallback(
-    (
-      chartId: string,
-      mode: "single" | "equalize" | "fit",
-      targetColSpan?: number,
-    ) => {
-      const nextState = buildResizeState(chartId, mode, targetColSpan);
-      if (!nextState) return;
-      setResizingChart(nextState);
-      void persistResizeState(nextState).finally(() => {
-        setResizingChart((current) =>
-          current?.chartId === chartId ? null : current,
-        );
-      });
-    },
-    [buildResizeState, persistResizeState],
-  );
-
-  const handleResizeClose = useCallback(() => {
-    setResizingChart(null);
-  }, []);
 
   const previewChart = useMemo(
     () => charts.find((chart) => chart.id === previewChartId) ?? null,
@@ -772,6 +622,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     previewRunRows,
   ]);
   const dashboardWarningMessage = chartQueryError ?? measureQueryError;
+  const isReadOnlyDashboard =
+    isDashboardMode || dashboard?.sourceKind === "attached";
 
   if (loading) return <DashboardLoadingPlaceholder />;
   if (!dashboard)
@@ -790,9 +642,9 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         <DashboardHeader
           dashboard={dashboard}
           onTitleUpdate={handleTitleUpdate}
-          readOnly={isDashboardMode}
+          readOnly={isReadOnlyDashboard}
         />
-        {!isDashboardMode ? (
+        {!isReadOnlyDashboard ? (
           <div className="flex items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -817,10 +669,6 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
             <DashboardSettingsDialog
               isOpen={isSettingsOpen}
               onOpenChange={setIsSettingsOpen}
-              columns={columns}
-              onColumnsChange={handleColumnsChange}
-              autoFitRows={autoFitRows}
-              onAutoFitChange={handleAutoFitChange}
             />
           </div>
         ) : null}
@@ -831,12 +679,13 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         selectedChartId={selectedChartId}
         charts={charts}
         onClearChartSelection={() => setSelectedChartId(null)}
+        readOnly={isReadOnlyDashboard}
       />
       {dashboardWarningMessage ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <div>{dashboardWarningMessage}</div>
           {isUnauthorizedMessage(dashboardWarningMessage) &&
-          !isDashboardMode ? (
+          !isReadOnlyDashboard ? (
             <div className="mt-3">
               <Button asChild size="sm" variant="outline">
                 <Link href="/settings">Open Settings</Link>
@@ -853,28 +702,23 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
         measureOptions={measureOptions}
         measuresById={measuresById}
         measureValuesById={measureValuesById}
-        layoutRows={layoutRows}
-        dashboardColumns={columns}
-        onDragEnd={handleDragEnd}
+        dashboardColumns={DEFAULT_DASHBOARD_COLUMNS}
+        onLayoutCommit={handleLayoutCommit}
         onConfigChange={handleChartConfigChange}
         onMeasureChange={handleDashboardMeasureUpdate}
         onDelete={handleChartDelete}
         expandedSqlChartId={expandedSqlChartId}
         onToggleSql={handleToggleSql}
         onSqlUpdate={handleSqlUpdate}
-        resizingChart={resizingChart}
-        onResizeOpen={handleResizeOpen}
-        onResizeClose={handleResizeClose}
-        onResizeSelect={handleResizeSelect}
         selectedChartId={selectedChartId}
         onChartSelect={setSelectedChartId}
         onPreviewChart={(chartId) => {
           setPreviewRunRows(null);
           setPreviewChartId(chartId);
         }}
-        readOnly={isDashboardMode}
+        readOnly={isReadOnlyDashboard}
       />
-      {!isDashboardMode ? (
+      {!isReadOnlyDashboard ? (
         <>
           <DashboardDataCardDialog
             open={isDataCardDialogOpen}

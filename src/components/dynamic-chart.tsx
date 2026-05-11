@@ -71,11 +71,13 @@ export function DynamicChart({
   chartConfig,
   className,
   showMetadata = true,
+  fillAvailableHeight = false,
 }: {
   chartData: Result[];
   chartConfig: Config;
   className?: string;
   showMetadata?: boolean;
+  fillAvailableHeight?: boolean;
 }) {
   const defaultColors = useMemo(() => getChartColors(), []);
   const normalizedChartData = useMemo(
@@ -356,6 +358,7 @@ export function DynamicChart({
     <div
       className={cn(
         "w-full flex flex-col justify-center items-stretch",
+        fillAvailableHeight && "h-full min-h-0",
         className,
       )}
     >
@@ -365,7 +368,12 @@ export function DynamicChart({
       {chartConfig && processedChartData.length > 0 && hasYData && (
         <ChartContainer
           config={chartContainerConfig}
-          className="w-full h-[320px] sm:h-[380px] lg:h-[420px]"
+          className={cn(
+            "w-full",
+            fillAvailableHeight
+              ? "min-h-0 flex-1 h-full"
+              : "h-[320px] sm:h-[380px] lg:h-[420px]",
+          )}
         >
           {renderChart()}
         </ChartContainer>

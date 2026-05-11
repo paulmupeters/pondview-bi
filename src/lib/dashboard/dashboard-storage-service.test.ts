@@ -1,11 +1,35 @@
 import { describe, expect, test } from "bun:test";
 import {
+  decodeAttachedDashboardId,
+  encodeAttachedDashboardId,
   resolveDashboardExternalConnection,
   resolveDashboardSourceMode,
   resolveJoinDefsForNewDashboard,
   resolveTargetForSource,
 } from "@/lib/dashboard/dashboard-storage-service";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
+
+describe("attached dashboard ids", () => {
+  test("round-trips catalog-qualified dashboard ids", () => {
+    const encoded = encodeAttachedDashboardId({
+      backend: "duckdb-http",
+      dbIdentifier: null,
+      catalog: "sample-data",
+      dashboardId: "executive-overview",
+    });
+
+    expect(decodeAttachedDashboardId(encoded)).toEqual({
+      backend: "duckdb-http",
+      dbIdentifier: null,
+      catalog: "sample-data",
+      dashboardId: "executive-overview",
+    });
+  });
+
+  test("rejects non-attached dashboard ids", () => {
+    expect(decodeAttachedDashboardId("dashboard_123")).toBeNull();
+  });
+});
 
 describe("resolveTargetForSource", () => {
   test("keeps remote runtime-default dashboards on the selected remote backend", () => {

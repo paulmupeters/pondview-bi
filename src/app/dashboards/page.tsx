@@ -34,6 +34,8 @@ type DashboardLite = {
   title: string | null;
   updatedAt: number;
   storageStatus?: "shared" | "best-effort" | null;
+  sourceKind?: "attached" | null;
+  sourceCatalog?: string | null;
 };
 
 const EMPTY_INITIAL_DASHBOARDS: DashboardLite[] = [];
@@ -355,9 +357,16 @@ export default function DashboardsPage() {
                             Latest
                           </span>
                         )}
-                        {dashboard.storageStatus === "best-effort" && (
-                          <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                            Local
+                        {dashboard.sourceKind === "attached" && (
+                          <span
+                            className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400"
+                            title={
+                              dashboard.sourceCatalog
+                                ? `Attached from ${dashboard.sourceCatalog}`
+                                : "Attached dashboard"
+                            }
+                          >
+                            Attached
                           </span>
                         )}
                       </div>
@@ -371,7 +380,7 @@ export default function DashboardsPage() {
                       </h3>
                     </div>
 
-                    {!isDashboardMode ? (
+                    {!isDashboardMode && dashboard.sourceKind !== "attached" ? (
                       <button
                         type="button"
                         className="pointer-events-auto relative z-20 mt-0.5 inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-0 ring-offset-background transition-all hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100"

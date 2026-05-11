@@ -1,3 +1,4 @@
+import { Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
 import {
@@ -151,9 +152,12 @@ export function MetricCardSettingsDialog({
       ) : (
         <DialogTrigger asChild>{trigger}</DialogTrigger>
       )}
-      <DialogContent className="max-w-3xl bg-card">
-        <DialogHeader>
-          <DialogTitle>Metric Card Settings</DialogTitle>
+      <DialogContent className="max-w-4xl bg-card p-6">
+        <DialogHeader className="pb-2">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <Settings2 className="h-5 w-5 text-muted-foreground" />
+            Metric Card Settings
+          </DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">

@@ -1,3 +1,4 @@
+import { Settings2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { Button } from "@/components/ui/button";
@@ -265,9 +266,12 @@ export function TextConfigDialog({
           <DialogTrigger asChild>{trigger}</DialogTrigger>
         )
       ) : null}
-      <DialogContent className="max-w-2xl bg-card">
-        <DialogHeader>
-          <DialogTitle>Text Card</DialogTitle>
+      <DialogContent className="max-w-3xl bg-card p-6">
+        <DialogHeader className="pb-2">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <Settings2 className="h-5 w-5 text-muted-foreground" />
+            Text Card Settings
+          </DialogTitle>
         </DialogHeader>
         {dialogBody}
       </DialogContent>

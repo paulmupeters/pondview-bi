@@ -44,7 +44,8 @@ const SNAPSHOT_SCHEMA = "pondview_snapshot";
 type DashboardStorageTargetKind =
   | "wasm-local"
   | "runtime-default"
-  | "motherduck";
+  | "motherduck"
+  | "attached-catalog";
 
 type DashboardStorageTarget = {
   key: string;
@@ -52,6 +53,8 @@ type DashboardStorageTarget = {
   dbIdentifier: string | null;
   sqlBackend: SqlBackend;
   storageStatus: DashboardStorageStatus;
+  catalog?: string | null;
+  sourceKind?: "attached" | null;
 };
 
 type DashboardRecord = WorkspaceDashboard & {
@@ -62,6 +65,9 @@ type DashboardRecord = WorkspaceDashboard & {
   homeDbIdentifier: string | null;
   homeSqlBackend: SqlBackend | null;
   storageStatus: DashboardStorageStatus | null;
+  sourceKind?: "attached" | null;
+  sourceCatalog?: string | null;
+  originalId?: string | null;
 };
 
 type ChartRecord = WorkspaceChart;
@@ -96,6 +102,9 @@ type DashboardSummary = Pick<
   | "homeSqlBackend"
   | "storageStatus"
   | "projectPath"
+  | "sourceKind"
+  | "sourceCatalog"
+  | "originalId"
 >;
 
 function sqlNullableString(value: string | null | undefined): string {
@@ -170,8 +179,9 @@ function buildTargetKey(
   kind: DashboardStorageTargetKind,
   backend: SqlBackend,
   dbIdentifier: string | null,
+  catalog?: string | null,
 ): string {
-  return `${kind}:${backend}:${dbIdentifier ?? "__runtime_default__"}`;
+  return `${kind}:${backend}:${dbIdentifier ?? "__runtime_default__"}:${catalog ?? "__current__"}`;
 }
 
 function createWasmTarget(): DashboardStorageTarget {
@@ -200,6 +210,76 @@ function createRuntimeDefaultTarget(
   };
 }
 
+function createAttachedCatalogTarget(
+  baseTarget: DashboardStorageTarget,
+  catalog: string,
+): DashboardStorageTarget {
+  return {
+    key: buildTargetKey(
+      "attached-catalog",
+      baseTarget.sqlBackend,
+      baseTarget.dbIdentifier,
+      catalog,
+    ),
+    kind: "attached-catalog",
+    dbIdentifier: baseTarget.dbIdentifier,
+    sqlBackend: baseTarget.sqlBackend,
+    storageStatus: baseTarget.storageStatus,
+    catalog,
+    sourceKind: "attached",
+  };
+}
+
+export function encodeAttachedDashboardId(input: {
+  backend: SqlBackend;
+  dbIdentifier?: string | null;
+  catalog: string;
+  dashboardId: string;
+}): string {
+  return [
+    "attached",
+    encodeURIComponent(input.backend),
+    encodeURIComponent(input.dbIdentifier ?? ""),
+    encodeURIComponent(input.catalog),
+    encodeURIComponent(input.dashboardId),
+  ].join(":");
+}
+
+export function decodeAttachedDashboardId(dashboardId: string): {
+  backend: SqlBackend;
+  dbIdentifier: string | null;
+  catalog: string;
+  dashboardId: string;
+} | null {
+  const parts = dashboardId.split(":");
+  if (parts.length !== 5 || parts[0] !== "attached") {
+    return null;
+  }
+
+  const backend = decodeURIComponent(parts[1]);
+  if (
+    backend !== "duckdb-wasm" &&
+    backend !== "bridge" &&
+    backend !== "duckdb-http"
+  ) {
+    return null;
+  }
+
+  const catalog = decodeURIComponent(parts[3]);
+  const originalDashboardId = decodeURIComponent(parts[4]);
+  if (!catalog || !originalDashboardId) {
+    return null;
+  }
+
+  const dbIdentifier = decodeURIComponent(parts[2]) || null;
+  return {
+    backend,
+    dbIdentifier,
+    catalog,
+    dashboardId: originalDashboardId,
+  };
+}
+
 function _createMotherDuckTarget(
   dbIdentifier: string,
   sqlBackend: Extract<SqlBackend, "bridge" | "duckdb-http">,
@@ -220,6 +300,112 @@ function storedDbIdentifierForTarget(
     return DEFAULT_WASM_DB_IDENTIFIER;
   }
   return target.dbIdentifier;
+}
+
+function metadataSchemaRef(target: DashboardStorageTarget): string {
+  return target.kind === "attached-catalog" && target.catalog
+    ? `${quoteIdentifier(target.catalog)}.${quoteIdentifier(METADATA_SCHEMA)}`
+    : quoteIdentifier(METADATA_SCHEMA);
+}
+
+function metadataTableRef(
+  target: DashboardStorageTarget,
+  tableName: string,
+): string {
+  return `${metadataSchemaRef(target)}.${quoteIdentifier(tableName)}`;
+}
+
+function getDashboardStorageId(dashboardId: string): string {
+  return decodeAttachedDashboardId(dashboardId)?.dashboardId ?? dashboardId;
+}
+
+function decorateDashboardRecordForTarget(
+  target: DashboardStorageTarget,
+  dashboard: DashboardRecord,
+): DashboardRecord {
+  if (target.kind !== "attached-catalog" || !target.catalog) {
+    return dashboard;
+  }
+
+  return {
+    ...dashboard,
+    id: encodeAttachedDashboardId({
+      backend: target.sqlBackend,
+      dbIdentifier: target.dbIdentifier,
+      catalog: target.catalog,
+      dashboardId: dashboard.id,
+    }),
+    runtimeBackend: target.sqlBackend,
+    homeDbIdentifier: target.dbIdentifier,
+    homeSqlBackend: target.sqlBackend,
+    originalId: dashboard.id,
+    sourceKind: "attached",
+    sourceCatalog: target.catalog,
+  };
+}
+
+function decorateChartRecordForTarget(
+  target: DashboardStorageTarget,
+  chart: ChartRecord,
+): ChartRecord {
+  if (target.kind !== "attached-catalog" || !target.catalog) {
+    return chart;
+  }
+
+  const dashboardId = encodeAttachedDashboardId({
+    backend: target.sqlBackend,
+    dbIdentifier: target.dbIdentifier,
+    catalog: target.catalog,
+    dashboardId: chart.dashboardId,
+  });
+  const sourceDescriptor = buildDashboardSourceDescriptor({
+    runtimeBackend: target.sqlBackend,
+    dbIdentifier: target.dbIdentifier,
+    catalogContext: chart.catalogContext ?? target.catalog,
+  });
+
+  return {
+    ...chart,
+    dashboardId,
+    catalogContext: chart.catalogContext ?? target.catalog,
+    dbIdentifier: target.dbIdentifier,
+    sqlBackend: target.sqlBackend,
+    sourceDescriptor,
+    sourceDescriptorJson: serializeDashboardSourceDescriptor(sourceDescriptor),
+    sourceCatalogContext: chart.sourceCatalogContext ?? target.catalog,
+  };
+}
+
+function decorateMeasureRecordForTarget(
+  target: DashboardStorageTarget,
+  measure: MeasureRecord,
+): MeasureRecord {
+  if (target.kind !== "attached-catalog" || !target.catalog) {
+    return measure;
+  }
+
+  const dashboardId = encodeAttachedDashboardId({
+    backend: target.sqlBackend,
+    dbIdentifier: target.dbIdentifier,
+    catalog: target.catalog,
+    dashboardId: measure.dashboardId,
+  });
+  const sourceDescriptor = buildDashboardSourceDescriptor({
+    runtimeBackend: target.sqlBackend,
+    dbIdentifier: target.dbIdentifier,
+    catalogContext: measure.catalogContext ?? target.catalog,
+  });
+
+  return {
+    ...measure,
+    dashboardId,
+    catalogContext: measure.catalogContext ?? target.catalog,
+    dbIdentifier: target.dbIdentifier,
+    sqlBackend: target.sqlBackend,
+    sourceDescriptor,
+    sourceDescriptorJson: serializeDashboardSourceDescriptor(sourceDescriptor),
+    sourceCatalogContext: measure.sourceCatalogContext ?? target.catalog,
+  };
 }
 
 function _dashboardSnapshotSchema(dashboardId: string): string {
@@ -381,6 +567,84 @@ function discoverReadTargets(): DashboardStorageTarget[] {
   return Array.from(targets.values());
 }
 
+function createBaseTargetFromAttachedId(
+  decoded: NonNullable<ReturnType<typeof decodeAttachedDashboardId>>,
+): DashboardStorageTarget {
+  const base =
+    decoded.backend === "duckdb-wasm"
+      ? createWasmTarget()
+      : createRuntimeDefaultTarget(decoded.backend);
+
+  return decoded.dbIdentifier && decoded.backend === "duckdb-wasm"
+    ? {
+        ...base,
+        dbIdentifier: decoded.dbIdentifier,
+        key: buildTargetKey(base.kind, base.sqlBackend, decoded.dbIdentifier),
+      }
+    : base;
+}
+
+async function resolveCurrentCatalogForTarget(
+  target: DashboardStorageTarget,
+): Promise<string | null> {
+  const rows = await runStorageSql(
+    target,
+    "SELECT current_catalog() AS current_catalog;",
+  ).catch(() => []);
+
+  return toNullableString(rows[0]?.current_catalog);
+}
+
+async function discoverAttachedCatalogTargets(
+  baseTargets: DashboardStorageTarget[],
+): Promise<DashboardStorageTarget[]> {
+  const attachedTargets = new Map<string, DashboardStorageTarget>();
+
+  for (const baseTarget of baseTargets) {
+    const currentCatalog = await resolveCurrentCatalogForTarget(baseTarget);
+    const rows = await runStorageSql(
+      baseTarget,
+      `SELECT DISTINCT table_catalog
+       FROM information_schema.tables
+       WHERE table_schema = ${quoteString(METADATA_SCHEMA)}
+         AND table_name = 'dashboards'
+       ORDER BY table_catalog;`,
+    ).catch(() => []);
+
+    for (const row of rows) {
+      const catalog = toNullableString(row.table_catalog);
+      if (!catalog) {
+        continue;
+      }
+      if (
+        baseTarget.kind === "wasm-local" &&
+        catalog === DEFAULT_WASM_DB_IDENTIFIER
+      ) {
+        continue;
+      }
+      if (
+        currentCatalog &&
+        catalog.toLowerCase() === currentCatalog.toLowerCase()
+      ) {
+        continue;
+      }
+      if (
+        catalog.toLowerCase() === "memory" ||
+        catalog.toLowerCase() === "main"
+      ) {
+        continue;
+      }
+
+      const target = createAttachedCatalogTarget(baseTarget, catalog);
+      if (target.key !== baseTarget.key) {
+        attachedTargets.set(target.key, target);
+      }
+    }
+  }
+
+  return Array.from(attachedTargets.values());
+}
+
 function normalizeDashboardRow(
   row: Record<string, unknown>,
 ): DashboardRecord | null {
@@ -395,7 +659,7 @@ function normalizeDashboardRow(
     title,
     createdAt: toNumber(row.created_at, Date.now()),
     updatedAt: toNumber(row.updated_at, Date.now()),
-    columns: toNumber(row.columns, 3),
+    columns: toNumber(row.columns, 4),
     autoFitRows: toBoolean(row.auto_fit_rows, false),
     runtimeBackend:
       normalizeSqlBackend(row.runtime_backend) ??
@@ -448,6 +712,10 @@ function normalizeChartRow(row: Record<string, unknown>): ChartRecord | null {
     semanticQueryJson: toNullableString(row.semantic_query_json),
     exploreName: toNullableString(row.explore_name),
     position: toNumber(row.position, 0),
+    layoutX: row.layout_x == null ? null : toNumber(row.layout_x, 0),
+    layoutY: row.layout_y == null ? null : toNumber(row.layout_y, 0),
+    layoutW: row.layout_w == null ? null : toNumber(row.layout_w, 1),
+    layoutH: row.layout_h == null ? null : toNumber(row.layout_h, 3),
     createdAt: toNumber(row.created_at, Date.now()),
     updatedAt: toNumber(row.updated_at, Date.now()),
     sourceSql: sql,
@@ -613,6 +881,11 @@ async function hasMetadataTables(
       `SELECT 1
        FROM information_schema.tables
        WHERE table_schema = ${quoteString(METADATA_SCHEMA)}
+         ${
+           target.kind === "attached-catalog" && target.catalog
+             ? `AND table_catalog = ${quoteString(target.catalog)}`
+             : ""
+         }
          AND table_name = 'dashboards'
        LIMIT 1;`,
     );
@@ -634,7 +907,7 @@ async function ensureMetadataSchema(
       title TEXT NOT NULL,
       created_at BIGINT NOT NULL,
       updated_at BIGINT NOT NULL,
-      columns INTEGER NOT NULL DEFAULT 3,
+      columns INTEGER NOT NULL DEFAULT 4,
       auto_fit_rows BOOLEAN NOT NULL DEFAULT FALSE,
       runtime_backend TEXT NOT NULL,
       active_snapshot_id TEXT,
@@ -659,6 +932,10 @@ async function ensureMetadataSchema(
       semantic_query_json TEXT,
       explore_name TEXT,
       position INTEGER NOT NULL,
+      layout_x INTEGER,
+      layout_y INTEGER,
+      layout_w INTEGER,
+      layout_h INTEGER,
       created_at BIGINT NOT NULL,
       updated_at BIGINT NOT NULL
     );`,
@@ -754,6 +1031,14 @@ async function ensureMetadataSchema(
      ADD COLUMN IF NOT EXISTS source_descriptor_json TEXT;`,
     `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
      ADD COLUMN IF NOT EXISTS snapshot_id TEXT;`,
+    `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
+     ADD COLUMN IF NOT EXISTS layout_x INTEGER;`,
+    `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
+     ADD COLUMN IF NOT EXISTS layout_y INTEGER;`,
+    `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
+     ADD COLUMN IF NOT EXISTS layout_w INTEGER;`,
+    `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
+     ADD COLUMN IF NOT EXISTS layout_h INTEGER;`,
     `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_measures
      ADD COLUMN IF NOT EXISTS sql TEXT;`,
     `ALTER TABLE ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_measures
@@ -783,13 +1068,14 @@ async function listDashboardsFromTarget(
   const rows = await runStorageSql(
     target,
     `SELECT *
-     FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboards
+     FROM ${metadataTableRef(target, "dashboards")}
      ORDER BY updated_at DESC;`,
   );
 
   return rows
     .map((row) => normalizeDashboardRow(row))
-    .filter((row): row is DashboardRecord => row !== null);
+    .filter((row): row is DashboardRecord => row !== null)
+    .map((dashboard) => decorateDashboardRecordForTarget(target, dashboard));
 }
 
 async function getDashboardFromTarget(
@@ -803,12 +1089,13 @@ async function getDashboardFromTarget(
   const rows = await runStorageSql(
     target,
     `SELECT *
-     FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboards
-     WHERE id = ${quoteString(dashboardId)}
+     FROM ${metadataTableRef(target, "dashboards")}
+     WHERE id = ${quoteString(getDashboardStorageId(dashboardId))}
      LIMIT 1;`,
   );
 
-  return normalizeDashboardRow(rows[0] ?? {}) ?? null;
+  const dashboard = normalizeDashboardRow(rows[0] ?? {}) ?? null;
+  return dashboard ? decorateDashboardRecordForTarget(target, dashboard) : null;
 }
 
 async function getChartFromTarget(
@@ -822,12 +1109,13 @@ async function getChartFromTarget(
   const rows = await runStorageSql(
     target,
     `SELECT *
-     FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
+     FROM ${metadataTableRef(target, "dashboard_charts")}
      WHERE id = ${quoteString(chartId)}
      LIMIT 1;`,
   );
 
-  return normalizeChartRow(rows[0] ?? {}) ?? null;
+  const chart = normalizeChartRow(rows[0] ?? {}) ?? null;
+  return chart ? decorateChartRecordForTarget(target, chart) : null;
 }
 
 async function getMeasureFromTarget(
@@ -841,12 +1129,13 @@ async function getMeasureFromTarget(
   const rows = await runStorageSql(
     target,
     `SELECT *
-     FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_measures
+     FROM ${metadataTableRef(target, "dashboard_measures")}
      WHERE id = ${quoteString(measureId)}
      LIMIT 1;`,
   );
 
-  return normalizeMeasureRow(rows[0] ?? {}) ?? null;
+  const measure = normalizeMeasureRow(rows[0] ?? {}) ?? null;
+  return measure ? decorateMeasureRecordForTarget(target, measure) : null;
 }
 
 async function listChartsFromTarget(
@@ -860,14 +1149,15 @@ async function listChartsFromTarget(
   const rows = await runStorageSql(
     target,
     `SELECT *
-     FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_charts
-     WHERE dashboard_id = ${quoteString(dashboardId)}
+     FROM ${metadataTableRef(target, "dashboard_charts")}
+     WHERE dashboard_id = ${quoteString(getDashboardStorageId(dashboardId))}
      ORDER BY position ASC;`,
   );
 
   return rows
     .map((row) => normalizeChartRow(row))
-    .filter((row): row is ChartRecord => row !== null);
+    .filter((row): row is ChartRecord => row !== null)
+    .map((chart) => decorateChartRecordForTarget(target, chart));
 }
 
 async function listMeasuresFromTarget(
@@ -881,14 +1171,15 @@ async function listMeasuresFromTarget(
   const rows = await runStorageSql(
     target,
     `SELECT *
-     FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_measures
-     WHERE dashboard_id = ${quoteString(dashboardId)}
+     FROM ${metadataTableRef(target, "dashboard_measures")}
+     WHERE dashboard_id = ${quoteString(getDashboardStorageId(dashboardId))}
      ORDER BY label ASC;`,
   );
 
   return rows
     .map((row) => normalizeMeasureRow(row))
-    .filter((row): row is MeasureRecord => row !== null);
+    .filter((row): row is MeasureRecord => row !== null)
+    .map((measure) => decorateMeasureRecordForTarget(target, measure));
 }
 
 async function listDashboardSlicersFromTarget(
@@ -902,8 +1193,8 @@ async function listDashboardSlicersFromTarget(
   const rows = await runStorageSql(
     target,
     `SELECT *
-     FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_slicers
-     WHERE dashboard_id = ${quoteString(dashboardId)}
+     FROM ${metadataTableRef(target, "dashboard_slicers")}
+     WHERE dashboard_id = ${quoteString(getDashboardStorageId(dashboardId))}
      ORDER BY position ASC;`,
   );
 
@@ -923,7 +1214,7 @@ async function listChartSlicersFromTarget(
   const rows = await runStorageSql(
     target,
     `SELECT *
-     FROM ${quoteIdentifier(METADATA_SCHEMA)}.chart_slicers
+     FROM ${metadataTableRef(target, "chart_slicers")}
      WHERE chart_id = ${quoteString(chartId)}
      ORDER BY position ASC;`,
   );
@@ -944,8 +1235,8 @@ async function listJoinDefsFromTarget(
   const rows = await runStorageSql(
     target,
     `SELECT left_table, left_column, right_table, right_column, join_type
-     FROM ${quoteIdentifier(METADATA_SCHEMA)}.dashboard_join_defs
-     WHERE dashboard_id = ${quoteString(dashboardId)}
+     FROM ${metadataTableRef(target, "dashboard_join_defs")}
+     WHERE dashboard_id = ${quoteString(getDashboardStorageId(dashboardId))}
      ORDER BY position ASC;`,
   );
 
@@ -1080,6 +1371,10 @@ async function upsertChartRecord(
       semantic_query_json,
       explore_name,
       position,
+      layout_x,
+      layout_y,
+      layout_w,
+      layout_h,
       created_at,
       updated_at
     ) VALUES (
@@ -1098,10 +1393,43 @@ async function upsertChartRecord(
       ${sqlNullableString(chart.semanticQueryJson)},
       ${sqlNullableString(chart.exploreName)},
       ${chart.position},
+      ${chart.layoutX ?? "NULL"},
+      ${chart.layoutY ?? "NULL"},
+      ${chart.layoutW ?? "NULL"},
+      ${chart.layoutH ?? "NULL"},
       ${chart.createdAt},
       ${chart.updatedAt}
     );`,
   );
+}
+
+function getInitialChartLayout(
+  charts: ChartRecord[],
+  columns: number | null | undefined,
+  chartConfigJson: string,
+): { layoutX: number; layoutY: number; layoutW: number; layoutH: number } {
+  const gridColumns = Math.max(1, columns ?? 4);
+  let requestedWidth = 1;
+  try {
+    const parsed = JSON.parse(chartConfigJson) as { colSpan?: unknown };
+    if (typeof parsed.colSpan === "number" && Number.isFinite(parsed.colSpan)) {
+      requestedWidth = parsed.colSpan;
+    }
+  } catch {
+    requestedWidth = 1;
+  }
+
+  const layoutW = Math.min(
+    gridColumns,
+    Math.max(1, Math.round(requestedWidth)),
+  );
+  const layoutY = charts.reduce((bottom, chart) => {
+    const y = chart.layoutY ?? Math.floor(chart.position / gridColumns) * 3;
+    const h = chart.layoutH ?? 3;
+    return Math.max(bottom, y + h);
+  }, 0);
+
+  return { layoutX: 0, layoutY, layoutW, layoutH: 3 };
 }
 
 async function upsertMeasureRecord(
@@ -1312,6 +1640,19 @@ export class DashboardStorageService {
     target: DashboardStorageTarget;
     dashboard: DashboardRecord;
   } | null> {
+    const decodedAttachedId = decodeAttachedDashboardId(dashboardId);
+    if (decodedAttachedId) {
+      const target = createAttachedCatalogTarget(
+        createBaseTargetFromAttachedId(decodedAttachedId),
+        decodedAttachedId.catalog,
+      );
+      const dashboard = await getDashboardFromTarget(
+        target,
+        decodedAttachedId.dashboardId,
+      ).catch(() => null);
+      return dashboard ? { target, dashboard } : null;
+    }
+
     const targets = discoverReadTargets();
     for (const target of targets) {
       const dashboard = await getDashboardFromTarget(target, dashboardId).catch(
@@ -1359,6 +1700,7 @@ export class DashboardStorageService {
 
   async listDashboards(): Promise<DashboardSummary[]> {
     const targets = discoverReadTargets();
+    const attachedTargets = await discoverAttachedCatalogTargets(targets);
     const dashboardsById = new Map<string, DashboardRecord>();
 
     for (const target of targets) {
@@ -1368,6 +1710,13 @@ export class DashboardStorageService {
         if (!existing || existing.updatedAt < dashboard.updatedAt) {
           dashboardsById.set(dashboard.id, dashboard);
         }
+      }
+    }
+
+    for (const target of attachedTargets) {
+      const dashboards = await listDashboardsFromTarget(target).catch(() => []);
+      for (const dashboard of dashboards) {
+        dashboardsById.set(dashboard.id, dashboard);
       }
     }
 
@@ -1399,7 +1748,7 @@ export class DashboardStorageService {
       title,
       createdAt: now,
       updatedAt: now,
-      columns: 3,
+      columns: 4,
       autoFitRows: false,
       runtimeBackend,
       activeSnapshotId: null,
@@ -1465,7 +1814,7 @@ export class DashboardStorageService {
       ...input.dashboard,
       createdAt: input.dashboard.createdAt || now,
       updatedAt: now,
-      columns: input.dashboard.columns ?? 3,
+      columns: input.dashboard.columns ?? 4,
       autoFitRows: input.dashboard.autoFitRows ?? false,
       runtimeBackend,
       activeSnapshotId: null,
@@ -1798,6 +2147,12 @@ export class DashboardStorageService {
       -1,
     );
 
+    const initialLayout = getInitialChartLayout(
+      charts,
+      resolved.dashboard.columns,
+      input.chartConfigJson,
+    );
+
     await upsertChartRecord(resolved.target, {
       id,
       dashboardId: input.dashboardId,
@@ -1811,6 +2166,7 @@ export class DashboardStorageService {
       semanticQueryJson: input.semanticQueryJson ?? null,
       exploreName: input.exploreName ?? null,
       position: maxPosition + 1,
+      ...initialLayout,
       createdAt: now,
       updatedAt: now,
       sourceDescriptor: prepared.sourceDescriptor,
@@ -1839,6 +2195,30 @@ export class DashboardStorageService {
     await upsertChartRecord(resolved.target, {
       ...resolved.chart,
       chartConfigJson,
+      updatedAt: now,
+    });
+    await touchDashboard(resolved.target, resolved.chart.dashboardId, now);
+    return { updated: true };
+  }
+
+  async updateChartLayout(
+    chartId: string,
+    layout: { x: number; y: number; w: number; h: number },
+    position: number,
+    now = Date.now(),
+  ): Promise<{ updated: boolean }> {
+    const resolved = await this.resolveChartTarget(chartId);
+    if (!resolved) {
+      return { updated: false };
+    }
+
+    await upsertChartRecord(resolved.target, {
+      ...resolved.chart,
+      position,
+      layoutX: layout.x,
+      layoutY: layout.y,
+      layoutW: layout.w,
+      layoutH: layout.h,
       updatedAt: now,
     });
     await touchDashboard(resolved.target, resolved.chart.dashboardId, now);

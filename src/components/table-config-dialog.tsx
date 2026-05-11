@@ -1,3 +1,4 @@
+import { Settings2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,11 +69,11 @@ export function TableConfigDialog({
       ) : (
         <DialogTrigger asChild>{trigger}</DialogTrigger>
       )}
-      <DialogContent className="max-w-xl bg-card">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span className="text-gray-500">⚙️</span>
-            Table Configuration
+      <DialogContent className="max-w-2xl bg-card p-6">
+        <DialogHeader className="pb-2">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <Settings2 className="h-5 w-5 text-muted-foreground" />
+            Table Settings
           </DialogTitle>
         </DialogHeader>
 

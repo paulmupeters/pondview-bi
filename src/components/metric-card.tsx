@@ -10,6 +10,7 @@ interface MetricCardProps {
   takeaway?: string;
   className?: string;
   editable?: boolean;
+  showTitle?: boolean;
   onTitleChange?: (value: string) => void;
   onDescriptionChange?: (value: string) => void;
   onTakeawayChange?: (value: string) => void;
@@ -22,6 +23,7 @@ export function MetricCard({
   takeaway,
   className,
   editable = false,
+  showTitle = true,
   onTitleChange,
   onDescriptionChange,
   onTakeawayChange,
@@ -100,37 +102,39 @@ export function MetricCard({
 
   return (
     <Card className={className}>
-      <CardHeader>
-        <div className="group/title flex items-center gap-2">
-          {editingField === "title" ? (
-            <input
-              ref={inputRef}
-              type="text"
-              className="w-full bg-background border border-input rounded px-2 py-1.5 text-base font-medium text-muted-foreground focus:outline-none focus:border-primary"
-              value={draftValue}
-              onChange={(event) => setDraftValue(event.target.value)}
-              onBlur={handleBlur}
-              onKeyDown={handleInputKeyDown}
-            />
-          ) : (
-            <>
-              <CardTitle className="text-base font-medium text-muted-foreground">
-                {title}
-              </CardTitle>
-              {canEditTitle && (
-                <button
-                  type="button"
-                  className="text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/title:opacity-100 focus-visible:opacity-100"
-                  onClick={() => handleStartEditing("title")}
-                  aria-label="Edit card title"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </CardHeader>
+      {showTitle ? (
+        <CardHeader>
+          <div className="group/title flex items-center gap-2">
+            {editingField === "title" ? (
+              <input
+                ref={inputRef}
+                type="text"
+                className="w-full bg-background border border-input rounded px-2 py-1.5 text-base font-medium text-muted-foreground focus:outline-none focus:border-primary"
+                value={draftValue}
+                onChange={(event) => setDraftValue(event.target.value)}
+                onBlur={handleBlur}
+                onKeyDown={handleInputKeyDown}
+              />
+            ) : (
+              <>
+                <CardTitle className="text-base font-medium text-muted-foreground">
+                  {title}
+                </CardTitle>
+                {canEditTitle && (
+                  <button
+                    type="button"
+                    className="text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/title:opacity-100 focus-visible:opacity-100"
+                    onClick={() => handleStartEditing("title")}
+                    aria-label="Edit card title"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </CardHeader>
+      ) : null}
       <CardContent className="flex-1 flex flex-col justify-center">
         <div className="text-4xl font-bold text-foreground">
           {formattedValue}

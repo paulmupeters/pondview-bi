@@ -43,6 +43,7 @@ interface DashboardSlicersBarProps {
   selectedChartId?: string | null;
   charts?: Array<{ id: string; sql: string }>;
   onClearChartSelection?: () => void;
+  readOnly?: boolean;
 }
 
 function normalizeSlicer(
@@ -62,6 +63,7 @@ export function DashboardSlicersBar({
   selectedChartId = null,
   charts = [],
   onClearChartSelection: _onClearChartSelection,
+  readOnly = false,
 }: DashboardSlicersBarProps) {
   const { availableDimensions, filters, removeFilter, setActiveScope } =
     useFilters();
@@ -264,11 +266,13 @@ export function DashboardSlicersBar({
               field={slicer.field}
               title={slicer.title}
               limit={slicer.limit}
-              onRemove={() => handleRemoveSlicer(slicer.id)}
+              onRemove={
+                readOnly ? undefined : () => handleRemoveSlicer(slicer.id)
+              }
             />
           ))}
 
-          {availableForSlicers.length > 0 && (
+          {!readOnly && availableForSlicers.length > 0 && (
             <Popover open={addSlicerOpen} onOpenChange={setAddSlicerOpen}>
               <PopoverTrigger asChild>
                 <Button
