@@ -72,6 +72,8 @@ These commands talk to the bridge API:
 pondview attach ./analytics.duckdb --as analytics
 pondview list-sources
 pondview query "SELECT 42 AS answer"
+pondview query --file ./dashboard-metadata.sql --database ./analytics.duckdb
+pondview dashboard validate --database ./analytics.duckdb
 pondview detach analytics
 pondview doctor
 pondview stop
@@ -92,6 +94,36 @@ a custom or remote endpoint:
 ```bash
 pondview query "SELECT 42 AS answer" --url http://127.0.0.1:17818
 ```
+
+Use `query --file` for longer SQL scripts, including dashboard metadata authoring
+scripts:
+
+```bash
+pondview query --file ./dashboard-metadata.sql --database ./analytics.duckdb
+```
+
+### Dashboard maintenance
+
+Dashboard commands inspect and maintain dashboard metadata stored in the
+`pondview` schema of the active bridge database.
+
+```bash
+pondview dashboard list --database ./analytics.duckdb
+pondview dashboard show dashboard_123 --database ./analytics.duckdb
+pondview dashboard validate --database ./analytics.duckdb
+pondview dashboard validate dashboard_123 --database ./analytics.duckdb
+pondview dashboard rename dashboard_123 --title "Executive Revenue" --database ./analytics.duckdb
+pondview dashboard delete dashboard_123 --yes --database ./analytics.duckdb
+pondview dashboard open dashboard_123 --database ./analytics.duckdb
+```
+
+`dashboard validate` checks that dashboard metadata is structurally readable,
+that chart configs and source descriptors parse as JSON, that child runtime
+metadata is consistent, and that stored chart and measure SQL can run as a small
+preview query.
+
+`dashboard open` starts the bundled local app in dashboard mode and opens either
+the dashboard list or a specific dashboard view.
 
 `pondview doctor` checks the configured bridge URL and prints a machine-readable
 JSON diagnostic report. It does not autostart a bridge, so it is safe to use in
@@ -131,6 +163,9 @@ that port.
 | `--token <token>` | all bridge/client commands | Requires or sends a bridge auth token. |
 | `--token-env <name>` | all bridge/client commands | Reads the bridge auth token from an environment variable. |
 | `--url <url>` | client commands | Uses an explicit bridge URL and disables autostart. |
+| `--file <path>` | `query` | Reads SQL from a UTF-8 file instead of inline command arguments. |
+| `--title <title>` | `dashboard rename` | Sets the dashboard title. |
+| `--yes` | `dashboard delete` | Confirms dashboard deletion. |
 | `--no-autostart` | client commands | Fails when no bridge is reachable instead of starting one. |
 | `--no-open` | `serve` | Does not open the browser after starting the local app. |
 | `--force` | `stop` | Stops whatever is listening on the configured port without checking whether it is a Pondview bridge. |

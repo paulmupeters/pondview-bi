@@ -235,7 +235,7 @@ export function DashboardChartCard({
       data-chart-card-id={chart.id}
       role="button"
       tabIndex={0}
-      className={`group relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-md p-4 pt-12 md:p-2 md:pt-12 ring-1 ring-inset ${isSelected ? "ring-primary bg-primary/5" : "ring-transparent"}`}
+      className={`group relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-md p-4 pt-12 md:p-2 md:pt-12 ring-1 ring-inset ${isSelected ? "ring-primary bg-primary/5" : "ring-transparent"}`}
     >
       {!readOnly ? (
         <div className="absolute left-2 top-2 z-30">
@@ -322,7 +322,7 @@ export function DashboardChartCard({
             showTitle={false}
           />
         ) : isTable && rows.length > 0 ? (
-          <div className="w-full">
+          <div className="flex min-h-0 w-full flex-1 overflow-hidden">
             <SqlResultsTable
               dataOverride={{
                 stage: "complete",
@@ -330,6 +330,8 @@ export function DashboardChartCard({
                 rows: rows as Record<string, unknown>[],
               }}
               enableColumnFilters={false}
+              expandable
+              expandTitle={cardTitle}
             />
           </div>
         ) : isTextConfig(config) ? (

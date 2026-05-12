@@ -1,4 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type {
+  BridgeJsonValue,
+  BridgeQueryResponse,
+} from "@pondview/bridge-protocol";
 import { runCli } from "./cli";
 
 function createNoopClient() {
@@ -42,6 +49,38 @@ async function captureStdout(operation: () => Promise<void>): Promise<string> {
   }
 
   return output.join("\n");
+}
+
+async function captureStdoutAndError(
+  operation: () => Promise<void>,
+): Promise<{ output: string; error: unknown }> {
+  let error: unknown;
+  const output = await captureStdout(async () => {
+    try {
+      await operation();
+    } catch (caught) {
+      error = caught;
+    }
+  });
+  return { output, error };
+}
+
+function createTempDir(): string {
+  return mkdtempSync(join(tmpdir(), "pondview-cli-"));
+}
+
+type TestRow = Record<string, BridgeJsonValue>;
+
+function queryResponse(
+  rows: TestRow[] = [],
+  rowsChanged?: number,
+): BridgeQueryResponse {
+  return {
+    columns: [],
+    rows,
+    rowCount: rows.length,
+    ...(rowsChanged === undefined ? {} : { rowsChanged }),
+  };
 }
 
 describe("bridge CLI serve browser behavior", () => {
@@ -308,6 +347,336 @@ describe("bridge CLI client autostart", () => {
       database: "./analytics.duckdb",
       readonly: true,
     });
+  });
+});
+
+describe("bridge CLI query files", () => {
+  test("query --file reads SQL from disk", async () => {
+    const tempDir = createTempDir();
+    const sqlPath = join(tempDir, "statement.sql");
+    writeFileSync(sqlPath, "SELECT 42 AS answer;\n", "utf8");
+    const queries: string[] = [];
+
+    try {
+      await runCli(["query", "--file", sqlPath], {
+        createClient: () => ({
+          ...createNoopClient(),
+          query: async (input) => {
+            queries.push(input.sql);
+            return { columns: [], rows: [], rowCount: 0 };
+          },
+        }),
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+
+    expect(queries).toEqual(["SELECT 42 AS answer;"]);
+  });
+
+  test("query rejects mixed inline SQL and --file input", async () => {
+    await expect(
+      runCli(["query", "SELECT 1", "--file", "statement.sql"]),
+    ).rejects.toThrow("Use either inline SQL or --file");
+  });
+});
+
+describe("bridge CLI dashboard commands", () => {
+  const tables = [
+    "dashboards",
+    "dashboard_charts",
+    "dashboard_measures",
+    "dashboard_slicers",
+    "dashboard_join_defs",
+    "chart_slicers",
+    "dashboard_cache_tables",
+    "dashboard_source_caches",
+    "dashboard_snapshots",
+  ];
+
+  function dashboardClient(options?: {
+    previewError?: boolean;
+    queries?: string[];
+    dashboards?: TestRow[];
+    charts?: TestRow[];
+    measures?: TestRow[];
+    slicers?: TestRow[];
+    joinDefs?: TestRow[];
+  }) {
+    const dashboards = options?.dashboards ?? [
+      {
+        id: "dash_1",
+        title: "Revenue",
+        updated_at: 123,
+        runtime_backend: "bridge",
+      },
+    ];
+    const measures = options?.measures ?? [
+      {
+        id: "measure_1",
+        dashboard_id: "dash_1",
+        key: "total_revenue",
+        label: "Total Revenue",
+        sql: "SELECT 1 AS total_revenue",
+        sql_backend: "bridge",
+        source_descriptor_json:
+          '{"kind":"runtime","runtimeBackend":"bridge","dbIdentifier":null,"catalogContext":null}',
+      },
+    ];
+    const charts = options?.charts ?? [
+      {
+        id: "chart_1",
+        dashboard_id: "dash_1",
+        title: "Revenue",
+        description: "Revenue card",
+        sql: "SELECT 1 AS total_revenue",
+        sql_backend: "bridge",
+        chart_config_json:
+          '{"configType":"card","measureId":"measure_1","title":"Revenue","description":"Revenue card"}',
+        source_descriptor_json:
+          '{"kind":"runtime","runtimeBackend":"bridge","dbIdentifier":null,"catalogContext":null}',
+      },
+    ];
+    const slicers = options?.slicers ?? [
+      { id: "slicer_1", dashboard_id: "dash_1", field: "region" },
+    ];
+    const joinDefs = options?.joinDefs ?? [
+      { dashboard_id: "dash_1", position: 0, left_table: "a" },
+    ];
+
+    return {
+      ...createNoopClient(),
+      query: async (input: { sql: string }): Promise<BridgeQueryResponse> => {
+        options?.queries?.push(input.sql);
+        const sql = input.sql;
+        if (sql.includes("information_schema.tables")) {
+          return queryResponse(tables.map((table_name) => ({ table_name })));
+        }
+        if (sql.startsWith("SELECT * FROM (")) {
+          if (options?.previewError) {
+            throw new Error("preview failed");
+          }
+          return queryResponse();
+        }
+        if (sql.includes('UPDATE "pondview"."dashboards"')) {
+          return queryResponse([], 1);
+        }
+        if (sql.includes("DELETE FROM")) {
+          return queryResponse([], 9);
+        }
+        if (sql.includes('COUNT(*) FROM "pondview"."dashboard_charts"')) {
+          return queryResponse(
+            dashboards.map((dashboard) => ({
+              ...dashboard,
+              chart_count: charts.filter(
+                (chart) => chart.dashboard_id === dashboard.id,
+              ).length,
+              measure_count: measures.filter(
+                (measure) => measure.dashboard_id === dashboard.id,
+              ).length,
+              slicer_count: slicers.filter(
+                (slicer) => slicer.dashboard_id === dashboard.id,
+              ).length,
+            })),
+          );
+        }
+        if (sql.includes('FROM "pondview"."dashboards"')) {
+          return queryResponse(dashboards);
+        }
+        if (sql.includes('FROM "pondview"."dashboard_charts"')) {
+          return queryResponse(charts);
+        }
+        if (sql.includes('FROM "pondview"."dashboard_measures"')) {
+          return queryResponse(measures);
+        }
+        if (sql.includes('FROM "pondview"."dashboard_slicers"')) {
+          return queryResponse(slicers);
+        }
+        if (sql.includes('FROM "pondview"."dashboard_join_defs"')) {
+          return queryResponse(joinDefs);
+        }
+        return queryResponse();
+      },
+    };
+  }
+
+  test("dashboard list prints dashboard summaries", async () => {
+    const output = await captureStdout(() =>
+      runCli(["dashboard", "list"], {
+        createClient: () => dashboardClient(),
+      }),
+    );
+
+    expect(JSON.parse(output)).toMatchObject({
+      dashboards: [
+        {
+          id: "dash_1",
+          title: "Revenue",
+          chart_count: 1,
+          measure_count: 1,
+          slicer_count: 1,
+        },
+      ],
+    });
+  });
+
+  test("dashboard show prints dashboard metadata", async () => {
+    const output = await captureStdout(() =>
+      runCli(["dashboard", "show", "dash_1"], {
+        createClient: () => dashboardClient(),
+      }),
+    );
+
+    expect(JSON.parse(output)).toMatchObject({
+      dashboard: { id: "dash_1", title: "Revenue" },
+      charts: [{ id: "chart_1" }],
+      measures: [{ id: "measure_1" }],
+      slicers: [{ id: "slicer_1" }],
+      joinDefs: [{ dashboard_id: "dash_1" }],
+    });
+  });
+
+  test("dashboard validate passes valid metadata", async () => {
+    const output = await captureStdout(() =>
+      runCli(["dashboard", "validate", "dash_1"], {
+        createClient: () => dashboardClient(),
+      }),
+    );
+
+    expect(JSON.parse(output)).toMatchObject({
+      ok: true,
+      dashboards: ["dash_1"],
+      errors: [],
+    });
+  });
+
+  test("dashboard validate reports metadata and SQL failures", async () => {
+    const { output, error } = await captureStdoutAndError(() =>
+      runCli(["dashboard", "validate", "dash_1"], {
+        createClient: () =>
+          dashboardClient({
+            previewError: true,
+            measures: [],
+            charts: [
+              {
+                id: "chart_bad_json",
+                dashboard_id: "dash_1",
+                sql: "SELECT 1 AS value",
+                sql_backend: "bridge",
+                chart_config_json: "not json",
+                source_descriptor_json: "not json",
+              },
+              {
+                id: "chart_bad_refs",
+                dashboard_id: "dash_1",
+                title: "Bad refs",
+                description: "Bad refs",
+                sql: "SELECT 1 AS value",
+                sql_backend: "duckdb-http",
+                chart_config_json:
+                  '{"configType":"card","measureId":"missing_measure"}',
+                source_descriptor_json:
+                  '{"kind":"runtime","runtimeBackend":"bridge"}',
+              },
+            ],
+          }),
+      }),
+    );
+    const parsed = JSON.parse(output);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(parsed.ok).toBe(false);
+    expect(
+      parsed.errors.map((entry: { message: string }) => entry.message),
+    ).toEqual(
+      expect.arrayContaining([
+        "Invalid source_descriptor_json.",
+        "Invalid chart_config_json.",
+        'Runtime mismatch: dashboard runtime_backend is "bridge" but sql_backend is "duckdb-http".',
+        'Runtime mismatch: sql_backend is "duckdb-http" but source descriptor runtimeBackend is "bridge".',
+        'Card config references missing measureId "missing_measure".',
+        "SQL preview failed: preview failed",
+      ]),
+    );
+  });
+
+  test("dashboard rename requires a title and sends update SQL", async () => {
+    await expect(
+      runCli(["dashboard", "rename", "dash_1"], {
+        createClient: () => dashboardClient(),
+      }),
+    ).rejects.toThrow("Missing required --title");
+
+    const queries: string[] = [];
+    const output = await captureStdout(() =>
+      runCli(["dashboard", "rename", "dash_1", "--title", "New Title"], {
+        createClient: () => dashboardClient({ queries }),
+      }),
+    );
+
+    expect(queries.some((sql) => sql.includes("UPDATE"))).toBe(true);
+    expect(JSON.parse(output)).toMatchObject({
+      id: "dash_1",
+      title: "New Title",
+      rowsChanged: 1,
+    });
+  });
+
+  test("dashboard delete requires --yes and deletes dependent metadata first", async () => {
+    await expect(
+      runCli(["dashboard", "delete", "dash_1"], {
+        createClient: () => dashboardClient(),
+      }),
+    ).rejects.toThrow("without --yes");
+
+    const queries: string[] = [];
+    const output = await captureStdout(() =>
+      runCli(["dashboard", "delete", "dash_1", "--yes"], {
+        createClient: () => dashboardClient({ queries }),
+      }),
+    );
+    const deleteSql = queries.find((sql) => sql.includes("DELETE FROM")) ?? "";
+
+    expect(deleteSql.indexOf('"pondview"."dashboard_charts"')).toBeLessThan(
+      deleteSql.indexOf('"pondview"."dashboards"'),
+    );
+    expect(JSON.parse(output)).toMatchObject({
+      id: "dash_1",
+      deleted: true,
+      rowsChanged: 9,
+    });
+  });
+
+  test("dashboard open opens a specific dashboard in dashboard mode", async () => {
+    const openedUrls: string[] = [];
+
+    await runCli(
+      [
+        "dashboard",
+        "open",
+        "dash_1",
+        "--use-existing",
+        "--port",
+        "18000",
+        "--ui-port",
+        "0",
+      ],
+      {
+        createClient: () => dashboardClient(),
+        startBridgeUiServer: async () => ({
+          url: "http://127.0.0.1:56789",
+          stop: async () => {},
+        }),
+        openBrowser: async (url) => {
+          openedUrls.push(url);
+        },
+        waitForShutdown: async () => {},
+      },
+    );
+
+    expect(openedUrls).toEqual([
+      "http://127.0.0.1:56789/dashboards/view?id=dash_1&pondviewMode=dashboard",
+    ]);
   });
 });
 
