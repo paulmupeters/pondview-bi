@@ -44,9 +44,7 @@ describe("DashboardChartCard", () => {
     );
 
     expect(markup).toContain("h-full min-h-0 flex-col overflow-hidden");
-    expect(markup).toContain(
-      "flex min-h-0 w-full flex-1 overflow-hidden",
-    );
+    expect(markup).toContain("flex min-h-0 w-full flex-1 overflow-hidden");
     expect(markup).toContain("flex-1 overflow-auto rounded-md border w-full");
   });
 });

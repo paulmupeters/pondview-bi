@@ -33,4 +33,16 @@ describe("DashboardHeader", () => {
 
     expect(markup).toContain("Edit dashboard title");
   });
+
+  test("shows refresh control when refresh handler is provided", () => {
+    const markup = renderToStaticMarkup(
+      <DashboardHeader
+        dashboard={dashboard}
+        onTitleUpdate={async () => undefined}
+        onRefresh={async () => undefined}
+      />,
+    );
+
+    expect(markup).toContain("Refresh dashboard");
+  });
 });

@@ -33,16 +33,17 @@ function ChatRedirect() {
 }
 
 function LegacyDashboardDeepLinkRedirect() {
+  const location = useLocation();
   const params = useParams<{ dashboardId: string }>();
   const dashboardId = params.dashboardId;
   if (!dashboardId) {
     return <Navigate to="/dashboards" replace />;
   }
+  const searchParams = new URLSearchParams(location.search);
+  searchParams.set("id", dashboardId);
+
   return (
-    <Navigate
-      to={`/dashboards/view?id=${encodeURIComponent(dashboardId)}`}
-      replace
-    />
+    <Navigate to={`/dashboards/view?${searchParams.toString()}`} replace />
   );
 }
 

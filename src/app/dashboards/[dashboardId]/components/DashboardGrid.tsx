@@ -46,6 +46,8 @@ type DashboardGridProps = {
   selectedChartId: string | null;
   onChartSelect: (chartId: string) => void;
   onPreviewChart: (chartId: string) => void;
+  onRefreshChart: (chartId: string) => Promise<void>;
+  refreshingChartIds: Set<string>;
   readOnly?: boolean;
 };
 
@@ -161,6 +163,8 @@ export function DashboardGrid({
   selectedChartId,
   onChartSelect,
   onPreviewChart,
+  onRefreshChart,
+  refreshingChartIds,
   readOnly = false,
 }: DashboardGridProps) {
   const { width, containerRef, mounted } = useContainerWidth({
@@ -264,6 +268,8 @@ export function DashboardGrid({
                   isSelected={selectedChartId === chart.id}
                   onSelect={onChartSelect}
                   onPreviewChart={onPreviewChart}
+                  onRefresh={onRefreshChart}
+                  isRefreshing={refreshingChartIds.has(chart.id)}
                   readOnly={readOnly}
                 />
               </div>

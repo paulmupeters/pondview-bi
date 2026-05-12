@@ -3,6 +3,7 @@ import {
   Funnel,
   GripVertical,
   MoreHorizontal,
+  RefreshCw,
   Settings,
   Trash2,
 } from "lucide-react";
@@ -49,6 +50,8 @@ export function DashboardChartCard({
   isSelected = false,
   onSelect,
   onPreviewChart,
+  onRefresh,
+  isRefreshing = false,
   readOnly = false,
 }: DashboardChartCardProps) {
   const appliedFilterCount = chart.appliedFiltersCount ?? 0;
@@ -278,6 +281,19 @@ export function DashboardChartCard({
                     className={settingsIconClassName}
                   />
                   Expand
+                </button>
+              ) : null}
+              {onRefresh ? (
+                <button
+                  type="button"
+                  onClick={() => void onRefresh(chart.id)}
+                  disabled={isRefreshing}
+                  className={settingsButtonClassName}
+                >
+                  <RefreshCw
+                    className={`${settingsIconClassName} ${isRefreshing ? "animate-spin" : ""}`}
+                  />
+                  {isRefreshing ? "Refreshing" : "Refresh"}
                 </button>
               ) : null}
               <button

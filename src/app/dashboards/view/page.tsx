@@ -166,6 +166,10 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   const [measureQueryError, setMeasureQueryError] = useState<string | null>(
     null,
   );
+  const [isRefreshingDashboard, setIsRefreshingDashboard] = useState(false);
+  const [refreshingChartIds, setRefreshingChartIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -190,115 +194,247 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
     };
   }, [dashboardId]);
 
-  const refreshDashboardMeasures = useCallback(async () => {
-    try {
-      const measures = await listMeasuresByDashboard(dashboardId);
-      setDashboardMeasures(measures);
-      let nextMeasureError: string | null = null;
+  const refreshDashboardMeasures = useCallback(
+    async (options?: { forceRefresh?: boolean }) => {
+      try {
+        const measures = await listMeasuresByDashboard(dashboardId);
+        setDashboardMeasures(measures);
+        let nextMeasureError: string | null = null;
 
-      const valueEntries = await Promise.all(
-        measures.map(async (measure) => {
-          try {
+        const valueEntries = await Promise.all(
+          measures.map(async (measure) => {
+            try {
+              const result = await executeDashboardScopedQuery({
+                dashboardId,
+                sql: measure.sql,
+                sourceDescriptor: measure.sourceDescriptor ?? null,
+                snapshotId: measure.snapshotId ?? null,
+                forceRefresh: options?.forceRefresh,
+              });
+
+              return [
+                measure.id,
+                {
+                  formattedValue: formatFirstRowMeasureValue(result.rows),
+                  rawValue: extractFirstRowMeasurePrimitive(result.rows),
+                },
+              ] as const;
+            } catch (error) {
+              const message = getErrorMessage(error);
+              if (!nextMeasureError) {
+                nextMeasureError = isUnauthorizedMessage(message)
+                  ? DASHBOARD_AUTH_ERROR_MESSAGE
+                  : message;
+              }
+              console.error(
+                `Failed to resolve value for dashboard measure ${measure.id}:`,
+                error,
+              );
+              return [
+                measure.id,
+                {
+                  formattedValue: "",
+                  rawValue: undefined,
+                },
+              ] as const;
+            }
+          }),
+        );
+
+        setMeasureValuesById(
+          Object.fromEntries(
+            valueEntries.map(([measureId, value]) => [
+              measureId,
+              value.formattedValue,
+            ]),
+          ),
+        );
+        setMeasureRawValuesById(
+          Object.fromEntries(
+            valueEntries.map(([measureId, value]) => [
+              measureId,
+              value.rawValue,
+            ]),
+          ),
+        );
+        setMeasureQueryError(nextMeasureError);
+      } catch (error) {
+        console.error("Failed to refresh dashboard measures:", error);
+        const message = getErrorMessage(error);
+        setMeasureQueryError(
+          isUnauthorizedMessage(message)
+            ? DASHBOARD_AUTH_ERROR_MESSAGE
+            : message,
+        );
+      }
+    },
+    [dashboardId],
+  );
+
+  const refreshDashboardData = useCallback(
+    async (options?: { forceRefresh?: boolean }) => {
+      try {
+        const dashboardCharts = await listChartsByDashboard(dashboardId);
+        const sortedCharts = [...dashboardCharts].sort(
+          (a, b) => a.position - b.position,
+        );
+        const execution = await executeDashboardChartsWithFilters({
+          dashboardId,
+          charts: sortedCharts,
+          dashboardFilters,
+          chartFiltersById,
+          forceRefresh: options?.forceRefresh,
+        });
+        const metadataEntries = Object.values(execution.metadataByChartId);
+        const firstError = metadataEntries.find((entry) => entry.errorMessage);
+
+        setCharts(
+          sortedCharts.map((chart) => ({
+            ...chart,
+            ...(execution.metadataByChartId[chart.id] ?? {
+              filtersApplied: false,
+              appliedFiltersCount: 0,
+              skippedFilters: [],
+            }),
+          })),
+        );
+        setChartData(execution.rowsByChartId);
+        setChartQueryError(
+          firstError
+            ? isUnauthorizedMessage(firstError.errorMessage)
+              ? DASHBOARD_AUTH_ERROR_MESSAGE
+              : (firstError.errorMessage ?? null)
+            : null,
+        );
+      } catch (error) {
+        console.error("Failed to refresh dashboard data:", error);
+        const message = getErrorMessage(error);
+        setChartQueryError(
+          isUnauthorizedMessage(message)
+            ? DASHBOARD_AUTH_ERROR_MESSAGE
+            : message,
+        );
+      }
+    },
+    [chartFiltersById, dashboardFilters, dashboardId],
+  );
+
+  const handleDashboardRefresh = useCallback(async () => {
+    setIsRefreshingDashboard(true);
+    try {
+      await Promise.all([
+        refreshDashboardData({ forceRefresh: true }),
+        refreshDashboardMeasures({ forceRefresh: true }),
+      ]);
+    } finally {
+      setIsRefreshingDashboard(false);
+    }
+  }, [refreshDashboardData, refreshDashboardMeasures]);
+
+  const handleChartRefresh = useCallback(
+    async (chartId: string) => {
+      const chart = charts.find((item) => item.id === chartId);
+      if (!chart) {
+        return;
+      }
+
+      setRefreshingChartIds((prev) => new Set(prev).add(chartId));
+      try {
+        const dashboardCharts = await listChartsByDashboard(dashboardId);
+        const chartForExecution =
+          dashboardCharts.find((item) => item.id === chartId) ?? null;
+        if (!chartForExecution) {
+          return;
+        }
+        const execution = await executeDashboardChartsWithFilters({
+          dashboardId,
+          charts: [chartForExecution],
+          dashboardFilters,
+          chartFiltersById,
+          forceRefresh: true,
+        });
+        const metadata = execution.metadataByChartId[chartId] ?? {
+          filtersApplied: false,
+          appliedFiltersCount: 0,
+          skippedFilters: [],
+        };
+        setCharts((prev) =>
+          prev.map((item) =>
+            item.id === chartId ? { ...item, ...metadata } : item,
+          ),
+        );
+        setChartData((prev) => ({
+          ...prev,
+          [chartId]: execution.rowsByChartId[chartId] ?? [],
+        }));
+        setChartQueryError(
+          metadata.errorMessage
+            ? isUnauthorizedMessage(metadata.errorMessage)
+              ? DASHBOARD_AUTH_ERROR_MESSAGE
+              : metadata.errorMessage
+            : null,
+        );
+
+        let measureId: string | null = null;
+        try {
+          const config = JSON.parse(chart.chartConfigJson) as
+            | CardConfig
+            | Config
+            | TableConfig
+            | TextConfig;
+          measureId =
+            isCardConfig(config) && config.measureId ? config.measureId : null;
+        } catch {
+          measureId = null;
+        }
+
+        if (measureId) {
+          const measure = dashboardMeasures.find(
+            (item) => item.id === measureId,
+          );
+          if (measure) {
             const result = await executeDashboardScopedQuery({
               dashboardId,
               sql: measure.sql,
               sourceDescriptor: measure.sourceDescriptor ?? null,
               snapshotId: measure.snapshotId ?? null,
+              forceRefresh: true,
             });
-
-            return [
-              measure.id,
-              {
-                formattedValue: formatFirstRowMeasureValue(result.rows),
-                rawValue: extractFirstRowMeasurePrimitive(result.rows),
-              },
-            ] as const;
-          } catch (error) {
-            const message = getErrorMessage(error);
-            if (!nextMeasureError) {
-              nextMeasureError = isUnauthorizedMessage(message)
-                ? DASHBOARD_AUTH_ERROR_MESSAGE
-                : message;
-            }
-            console.error(
-              `Failed to resolve value for dashboard measure ${measure.id}:`,
-              error,
-            );
-            return [
-              measure.id,
-              {
-                formattedValue: "",
-                rawValue: undefined,
-              },
-            ] as const;
+            setMeasureValuesById((prev) => ({
+              ...prev,
+              [measure.id]: formatFirstRowMeasureValue(result.rows),
+            }));
+            setMeasureRawValuesById((prev) => ({
+              ...prev,
+              [measure.id]: extractFirstRowMeasurePrimitive(result.rows),
+            }));
+            setMeasureQueryError(null);
           }
-        }),
-      );
-
-      setMeasureValuesById(
-        Object.fromEntries(
-          valueEntries.map(([measureId, value]) => [
-            measureId,
-            value.formattedValue,
-          ]),
-        ),
-      );
-      setMeasureRawValuesById(
-        Object.fromEntries(
-          valueEntries.map(([measureId, value]) => [measureId, value.rawValue]),
-        ),
-      );
-      setMeasureQueryError(nextMeasureError);
-    } catch (error) {
-      console.error("Failed to refresh dashboard measures:", error);
-      const message = getErrorMessage(error);
-      setMeasureQueryError(
-        isUnauthorizedMessage(message) ? DASHBOARD_AUTH_ERROR_MESSAGE : message,
-      );
-    }
-  }, [dashboardId]);
-
-  const refreshDashboardData = useCallback(async () => {
-    try {
-      const dashboardCharts = await listChartsByDashboard(dashboardId);
-      const sortedCharts = [...dashboardCharts].sort(
-        (a, b) => a.position - b.position,
-      );
-      const execution = await executeDashboardChartsWithFilters({
-        dashboardId,
-        charts: sortedCharts,
-        dashboardFilters,
-        chartFiltersById,
-      });
-      const metadataEntries = Object.values(execution.metadataByChartId);
-      const firstError = metadataEntries.find((entry) => entry.errorMessage);
-
-      setCharts(
-        sortedCharts.map((chart) => ({
-          ...chart,
-          ...(execution.metadataByChartId[chart.id] ?? {
-            filtersApplied: false,
-            appliedFiltersCount: 0,
-            skippedFilters: [],
-          }),
-        })),
-      );
-      setChartData(execution.rowsByChartId);
-      setChartQueryError(
-        firstError
-          ? isUnauthorizedMessage(firstError.errorMessage)
+        }
+      } catch (error) {
+        console.error(`Failed to refresh dashboard chart ${chartId}:`, error);
+        const message = getErrorMessage(error);
+        setChartQueryError(
+          isUnauthorizedMessage(message)
             ? DASHBOARD_AUTH_ERROR_MESSAGE
-            : (firstError.errorMessage ?? null)
-          : null,
-      );
-    } catch (error) {
-      console.error("Failed to refresh dashboard data:", error);
-      const message = getErrorMessage(error);
-      setChartQueryError(
-        isUnauthorizedMessage(message) ? DASHBOARD_AUTH_ERROR_MESSAGE : message,
-      );
-    }
-  }, [chartFiltersById, dashboardFilters, dashboardId]);
+            : message,
+        );
+      } finally {
+        setRefreshingChartIds((prev) => {
+          const next = new Set(prev);
+          next.delete(chartId);
+          return next;
+        });
+      }
+    },
+    [
+      chartFiltersById,
+      charts,
+      dashboardFilters,
+      dashboardId,
+      dashboardMeasures,
+    ],
+  );
 
   useEffect(() => {
     void refreshDashboardData();
@@ -636,12 +772,14 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   return (
     <div
       ref={dashboardContentRef}
-      className="mx-auto flex h-full w-full flex-col gap-1 overflow-y-auto px-6 md:px-12 lg:px-18 pt-2 pb-6 md:pb-10"
+      className={`mx-auto flex h-full w-full flex-col gap-1 overflow-y-auto px-6 md:px-12 lg:px-18 pt-2 pb-6 md:pb-10 ${isDashboardMode ? "md:max-w-[calc(100vw-3.5rem)]" : ""}`}
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <DashboardHeader
           dashboard={dashboard}
           onTitleUpdate={handleTitleUpdate}
+          onRefresh={handleDashboardRefresh}
+          isRefreshing={isRefreshingDashboard}
           readOnly={isReadOnlyDashboard}
         />
         {!isReadOnlyDashboard ? (
@@ -716,6 +854,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
           setPreviewRunRows(null);
           setPreviewChartId(chartId);
         }}
+        onRefreshChart={handleChartRefresh}
+        refreshingChartIds={refreshingChartIds}
         readOnly={isReadOnlyDashboard}
       />
       {!isReadOnlyDashboard ? (

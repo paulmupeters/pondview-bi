@@ -100,6 +100,8 @@ export type DashboardChartCardProps = {
   isSelected?: boolean;
   onSelect?: (chartId: string) => void;
   onPreviewChart?: (chartId: string) => void;
+  onRefresh?: (chartId: string) => Promise<void>;
+  isRefreshing?: boolean;
   readOnly?: boolean;
 };
 

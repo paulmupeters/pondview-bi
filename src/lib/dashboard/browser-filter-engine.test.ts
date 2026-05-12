@@ -440,6 +440,60 @@ describe("browser-filter-engine", () => {
     ).toBe(1);
   });
 
+  test("force refresh rebuilds cached dashboard materialization", async () => {
+    const cache = new Map();
+    const runtimeSqlCalls: string[] = [];
+    const chart = createChart({
+      id: "chart-1",
+      sql: "SELECT * FROM orders",
+    });
+    const filters: Filter[] = [
+      {
+        field: "orders.region",
+        op: "eq",
+        values: ["EMEA"],
+      },
+    ];
+    const deps = {
+      resolveBackend: () => "duckdb-http" as const,
+      resolveRuntimeFingerprint: async () => "duckdb-http:shared:8080",
+      readJoinDefs: async () => [],
+      listCharts: async () => [chart],
+      getMaterializationCache: () => cache,
+      runRuntimeSql: async (sql: string) => {
+        runtimeSqlCalls.push(sql);
+        return [];
+      },
+      runChartSql: async () => [],
+    };
+
+    await executeDashboardChartsWithFilters(
+      {
+        dashboardId: "dashboard-1",
+        charts: [chart],
+        dashboardFilters: filters,
+        chartFiltersById: {},
+      },
+      deps,
+    );
+    await executeDashboardChartsWithFilters(
+      {
+        dashboardId: "dashboard-1",
+        charts: [chart],
+        dashboardFilters: filters,
+        chartFiltersById: {},
+        forceRefresh: true,
+      },
+      deps,
+    );
+
+    expect(
+      runtimeSqlCalls.filter((sql) =>
+        sql.includes('CREATE OR REPLACE VIEW "pondview_exec"."orders"'),
+      ).length,
+    ).toBe(2);
+  });
+
   test("lists view aliases as materialized tables", async () => {
     const runtimeSqlCalls: string[] = [];
 
