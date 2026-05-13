@@ -198,6 +198,29 @@ export function detectSqliteConnection(
 }
 
 /**
+ * Detects DuckDB Quack remote protocol identifiers.
+ */
+export function detectQuackConnection(
+  dbIdentifier: string,
+): SourceConnectionConfig | null {
+  const id = (dbIdentifier ?? "").trim();
+  if (!id.toLowerCase().startsWith("quack:")) {
+    return null;
+  }
+
+  return {
+    type: "quack",
+    identifier: id,
+    duckdbExtension: "quack",
+    duckdbExtensionRepository: "core_nightly",
+    readOnly: false,
+    attachOptions: {
+      type: "quack",
+    },
+  };
+}
+
+/**
  * Detects if a database identifier is a PostgreSQL URI and converts it to a SourceConnectionConfig.
  * Returns null if it's not a postgres URI.
  */
@@ -269,7 +292,8 @@ export function detectExternalConnection(
   return (
     detectPostgresConnection(dbIdentifier) ??
     detectMysqlConnection(dbIdentifier) ??
-    detectSqliteConnection(dbIdentifier)
+    detectSqliteConnection(dbIdentifier) ??
+    detectQuackConnection(dbIdentifier)
   );
 }
 

@@ -7,4 +7,12 @@ export interface SourceConnectionConfig {
   alias?: string;
   readOnly?: boolean;
   duckdbExtension?: string;
+  duckdbExtensionRepository?: string;
+  attachOptions?: SourceAttachOptions;
+}
+
+export interface SourceAttachOptions {
+  type?: string;
+  token?: string;
+  disableSsl?: boolean;
 }

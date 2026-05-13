@@ -40,6 +40,7 @@ const REMOTE_IDENTIFIER_PREFIXES = [
   "mysql://",
   "mysql:",
   "sqlite:",
+  "quack:",
   "duckdb:md:",
   "md:",
 ] as const;

@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils";
 type DatabaseType =
   | "duckdb"
   | "duckdb_remote"
+  | "quack"
   | "motherduck"
   | "postgres"
   | "mysql"
@@ -76,6 +77,11 @@ const DATABASE_OPTIONS: Array<{
     description: "Attach a read-only DuckDB file over HTTPS or S3",
   },
   {
+    label: "Quack Remote DuckDB",
+    value: "quack",
+    description: "Attach a DuckDB server over the Quack protocol",
+  },
+  {
     label: "Postgres",
     value: "postgres",
     description: "Connect with a Postgres database",
@@ -108,6 +114,8 @@ const resolveDuckdbExtension = (dbType: DatabaseType): string | undefined => {
       return "httpfs";
     case "motherduck":
       return "motherduck";
+    case "quack":
+      return "quack";
     case "postgres":
       return "postgres";
     case "mysql":
@@ -135,6 +143,12 @@ type PendingSourceConnection = {
   alias: string;
   readOnly: boolean;
   duckdbExtension?: string;
+  duckdbExtensionRepository?: string;
+  attachOptions?: {
+    type?: string;
+    token?: string;
+    disableSsl?: boolean;
+  };
   connectionId?: string;
 };
 
@@ -287,6 +301,11 @@ export function ConnectDataDialog({
   const [remoteDuckdbS3Secret, setRemoteDuckdbS3Secret] = useState("");
   const [remoteDuckdbS3SessionToken, setRemoteDuckdbS3SessionToken] =
     useState("");
+  // Quack remote DuckDB fields
+  const [quackUri, setQuackUri] = useState("");
+  const [quackAlias, setQuackAlias] = useState("");
+  const [quackToken, setQuackToken] = useState("");
+  const [quackDisableSsl, setQuackDisableSsl] = useState(false);
   // Custom extension fields
   const [customExtensionName, setCustomExtensionName] = useState("");
   const [customAttachStatement, setCustomAttachStatement] = useState("");
@@ -327,6 +346,10 @@ export function ConnectDataDialog({
     setRemoteDuckdbS3KeyId("");
     setRemoteDuckdbS3Secret("");
     setRemoteDuckdbS3SessionToken("");
+    setQuackUri("");
+    setQuackAlias("");
+    setQuackToken("");
+    setQuackDisableSsl(false);
     setCustomExtensionName("");
     setCustomAttachStatement("");
     setCustomAttachAlias("");
@@ -428,6 +451,23 @@ export function ConnectDataDialog({
     };
   }, [remoteDuckdbUrl, remoteDuckdbAlias]);
 
+  const buildQuackConnection = useCallback((): PendingSourceConnection => {
+    const identifier = quackUri.trim();
+    return {
+      type: "quack",
+      identifier,
+      alias: quackAlias.trim() || buildDuckdbRemoteAlias(identifier) || "quack",
+      readOnly: false,
+      duckdbExtension: "quack",
+      duckdbExtensionRepository: "core_nightly",
+      attachOptions: {
+        type: "quack",
+        token: quackToken.trim(),
+        disableSsl: quackDisableSsl ? true : undefined,
+      },
+    };
+  }, [quackUri, quackAlias, quackToken, quackDisableSsl]);
+
   const buildSourceConnectionId = useCallback(
     (type: string, alias: string): string =>
       `${type}:${alias.trim() || "source"}`.replace(/[^A-Za-z0-9:_-]/g, "_"),
@@ -452,11 +492,14 @@ export function ConnectDataDialog({
         alias: connection.alias,
         readonly: connection.readOnly,
         duckdbExtension: connection.duckdbExtension,
+        duckdbExtensionRepository: connection.duckdbExtensionRepository,
+        attachOptions: connection.attachOptions,
       });
       return {
         ...connection,
         identifier: connectionId,
         connectionId,
+        attachOptions: undefined,
       };
     },
     [buildSourceConnectionId, effectiveSqlBackend],
@@ -591,6 +634,19 @@ export function ConnectDataDialog({
         );
         return;
       }
+    } else if (selectedDatabase === "quack") {
+      if (!quackUri.trim()) {
+        setErrorMessage("Enter a Quack URI.");
+        return;
+      }
+      if (!quackUri.trim().toLowerCase().startsWith("quack:")) {
+        setErrorMessage("Use a Quack URI such as quack:localhost:9494.");
+        return;
+      }
+      if (!quackToken.trim()) {
+        setErrorMessage("Enter the Quack authentication token.");
+        return;
+      }
     } else if (selectedDatabase === "postgres") {
       if (
         !postgresHost.trim() ||
@@ -637,6 +693,8 @@ export function ConnectDataDialog({
       let dbPath: string;
       if (selectedDatabase === "duckdb_remote") {
         dbPath = remoteDuckdbUrl.trim();
+      } else if (selectedDatabase === "quack") {
+        dbPath = quackUri.trim();
       } else if (selectedDatabase === "postgres") {
         dbPath = buildPostgresConnectionStringFromFields();
       } else if (selectedDatabase === "mysql") {
@@ -682,20 +740,22 @@ export function ConnectDataDialog({
       const rawConnection =
         selectedDatabase === "duckdb_remote"
           ? buildRemoteDuckdbConnection()
-          : {
-              type: selectedDatabase ?? "duckdb",
-              identifier: dbPath,
-              alias:
-                selectedDatabase === "postgres"
-                  ? postgresDatabase.trim() || "source"
-                  : selectedDatabase === "mysql"
-                    ? mysqlDatabase.trim() || "source"
-                    : selectedDatabase === "sqlite"
-                      ? sqliteAlias.trim() || "source"
-                      : "source",
-              readOnly: true,
-              duckdbExtension: extension,
-            };
+          : selectedDatabase === "quack"
+            ? buildQuackConnection()
+            : {
+                type: selectedDatabase ?? "duckdb",
+                identifier: dbPath,
+                alias:
+                  selectedDatabase === "postgres"
+                    ? postgresDatabase.trim() || "source"
+                    : selectedDatabase === "mysql"
+                      ? mysqlDatabase.trim() || "source"
+                      : selectedDatabase === "sqlite"
+                        ? sqliteAlias.trim() || "source"
+                        : "source",
+                readOnly: true,
+                duckdbExtension: extension,
+              };
       const connection = await prepareConnectionForRuntime(rawConnection);
       pendingSourceRef.current = connection;
 
@@ -753,7 +813,10 @@ export function ConnectDataDialog({
     selectedDatabase,
     remoteDuckdbUrl,
     buildRemoteDuckdbConnection,
+    buildQuackConnection,
     buildRemoteDuckdbSecretStatement,
+    quackUri,
+    quackToken,
     postgresHost,
     postgresUser,
     postgresDatabase,
@@ -782,6 +845,8 @@ export function ConnectDataDialog({
         let dbPath: string;
         if (selectedDatabase === "duckdb_remote") {
           dbPath = remoteDuckdbUrl.trim();
+        } else if (selectedDatabase === "quack") {
+          dbPath = quackUri.trim();
         } else if (selectedDatabase === "postgres") {
           dbPath = buildPostgresConnectionStringFromFields();
         } else if (selectedDatabase === "mysql") {
@@ -796,20 +861,22 @@ export function ConnectDataDialog({
         const rawConnection =
           selectedDatabase === "duckdb_remote"
             ? buildRemoteDuckdbConnection()
-            : {
-                type: selectedDatabase ?? "duckdb",
-                identifier: dbPath,
-                alias:
-                  selectedDatabase === "postgres"
-                    ? postgresDatabase.trim() || "source"
-                    : selectedDatabase === "mysql"
-                      ? mysqlDatabase.trim() || "source"
-                      : selectedDatabase === "sqlite"
-                        ? sqliteAlias.trim() || "source"
-                        : "source",
-                readOnly: true,
-                duckdbExtension: extension,
-              };
+            : selectedDatabase === "quack"
+              ? buildQuackConnection()
+              : {
+                  type: selectedDatabase ?? "duckdb",
+                  identifier: dbPath,
+                  alias:
+                    selectedDatabase === "postgres"
+                      ? postgresDatabase.trim() || "source"
+                      : selectedDatabase === "mysql"
+                        ? mysqlDatabase.trim() || "source"
+                        : selectedDatabase === "sqlite"
+                          ? sqliteAlias.trim() || "source"
+                          : "source",
+                  readOnly: true,
+                  duckdbExtension: extension,
+                };
         const connection = await prepareConnectionForRuntime(rawConnection);
         pendingSourceRef.current = connection;
         const plan = buildAttachmentPlan(connection, {
@@ -863,7 +930,9 @@ export function ConnectDataDialog({
       selectedDatabase,
       remoteDuckdbUrl,
       buildRemoteDuckdbConnection,
+      buildQuackConnection,
       buildRemoteDuckdbSecretStatement,
+      quackUri,
       buildPostgresConnectionStringFromFields,
       buildMysqlConnectionStringFromFields,
       postgresDatabase,
@@ -886,6 +955,8 @@ export function ConnectDataDialog({
         let dbPath: string;
         if (selectedDatabase === "duckdb_remote") {
           dbPath = remoteDuckdbUrl.trim();
+        } else if (selectedDatabase === "quack") {
+          dbPath = quackUri.trim();
         } else if (selectedDatabase === "postgres") {
           dbPath = buildPostgresConnectionStringFromFields();
         } else if (selectedDatabase === "mysql") {
@@ -902,20 +973,22 @@ export function ConnectDataDialog({
         const rawConnection =
           selectedDatabase === "duckdb_remote"
             ? buildRemoteDuckdbConnection()
-            : {
-                type: selectedDatabase ?? "duckdb",
-                identifier: dbPath,
-                alias:
-                  selectedDatabase === "postgres"
-                    ? postgresDatabase.trim() || "source"
-                    : selectedDatabase === "mysql"
-                      ? mysqlDatabase.trim() || "source"
-                      : selectedDatabase === "sqlite"
-                        ? sqliteAlias.trim() || "source"
-                        : "source",
-                readOnly: true,
-                duckdbExtension: extension,
-              };
+            : selectedDatabase === "quack"
+              ? buildQuackConnection()
+              : {
+                  type: selectedDatabase ?? "duckdb",
+                  identifier: dbPath,
+                  alias:
+                    selectedDatabase === "postgres"
+                      ? postgresDatabase.trim() || "source"
+                      : selectedDatabase === "mysql"
+                        ? mysqlDatabase.trim() || "source"
+                        : selectedDatabase === "sqlite"
+                          ? sqliteAlias.trim() || "source"
+                          : "source",
+                  readOnly: true,
+                  duckdbExtension: extension,
+                };
         const connection = await prepareConnectionForRuntime(rawConnection);
         pendingSourceRef.current = connection;
 
@@ -959,12 +1032,15 @@ export function ConnectDataDialog({
                   ? sqlitePath.trim()
                   : selectedDatabase === "duckdb_remote"
                     ? remoteDuckdbUrl.trim()
-                    : databasePath.trim(),
+                    : selectedDatabase === "quack"
+                      ? quackUri.trim()
+                      : databasePath.trim(),
           schema: selectedSchema || undefined,
           tables: schemaTablesPreview,
           attachAs: source.alias,
           readOnly: source.readOnly,
           duckdbExtension: source.duckdbExtension,
+          duckdbExtensionRepository: source.duckdbExtensionRepository,
         });
       }
 
@@ -984,7 +1060,9 @@ export function ConnectDataDialog({
     databasePath,
     remoteDuckdbUrl,
     buildRemoteDuckdbConnection,
+    buildQuackConnection,
     buildRemoteDuckdbSecretStatement,
+    quackUri,
     onConnected,
     onOpenChange,
     selectedDatabase,
@@ -1016,6 +1094,12 @@ export function ConnectDataDialog({
         isWasmActive && !isBrowserCompatibleRemoteDuckdbUrl(remoteDuckdbUrl)
       );
     }
+    if (selectedDatabase === "quack") {
+      return (
+        !quackUri.trim().toLowerCase().startsWith("quack:") ||
+        !quackToken.trim()
+      );
+    }
     if (selectedDatabase === "postgres") {
       return (
         !postgresHost.trim() || !postgresUser.trim() || !postgresDatabase.trim()
@@ -1039,6 +1123,8 @@ export function ConnectDataDialog({
     isWasmActive,
     selectedDatabase,
     remoteDuckdbUrl,
+    quackUri,
+    quackToken,
     postgresHost,
     postgresUser,
     postgresDatabase,
@@ -1180,6 +1266,43 @@ export function ConnectDataDialog({
               ) : null}
             </>
           )}
+        </div>
+      );
+    }
+
+    if (selectedDatabase === "quack") {
+      return (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold">Quack Remote DuckDB</h3>
+          <Input
+            placeholder="Quack URI (e.g. quack:localhost:9494)"
+            value={quackUri}
+            onChange={(e) => setQuackUri(e.target.value)}
+          />
+          <Input
+            placeholder="Attach as alias (optional)"
+            value={quackAlias}
+            onChange={(e) => setQuackAlias(e.target.value)}
+          />
+          <Input
+            type="password"
+            placeholder="Authentication token"
+            value={quackToken}
+            onChange={(e) => setQuackToken(e.target.value)}
+          />
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={quackDisableSsl}
+              onChange={(event) => setQuackDisableSsl(event.target.checked)}
+            />
+            Use plain HTTP for this remote endpoint
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Local Quack URIs use plain HTTP by default. Remote Quack endpoints
+            should usually sit behind HTTPS; enable plain HTTP only for trusted
+            test endpoints.
+          </p>
         </div>
       );
     }

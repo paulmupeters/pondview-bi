@@ -101,6 +101,14 @@ export const bridgeAttachSourceRequestSchema = z.object({
   alias: z.string().min(1),
   readonly: z.boolean().optional(),
   duckdbExtension: z.string().optional(),
+  duckdbExtensionRepository: z.string().optional(),
+  attachOptions: z
+    .object({
+      type: z.string().optional(),
+      token: z.string().optional(),
+      disableSsl: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export const bridgeSourcesResponseSchema = z.object({
@@ -120,6 +128,14 @@ export const bridgeSecretSourceSchema = z.object({
   alias: z.string().optional(),
   readonly: z.boolean().optional(),
   duckdbExtension: z.string().optional(),
+  duckdbExtensionRepository: z.string().optional(),
+  attachOptions: z
+    .object({
+      type: z.string().optional(),
+      token: z.string().optional(),
+      disableSsl: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export const bridgeSecretAiSchema = z.object({
@@ -158,6 +174,7 @@ export const bridgeSecretsStatusResponseSchema = z.object({
       alias: z.string().optional(),
       readonly: z.boolean().optional(),
       duckdbExtension: z.string().optional(),
+      duckdbExtensionRepository: z.string().optional(),
     }),
   ),
   ai: z

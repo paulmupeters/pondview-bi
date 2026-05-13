@@ -46,4 +46,20 @@ describe("dashboard source descriptors", () => {
       ),
     ).toEqual(descriptor);
   });
+
+  test("classifies Quack descriptors as external DuckDB sources", () => {
+    expect(
+      buildDashboardSourceDescriptor({
+        runtimeBackend: "bridge",
+        dbIdentifier: "quack:analytics.example.com:443",
+        catalogContext: "analytics",
+      }),
+    ).toEqual({
+      kind: "external",
+      runtimeBackend: "bridge",
+      dbIdentifier: "quack:analytics.example.com:443",
+      catalogContext: "analytics",
+      externalType: "quack",
+    });
+  });
 });

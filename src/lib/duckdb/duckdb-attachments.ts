@@ -1,6 +1,7 @@
 import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 
 const ATTACH_TYPE_BY_SOURCE: Record<string, string | undefined> = {
+  quack: "quack",
   postgres: "postgres",
   mysql: "mysql",
   sqlite: "sqlite",
@@ -9,6 +10,7 @@ const ATTACH_TYPE_BY_SOURCE: Record<string, string | undefined> = {
 const DEFAULT_EXTENSION_BY_SOURCE: Record<string, string | undefined> = {
   duckdb_remote: "httpfs",
   motherduck: "motherduck",
+  quack: "quack",
   postgres: "postgres",
   mysql: "mysql",
   sqlite: "sqlite",
@@ -80,10 +82,17 @@ function buildAttachStatement(
   }
 
   const attachParts: string[] = [];
-  const attachType = ATTACH_TYPE_BY_SOURCE[connection.type];
+  const attachType =
+    connection.attachOptions?.type ?? ATTACH_TYPE_BY_SOURCE[connection.type];
 
   if (attachType) {
     attachParts.push(`TYPE ${attachType}`);
+  }
+  if (connection.attachOptions?.token) {
+    attachParts.push(`TOKEN ${quoteString(connection.attachOptions.token)}`);
+  }
+  if (typeof connection.attachOptions?.disableSsl === "boolean") {
+    attachParts.push(`DISABLE_SSL ${connection.attachOptions.disableSsl}`);
   }
   if (connection.readOnly) {
     attachParts.push("READ_ONLY");
@@ -114,7 +123,12 @@ export function buildAttachmentPlan(
     connection.duckdbExtension || DEFAULT_EXTENSION_BY_SOURCE[connection.type];
   if (extension && extension !== "duckdb" && !options.skipExtensionLoad) {
     const sanitizedExtension = sanitizeExtensionName(extension);
-    statements.push(`INSTALL ${sanitizedExtension};`);
+    const repository = connection.duckdbExtensionRepository?.trim();
+    statements.push(
+      repository
+        ? `INSTALL ${sanitizedExtension} FROM ${sanitizeExtensionName(repository)};`
+        : `INSTALL ${sanitizedExtension};`,
+    );
     statements.push(`LOAD ${sanitizedExtension};`);
   }
 

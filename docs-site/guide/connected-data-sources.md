@@ -10,6 +10,7 @@ Current Connect Data dialog options:
 - MotherDuck
 - MySQL
 - SQLite
+- Quack Remote DuckDB
 
 The runtime can also represent additional source types in metadata, but the primary UI picker currently exposes the four options above.
 
@@ -25,7 +26,7 @@ To connect sources:
 
 ## How a connection is resolved
 
-For Postgres/MySQL/SQLite, the dialog:
+For Postgres/MySQL/SQLite/Quack, the dialog:
 
 1. Builds a source identifier (e.g. `postgres://...`, `mysql://...`, `sqlite:/path`).
 2. Creates an attachment plan with `buildAttachmentPlan(...)`.
@@ -34,6 +35,16 @@ For Postgres/MySQL/SQLite, the dialog:
 5. Runs a best-effort `DETACH DATABASE IF EXISTS ...`.
 
 MotherDuck uses `dbIdentifier`-based querying (`md:...`) through `runQuery(...)` and reads metadata from `information_schema`.
+
+Quack Remote DuckDB attaches a remote DuckDB server over the Quack protocol:
+
+```sql
+INSTALL quack FROM core_nightly;
+LOAD quack;
+ATTACH 'quack:host:9494' AS remote (TYPE quack, TOKEN '...');
+```
+
+Quack is a DuckDB beta feature that currently requires DuckDB v1.5.2 or newer in the active remote runtime. Use Bridge for Quack connections when possible so the Quack token is stored in the Bridge secret store instead of browser-visible state.
 
 ## What gets stored locally
 
@@ -77,5 +88,6 @@ DuckDB WASM does not have this server-side boundary. Do not use WASM for credent
 ## Known limitations
 
 - Source connection discovery requires a remote runtime; it cannot run in pure WASM mode.
+- Quack support depends on DuckDB's beta `quack` extension from `core_nightly`; protocol details may change before DuckDB v2.0.
 - Schema table preview is intentionally limited (`LIMIT 20` in dialog metadata queries).
 - Removing a source only does best-effort remote detach; persisted connection metadata is always removed locally.

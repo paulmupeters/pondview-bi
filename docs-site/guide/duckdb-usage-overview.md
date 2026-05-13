@@ -57,7 +57,7 @@ The execution planner resolves each source into one of three modes:
 1. `live`
    Runtime-native DuckDB or MotherDuck sources execute directly.
 2. `external-cache`
-   Postgres, MySQL, and SQLite sources are copied into runtime-managed execution tables before joins and filters run.
+   Postgres, MySQL, SQLite, and Quack sources are copied into runtime-managed execution tables before joins and filters run when planned as external cache sources.
 3. `snapshot`
    Explicit frozen dashboard snapshots execute against immutable bindings.
 

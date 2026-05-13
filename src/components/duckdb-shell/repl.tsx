@@ -284,6 +284,7 @@ export function createDuckdbReplAutocompleteAction(
       alias: connectedEntry.attachAs || "source",
       readOnly: connectedEntry.readOnly,
       duckdbExtension: connectedEntry.duckdbExtension,
+      duckdbExtensionRepository: connectedEntry.duckdbExtensionRepository,
     };
     const plan = buildAttachmentPlan(connectionConfig);
 
@@ -443,6 +444,7 @@ export function DuckdbRepl({
         alias: connectedEntry.attachAs || "source",
         readOnly: connectedEntry.readOnly,
         duckdbExtension: connectedEntry.duckdbExtension,
+        duckdbExtensionRepository: connectedEntry.duckdbExtensionRepository,
       };
       const plan = buildAttachmentPlan(connectionConfig);
 

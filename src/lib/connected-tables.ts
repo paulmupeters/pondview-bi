@@ -22,6 +22,7 @@ export type ConnectedTable = {
   attachAs?: string;
   readOnly?: boolean;
   duckdbExtension?: string;
+  duckdbExtensionRepository?: string;
 };
 
 const isClient = typeof window !== "undefined";
@@ -44,6 +45,7 @@ export function sanitizeConnectedTableForStorage(
     attachAs: entry.attachAs,
     readOnly: entry.readOnly,
     duckdbExtension: entry.duckdbExtension,
+    duckdbExtensionRepository: entry.duckdbExtensionRepository,
   };
 }
 
@@ -90,6 +92,7 @@ export function readConnectedTablesFromStorage(): ConnectedTable[] {
         const attachAs = e.attachAs;
         const readOnly = e.readOnly;
         const duckdbExtension = e.duckdbExtension;
+        const duckdbExtensionRepository = e.duckdbExtensionRepository;
         const databaseNameValid =
           databaseName === undefined || typeof databaseName === "string";
         const attachValid =
@@ -98,13 +101,17 @@ export function readConnectedTablesFromStorage(): ConnectedTable[] {
           readOnly === undefined || typeof readOnly === "boolean";
         const duckdbExtensionValid =
           duckdbExtension === undefined || typeof duckdbExtension === "string";
+        const duckdbExtensionRepositoryValid =
+          duckdbExtensionRepository === undefined ||
+          typeof duckdbExtensionRepository === "string";
         return (
           tablesValid &&
           (hasTable || hasSchema) &&
           databaseNameValid &&
           attachValid &&
           readOnlyValid &&
-          duckdbExtensionValid
+          duckdbExtensionValid &&
+          duckdbExtensionRepositoryValid
         );
       })
       .map(sanitizeConnectedTableForStorage)

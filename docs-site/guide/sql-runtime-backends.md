@@ -16,6 +16,8 @@ Backend selection is controlled by Settings and resolved by `resolveSqlBackend(.
 | `bridge`      | Remote service (Pondview) | Remote/external data, extension attachment flows, bridge-managed auth. |
 | `duckdb-http` | Remote DuckDB HTTP server | Remote DuckDB query execution from browser with host/port config.      |
 
+Quack Remote DuckDB is modeled as a connected source rather than a fourth SQL runtime. The active remote runtime installs/loads DuckDB's `quack` extension and attaches the Quack server as a catalog. Bridge is preferred for Quack because it can keep the Quack token in the Bridge secret store.
+
 ## Selection rules
 
 Backend resolution combines the saved user preference and runtime availability:

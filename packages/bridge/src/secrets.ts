@@ -70,6 +70,7 @@ export class BridgeSecretStore {
         alias: source.alias,
         readonly: source.readonly,
         duckdbExtension: source.duckdbExtension,
+        duckdbExtensionRepository: source.duckdbExtensionRepository,
       })),
       ai: data.ai
         ? {

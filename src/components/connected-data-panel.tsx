@@ -196,6 +196,7 @@ export async function validateConnectedEntry(
       alias: entry.attachAs,
       readOnly: entry.readOnly,
       duckdbExtension: entry.duckdbExtension,
+      duckdbExtensionRepository: entry.duckdbExtensionRepository,
     });
 
     for (const statement of plan.statements) {

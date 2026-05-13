@@ -124,6 +124,12 @@ export class DuckDbRuntime {
     alias: string;
     readonly?: boolean;
     duckdbExtension?: string;
+    duckdbExtensionRepository?: string;
+    attachOptions?: {
+      type?: string;
+      token?: string;
+      disableSsl?: boolean;
+    };
   }): Promise<BridgeSource> {
     if (this.readonly && input.readonly === false) {
       throw new Error("Readonly bridge mode cannot attach writable sources.");
@@ -210,16 +216,70 @@ export class DuckDbRuntime {
     }
 
     return sql.replace(
-      /(ATTACH\s+)'([^']+)'(\s+AS\s+"?[^";\s]+"?(?:\s*\([^;]*\))?\s*;?)/gi,
-      (match, prefix: string, candidate: string, suffix: string) => {
+      /(ATTACH\s+)'([^']+)'(\s+AS\s+"?[^";\s]+"?)(\s*\([^;]*\))?(\s*;?)/gi,
+      (
+        match,
+        prefix: string,
+        candidate: string,
+        aliasClause: string,
+        optionsClause: string | undefined,
+        terminator: string,
+      ) => {
         const source = this.resolveSource?.(candidate);
         if (!source) {
           return match;
         }
-        return `${prefix}${quoteString(source.identifier)}${suffix}`;
+        const mergedOptions = mergeAttachOptions(
+          optionsClause,
+          source.attachOptions,
+        );
+        return `${prefix}${quoteString(source.identifier)}${aliasClause}${mergedOptions}${terminator}`;
       },
     );
   }
+}
+
+function mergeAttachOptions(
+  optionsClause: string | undefined,
+  attachOptions: BridgeSecretSource["attachOptions"],
+): string {
+  const parts = parseAttachOptions(optionsClause);
+  if (attachOptions?.type && !hasAttachOption(parts, "TYPE")) {
+    parts.push(`TYPE ${attachOptions.type}`);
+  }
+  if (attachOptions?.token && !hasAttachOption(parts, "TOKEN")) {
+    parts.push(`TOKEN ${quoteString(attachOptions.token)}`);
+  }
+  if (
+    typeof attachOptions?.disableSsl === "boolean" &&
+    !hasAttachOption(parts, "DISABLE_SSL")
+  ) {
+    parts.push(`DISABLE_SSL ${attachOptions.disableSsl}`);
+  }
+
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
+}
+
+function parseAttachOptions(optionsClause: string | undefined): string[] {
+  const trimmed = optionsClause?.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  return trimmed
+    .replace(/^\(/, "")
+    .replace(/\)$/, "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function hasAttachOption(parts: string[], keyword: string): boolean {
+  const normalizedKeyword = keyword.toUpperCase();
+  return parts.some(
+    (part) =>
+      part.trim().split(/\s+/, 1)[0]?.toUpperCase() === normalizedKeyword,
+  );
 }
 
 function getColumns(reader: DuckDBResultReader): BridgeColumn[] {
