@@ -3,6 +3,7 @@ import {
   type BridgeSecretS3Backup,
   type BridgeSecretSource,
   type BridgeSecretsStatusResponse,
+  type BridgeSourcesResponse,
   bridgeConfigResponseSchema,
   bridgeQueryResponseSchema,
   bridgeS3BackupDownloadResponseSchema,
@@ -11,6 +12,7 @@ import {
   bridgeS3BackupUploadResponseSchema,
   bridgeSecretMutationResponseSchema,
   bridgeSecretsStatusResponseSchema,
+  bridgeSourcesResponseSchema,
 } from "@pondview/bridge-protocol";
 
 export interface PondviewBridgeDatabaseInfo {
@@ -502,6 +504,21 @@ export async function getBridgeSecretsStatus(
     throw new Error(await parseError(response));
   }
   return bridgeSecretsStatusResponseSchema.parse(await response.json());
+}
+
+export async function listBridgeSources(
+  signal?: AbortSignal,
+): Promise<BridgeSourcesResponse> {
+  const response = await fetch(bridgeUrl("/sources"), {
+    method: "GET",
+    headers: getAuthHeaders(),
+    cache: "no-store",
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return bridgeSourcesResponseSchema.parse(await response.json());
 }
 
 export async function saveBridgeSourceSecret(

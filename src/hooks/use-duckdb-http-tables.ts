@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DuckdbTableEntry } from "@/lib/api/types/duckdb";
-import { getBridgeSession, runBridgeQuery } from "@/lib/bridge/pondview-bridge";
+import {
+  getBridgeSession,
+  type PondviewBridgeDatabaseInfo,
+  runBridgeQuery,
+} from "@/lib/bridge/pondview-bridge";
 import { resolveCurrentCatalog } from "@/lib/duckdb/catalog-context";
 import {
   getDuckDbHttpConfigFromStorage,
@@ -17,6 +21,7 @@ import { useDuckDbHttpConfig } from "@/lib/sql/use-sql-backend";
 export interface DuckdbHttpConnectionInfo {
   host: string;
   port: number;
+  database?: PondviewBridgeDatabaseInfo;
 }
 
 const LIST_TABLES_SQL = `
@@ -167,7 +172,13 @@ export function useDuckdbHttpTables(
         if (!isStale()) {
           setIsConfigured(true);
           setConnectionInfo(
-            session ? { host: session.host, port: session.port } : null,
+            session
+              ? {
+                  host: session.host,
+                  port: session.port,
+                  database: session.database,
+                }
+              : null,
           );
         }
 

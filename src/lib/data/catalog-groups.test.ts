@@ -131,4 +131,197 @@ describe("buildDataCatalogGroups", () => {
       },
     ]);
   });
+
+  test("labels catalogs from stored connected sources", () => {
+    expect(
+      buildDataCatalogGroups(
+        [
+          {
+            catalog: "warehouse",
+            schema: "public",
+            name: "orders",
+            type: "BASE TABLE",
+          },
+        ],
+        {
+          sqlBackend: "bridge",
+          currentCatalog: "memory",
+          connectedSources: [
+            { type: "postgres", attachAs: "warehouse", readOnly: true },
+          ],
+        },
+      ),
+    ).toEqual([
+      {
+        catalog: "warehouse",
+        schema: "public",
+        origin: {
+          label: "Postgres",
+          description: "Attached source · read-only",
+        },
+        tables: [{ catalog: "warehouse", name: "orders", type: "BASE TABLE" }],
+      },
+    ]);
+  });
+
+  test("labels extension sources when catalog differs from attach alias", () => {
+    expect(
+      buildDataCatalogGroups(
+        [
+          {
+            catalog: "postgres",
+            schema: "public",
+            name: "orders",
+            type: "BASE TABLE",
+          },
+        ],
+        {
+          sqlBackend: "bridge",
+          currentCatalog: "memory",
+          connectedSources: [
+            {
+              type: "postgres",
+              attachAs: "warehouse",
+              schema: "public",
+              tables: ["orders"],
+              readOnly: true,
+            },
+          ],
+        },
+      ),
+    ).toEqual([
+      {
+        catalog: "postgres",
+        schema: "public",
+        origin: {
+          label: "Postgres",
+          description: "Attached source · read-only",
+        },
+        tables: [{ catalog: "postgres", name: "orders", type: "BASE TABLE" }],
+      },
+    ]);
+  });
+
+  test("labels catalogs from bridge source aliases", () => {
+    expect(
+      buildDataCatalogGroups(
+        [
+          {
+            catalog: "attached",
+            schema: "main",
+            name: "events",
+            type: "BASE TABLE",
+          },
+        ],
+        {
+          sqlBackend: "bridge",
+          currentCatalog: "memory",
+          connectedSources: [{ type: "duckdb", alias: "attached" }],
+        },
+      ),
+    ).toEqual([
+      {
+        catalog: "attached",
+        schema: "main",
+        origin: {
+          label: "Bridge attached database",
+          description: "DuckDB file attached via Bridge",
+        },
+        tables: [{ catalog: "attached", name: "events", type: "BASE TABLE" }],
+      },
+    ]);
+  });
+
+  test("labels remote DuckDB files when catalog differs from attach alias", () => {
+    expect(
+      buildDataCatalogGroups(
+        [
+          {
+            catalog: "analytics",
+            schema: "main",
+            name: "events",
+            type: "BASE TABLE",
+          },
+        ],
+        {
+          sqlBackend: "bridge",
+          currentCatalog: "memory",
+          connectedSources: [
+            {
+              type: "duckdb_remote",
+              attachAs: "remote_file",
+              schema: "main",
+              tables: ["events"],
+              readOnly: true,
+            },
+          ],
+        },
+      ),
+    ).toEqual([
+      {
+        catalog: "analytics",
+        schema: "main",
+        origin: {
+          label: "Bridge attached database",
+          description: "Remote DuckDB file attached via Bridge",
+        },
+        tables: [{ catalog: "analytics", name: "events", type: "BASE TABLE" }],
+      },
+    ]);
+  });
+
+  test("does not label unknown bridge-attached catalogs as bridge databases", () => {
+    expect(
+      buildDataCatalogGroups(
+        [
+          {
+            catalog: "warehouse",
+            schema: "public",
+            name: "orders",
+            type: "BASE TABLE",
+          },
+        ],
+        {
+          sqlBackend: "bridge",
+          currentCatalog: "memory",
+        },
+      ),
+    ).toEqual([
+      {
+        catalog: "warehouse",
+        schema: "public",
+        tables: [{ catalog: "warehouse", name: "orders", type: "BASE TABLE" }],
+      },
+    ]);
+  });
+
+  test("labels bridge primary databases from runtime context", () => {
+    expect(
+      buildDataCatalogGroups(
+        [
+          {
+            catalog: "analytics",
+            schema: "main",
+            name: "metrics",
+            type: "BASE TABLE",
+          },
+        ],
+        {
+          sqlBackend: "bridge",
+          currentCatalog: "analytics",
+          bridgeDatabaseMode: "file",
+        },
+      ),
+    ).toEqual([
+      {
+        catalog: "analytics",
+        schema: "main",
+        origin: {
+          label: "Bridge primary database",
+          description: "DuckDB file via Bridge",
+        },
+        tables: [{ catalog: "analytics", name: "metrics", type: "BASE TABLE" }],
+      },
+    ]);
+  });
 });

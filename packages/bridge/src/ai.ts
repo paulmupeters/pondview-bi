@@ -16,6 +16,21 @@ import type { DuckDbRuntime } from "./runtime/duckdb-runtime";
 
 const XAI_BASE_URL = "https://api.x.ai/v1";
 const OLLAMA_BASE_URL = "http://localhost:11434/v1";
+const HIDDEN_RUNTIME_SCHEMAS = [
+  "information_schema",
+  "pg_catalog",
+  "pondview",
+  "pondview_exec",
+  "md_information_schema",
+] as const;
+
+type RuntimeTableMetadata = {
+  table_catalog: string;
+  table_schema: string;
+  table_name: string;
+  table_type: string;
+  table_reference: string;
+};
 
 export async function handleAiChatRequest(
   request: Request,
@@ -63,19 +78,43 @@ function createBridgeAiTools(runtime: DuckDbRuntime) {
       durationMs: Date.now() - startedAt,
     };
   };
+  const listRuntimeTables = async (): Promise<RuntimeTableMetadata[]> => {
+    const excludedSchemas = HIDDEN_RUNTIME_SCHEMAS.map(
+      (schema) => `'${schema}'`,
+    ).join(", ");
+    const result = await executeSql(`
+      SELECT table_catalog, table_schema, table_name, table_type
+      FROM information_schema.tables
+      WHERE table_schema NOT IN (${excludedSchemas})
+      ORDER BY table_catalog, table_schema, table_name
+    `);
+    return result.rows.map((row) => {
+      const metadata = {
+        table_catalog: String(row.table_catalog ?? ""),
+        table_schema: String(row.table_schema ?? ""),
+        table_name: String(row.table_name ?? ""),
+        table_type: String(row.table_type ?? ""),
+      };
+
+      return {
+        ...metadata,
+        table_reference: buildRuntimeTableReference(metadata),
+      };
+    });
+  };
+  const resolveTableReference = async (table: string): Promise<string> => {
+    const tables = await listRuntimeTables();
+    return resolveRuntimeTableReferenceFromMetadata(table, tables);
+  };
 
   return {
     list_tables: tool({
-      description: "List all tables available in the Bridge DuckDB runtime.",
+      description:
+        "List all tables available in the Bridge DuckDB runtime. Use table_reference exactly when calling schema, preview, or SQL tools.",
       inputSchema: z.object({ databasePath: z.string().optional() }),
       execute: async () => {
-        const result = await executeSql(`
-          SELECT table_schema, table_name, table_type
-          FROM information_schema.tables
-          WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
-          ORDER BY table_schema, table_name
-        `);
-        return { tables: result.rows, count: result.rows.length };
+        const tables = await listRuntimeTables();
+        return { tables, count: tables.length };
       },
     }),
     get_table_schema: tool({
@@ -85,12 +124,14 @@ function createBridgeAiTools(runtime: DuckDbRuntime) {
         databasePath: z.string().optional(),
       }),
       execute: async ({ table }) => {
-        const schema = await executeSql(`DESCRIBE ${table}`);
-        const sample = await executeSql(`SELECT * FROM ${table} LIMIT 5`).catch(
-          () => ({ rows: [] }),
-        );
+        const resolvedTable = await resolveTableReference(table);
+        const schema = await executeSql(`DESCRIBE ${resolvedTable}`);
+        const sample = await executeSql(
+          `SELECT * FROM ${resolvedTable} LIMIT 5`,
+        ).catch(() => ({ rows: [] }));
         return {
-          table,
+          table: resolvedTable,
+          requestedTable: table,
           columns: schema.rows,
           sampleRows: sample.rows,
         };
@@ -103,8 +144,16 @@ function createBridgeAiTools(runtime: DuckDbRuntime) {
         databasePath: z.string().optional(),
       }),
       execute: async ({ table }) => {
-        const result = await executeSql(`SELECT * FROM ${table} LIMIT 5`);
-        return { table, columns: result.columns, rows: result.rows };
+        const resolvedTable = await resolveTableReference(table);
+        const result = await executeSql(
+          `SELECT * FROM ${resolvedTable} LIMIT 5`,
+        );
+        return {
+          table: resolvedTable,
+          requestedTable: table,
+          columns: result.columns,
+          rows: result.rows,
+        };
       },
     }),
     execute_exploratory_sql: tool({
@@ -207,6 +256,153 @@ function normalizeRows(
   });
 }
 
+function normalizeIdentifierPart(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2) {
+    const first = trimmed[0];
+    const last = trimmed[trimmed.length - 1];
+    if (first === '"' && last === '"') {
+      return trimmed.slice(1, -1).replace(/""/g, '"').toLowerCase();
+    }
+    if (first === "`" && last === "`") {
+      return trimmed.slice(1, -1).replace(/``/g, "`").toLowerCase();
+    }
+  }
+  return trimmed.toLowerCase();
+}
+
+function splitTableReference(reference: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let quote: '"' | "`" | null = null;
+
+  for (let index = 0; index < reference.length; index += 1) {
+    const char = reference[index];
+
+    if (quote) {
+      current += char;
+      if (char === quote) {
+        const next = reference[index + 1];
+        if (next === quote) {
+          current += next;
+          index += 1;
+        } else {
+          quote = null;
+        }
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "`") {
+      quote = char;
+      current += char;
+      continue;
+    }
+
+    if (char === ".") {
+      const part = current.trim();
+      if (!part) {
+        return [];
+      }
+      parts.push(part);
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (quote) {
+    return [];
+  }
+
+  const finalPart = current.trim();
+  if (!finalPart) {
+    return [];
+  }
+  parts.push(finalPart);
+  return parts;
+}
+
+function quoteIdentifier(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function isDefaultTableSchema(schema: string): boolean {
+  const normalized = schema.trim().toLowerCase();
+  return normalized === "" || normalized === "main" || normalized === "public";
+}
+
+function buildRuntimeTableReference(
+  table: Pick<
+    RuntimeTableMetadata,
+    "table_catalog" | "table_schema" | "table_name"
+  >,
+): string {
+  const catalog = table.table_catalog.trim();
+  const schema = table.table_schema.trim();
+  const name = table.table_name.trim();
+  const parts =
+    catalog && isDefaultTableSchema(schema)
+      ? [catalog, name]
+      : catalog
+        ? [catalog, schema, name]
+        : isDefaultTableSchema(schema)
+          ? [name]
+          : [schema, name];
+
+  return parts.map(quoteIdentifier).join(".");
+}
+
+function resolveRuntimeTableReferenceFromMetadata(
+  tableReference: string,
+  tables: RuntimeTableMetadata[],
+): string {
+  const parts = splitTableReference(tableReference);
+  if (parts.length === 0 || parts.length > 3) {
+    return tableReference;
+  }
+
+  const normalizedParts = parts.map(normalizeIdentifierPart);
+  const matches = tables.filter((table) => {
+    const catalog = table.table_catalog.trim().toLowerCase();
+    const schema = table.table_schema.trim().toLowerCase();
+    const name = table.table_name.trim().toLowerCase();
+
+    if (normalizedParts.length === 1) {
+      return name === normalizedParts[0];
+    }
+
+    if (normalizedParts.length === 2) {
+      const [qualifier, tableName] = normalizedParts;
+      return (
+        name === tableName &&
+        (schema === qualifier ||
+          catalog === qualifier ||
+          (isDefaultTableSchema(qualifier) && isDefaultTableSchema(schema)))
+      );
+    }
+
+    const [catalogName, schemaName, tableName] = normalizedParts;
+    return (
+      catalog === catalogName && schema === schemaName && name === tableName
+    );
+  });
+
+  if (matches.length === 0) {
+    return tableReference;
+  }
+
+  if (matches.length > 1) {
+    const options = matches.map(buildRuntimeTableReference).join(", ");
+    throw new Error(
+      `Table reference "${tableReference}" is ambiguous. Use one of: ${options}`,
+    );
+  }
+
+  return buildRuntimeTableReference(matches[0]);
+}
+
 function resolveBridgeModel(
   config: BridgeSecretAi,
   modelId: string,
@@ -248,7 +444,7 @@ function buildInstructions(
     return `You help users write, refine, fix, and understand SQL inside Pondview's SQL editor. Keep responses concise and practical. Use this connected-table context: ${tableContext}`;
   }
 
-  return `You are Pondview's BI analysis assistant. Help the user analyze data and write useful DuckDB SQL. Use this connected-table context: ${tableContext}`;
+  return `You are Pondview's BI analysis assistant. Help the user analyze data and write useful DuckDB SQL. First use list_tables, then use the exact table_reference returned by list_tables for get_table_schema, run_preview, and SQL. Attached databases like Postgres require the catalog alias in the table reference. Use this connected-table context: ${tableContext}`;
 }
 
 function jsonError(message: string, status: number): Response {

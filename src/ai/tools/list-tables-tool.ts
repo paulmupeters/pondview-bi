@@ -1,11 +1,10 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { runQuery } from "@/lib/sql/run-query";
-import { resolveToolRuntimeTarget } from "./sql-tool-shared";
+import { listRuntimeTables } from "./sql-tool-shared";
 
 export const listTablesTool = tool({
   description:
-    "List all available tables in a datasource. Use this to discover what tables exist before writing SQL.",
+    "List all available tables in a datasource. Use table_reference exactly when calling schema, preview, or SQL tools.",
   inputSchema: z.object({
     databasePath: z
       .string()
@@ -15,25 +14,7 @@ export const listTablesTool = tool({
       ),
   }),
   execute: async ({ databasePath }) => {
-    const sql = `
-      SELECT
-        table_schema,
-        table_name,
-        table_type
-      FROM information_schema.tables
-      WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
-      ORDER BY table_schema, table_name
-    `;
-
-    const { dbIdentifier } = resolveToolRuntimeTarget(databasePath);
-    const result = await runQuery({ sql, dbIdentifier });
-
-    const tables = result.rows.map((row) => ({
-      table_schema: String(row.table_schema ?? ""),
-      table_name: String(row.table_name ?? ""),
-      table_type: String(row.table_type ?? ""),
-    }));
-
+    const tables = await listRuntimeTables(databasePath);
     return { tables, count: tables.length };
   },
 });

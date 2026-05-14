@@ -1,6 +1,7 @@
 import {
   ArrowRight,
   ClockIcon,
+  Database,
   LayoutDashboard,
   Plus,
   Trash2,
@@ -16,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { addSampleDashboard } from "@/lib/dashboard/sample-dashboard";
 import { resolveDashboardMode } from "@/lib/dashboard-mode";
 import { cn } from "@/lib/utils";
 import {
@@ -102,7 +104,17 @@ function SkeletonGrid() {
   );
 }
 
-function EmptyState({ onCreate }: { onCreate?: () => void }) {
+function EmptyState({
+  onAddSample,
+  onCreate,
+  sampleError,
+  sampleLoading,
+}: {
+  onAddSample?: () => void;
+  onCreate?: () => void;
+  sampleError?: string | null;
+  sampleLoading?: boolean;
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in zoom-in-95 duration-500">
       <div className="relative mb-8">
@@ -117,16 +129,37 @@ function EmptyState({ onCreate }: { onCreate?: () => void }) {
       {onCreate ? (
         <>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
-            Create your first dashboard to organize visuals from your analyses.
+            Create your first dashboard, or attach the sample stations dashboard
+            to explore Pondview.
           </p>
-          <Button
-            size="lg"
-            className="mt-8 gap-2 rounded-full px-6 shadow-lg shadow-primary/20"
-            onClick={onCreate}
-          >
-            <Plus className="h-4 w-4" />
-            Create Dashboard
-          </Button>
+          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
+            {onAddSample ? (
+              <Button
+                size="lg"
+                className="gap-2 rounded-full px-6 shadow-lg shadow-primary/20"
+                onClick={onAddSample}
+                disabled={sampleLoading}
+              >
+                <Database className="h-4 w-4" />
+                {sampleLoading ? "Adding sample..." : "Add sample dashboard"}
+              </Button>
+            ) : null}
+            <Button
+              size="lg"
+              variant={onAddSample ? "outline" : "default"}
+              className="gap-2 rounded-full px-6"
+              onClick={onCreate}
+              disabled={sampleLoading}
+            >
+              <Plus className="h-4 w-4" />
+              Create Dashboard
+            </Button>
+          </div>
+          {sampleError ? (
+            <p className="mt-4 max-w-md text-sm text-destructive">
+              {sampleError}
+            </p>
+          ) : null}
         </>
       ) : (
         <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
@@ -180,6 +213,8 @@ export default function DashboardsPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
+  const [isAddingSample, setIsAddingSample] = useState(false);
+  const [sampleError, setSampleError] = useState<string | null>(null);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [dashboardToDelete, setDashboardToDelete] =
@@ -233,6 +268,23 @@ export default function DashboardsPage() {
       setIsCreating(false);
     }
   }, [createTitle, load]);
+
+  const handleAddSampleDashboard = useCallback(async () => {
+    setIsAddingSample(true);
+    setSampleError(null);
+    try {
+      await addSampleDashboard();
+      await load();
+    } catch (error) {
+      setSampleError(
+        error instanceof Error
+          ? error.message
+          : "Failed to add sample dashboard.",
+      );
+    } finally {
+      setIsAddingSample(false);
+    }
+  }, [load]);
 
   const confirmDelete = useCallback(async () => {
     if (!dashboardToDelete) return;
@@ -307,9 +359,16 @@ export default function DashboardsPage() {
           <ErrorState error={loadError} onRetry={() => void load()} />
         ) : sortedDashboards.length === 0 ? (
           <EmptyState
+            onAddSample={
+              isDashboardMode
+                ? undefined
+                : () => void handleAddSampleDashboard()
+            }
             onCreate={
               isDashboardMode ? undefined : () => setCreateDialogOpen(true)
             }
+            sampleError={sampleError}
+            sampleLoading={isAddingSample}
           />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

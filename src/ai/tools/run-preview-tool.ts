@@ -2,7 +2,10 @@ import { tool } from "ai";
 import { z } from "zod";
 import { runQuery } from "@/lib/sql/run-query";
 import type { Result } from "@/lib/types";
-import { resolveToolRuntimeTarget } from "./sql-tool-shared";
+import {
+  resolveRuntimeTableReference,
+  resolveToolRuntimeTarget,
+} from "./sql-tool-shared";
 
 function normalizeRows(rows: Record<string, unknown>[]): Result[] {
   return rows.map((row) => {
@@ -43,9 +46,13 @@ export const runPreviewTool = tool({
       ),
   }),
   execute: async ({ table, databasePath }) => {
+    const resolvedTable = await resolveRuntimeTableReference(
+      table,
+      databasePath,
+    );
     const { dbIdentifier } = resolveToolRuntimeTarget(databasePath);
     const result = await runQuery({
-      sql: `SELECT * FROM ${table} LIMIT 5`,
+      sql: `SELECT * FROM ${resolvedTable} LIMIT 5`,
       dbIdentifier,
     });
 
@@ -53,6 +60,6 @@ export const runPreviewTool = tool({
     const columns =
       rows.length > 0 ? Object.keys(rows[0]).map((name) => ({ name })) : [];
 
-    return { table, columns, rows };
+    return { table: resolvedTable, requestedTable: table, columns, rows };
   },
 });

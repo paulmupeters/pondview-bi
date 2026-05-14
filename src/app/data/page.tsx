@@ -10,9 +10,17 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
 import { useWasmTables } from "@/hooks/use-wasm-tables";
+import { listBridgeSources } from "@/lib/bridge/pondview-bridge";
+import {
+  CONNECTED_TABLES_STORAGE_KEY,
+  CONNECTED_TABLES_UPDATED_EVENT,
+  type ConnectedTable,
+  readConnectedTablesFromStorage,
+} from "@/lib/connected-tables";
 import {
   buildDataCatalogGroups,
   type DataCatalogGroup,
+  type DataCatalogSourceInput,
 } from "@/lib/data/catalog-groups";
 import {
   clearJoinDefsInStorage,
@@ -119,6 +127,19 @@ function TableCatalog({
                     {group.schema}
                   </span>
                 </div>
+                {group.origin && (
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary/70">
+                      Source
+                    </span>
+                    <span
+                      className="inline-flex max-w-full items-center rounded border border-border bg-background px-2 py-0.5 font-mono text-[10px] font-medium text-muted-foreground"
+                      title={group.origin.description}
+                    >
+                      <span className="truncate">{group.origin.label}</span>
+                    </span>
+                  </div>
+                )}
               </div>
               <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
                 {group.tables.length} table
@@ -208,12 +229,15 @@ export default function ViewDataPage() {
   /* ── Table loaders ── */
   const {
     tables: duckdbTables,
+    currentCatalog: duckdbCurrentCatalog,
     isLoading: isDuckdbTablesLoading,
     error: duckdbTablesError,
+    connectionInfo: duckdbConnectionInfo,
   } = useDuckdbHttpTables(effectiveSqlBackend, runtimeRefreshToken);
 
   const {
     tables: wasmTables,
+    currentCatalog: wasmCurrentCatalog,
     isLoading: isWasmTablesLoading,
     error: wasmTablesError,
   } = useWasmTables(runtimeRefreshToken, {
@@ -230,6 +254,12 @@ export default function ViewDataPage() {
 
   /* ── Dialogs ── */
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
+  const [connectedSources, setConnectedSources] = useState<ConnectedTable[]>(
+    () => readConnectedTablesFromStorage(),
+  );
+  const [bridgeSources, setBridgeSources] = useState<DataCatalogSourceInput[]>(
+    [],
+  );
 
   /* ── Join definitions ── */
   const [joinDefsRaw, setJoinDefsRaw] = useState("[]");
@@ -244,13 +274,86 @@ export default function ViewDataPage() {
     setJoinDefsRaw(readJoinDefsRawFromStorage());
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateConnectedSources = () => {
+      setConnectedSources(readConnectedTablesFromStorage());
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === CONNECTED_TABLES_STORAGE_KEY) {
+        updateConnectedSources();
+      }
+    };
+
+    window.addEventListener(
+      CONNECTED_TABLES_UPDATED_EVENT,
+      updateConnectedSources,
+    );
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(
+        CONNECTED_TABLES_UPDATED_EVENT,
+        updateConnectedSources,
+      );
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runtimeRefreshToken intentionally reloads bridge source metadata
+  useEffect(() => {
+    if (effectiveSqlBackend !== "bridge") {
+      setBridgeSources([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    void listBridgeSources(controller.signal)
+      .then((response) => {
+        setBridgeSources(
+          response.sources.map((source) => ({
+            type: source.type,
+            alias: source.alias,
+            readOnly: source.readonly,
+          })),
+        );
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          console.warn("[ViewDataPage] Failed to load bridge sources:", error);
+          setBridgeSources([]);
+        }
+      });
+
+    return () => controller.abort();
+  }, [effectiveSqlBackend, runtimeRefreshToken]);
+
   /* ── Derived data ── */
   const catalogGroups = useMemo(() => {
     const sourceTables =
       effectiveSqlBackend === "duckdb-wasm" ? wasmTables : duckdbTables;
 
-    return buildDataCatalogGroups(sourceTables);
-  }, [duckdbTables, effectiveSqlBackend, wasmTables]);
+    return buildDataCatalogGroups(sourceTables, {
+      sqlBackend: effectiveSqlBackend,
+      currentCatalog:
+        effectiveSqlBackend === "duckdb-wasm"
+          ? wasmCurrentCatalog
+          : duckdbCurrentCatalog,
+      bridgeDatabaseMode: duckdbConnectionInfo?.database?.mode,
+      connectedSources: [...connectedSources, ...bridgeSources],
+    });
+  }, [
+    bridgeSources,
+    connectedSources,
+    duckdbConnectionInfo?.database?.mode,
+    duckdbCurrentCatalog,
+    duckdbTables,
+    effectiveSqlBackend,
+    wasmCurrentCatalog,
+    wasmTables,
+  ]);
 
   const catalogTableCount = useMemo(
     () => catalogGroups.reduce((acc, group) => acc + group.tables.length, 0),
