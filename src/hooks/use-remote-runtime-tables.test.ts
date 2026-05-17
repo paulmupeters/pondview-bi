@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   mapInformationSchemaRows,
   mapShowAllTablesRows,
-} from "@/hooks/use-duckdb-http-tables";
+} from "@/hooks/use-remote-runtime-tables";
 
-describe("DuckDB HTTP table metadata mapping", () => {
+describe("Bridge table metadata mapping", () => {
   test("preserves catalog names from information_schema", () => {
     expect(
       mapInformationSchemaRows([

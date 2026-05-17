@@ -22,12 +22,12 @@ describe("dashboard source descriptors", () => {
   test("classifies motherduck descriptors distinctly from runtime sources", () => {
     expect(
       buildDashboardSourceDescriptor({
-        runtimeBackend: "duckdb-http",
+        runtimeBackend: "bridge",
         dbIdentifier: "md:analytics",
       }),
     ).toEqual({
       kind: "motherduck",
-      runtimeBackend: "duckdb-http",
+      runtimeBackend: "bridge",
       dbIdentifier: "md:analytics",
       catalogContext: null,
     });

@@ -18,7 +18,6 @@ import {
   quoteIdentifier,
   quoteString as quoteSqlString,
 } from "@/lib/duckdb/duckdb-attachments";
-import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
 import {
   buildMotherDuckIdentifier,
   extractMotherDuckDatabaseName,
@@ -66,20 +65,19 @@ const SCHEMALESS_DATABASES = new Set<DatabaseType>([
   "httpfs",
 ]);
 
+const WASM_COMPATIBLE_DATABASES = new Set<DatabaseType>(["duckdb_remote"]);
+
+type RemoteDuckdbAttachMode = "httpfs" | "quack";
+
 const DATABASE_OPTIONS: Array<{
   label: string;
   value: Exclude<DatabaseType, null>;
   description?: string;
 }> = [
   {
-    label: "Remote DuckDB File",
+    label: "Remote DuckDB",
     value: "duckdb_remote",
-    description: "Attach a read-only DuckDB file over HTTPS or S3",
-  },
-  {
-    label: "Quack Remote DuckDB",
-    value: "quack",
-    description: "Attach a DuckDB server over the Quack protocol",
+    description: "Attach via HTTPFS or Quack protocol",
   },
   {
     label: "Postgres",
@@ -163,6 +161,14 @@ function requiresSchemaSelection(dbType: DatabaseType): boolean {
   );
 }
 
+export function isWasmCompatibleDatabase(dbType: DatabaseType): boolean {
+  return WASM_COMPATIBLE_DATABASES.has(dbType);
+}
+
+export function shouldSkipExtensionLoadForWasm(dbType: DatabaseType): boolean {
+  return dbType === "duckdb_remote";
+}
+
 function extractMotherDuckTableNames(
   rows: Record<string, unknown>[],
 ): string[] {
@@ -188,12 +194,8 @@ async function runRemoteSql(
     const result = await runBridgeQuery(sql);
     return result.rows;
   }
-  if (effectiveSqlBackend === "duckdb-http") {
-    const result = await runDuckDbHttpQuery(sql);
-    return result.rows;
-  }
   throw new Error(
-    "Cannot run remote SQL: active runtime is DuckDB WASM. Switch to Bridge or DuckDB over HTTP in Settings.",
+    "Cannot run remote SQL: active runtime is DuckDB WASM. Switch to Bridge in Settings.",
   );
 }
 
@@ -228,6 +230,41 @@ function isBrowserCompatibleRemoteDuckdbUrl(value: string): boolean {
   return value.trim().toLowerCase().startsWith("https://");
 }
 
+export function normalizeQuackUriInput(value: string): string {
+  const trimmed = value.trim();
+  const normalized = trimmed.toLowerCase();
+  if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const port = parsed.port ? `:${parsed.port}` : "";
+    return `quack:${parsed.hostname}${port}`;
+  } catch {
+    return trimmed;
+  }
+}
+
+function isQuackUriInput(value: string): boolean {
+  return normalizeQuackUriInput(value).toLowerCase().startsWith("quack:");
+}
+
+export function resolveQuackDisableSsl(uriInput: string): boolean | undefined {
+  const normalized = uriInput.trim().toLowerCase();
+  if (normalized.startsWith("https://")) {
+    return false;
+  }
+  if (normalized.startsWith("http://")) {
+    return true;
+  }
+  if (normalized.startsWith("quack:")) {
+    return true;
+  }
+
+  return undefined;
+}
+
 function buildDuckdbRemoteAlias(value: string): string {
   const trimmed = value.trim();
   try {
@@ -240,24 +277,49 @@ function buildDuckdbRemoteAlias(value: string): string {
   }
 }
 
-function buildSchemaIntrospectionSql(params: {
+function buildQuackAlias(value: string): string {
+  const normalized = normalizeQuackUriInput(value)
+    .replace(/^quack:\/\//i, "")
+    .replace(/^quack:/i, "");
+  const host = normalized.startsWith("[")
+    ? normalized.slice(1, normalized.indexOf("]"))
+    : normalized.split(/[/:]/)[0];
+  return (host || "quack").replace(/[^A-Za-z0-9_]/g, "_") || "quack";
+}
+
+function usesGlobalInformationSchema(sourceType: DatabaseType): boolean {
+  return sourceType === "duckdb_remote";
+}
+
+export function buildSchemaIntrospectionSql(params: {
   sourceType: DatabaseType;
   alias: string;
 }): string {
-  if (params.sourceType === "duckdb_remote") {
+  if (params.sourceType === "quack") {
+    const remoteSql =
+      "SELECT DISTINCT table_schema FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') ORDER BY 1";
+    return `SELECT table_schema FROM ${quoteIdentifier(params.alias)}.query(${quoteSqlString(remoteSql)})`;
+  }
+
+  if (usesGlobalInformationSchema(params.sourceType)) {
     return `SELECT DISTINCT table_schema FROM information_schema.tables WHERE table_catalog = ${quoteSqlString(params.alias)} AND table_schema NOT IN ('information_schema', 'pg_catalog') ORDER BY 1`;
   }
 
   return `SELECT DISTINCT table_schema FROM ${quoteIdentifier(params.alias)}.information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') ORDER BY 1`;
 }
 
-function buildTablePreviewSql(params: {
+export function buildTablePreviewSql(params: {
   sourceType: DatabaseType;
   alias: string;
   schema: string;
 }): string {
   const safeSchema = quoteSqlString(params.schema);
-  if (params.sourceType === "duckdb_remote") {
+  if (params.sourceType === "quack") {
+    const remoteSql = `SELECT table_name FROM information_schema.tables WHERE table_schema = ${safeSchema} AND table_type = 'BASE TABLE' ORDER BY table_name LIMIT 20`;
+    return `SELECT table_name FROM ${quoteIdentifier(params.alias)}.query(${quoteSqlString(remoteSql)})`;
+  }
+
+  if (usesGlobalInformationSchema(params.sourceType)) {
     return `SELECT table_name FROM information_schema.tables WHERE table_catalog = ${quoteSqlString(params.alias)} AND table_schema = ${safeSchema} AND table_type = 'BASE TABLE' ORDER BY table_name LIMIT 20`;
   }
 
@@ -295,6 +357,8 @@ export function ConnectDataDialog({
   // Remote DuckDB file fields
   const [remoteDuckdbUrl, setRemoteDuckdbUrl] = useState("");
   const [remoteDuckdbAlias, setRemoteDuckdbAlias] = useState("");
+  const [remoteDuckdbAttachMode, setRemoteDuckdbAttachMode] =
+    useState<RemoteDuckdbAttachMode>("httpfs");
   const [remoteDuckdbS3Region, setRemoteDuckdbS3Region] = useState("");
   const [remoteDuckdbS3Endpoint, setRemoteDuckdbS3Endpoint] = useState("");
   const [remoteDuckdbS3KeyId, setRemoteDuckdbS3KeyId] = useState("");
@@ -305,7 +369,6 @@ export function ConnectDataDialog({
   const [quackUri, setQuackUri] = useState("");
   const [quackAlias, setQuackAlias] = useState("");
   const [quackToken, setQuackToken] = useState("");
-  const [quackDisableSsl, setQuackDisableSsl] = useState(false);
   // Custom extension fields
   const [customExtensionName, setCustomExtensionName] = useState("");
   const [customAttachStatement, setCustomAttachStatement] = useState("");
@@ -341,6 +404,7 @@ export function ConnectDataDialog({
     setSqliteAlias("");
     setRemoteDuckdbUrl("");
     setRemoteDuckdbAlias("");
+    setRemoteDuckdbAttachMode("httpfs");
     setRemoteDuckdbS3Region("");
     setRemoteDuckdbS3Endpoint("");
     setRemoteDuckdbS3KeyId("");
@@ -349,7 +413,6 @@ export function ConnectDataDialog({
     setQuackUri("");
     setQuackAlias("");
     setQuackToken("");
-    setQuackDisableSsl(false);
     setCustomExtensionName("");
     setCustomAttachStatement("");
     setCustomAttachAlias("");
@@ -452,21 +515,21 @@ export function ConnectDataDialog({
   }, [remoteDuckdbUrl, remoteDuckdbAlias]);
 
   const buildQuackConnection = useCallback((): PendingSourceConnection => {
-    const identifier = quackUri.trim();
+    const identifier = normalizeQuackUriInput(quackUri);
     return {
       type: "quack",
       identifier,
-      alias: quackAlias.trim() || buildDuckdbRemoteAlias(identifier) || "quack",
+      alias: quackAlias.trim() || buildQuackAlias(identifier),
       readOnly: false,
       duckdbExtension: "quack",
       duckdbExtensionRepository: "core_nightly",
       attachOptions: {
         type: "quack",
-        token: quackToken.trim(),
-        disableSsl: quackDisableSsl ? true : undefined,
+        token: quackToken.trim() || undefined,
+        disableSsl: resolveQuackDisableSsl(quackUri),
       },
     };
-  }, [quackUri, quackAlias, quackToken, quackDisableSsl]);
+  }, [quackUri, quackAlias, quackToken]);
 
   const buildSourceConnectionId = useCallback(
     (type: string, alias: string): string =>
@@ -613,10 +676,13 @@ export function ConnectDataDialog({
   }, [isWasmActive, effectiveSqlBackend, runMotherDuckAttachSequence]);
 
   const handleConnectClick = useCallback(async () => {
-    if (isWasmActive && selectedDatabase !== "duckdb_remote") return;
+    if (isWasmActive && !isWasmCompatibleDatabase(selectedDatabase)) return;
 
     // Field validation
-    if (selectedDatabase === "duckdb_remote") {
+    if (
+      selectedDatabase === "duckdb_remote" &&
+      remoteDuckdbAttachMode === "httpfs"
+    ) {
       if (!remoteDuckdbUrl.trim()) {
         setErrorMessage("Enter a remote DuckDB URL.");
         return;
@@ -634,17 +700,18 @@ export function ConnectDataDialog({
         );
         return;
       }
-    } else if (selectedDatabase === "quack") {
+    } else if (
+      selectedDatabase === "duckdb_remote" &&
+      remoteDuckdbAttachMode === "quack"
+    ) {
       if (!quackUri.trim()) {
         setErrorMessage("Enter a Quack URI.");
         return;
       }
-      if (!quackUri.trim().toLowerCase().startsWith("quack:")) {
-        setErrorMessage("Use a Quack URI such as quack:localhost:9494.");
-        return;
-      }
-      if (!quackToken.trim()) {
-        setErrorMessage("Enter the Quack authentication token.");
+      if (!isQuackUriInput(quackUri)) {
+        setErrorMessage(
+          "Use a Quack URI such as quack:localhost:9494, or an HTTP(S) endpoint URL.",
+        );
         return;
       }
     } else if (selectedDatabase === "postgres") {
@@ -692,9 +759,12 @@ export function ConnectDataDialog({
 
       let dbPath: string;
       if (selectedDatabase === "duckdb_remote") {
-        dbPath = remoteDuckdbUrl.trim();
+        dbPath =
+          remoteDuckdbAttachMode === "quack"
+            ? normalizeQuackUriInput(quackUri)
+            : remoteDuckdbUrl.trim();
       } else if (selectedDatabase === "quack") {
-        dbPath = quackUri.trim();
+        dbPath = normalizeQuackUriInput(quackUri);
       } else if (selectedDatabase === "postgres") {
         dbPath = buildPostgresConnectionStringFromFields();
       } else if (selectedDatabase === "mysql") {
@@ -739,7 +809,9 @@ export function ConnectDataDialog({
       const extension = resolveDuckdbExtension(selectedDatabase);
       const rawConnection =
         selectedDatabase === "duckdb_remote"
-          ? buildRemoteDuckdbConnection()
+          ? remoteDuckdbAttachMode === "quack"
+            ? buildQuackConnection()
+            : buildRemoteDuckdbConnection()
           : selectedDatabase === "quack"
             ? buildQuackConnection()
             : {
@@ -760,12 +832,15 @@ export function ConnectDataDialog({
       pendingSourceRef.current = connection;
 
       const plan = buildAttachmentPlan(connection, {
-        skipExtensionLoad: isWasmActive,
+        skipExtensionLoad:
+          isWasmActive && shouldSkipExtensionLoadForWasm(selectedDatabase),
       });
 
       // Execute INSTALL/LOAD/ATTACH
       const secretStatement =
-        selectedDatabase === "duckdb_remote" && !isWasmActive
+        selectedDatabase === "duckdb_remote" &&
+        remoteDuckdbAttachMode === "httpfs" &&
+        !isWasmActive
           ? buildRemoteDuckdbSecretStatement()
           : null;
       if (secretStatement) {
@@ -779,7 +854,12 @@ export function ConnectDataDialog({
       const schemaRows = await runRuntimeSql(
         effectiveSqlBackend,
         buildSchemaIntrospectionSql({
-          sourceType: selectedDatabase,
+          sourceType:
+            selectedDatabase === "duckdb_remote"
+              ? remoteDuckdbAttachMode === "quack"
+                ? "quack"
+                : "duckdb_remote"
+              : selectedDatabase,
           alias: plan.alias,
         }),
       );
@@ -811,12 +891,12 @@ export function ConnectDataDialog({
     isWasmActive,
     databasePath,
     selectedDatabase,
+    remoteDuckdbAttachMode,
     remoteDuckdbUrl,
     buildRemoteDuckdbConnection,
     buildQuackConnection,
     buildRemoteDuckdbSecretStatement,
     quackUri,
-    quackToken,
     postgresHost,
     postgresUser,
     postgresDatabase,
@@ -837,16 +917,19 @@ export function ConnectDataDialog({
 
   const handleSchemaSelect = useCallback(
     async (schema: string) => {
-      if (isWasmActive && selectedDatabase !== "duckdb_remote") return;
+      if (isWasmActive && !isWasmCompatibleDatabase(selectedDatabase)) return;
       setSelectedSchema(schema);
       try {
         setIsLoadingTables(true);
 
         let dbPath: string;
         if (selectedDatabase === "duckdb_remote") {
-          dbPath = remoteDuckdbUrl.trim();
+          dbPath =
+            remoteDuckdbAttachMode === "quack"
+              ? normalizeQuackUriInput(quackUri)
+              : remoteDuckdbUrl.trim();
         } else if (selectedDatabase === "quack") {
-          dbPath = quackUri.trim();
+          dbPath = normalizeQuackUriInput(quackUri);
         } else if (selectedDatabase === "postgres") {
           dbPath = buildPostgresConnectionStringFromFields();
         } else if (selectedDatabase === "mysql") {
@@ -860,7 +943,9 @@ export function ConnectDataDialog({
         const extension = resolveDuckdbExtension(selectedDatabase);
         const rawConnection =
           selectedDatabase === "duckdb_remote"
-            ? buildRemoteDuckdbConnection()
+            ? remoteDuckdbAttachMode === "quack"
+              ? buildQuackConnection()
+              : buildRemoteDuckdbConnection()
             : selectedDatabase === "quack"
               ? buildQuackConnection()
               : {
@@ -880,11 +965,14 @@ export function ConnectDataDialog({
         const connection = await prepareConnectionForRuntime(rawConnection);
         pendingSourceRef.current = connection;
         const plan = buildAttachmentPlan(connection, {
-          skipExtensionLoad: isWasmActive,
+          skipExtensionLoad:
+            isWasmActive && shouldSkipExtensionLoadForWasm(selectedDatabase),
         });
 
         const secretStatement =
-          selectedDatabase === "duckdb_remote" && !isWasmActive
+          selectedDatabase === "duckdb_remote" &&
+          remoteDuckdbAttachMode === "httpfs" &&
+          !isWasmActive
             ? buildRemoteDuckdbSecretStatement()
             : null;
         if (secretStatement) {
@@ -897,7 +985,12 @@ export function ConnectDataDialog({
         const tableRows = await runRuntimeSql(
           effectiveSqlBackend,
           buildTablePreviewSql({
-            sourceType: selectedDatabase,
+            sourceType:
+              selectedDatabase === "duckdb_remote"
+                ? remoteDuckdbAttachMode === "quack"
+                  ? "quack"
+                  : "duckdb_remote"
+                : selectedDatabase,
             alias: plan.alias,
             schema,
           }),
@@ -928,6 +1021,7 @@ export function ConnectDataDialog({
       isWasmActive,
       databasePath,
       selectedDatabase,
+      remoteDuckdbAttachMode,
       remoteDuckdbUrl,
       buildRemoteDuckdbConnection,
       buildQuackConnection,
@@ -945,7 +1039,7 @@ export function ConnectDataDialog({
   );
 
   const handleAddTable = useCallback(async () => {
-    if (isWasmActive && selectedDatabase !== "duckdb_remote") return;
+    if (isWasmActive && !isWasmCompatibleDatabase(selectedDatabase)) return;
     if (!hasConnected || !selectedDatabase) {
       return;
     }
@@ -954,9 +1048,12 @@ export function ConnectDataDialog({
       if (selectedDatabase !== "motherduck") {
         let dbPath: string;
         if (selectedDatabase === "duckdb_remote") {
-          dbPath = remoteDuckdbUrl.trim();
+          dbPath =
+            remoteDuckdbAttachMode === "quack"
+              ? normalizeQuackUriInput(quackUri)
+              : remoteDuckdbUrl.trim();
         } else if (selectedDatabase === "quack") {
-          dbPath = quackUri.trim();
+          dbPath = normalizeQuackUriInput(quackUri);
         } else if (selectedDatabase === "postgres") {
           dbPath = buildPostgresConnectionStringFromFields();
         } else if (selectedDatabase === "mysql") {
@@ -972,7 +1069,9 @@ export function ConnectDataDialog({
         const extension = resolveDuckdbExtension(selectedDatabase);
         const rawConnection =
           selectedDatabase === "duckdb_remote"
-            ? buildRemoteDuckdbConnection()
+            ? remoteDuckdbAttachMode === "quack"
+              ? buildQuackConnection()
+              : buildRemoteDuckdbConnection()
             : selectedDatabase === "quack"
               ? buildQuackConnection()
               : {
@@ -993,7 +1092,8 @@ export function ConnectDataDialog({
         pendingSourceRef.current = connection;
 
         const plan = buildAttachmentPlan(connection, {
-          skipExtensionLoad: isWasmActive,
+          skipExtensionLoad:
+            isWasmActive && shouldSkipExtensionLoadForWasm(selectedDatabase),
         });
         try {
           await runRuntimeSql(
@@ -1005,7 +1105,9 @@ export function ConnectDataDialog({
         }
 
         const secretStatement =
-          selectedDatabase === "duckdb_remote" && !isWasmActive
+          selectedDatabase === "duckdb_remote" &&
+          remoteDuckdbAttachMode === "httpfs" &&
+          !isWasmActive
             ? buildRemoteDuckdbSecretStatement()
             : null;
         if (secretStatement) {
@@ -1018,11 +1120,20 @@ export function ConnectDataDialog({
 
       const source = pendingSourceRef.current;
       if (source) {
+        const browserConnectionId =
+          selectedDatabase === "duckdb_remote" &&
+          remoteDuckdbAttachMode === "quack" &&
+          effectiveSqlBackend === "duckdb-wasm"
+            ? buildSourceConnectionId(source.type, source.alias)
+            : undefined;
+
         await appendConnectedTable({
           type: source.type,
           connectionId:
             source.connectionId ??
-            (effectiveSqlBackend === "bridge" ? source.identifier : undefined),
+            (effectiveSqlBackend === "bridge"
+              ? source.identifier
+              : browserConnectionId),
           databaseName:
             selectedDatabase === "postgres"
               ? postgresDatabase.trim()
@@ -1031,10 +1142,10 @@ export function ConnectDataDialog({
                 : selectedDatabase === "sqlite"
                   ? sqlitePath.trim()
                   : selectedDatabase === "duckdb_remote"
-                    ? remoteDuckdbUrl.trim()
-                    : selectedDatabase === "quack"
-                      ? quackUri.trim()
-                      : databasePath.trim(),
+                    ? remoteDuckdbAttachMode === "quack"
+                      ? normalizeQuackUriInput(quackUri)
+                      : remoteDuckdbUrl.trim()
+                    : databasePath.trim(),
           schema: selectedSchema || undefined,
           tables: schemaTablesPreview,
           attachAs: source.alias,
@@ -1058,6 +1169,7 @@ export function ConnectDataDialog({
     hasConnected,
     isWasmActive,
     databasePath,
+    remoteDuckdbAttachMode,
     remoteDuckdbUrl,
     buildRemoteDuckdbConnection,
     buildQuackConnection,
@@ -1075,6 +1187,7 @@ export function ConnectDataDialog({
     sqliteAlias,
     effectiveSqlBackend,
     prepareConnectionForRuntime,
+    buildSourceConnectionId,
     selectedSchema,
     schemaTablesPreview,
   ]);
@@ -1085,19 +1198,18 @@ export function ConnectDataDialog({
 
   const isConnectDisabled = useMemo(() => {
     if (!selectedDatabase) return true;
-    if (isWasmActive && selectedDatabase !== "duckdb_remote") return true;
+    if (isWasmActive && !isWasmCompatibleDatabase(selectedDatabase)) {
+      return true;
+    }
 
     if (selectedDatabase === "duckdb_remote") {
+      if (remoteDuckdbAttachMode === "quack") {
+        return !isQuackUriInput(quackUri);
+      }
       if (!remoteDuckdbUrl.trim()) return true;
       if (!isRemoteDuckdbUrl(remoteDuckdbUrl)) return true;
       return (
         isWasmActive && !isBrowserCompatibleRemoteDuckdbUrl(remoteDuckdbUrl)
-      );
-    }
-    if (selectedDatabase === "quack") {
-      return (
-        !quackUri.trim().toLowerCase().startsWith("quack:") ||
-        !quackToken.trim()
       );
     }
     if (selectedDatabase === "postgres") {
@@ -1122,9 +1234,9 @@ export function ConnectDataDialog({
   }, [
     isWasmActive,
     selectedDatabase,
+    remoteDuckdbAttachMode,
     remoteDuckdbUrl,
     quackUri,
-    quackToken,
     postgresHost,
     postgresUser,
     postgresDatabase,
@@ -1141,7 +1253,9 @@ export function ConnectDataDialog({
   const availableDatabaseOptions = useMemo(
     () =>
       isWasmActive
-        ? DATABASE_OPTIONS.filter((option) => option.value === "duckdb_remote")
+        ? DATABASE_OPTIONS.filter((option) =>
+            isWasmCompatibleDatabase(option.value),
+          )
         : DATABASE_OPTIONS,
     [isWasmActive],
   );
@@ -1193,116 +1307,136 @@ export function ConnectDataDialog({
       const isS3Like = !isBrowserCompatibleRemoteDuckdbUrl(remoteDuckdbUrl);
       return (
         <div className="space-y-3">
-          <Input
-            placeholder={
-              isWasmActive
-                ? "Presigned HTTPS URL to .duckdb file"
-                : "HTTPS, s3://, r2://, gcs://, or gs:// URL"
-            }
-            value={remoteDuckdbUrl}
-            onChange={(e) => setRemoteDuckdbUrl(e.target.value)}
-          />
-          <Input
-            placeholder="Attach as alias (optional)"
-            value={remoteDuckdbAlias}
-            onChange={(e) => setRemoteDuckdbAlias(e.target.value)}
-          />
-          {isWasmActive ? (
-            <p className="text-xs text-muted-foreground">
-              DuckDB WASM can attach public or presigned HTTPS URLs. The bucket
-              must allow browser CORS access for GET and HEAD requests.
-            </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className={cn(
+                "rounded-md border px-3 py-2 text-sm",
+                remoteDuckdbAttachMode === "httpfs"
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-card text-muted-foreground",
+              )}
+              onClick={() => setRemoteDuckdbAttachMode("httpfs")}
+            >
+              HTTPFS file
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "rounded-md border px-3 py-2 text-sm",
+                remoteDuckdbAttachMode === "quack"
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-card text-muted-foreground",
+              )}
+              onClick={() => setRemoteDuckdbAttachMode("quack")}
+            >
+              Quack endpoint
+            </button>
+          </div>
+
+          {remoteDuckdbAttachMode === "quack" ? (
+            <>
+              <Input
+                placeholder="quack:localhost:9494 or http://localhost:9494"
+                value={quackUri}
+                onChange={(e) => setQuackUri(e.target.value)}
+              />
+              <Input
+                placeholder="Attach as alias (optional)"
+                value={quackAlias}
+                onChange={(e) => setQuackAlias(e.target.value)}
+              />
+              <Input
+                type="password"
+                placeholder="Authentication token (optional)"
+                value={quackToken}
+                onChange={(e) => setQuackToken(e.target.value)}
+              />
+            </>
           ) : (
             <>
-              <p className="text-xs text-muted-foreground">
-                HTTPS URLs attach directly. S3-compatible URLs use DuckDB
-                secrets on the active runtime.
-              </p>
-              {isS3Like && remoteDuckdbUrl.trim() ? (
-                <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-                  <p className="text-xs font-medium text-foreground">
-                    S3-compatible credentials
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      placeholder="Region (optional)"
-                      value={remoteDuckdbS3Region}
-                      onChange={(e) => setRemoteDuckdbS3Region(e.target.value)}
-                    />
-                    <Input
-                      placeholder="Endpoint (optional)"
-                      value={remoteDuckdbS3Endpoint}
-                      onChange={(e) =>
-                        setRemoteDuckdbS3Endpoint(e.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      placeholder="Key ID (optional)"
-                      value={remoteDuckdbS3KeyId}
-                      onChange={(e) => setRemoteDuckdbS3KeyId(e.target.value)}
-                    />
-                    <Input
-                      type="password"
-                      placeholder="Secret (optional)"
-                      value={remoteDuckdbS3Secret}
-                      onChange={(e) => setRemoteDuckdbS3Secret(e.target.value)}
-                    />
-                  </div>
-                  <Input
-                    type="password"
-                    placeholder="Session token (optional)"
-                    value={remoteDuckdbS3SessionToken}
-                    onChange={(e) =>
-                      setRemoteDuckdbS3SessionToken(e.target.value)
-                    }
-                  />
+              <Input
+                placeholder={
+                  isWasmActive
+                    ? "Presigned HTTPS URL to .duckdb file"
+                    : "HTTPS, s3://, r2://, gcs://, or gs:// URL"
+                }
+                value={remoteDuckdbUrl}
+                onChange={(e) => setRemoteDuckdbUrl(e.target.value)}
+              />
+              <Input
+                placeholder="Attach as alias (optional)"
+                value={remoteDuckdbAlias}
+                onChange={(e) => setRemoteDuckdbAlias(e.target.value)}
+              />
+              {isWasmActive ? (
+                <p className="text-xs text-muted-foreground">
+                  DuckDB WASM can attach public or presigned HTTPS URLs. The
+                  bucket must allow browser CORS access for GET and HEAD
+                  requests.
+                </p>
+              ) : (
+                <>
                   <p className="text-xs text-muted-foreground">
-                    Leave key and secret blank to use the runtime credential
-                    chain.
+                    HTTPS URLs attach directly. S3-compatible URLs use DuckDB
+                    secrets on the active runtime.
                   </p>
-                </div>
-              ) : null}
+                  {isS3Like && remoteDuckdbUrl.trim() ? (
+                    <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                      <p className="text-xs font-medium text-foreground">
+                        S3-compatible credentials
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          placeholder="Region (optional)"
+                          value={remoteDuckdbS3Region}
+                          onChange={(e) =>
+                            setRemoteDuckdbS3Region(e.target.value)
+                          }
+                        />
+                        <Input
+                          placeholder="Endpoint (optional)"
+                          value={remoteDuckdbS3Endpoint}
+                          onChange={(e) =>
+                            setRemoteDuckdbS3Endpoint(e.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          placeholder="Key ID (optional)"
+                          value={remoteDuckdbS3KeyId}
+                          onChange={(e) =>
+                            setRemoteDuckdbS3KeyId(e.target.value)
+                          }
+                        />
+                        <Input
+                          type="password"
+                          placeholder="Secret (optional)"
+                          value={remoteDuckdbS3Secret}
+                          onChange={(e) =>
+                            setRemoteDuckdbS3Secret(e.target.value)
+                          }
+                        />
+                      </div>
+                      <Input
+                        type="password"
+                        placeholder="Session token (optional)"
+                        value={remoteDuckdbS3SessionToken}
+                        onChange={(e) =>
+                          setRemoteDuckdbS3SessionToken(e.target.value)
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Leave key and secret blank to use the runtime credential
+                        chain.
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </>
           )}
-        </div>
-      );
-    }
-
-    if (selectedDatabase === "quack") {
-      return (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Quack Remote DuckDB</h3>
-          <Input
-            placeholder="Quack URI (e.g. quack:localhost:9494)"
-            value={quackUri}
-            onChange={(e) => setQuackUri(e.target.value)}
-          />
-          <Input
-            placeholder="Attach as alias (optional)"
-            value={quackAlias}
-            onChange={(e) => setQuackAlias(e.target.value)}
-          />
-          <Input
-            type="password"
-            placeholder="Authentication token"
-            value={quackToken}
-            onChange={(e) => setQuackToken(e.target.value)}
-          />
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={quackDisableSsl}
-              onChange={(event) => setQuackDisableSsl(event.target.checked)}
-            />
-            Use plain HTTP for this remote endpoint
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Local Quack URIs use plain HTTP by default. Remote Quack endpoints
-            should usually sit behind HTTPS; enable plain HTTP only for trusted
-            test endpoints.
-          </p>
         </div>
       );
     }
@@ -1711,7 +1845,7 @@ export function ConnectDataDialog({
                 disabled={isAddDisabled}
                 onClick={handleAddTable}
               >
-                Attach Source
+                Attach Schema
               </Button>
             </div>
           )}

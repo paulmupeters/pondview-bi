@@ -1,11 +1,9 @@
-import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import { runWithCatalogContext } from "@/lib/duckdb/catalog-context";
 import {
   buildAttachmentPlan,
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
-import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
 import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import { rewriteSqlForAttachedDatabase } from "@/lib/duckdb/rewrite-sql";
 import { runQueryWasm } from "@/lib/sql/run-query-wasm";
@@ -18,7 +16,6 @@ import {
 
 export type RunQueryOptions = {
   sql: string;
-  config?: HttpDuckDbConfig;
   dbIdentifier?: string;
   catalogContext?: string | null;
   signal?: AbortSignal;
@@ -36,7 +33,6 @@ type RunQueryDeps = {
   resolveBackend: typeof resolveSqlBackend;
   assertWasmCompatibleIdentifier: typeof assertWasmCompatibleDbIdentifier;
   runBridge: typeof runBridgeQuery;
-  runDuckDbHttp: typeof runDuckDbHttpQuery;
   runWasm: typeof runQueryWasm;
 };
 
@@ -44,7 +40,6 @@ const defaultDeps: RunQueryDeps = {
   resolveBackend: resolveSqlBackend,
   assertWasmCompatibleIdentifier: assertWasmCompatibleDbIdentifier,
   runBridge: runBridgeQuery,
-  runDuckDbHttp: runDuckDbHttpQuery,
   runWasm: runQueryWasm,
 };
 
@@ -56,7 +51,6 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
 
   return async function runQuery({
     sql,
-    config,
     dbIdentifier,
     catalogContext,
     signal,
@@ -78,10 +72,7 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
       const runRemoteSql =
         backend === "bridge"
           ? (statement: string) => deps.runBridge(statement, signal)
-          : backend === "duckdb-http"
-            ? (statement: string) =>
-                deps.runDuckDbHttp(statement, signal, config)
-            : null;
+          : null;
 
       if (!runRemoteSql) {
         deps.assertWasmCompatibleIdentifier(dbIdentifier);
@@ -132,19 +123,6 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
         sql: trimmedSql,
         selectedCatalog: catalogContext,
         runQuery: (statement: string) => deps.runBridge(statement, signal),
-      });
-      return {
-        ...result,
-        backend,
-      };
-    }
-
-    if (backend === "duckdb-http") {
-      const result = await runWithCatalogContext({
-        sql: trimmedSql,
-        selectedCatalog: catalogContext,
-        runQuery: (statement: string) =>
-          deps.runDuckDbHttp(statement, signal, config),
       });
       return {
         ...result,

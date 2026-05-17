@@ -12,7 +12,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
+import { useConnectedTables } from "@/hooks/use-connected-tables";
+import type { RemoteRuntimeConnectionInfo } from "@/hooks/use-remote-runtime-tables";
+import { useRemoteRuntimeTables } from "@/hooks/use-remote-runtime-tables";
 import { useWasmTables } from "@/hooks/use-wasm-tables";
 import { runBridgeQuery } from "@/lib/bridge/pondview-bridge";
 import type { ConnectedTable } from "@/lib/connected-tables";
@@ -22,7 +24,6 @@ import {
   quoteIdentifier,
   resolveAttachmentAlias,
 } from "@/lib/duckdb/duckdb-attachments";
-import { runDuckDbHttpQuery } from "@/lib/duckdb/duckdb-http-browser";
 import {
   buildExplorerInsertPayload,
   buildExplorerTableReference,
@@ -142,6 +143,29 @@ export function shouldShowConnectedEntry(
   return !visibleRemoteCatalogs.has(catalog);
 }
 
+export function connectedEntriesToExplorerTables(
+  entries: ConnectedTable[],
+): Array<{
+  catalog?: string;
+  schema: string;
+  name: string;
+}> {
+  return entries.flatMap((entry) => {
+    if (entry.type.trim().toLowerCase() !== "quack") {
+      return [];
+    }
+
+    const catalog = getConnectedEntryCatalog(entry);
+    const schema = entry.schema?.trim() || "main";
+
+    return getVisibleConnectedEntryTables(entry).map((name) => ({
+      catalog,
+      schema,
+      name,
+    }));
+  });
+}
+
 export type ConnectedEntryStatus = "ready" | "disconnected";
 
 function createExplorerRemoteSqlRunner(
@@ -150,13 +174,6 @@ function createExplorerRemoteSqlRunner(
   if (sqlBackend === "bridge") {
     return async (sql: string) => {
       const result = await runBridgeQuery(sql);
-      return result.rows;
-    };
-  }
-
-  if (sqlBackend === "duckdb-http") {
-    return async (sql: string) => {
-      const result = await runDuckDbHttpQuery(sql);
       return result.rows;
     };
   }
@@ -283,6 +300,19 @@ export function getSampleDataActionState({
   };
 }
 
+export function getRemoteRuntimeDisplayLabel(
+  connectionInfo: RemoteRuntimeConnectionInfo | null,
+): string {
+  if (!connectionInfo) {
+    return "Bridge";
+  }
+
+  const databaseName = connectionInfo.database?.name?.trim();
+  const runtimeName = databaseName || "Bridge";
+
+  return `${runtimeName} (${connectionInfo.host})`;
+}
+
 interface ConnectedDataPanelProps {
   selectedDb?: string;
   onSelect: (dbIdentifier: string) => void;
@@ -344,7 +374,8 @@ export function ConnectedDataPanel({
     error: remoteTablesError,
     connectionInfo: remoteConnectionInfo,
     refresh: refreshRemoteTables,
-  } = useDuckdbHttpTables(sqlBackend, refreshToken);
+  } = useRemoteRuntimeTables(sqlBackend, refreshToken);
+  const connectedEntries = useConnectedTables();
   const [isOpen, setIsOpen] = useState(false);
   const [sampleDataLoadingTarget, setSampleDataLoadingTarget] = useState<
     "remote" | "wasm" | null
@@ -442,12 +473,17 @@ export function ConnectedDataPanel({
     [],
   );
 
+  const connectedWasmTables = useMemo(
+    () => connectedEntriesToExplorerTables(connectedEntries),
+    [connectedEntries],
+  );
+
   const groupedWasmTables = useMemo(
     () =>
-      groupExplorerTables(wasmTables).filter(
+      groupExplorerTables([...wasmTables, ...connectedWasmTables]).filter(
         (group) => !isHiddenRuntimeSchema(group.schema),
       ),
-    [groupExplorerTables, wasmTables],
+    [connectedWasmTables, groupExplorerTables, wasmTables],
   );
 
   const groupedRemoteTables = useMemo(
@@ -460,12 +496,8 @@ export function ConnectedDataPanel({
 
   const remoteLabel =
     sqlBackend === "bridge"
-      ? remoteConnectionInfo
-        ? `Bridge (${remoteConnectionInfo.host})`
-        : "Bridge"
-      : remoteConnectionInfo
-        ? `DuckDB HTTP (${remoteConnectionInfo.host}:${remoteConnectionInfo.port})`
-        : "DuckDB HTTP";
+      ? getRemoteRuntimeDisplayLabel(remoteConnectionInfo)
+      : "Bridge";
   const activeRuntimeExplorer = useMemo(
     () =>
       resolveActiveRuntimeExplorer({
@@ -732,7 +764,7 @@ export function ConnectedDataPanel({
                 onClick={handleSelectWasm}
               >
                 <Database className="h-3.5 w-3.5 shrink-0 text-[#A8BCA1]" />
-                <span className="truncate">DuckDB WASM (local)</span>
+                <span className="truncate">DuckDB WASM</span>
               </button>
             </div>
             <div className="pl-8 text-xs text-slate-500 space-y-2 mt-2 font-mono">

@@ -6,7 +6,6 @@ import { runQuery } from "@/lib/sql/run-query";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import {
   getBridgeRuntimeState,
-  getSqlBackendPreference,
   refreshBridgeHealth,
 } from "@/lib/sql/sql-runtime";
 
@@ -27,8 +26,7 @@ async function resolveSampleDashboardBackend(): Promise<SqlBackend> {
     return "bridge";
   }
 
-  const preference = getSqlBackendPreference();
-  return preference === "duckdb-http" ? "duckdb-http" : "duckdb-wasm";
+  return "duckdb-wasm";
 }
 
 export async function addSampleDashboard(): Promise<AddSampleDashboardResult> {

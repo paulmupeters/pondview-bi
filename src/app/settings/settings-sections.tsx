@@ -468,6 +468,7 @@ type RuntimeSettingsSectionProps = {
   selectedSqlBackend: SqlBackend;
   onSqlBackendChange: (backend: SqlBackend) => void;
   bridgeOptionLabel: string;
+  isBridgeSelectable: boolean;
   runtimeSettingsError: string | null;
   runtimeSettingsSuccess: string | null;
   bridgeHealthSummary: string;
@@ -480,20 +481,6 @@ type RuntimeSettingsSectionProps = {
   onSetBridgeSecret: () => void;
   onClearBridgeSecret: () => void;
   hasBridgeSessionSecret: boolean;
-  duckDbHttpHealthStatus: string;
-  duckDbHttpHost: string;
-  onDuckDbHttpHostChange: (value: string) => void;
-  duckDbHttpPort: string;
-  onDuckDbHttpPortChange: (value: string) => void;
-  hasDuckDbHttpAuth: boolean;
-  duckDbHttpAuth: string;
-  onDuckDbHttpAuthChange: (value: string) => void;
-  onClearDuckDbHttpAuth: () => void;
-  onSaveDuckDbHttpConfig: () => void;
-  onTestDuckDbHttpConnection: () => void;
-  isTestingHttpConnection: boolean;
-  onClearDuckDbHttpConfig: () => void;
-  isDuckDbHttpConfigured: boolean;
 };
 
 export function RuntimeSettingsSection({
@@ -502,6 +489,7 @@ export function RuntimeSettingsSection({
   selectedSqlBackend,
   onSqlBackendChange,
   bridgeOptionLabel,
+  isBridgeSelectable,
   runtimeSettingsError,
   runtimeSettingsSuccess,
   bridgeHealthSummary,
@@ -514,20 +502,6 @@ export function RuntimeSettingsSection({
   onSetBridgeSecret,
   onClearBridgeSecret,
   hasBridgeSessionSecret,
-  duckDbHttpHealthStatus,
-  duckDbHttpHost,
-  onDuckDbHttpHostChange,
-  duckDbHttpPort,
-  onDuckDbHttpPortChange,
-  hasDuckDbHttpAuth,
-  duckDbHttpAuth,
-  onDuckDbHttpAuthChange,
-  onClearDuckDbHttpAuth,
-  onSaveDuckDbHttpConfig,
-  onTestDuckDbHttpConnection,
-  isTestingHttpConnection,
-  onClearDuckDbHttpConfig,
-  isDuckDbHttpConfigured,
 }: RuntimeSettingsSectionProps) {
   return (
     <SettingsContentSection>
@@ -553,7 +527,15 @@ export function RuntimeSettingsSection({
           </span>
         </div>
 
-        <FormField label="Query runtime" htmlFor="sql-backend-select">
+        <FormField
+          label="Query runtime"
+          htmlFor="sql-backend-select"
+          description={
+            isBridgeSelectable
+              ? undefined
+              : "Start Pondview Bridge or save a reachable endpoint before selecting Bridge."
+          }
+        >
           <Select
             value={selectedSqlBackend}
             onValueChange={(value) => onSqlBackendChange(value as SqlBackend)}
@@ -563,7 +545,9 @@ export function RuntimeSettingsSection({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="duckdb-wasm">DuckDB WASM</SelectItem>
-              <SelectItem value="bridge">{bridgeOptionLabel}</SelectItem>
+              <SelectItem value="bridge" disabled={!isBridgeSelectable}>
+                {bridgeOptionLabel}
+              </SelectItem>
             </SelectContent>
           </Select>
         </FormField>
@@ -643,97 +627,6 @@ export function RuntimeSettingsSection({
                   Clear
                 </Button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {selectedSqlBackend === "duckdb-http" && (
-          <div className="space-y-4 border-t pt-5">
-            <div>
-              <h4 className="text-sm font-semibold">DuckDB HTTP connection</h4>
-              <p className="text-sm text-muted-foreground">
-                Configure host, port, and optional auth for a remote DuckDB{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  httpserver
-                </code>{" "}
-                instance.
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Health: {duckDbHttpHealthStatus}
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-              <Input
-                type="text"
-                value={duckDbHttpHost}
-                onChange={(event) => onDuckDbHttpHostChange(event.target.value)}
-                placeholder="http://127.0.0.1 or duckdb-host.local"
-              />
-              <Input
-                type="text"
-                value={duckDbHttpPort}
-                onChange={(event) => onDuckDbHttpPortChange(event.target.value)}
-                placeholder="8123"
-              />
-            </div>
-
-            <FormField
-              label={
-                <>
-                  Auth{" "}
-                  <span className="font-normal text-muted-foreground">
-                    ({hasDuckDbHttpAuth ? "set" : "not set"})
-                  </span>
-                </>
-              }
-              htmlFor="duckdb-http-auth"
-            >
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  id="duckdb-http-auth"
-                  type="password"
-                  name="settings-duckdb-http-auth"
-                  autoComplete="off"
-                  data-1p-ignore="true"
-                  data-lpignore="true"
-                  data-form-type="other"
-                  value={duckDbHttpAuth}
-                  onChange={(event) =>
-                    onDuckDbHttpAuthChange(event.target.value)
-                  }
-                  placeholder={
-                    hasDuckDbHttpAuth
-                      ? "••••••••  (enter new value, then Save Config)"
-                      : "token or user:pass"
-                  }
-                />
-                <Button
-                  variant="outline"
-                  onClick={onClearDuckDbHttpAuth}
-                  disabled={!hasDuckDbHttpAuth}
-                >
-                  Clear
-                </Button>
-              </div>
-            </FormField>
-
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={onSaveDuckDbHttpConfig}>Save Connection</Button>
-              <Button
-                variant="outline"
-                onClick={onTestDuckDbHttpConnection}
-                disabled={isTestingHttpConnection}
-              >
-                {isTestingHttpConnection ? "Testing..." : "Test Connection"}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={onClearDuckDbHttpConfig}
-                disabled={!isDuckDbHttpConfigured}
-              >
-                Clear Config
-              </Button>
             </div>
           </div>
         )}

@@ -66,6 +66,7 @@ describe("DuckDbRuntime", () => {
 
     expect(runtime.databaseInfo().mode).toBe("file");
     expect(runtime.databaseInfo().id).not.toBe("memory");
+    expect(runtime.databaseInfo().name).toBe("analytics.duckdb");
     expect(result.rows).toEqual([{ answer: 42 }]);
   });
 

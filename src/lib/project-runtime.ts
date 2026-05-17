@@ -91,7 +91,6 @@ export function getProjectRuntimeSelection(): ProjectRuntimeSelection | null {
       typeof parsed.projectId !== "string" ||
       typeof parsed.sourceRef !== "string" ||
       (parsed.runtimeBackend !== "bridge" &&
-        parsed.runtimeBackend !== "duckdb-http" &&
         parsed.runtimeBackend !== "duckdb-wasm")
     ) {
       return null;

@@ -1,6 +1,6 @@
 # Connected Data Sources
 
-Connected sources are metadata entries stored in browser local storage and consumed by the SQL/chat UI. Source attachment and schema introspection run through a remote DuckDB runtime (Bridge or DuckDB over HTTP), not DuckDB WASM.
+Connected sources are metadata entries stored in browser local storage and consumed by the SQL/chat UI. Source attachment and schema introspection run through Bridge when the source needs a server-side runtime or secret boundary.
 
 ## Supported source types in the dialog
 
@@ -10,7 +10,7 @@ Current Connect Data dialog options:
 - MotherDuck
 - MySQL
 - SQLite
-- Quack Remote DuckDB
+- Remote DuckDB (HTTPFS file or Quack endpoint)
 
 The runtime can also represent additional source types in metadata, but the primary UI picker currently exposes the four options above.
 
@@ -20,7 +20,7 @@ Source connection flow is disabled when active runtime is `duckdb-wasm`.
 
 To connect sources:
 
-1. Switch runtime in **Settings -> Query Runtime** to `Bridge` or `DuckDB over HTTP`.
+1. Switch runtime in **Settings -> Query Runtime** to `Bridge`.
 2. Open **Connect Data Source**.
 3. Configure source fields and connect.
 

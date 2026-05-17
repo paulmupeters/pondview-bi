@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SqlResultsTable } from "@/components/sql-results-table";
 import { Button } from "@/components/ui/button";
-import type { HttpDuckDbConfig } from "@/lib/api/types/duckdb";
 import { quoteString } from "@/lib/duckdb/duckdb-attachments";
 import { sanitizeSqlErrorMessage } from "@/lib/sql/error-sanitizer";
 import { runQuery } from "@/lib/sql/run-query";
@@ -97,12 +96,10 @@ export function parseSqlAutocompleteSuggestion(
 
 export function createSqlExecuteQuery(options: {
   dbIdentifier?: string;
-  config?: HttpDuckDbConfig;
 }): ExecuteQueryFn {
   return async ({ sql, signal }) => {
     const { rows, columns, backend } = await runQuery({
       sql,
-      config: options.config,
       dbIdentifier: options.dbIdentifier,
       signal,
     });
@@ -123,7 +120,6 @@ export const createDuckDbExecuteQuery = createSqlExecuteQuery;
 export function createSqlAutocompleteAction(
   options: {
     dbIdentifier?: string;
-    config?: HttpDuckDbConfig;
     catalogContext?: string | null;
   },
   deps: {
@@ -141,7 +137,6 @@ export function createSqlAutocompleteAction(
     try {
       await runSqlQuery({
         sql: "LOAD autocomplete;",
-        config: options.config,
         dbIdentifier: options.dbIdentifier,
         catalogContext: options.catalogContext,
         signal,
@@ -149,7 +144,6 @@ export function createSqlAutocompleteAction(
 
       const result = await runSqlQuery({
         sql: buildSqlAutocompleteQuery(sql),
-        config: options.config,
         dbIdentifier: options.dbIdentifier,
         catalogContext: options.catalogContext,
         signal,

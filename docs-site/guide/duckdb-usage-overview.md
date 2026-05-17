@@ -7,7 +7,6 @@ This note summarizes the current DuckDB execution surfaces and how dashboards fi
 | Runner | Where it lives | Primary entry points | Typical identifiers |
 | --- | --- | --- | --- |
 | Bridge runtime | `src/lib/bridge/pondview-bridge.ts` via `runQuery(...)` | SQL console, chat/manual SQL runs, dashboard execution when backend is `bridge` | runtime-default, `md:analytics`, external connector identifiers |
-| DuckDB HTTP runtime | `src/lib/duckdb/duckdb-http-browser.ts` via `runQuery(...)` | SQL console, chat/manual SQL runs, dashboard execution when backend is `duckdb-http` | runtime-default, `md:analytics`, external connector identifiers |
 | DuckDB-Wasm | `src/lib/sql/run-query-wasm.ts` via `runQuery(...)` | local browser SQL execution, dashboard execution when backend is `duckdb-wasm` | `wasm:local` |
 
 The old write-up around a single node-centric path is no longer the right mental model for dashboard execution. Dashboard execution now follows the stored `DashboardSourceDescriptor` plus the selected runtime backend.
@@ -26,7 +25,6 @@ It accepts:
 It then routes to:
 
 - Bridge
-- DuckDB HTTP
 - DuckDB-Wasm
 - MotherDuck attachment flow when the identifier is `md:...`
 

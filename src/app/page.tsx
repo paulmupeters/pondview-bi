@@ -57,7 +57,7 @@ function deriveManualQueryTitle(sql: string): string {
 
 export async function runHomepageExampleCommand(params: {
   command: string;
-  backendPreference: "bridge" | "duckdb-http" | "duckdb-wasm";
+  backendPreference: "bridge" | "duckdb-wasm";
   ensureSampleData?: typeof ensureSampleDataForEmptyRuntime;
   submit: (command: string) => void;
 }) {

@@ -5,6 +5,7 @@ export const bridgeRuntimeBackendSchema = z.literal("bridge");
 export const bridgeDatabaseInfoSchema = z.object({
   mode: z.enum(["memory", "file"]),
   id: z.string(),
+  name: z.string().optional(),
 });
 
 export const bridgeHealthResponseSchema = z.object({

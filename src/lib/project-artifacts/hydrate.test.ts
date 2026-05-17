@@ -22,7 +22,7 @@ describe("project artifact hydration", () => {
         schemaVersion: 1,
         bindings: {
           analytics: {
-            runtimeBackend: "duckdb-http",
+            runtimeBackend: "bridge",
             dbIdentifier: "md:analytics",
             catalogContext: "main",
           },
@@ -148,7 +148,7 @@ describe("project artifact hydration", () => {
       title: "Revenue",
       columns: 4,
       homeDbIdentifier: "md:analytics",
-      homeSqlBackend: "duckdb-http",
+      homeSqlBackend: "bridge",
       storageStatus: "shared",
       projectPath: "pondview/dashboards/revenue",
     });

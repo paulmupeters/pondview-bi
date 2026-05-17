@@ -117,9 +117,7 @@ export function parseDashboardSourceDescriptor(
   const runtimeBackend = candidate.runtimeBackend;
   if (
     (kind !== "runtime" && kind !== "motherduck" && kind !== "external") ||
-    (runtimeBackend !== "duckdb-wasm" &&
-      runtimeBackend !== "bridge" &&
-      runtimeBackend !== "duckdb-http")
+    (runtimeBackend !== "duckdb-wasm" && runtimeBackend !== "bridge")
   ) {
     return null;
   }

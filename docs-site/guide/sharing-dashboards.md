@@ -10,8 +10,8 @@ runtime state.
 
 Project artifacts should be shared through a Git-friendly format, ideally backed
 by GitHub. Data should be shared or connected through a separate data backend
-such as MotherDuck, S3-compatible storage, DuckDB HTTP, a warehouse, or manual
-upload.
+such as MotherDuck, S3-compatible storage, Bridge-connected warehouses, or
+manual upload.
 
 This gives Pondview a clean sharing model:
 
@@ -41,7 +41,7 @@ GitHub project repository
 Data backend
   MotherDuck database
   or S3-compatible bucket with Parquet, CSV, or DuckDB snapshots
-  or DuckDB HTTP / warehouse / local upload
+  / local upload
 
 Private local bindings
   sourceRef "analytics" -> actual backend, database, catalog, and credentials

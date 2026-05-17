@@ -18,6 +18,7 @@ import {
 export interface PondviewBridgeDatabaseInfo {
   mode: "memory" | "file";
   id: string;
+  name?: string;
 }
 
 export interface PondviewBridgeConfig {
@@ -311,7 +312,8 @@ function bridgeConfigChanged(
     previousConfig?.port !== nextConfig?.port ||
     previousConfig?.requiresAuth !== nextConfig?.requiresAuth ||
     previousConfig?.database?.mode !== nextConfig?.database?.mode ||
-    previousConfig?.database?.id !== nextConfig?.database?.id
+    previousConfig?.database?.id !== nextConfig?.database?.id ||
+    previousConfig?.database?.name !== nextConfig?.database?.name
   );
 }
 

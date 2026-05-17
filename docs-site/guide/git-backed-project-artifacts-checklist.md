@@ -63,7 +63,7 @@ implementation phases.
 - [~] Decide which runtime schemas and metadata belong in snapshots
       The v1 browser flow snapshots the whole local DuckDB WASM database file,
       including runtime metadata and materialized state. Remote Bridge and
-      DuckDB HTTP snapshot scoping remains future work.
+      Bridge runtime snapshot scoping remains future work.
 - [x] Add `Export Snapshot` and `Import Snapshot` product flows
 - [x] Document that snapshots are portable runtime artifacts, not canonical
       authored project source

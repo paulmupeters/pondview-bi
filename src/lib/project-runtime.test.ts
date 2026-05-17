@@ -34,7 +34,7 @@ describe("project runtime hydration", () => {
           schemaVersion: 1,
           bindings: {
             analytics: {
-              runtimeBackend: "duckdb-http",
+              runtimeBackend: "bridge",
               dbIdentifier: "postgres://warehouse/app",
               catalogContext: "public",
             },
@@ -46,7 +46,7 @@ describe("project runtime hydration", () => {
     expect(selection).toEqual({
       projectId: "browser-project-revenue",
       sourceRef: "analytics",
-      runtimeBackend: "duckdb-http",
+      runtimeBackend: "bridge",
       dbIdentifier: "postgres://warehouse/app",
       catalogContext: "public",
     });

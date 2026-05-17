@@ -83,7 +83,7 @@ import {
 } from "../[dashboardId]/utils";
 
 const DASHBOARD_AUTH_ERROR_MESSAGE =
-  "Dashboard queries need DuckDB HTTP authentication. Re-enter your DuckDB HTTP auth in Settings to load data.";
+  "Dashboard queries need Bridge authentication. Re-enter your Bridge session secret in Settings to load data.";
 const DEFAULT_DASHBOARD_COLUMNS = 4;
 
 function DashboardLoadingPlaceholder() {

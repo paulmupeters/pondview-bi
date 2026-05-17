@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import {
   type DuckDBConnection,
   DuckDBInstance,
@@ -23,6 +23,7 @@ interface DuckDbRuntimeOptions {
 export interface DuckDbRuntimeDatabaseInfo {
   mode: "memory" | "file";
   id: string;
+  name?: string;
 }
 
 export class DuckDbRuntime {
@@ -53,6 +54,7 @@ export class DuckDbRuntime {
     return {
       mode: this.databasePath ? "file" : "memory",
       id: this.databaseId,
+      name: this.databasePath ? basename(this.databasePath) : undefined,
     };
   }
 

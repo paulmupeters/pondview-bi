@@ -54,9 +54,11 @@ export function buildDataCatalogGroups(
 ): DataCatalogGroup[] {
   const grouped = new Map<string, DataCatalogTableEntry[]>();
   const groupLabels = new Map<string, { catalog: string; schema: string }>();
-  const sourceByAlias = buildSourceAliasMap(options.connectedSources ?? []);
+  const connectedSources = options.connectedSources ?? [];
+  const sourceByAlias = buildSourceAliasMap(connectedSources);
+  const sourceTables = buildConnectedSourceTableInputs(connectedSources);
 
-  for (const table of tables) {
+  for (const table of mergeTableInputs(tables, sourceTables)) {
     const schema = table.schema.trim();
     const catalog = table.catalog?.trim() || DEFAULT_DATA_CATALOG;
 
@@ -110,6 +112,66 @@ export function buildDataCatalogGroups(
       (a, b) =>
         a.catalog.localeCompare(b.catalog) || a.schema.localeCompare(b.schema),
     );
+}
+
+function mergeTableInputs(
+  runtimeTables: DataCatalogTableInput[],
+  connectedSourceTables: DataCatalogTableInput[],
+): DataCatalogTableInput[] {
+  if (connectedSourceTables.length === 0) {
+    return runtimeTables;
+  }
+
+  const seen = new Set<string>();
+  const merged: DataCatalogTableInput[] = [];
+
+  for (const table of [...runtimeTables, ...connectedSourceTables]) {
+    const schema = table.schema.trim().toLowerCase();
+    const catalog = (
+      table.catalog?.trim() || DEFAULT_DATA_CATALOG
+    ).toLowerCase();
+    const name = table.name.trim().toLowerCase();
+    const key = `${catalog}\u0000${schema}\u0000${name}`;
+
+    if (schema.length === 0 || name.length === 0 || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    merged.push(table);
+  }
+
+  return merged;
+}
+
+function buildConnectedSourceTableInputs(
+  sources: DataCatalogSourceInput[],
+): DataCatalogTableInput[] {
+  return sources.flatMap((source) => {
+    if (source.type.trim().toLowerCase() !== "quack") {
+      return [];
+    }
+
+    const catalog =
+      source.attachAs?.trim() ||
+      source.alias?.trim() ||
+      source.databaseName?.trim() ||
+      DEFAULT_DATA_CATALOG;
+    const schema = source.schema?.trim() || "main";
+    const tableNames = [
+      ...(source.tables ?? []),
+      ...(source.table ? [source.table] : []),
+    ]
+      .map((tableName) => tableName.trim())
+      .filter(Boolean);
+
+    return Array.from(new Set(tableNames)).map((name) => ({
+      catalog,
+      schema,
+      name,
+      type: "BASE TABLE",
+    }));
+  });
 }
 
 function buildSourceAliasMap(
@@ -191,17 +253,6 @@ function resolveCatalogOrigin(
     return {
       label: "Bridge primary database",
       description: runtimeDescription,
-    };
-  }
-
-  if (options.sqlBackend === "duckdb-http") {
-    return {
-      label: isCurrentCatalog
-        ? "DuckDB HTTP primary database"
-        : "DuckDB HTTP attached database",
-      description: isCurrentCatalog
-        ? "Remote DuckDB HTTP runtime"
-        : "Attached in the active DuckDB HTTP session",
     };
   }
 

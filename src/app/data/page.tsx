@@ -8,7 +8,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
-import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
+import { useRemoteRuntimeTables } from "@/hooks/use-remote-runtime-tables";
 import { useWasmTables } from "@/hooks/use-wasm-tables";
 import { listBridgeSources } from "@/lib/bridge/pondview-bridge";
 import {
@@ -233,7 +233,7 @@ export default function ViewDataPage() {
     isLoading: isDuckdbTablesLoading,
     error: duckdbTablesError,
     connectionInfo: duckdbConnectionInfo,
-  } = useDuckdbHttpTables(effectiveSqlBackend, runtimeRefreshToken);
+  } = useRemoteRuntimeTables(effectiveSqlBackend, runtimeRefreshToken);
 
   const {
     tables: wasmTables,

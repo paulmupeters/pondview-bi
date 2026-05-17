@@ -9,8 +9,6 @@ describe("getActiveRuntimeLabel", () => {
         effectiveSqlBackend: "duckdb-wasm",
         isBridgeDiscoverable: false,
         isBridgeQueryReady: false,
-        isDuckDbHttpConfigured: false,
-        duckDbHttpHealthStatus: "unknown",
       }),
     ).toBe("DuckDB WASM");
   });
@@ -22,8 +20,6 @@ describe("getActiveRuntimeLabel", () => {
         effectiveSqlBackend: "bridge",
         isBridgeDiscoverable: true,
         isBridgeQueryReady: true,
-        isDuckDbHttpConfigured: false,
-        duckDbHttpHealthStatus: "unknown",
       }),
     ).toBe("Bridge");
   });
@@ -35,8 +31,6 @@ describe("getActiveRuntimeLabel", () => {
         effectiveSqlBackend: "duckdb-wasm",
         isBridgeDiscoverable: false,
         isBridgeQueryReady: false,
-        isDuckDbHttpConfigured: false,
-        duckDbHttpHealthStatus: "unknown",
       }),
     ).toBe("Bridge (unavailable, using DuckDB WASM)");
 
@@ -46,57 +40,7 @@ describe("getActiveRuntimeLabel", () => {
         effectiveSqlBackend: "duckdb-wasm",
         isBridgeDiscoverable: true,
         isBridgeQueryReady: false,
-        isDuckDbHttpConfigured: false,
-        duckDbHttpHealthStatus: "unknown",
       }),
     ).toBe("Bridge (waiting for auth, using DuckDB WASM)");
-  });
-
-  test("shows DuckDB over HTTP when it is selected and active", () => {
-    expect(
-      getActiveRuntimeLabel({
-        selectedSqlBackend: "duckdb-http",
-        effectiveSqlBackend: "duckdb-http",
-        isBridgeDiscoverable: false,
-        isBridgeQueryReady: false,
-        isDuckDbHttpConfigured: true,
-        duckDbHttpHealthStatus: "online",
-      }),
-    ).toBe("DuckDB over HTTP");
-  });
-
-  test("shows DuckDB over HTTP fallback reasons when WASM is active", () => {
-    expect(
-      getActiveRuntimeLabel({
-        selectedSqlBackend: "duckdb-http",
-        effectiveSqlBackend: "duckdb-wasm",
-        isBridgeDiscoverable: false,
-        isBridgeQueryReady: false,
-        isDuckDbHttpConfigured: false,
-        duckDbHttpHealthStatus: "unknown",
-      }),
-    ).toBe("DuckDB over HTTP (not configured, using DuckDB WASM)");
-
-    expect(
-      getActiveRuntimeLabel({
-        selectedSqlBackend: "duckdb-http",
-        effectiveSqlBackend: "duckdb-wasm",
-        isBridgeDiscoverable: false,
-        isBridgeQueryReady: false,
-        isDuckDbHttpConfigured: true,
-        duckDbHttpHealthStatus: "offline",
-      }),
-    ).toBe("DuckDB over HTTP (unavailable, using DuckDB WASM)");
-
-    expect(
-      getActiveRuntimeLabel({
-        selectedSqlBackend: "duckdb-http",
-        effectiveSqlBackend: "duckdb-wasm",
-        isBridgeDiscoverable: false,
-        isBridgeQueryReady: false,
-        isDuckDbHttpConfigured: true,
-        duckDbHttpHealthStatus: "unknown",
-      }),
-    ).toBe("DuckDB over HTTP (pending, using DuckDB WASM)");
   });
 });

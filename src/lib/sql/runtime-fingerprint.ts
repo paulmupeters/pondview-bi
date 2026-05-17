@@ -1,5 +1,4 @@
 import { getBridgeSession } from "@/lib/bridge/pondview-bridge";
-import { getDuckDbHttpConfigFromStorage } from "@/lib/duckdb/duckdb-http-browser";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 
 const WASM_RUNTIME_FINGERPRINT = "duckdb-wasm:local";
@@ -19,13 +18,6 @@ export async function resolveSqlRuntimeFingerprint(
   const defaultFingerprint = getDefaultSqlRuntimeFingerprint(backend);
   if (defaultFingerprint) {
     return defaultFingerprint;
-  }
-
-  if (backend === "duckdb-http") {
-    const config = getDuckDbHttpConfigFromStorage();
-    return config
-      ? `duckdb-http:${normalizeHost(config.host)}:${config.port}`
-      : "duckdb-http:unknown";
   }
 
   try {

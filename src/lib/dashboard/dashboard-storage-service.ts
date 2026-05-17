@@ -168,11 +168,7 @@ function normalizeStorageStatus(value: unknown): DashboardStorageStatus {
 }
 
 function normalizeSqlBackend(value: unknown): SqlBackend | null {
-  return value === "bridge" ||
-    value === "duckdb-http" ||
-    value === "duckdb-wasm"
-    ? value
-    : null;
+  return value === "bridge" || value === "duckdb-wasm" ? value : null;
 }
 
 function buildTargetKey(
@@ -199,7 +195,7 @@ function createWasmTarget(): DashboardStorageTarget {
 }
 
 function createRuntimeDefaultTarget(
-  sqlBackend: Extract<SqlBackend, "bridge" | "duckdb-http">,
+  sqlBackend: Extract<SqlBackend, "bridge">,
 ): DashboardStorageTarget {
   return {
     key: buildTargetKey("runtime-default", sqlBackend, null),
@@ -257,11 +253,7 @@ export function decodeAttachedDashboardId(dashboardId: string): {
   }
 
   const backend = decodeURIComponent(parts[1]);
-  if (
-    backend !== "duckdb-wasm" &&
-    backend !== "bridge" &&
-    backend !== "duckdb-http"
-  ) {
+  if (backend !== "duckdb-wasm" && backend !== "bridge") {
     return null;
   }
 
@@ -282,7 +274,7 @@ export function decodeAttachedDashboardId(dashboardId: string): {
 
 function _createMotherDuckTarget(
   dbIdentifier: string,
-  sqlBackend: Extract<SqlBackend, "bridge" | "duckdb-http">,
+  sqlBackend: Extract<SqlBackend, "bridge">,
 ): DashboardStorageTarget {
   return {
     key: buildTargetKey("motherduck", sqlBackend, dbIdentifier),
@@ -528,7 +520,7 @@ export function resolveDefaultStorageTarget(
     backendPreference: preferredBackend ?? getSqlBackendPreference(),
   });
 
-  if (backend === "bridge" || backend === "duckdb-http") {
+  if (backend === "bridge") {
     return createRuntimeDefaultTarget(backend);
   }
 
@@ -543,7 +535,7 @@ export function resolveTargetForSource(input: {
   const sourceBackend =
     input.sourceDescriptor?.runtimeBackend ?? input.sqlBackend ?? null;
 
-  if (sourceBackend === "bridge" || sourceBackend === "duckdb-http") {
+  if (sourceBackend === "bridge") {
     return createRuntimeDefaultTarget(sourceBackend);
   }
 

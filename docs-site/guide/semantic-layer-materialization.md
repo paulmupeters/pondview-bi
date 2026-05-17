@@ -19,7 +19,7 @@ The current dashboard path is browser-first. It does not depend on checked-in se
 Each saved chart or measure carries a `DashboardSourceDescriptor` with:
 
 - `kind`: `runtime`, `motherduck`, or `external`
-- `runtimeBackend`: `duckdb-wasm`, `bridge`, or `duckdb-http`
+- `runtimeBackend`: `duckdb-wasm` or `bridge`
 - `dbIdentifier`
 - `catalogContext`
 - optional `externalType` for external connectors

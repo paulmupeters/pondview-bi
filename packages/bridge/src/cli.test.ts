@@ -572,7 +572,7 @@ describe("bridge CLI dashboard commands", () => {
                 title: "Bad refs",
                 description: "Bad refs",
                 sql: "SELECT 1 AS value",
-                sql_backend: "duckdb-http",
+                sql_backend: "duckdb-wasm",
                 chart_config_json:
                   '{"configType":"card","measureId":"missing_measure"}',
                 source_descriptor_json:
@@ -592,8 +592,8 @@ describe("bridge CLI dashboard commands", () => {
       expect.arrayContaining([
         "Invalid source_descriptor_json.",
         "Invalid chart_config_json.",
-        'Runtime mismatch: dashboard runtime_backend is "bridge" but sql_backend is "duckdb-http".',
-        'Runtime mismatch: sql_backend is "duckdb-http" but source descriptor runtimeBackend is "bridge".',
+        'Runtime mismatch: dashboard runtime_backend is "bridge" but sql_backend is "duckdb-wasm".',
+        'Runtime mismatch: sql_backend is "duckdb-wasm" but source descriptor runtimeBackend is "bridge".',
         'Card config references missing measureId "missing_measure".',
         "SQL preview failed: preview failed",
       ]),

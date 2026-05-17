@@ -37,7 +37,7 @@ describe("dashboard artifact export", () => {
       columns: 4,
       autoFitRows: true,
       homeDbIdentifier: "md:analytics",
-      homeSqlBackend: "duckdb-http",
+      homeSqlBackend: "bridge",
       storageStatus: "shared",
     };
 
@@ -49,7 +49,7 @@ describe("dashboard artifact export", () => {
         description: null,
         sql: " select month, revenue from monthly_revenue ",
         sourceDescriptor: buildDashboardSourceDescriptor({
-          runtimeBackend: "duckdb-http",
+          runtimeBackend: "bridge",
           dbIdentifier: "md:analytics",
           catalogContext: "main",
         }),
@@ -57,7 +57,7 @@ describe("dashboard artifact export", () => {
         snapshotId: "snapshot_1",
         dbIdentifier: "md:analytics",
         catalogContext: "main",
-        sqlBackend: "duckdb-http",
+        sqlBackend: "bridge",
         chartConfigJson: JSON.stringify({
           visualType: "chart",
           type: "line",
@@ -81,7 +81,7 @@ describe("dashboard artifact export", () => {
         description: null,
         sql: " select sum(revenue) as total_revenue from monthly_revenue ",
         sourceDescriptor: buildDashboardSourceDescriptor({
-          runtimeBackend: "duckdb-http",
+          runtimeBackend: "bridge",
           dbIdentifier: "md:analytics",
           catalogContext: "main",
         }),
@@ -89,7 +89,7 @@ describe("dashboard artifact export", () => {
         snapshotId: null,
         dbIdentifier: "md:analytics",
         catalogContext: "main",
-        sqlBackend: "duckdb-http",
+        sqlBackend: "bridge",
         chartConfigJson: JSON.stringify({
           configType: "card",
           measureId: "total-revenue",
@@ -109,7 +109,7 @@ describe("dashboard artifact export", () => {
         description: null,
         sql: "select 1",
         sourceDescriptor: buildDashboardSourceDescriptor({
-          runtimeBackend: "duckdb-http",
+          runtimeBackend: "bridge",
           dbIdentifier: "md:analytics",
           catalogContext: "main",
         }),
@@ -117,7 +117,7 @@ describe("dashboard artifact export", () => {
         snapshotId: null,
         dbIdentifier: "md:analytics",
         catalogContext: "main",
-        sqlBackend: "duckdb-http",
+        sqlBackend: "bridge",
         chartConfigJson: JSON.stringify({
           configType: "text",
           title: "Narrative",
@@ -139,7 +139,7 @@ describe("dashboard artifact export", () => {
         label: "Total Revenue",
         sql: " select sum(revenue) as total_revenue from monthly_revenue ",
         sourceDescriptor: buildDashboardSourceDescriptor({
-          runtimeBackend: "duckdb-http",
+          runtimeBackend: "bridge",
           dbIdentifier: "md:analytics",
           catalogContext: "main",
         }),
@@ -147,7 +147,7 @@ describe("dashboard artifact export", () => {
         snapshotId: "snapshot_2",
         dbIdentifier: "md:analytics",
         catalogContext: "main",
-        sqlBackend: "duckdb-http",
+        sqlBackend: "bridge",
         createdAt: 5,
         updatedAt: 6,
       },
@@ -389,7 +389,7 @@ describe("published notebook artifact export", () => {
           query: "select month, revenue from monthly_revenue",
           dbIdentifier: "md:analytics",
           catalogContext: "main",
-          sqlBackend: "duckdb-http",
+          sqlBackend: "bridge",
           visualType: "chart",
           chartConfig: {
             visualType: "chart",

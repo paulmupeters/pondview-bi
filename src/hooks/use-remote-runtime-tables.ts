@@ -1,24 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DuckdbTableEntry } from "@/lib/api/types/duckdb";
 import {
   getBridgeSession,
   type PondviewBridgeDatabaseInfo,
   runBridgeQuery,
 } from "@/lib/bridge/pondview-bridge";
 import { resolveCurrentCatalog } from "@/lib/duckdb/catalog-context";
-import {
-  getDuckDbHttpConfigFromStorage,
-  runDuckDbHttpQuery,
-} from "@/lib/duckdb/duckdb-http-browser";
 import { sanitizeSqlErrorMessage } from "@/lib/sql/error-sanitizer";
 import {
   isHiddenRuntimeSchema,
   RUNTIME_SCHEMA_EXCLUSION_SQL,
 } from "@/lib/sql/runtime-table-schemas";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
-import { useDuckDbHttpConfig } from "@/lib/sql/use-sql-backend";
 
-export interface DuckdbHttpConnectionInfo {
+export interface DuckdbTableEntry {
+  catalog?: string;
+  schema: string;
+  name: string;
+  type: string;
+  columns?: { name: string; type?: string }[];
+}
+
+export interface RemoteRuntimeConnectionInfo {
   host: string;
   port: number;
   database?: PondviewBridgeDatabaseInfo;
@@ -125,7 +127,7 @@ export function mapShowAllTablesRows(
     .filter((row) => row.schema.length > 0 && row.name.length > 0);
 }
 
-export function useDuckdbHttpTables(
+export function useRemoteRuntimeTables(
   backend: SqlBackend,
   refreshToken?: number,
 ) {
@@ -135,13 +137,9 @@ export function useDuckdbHttpTables(
   const [error, setError] = useState<string | null>(null);
   const [isConfigured, setIsConfigured] = useState(false);
   const [connectionInfo, setConnectionInfo] =
-    useState<DuckdbHttpConnectionInfo | null>(null);
+    useState<RemoteRuntimeConnectionInfo | null>(null);
   const isMountedRef = useRef(true);
   const refreshRequestIdRef = useRef(0);
-  const duckDbHttpConfig = useDuckDbHttpConfig();
-  const _duckDbHttpConfigKey = duckDbHttpConfig
-    ? `${duckDbHttpConfig.host}:${duckDbHttpConfig.port}`
-    : "";
 
   const refresh = useCallback(async () => {
     const requestId = refreshRequestIdRef.current + 1;
@@ -165,86 +163,35 @@ export function useDuckdbHttpTables(
       setIsLoading(true);
       setError(null);
 
-      if (backend === "bridge") {
-        const session = await getBridgeSession().catch(() => null);
-        const runBridgeSql = (sql: string) => runBridgeQuery(sql);
-
-        if (!isStale()) {
-          setIsConfigured(true);
-          setConnectionInfo(
-            session
-              ? {
-                  host: session.host,
-                  port: session.port,
-                  database: session.database,
-                }
-              : null,
-          );
-        }
-
-        try {
-          const [result, nextCurrentCatalog] = await Promise.all([
-            runBridgeSql(LIST_TABLES_SQL),
-            resolveCurrentCatalog(runBridgeSql),
-          ]);
-          let tables = mapInformationSchemaRows(result.rows);
-          try {
-            const columns = await runBridgeSql(LIST_COLUMNS_SQL);
-            tables = attachColumnMetadata(tables, columns.rows);
-          } catch (error) {
-            console.warn(
-              "[useDuckdbHttpTables] Failed to load columns:",
-              error,
-            );
-          }
-          if (!isStale()) {
-            setTables(tables);
-            setCurrentCatalog(nextCurrentCatalog);
-          }
-        } catch {
-          const [fallback, nextCurrentCatalog] = await Promise.all([
-            runBridgeSql("SHOW ALL TABLES;"),
-            resolveCurrentCatalog(runBridgeSql),
-          ]);
-          if (!isStale()) {
-            setTables(mapShowAllTablesRows(fallback.rows));
-            setCurrentCatalog(nextCurrentCatalog);
-          }
-        }
-
-        return;
-      }
-
-      const config = getDuckDbHttpConfigFromStorage();
-      if (!config) {
-        if (!isStale()) {
-          setTables([]);
-          setCurrentCatalog(null);
-          setError(null);
-          setIsConfigured(false);
-          setConnectionInfo(null);
-        }
-        return;
-      }
+      const session = await getBridgeSession().catch(() => null);
+      const runBridgeSql = (sql: string) => runBridgeQuery(sql);
 
       if (!isStale()) {
         setIsConfigured(true);
-        setConnectionInfo({ host: config.host, port: config.port });
+        setConnectionInfo(
+          session
+            ? {
+                host: session.host,
+                port: session.port,
+                database: session.database,
+              }
+            : null,
+        );
       }
-
-      const runDuckDbHttpSql = (sql: string) => runDuckDbHttpQuery(sql);
-
       try {
         const [result, nextCurrentCatalog] = await Promise.all([
-          runDuckDbHttpSql(LIST_TABLES_SQL),
-          resolveCurrentCatalog(runDuckDbHttpSql),
+          runBridgeSql(LIST_TABLES_SQL),
+          resolveCurrentCatalog(runBridgeSql),
         ]);
         let tables = mapInformationSchemaRows(result.rows);
         try {
-          const columns = await runDuckDbHttpSql(LIST_COLUMNS_SQL);
+          const columns = await runBridgeSql(LIST_COLUMNS_SQL);
           tables = attachColumnMetadata(tables, columns.rows);
         } catch (error) {
-          console.warn("[useDuckdbHttpTables] Failed to load columns:", error);
+          console.warn(
+            "[useRemoteRuntimeTables] Failed to load columns:",
+            error,
+          );
         }
         if (!isStale()) {
           setTables(tables);
@@ -252,8 +199,8 @@ export function useDuckdbHttpTables(
         }
       } catch {
         const [fallback, nextCurrentCatalog] = await Promise.all([
-          runDuckDbHttpSql("SHOW ALL TABLES;"),
-          resolveCurrentCatalog(runDuckDbHttpSql),
+          runBridgeSql("SHOW ALL TABLES;"),
+          resolveCurrentCatalog(runBridgeSql),
         ]);
         if (!isStale()) {
           setTables(mapShowAllTablesRows(fallback.rows));
@@ -268,7 +215,7 @@ export function useDuckdbHttpTables(
         setError(message);
         setTables([]);
         setCurrentCatalog(null);
-        console.error("[useDuckdbHttpTables] Error:", message);
+        console.error("[useRemoteRuntimeTables] Error:", message);
       }
     } finally {
       if (!isStale()) {

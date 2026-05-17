@@ -95,14 +95,14 @@ describe("sample data runtime helpers", () => {
 
     expect(
       resolveSampleDataRuntime(
-        { backendPreference: "duckdb-http" },
+        { backendPreference: "bridge" },
         {
-          resolveBackend: () => "duckdb-http",
+          resolveBackend: () => "bridge",
           resolveDbIdentifier: (_dbIdentifier, _backend) => undefined,
         },
       ),
     ).toEqual({
-      backend: "duckdb-http",
+      backend: "bridge",
       dbIdentifier: undefined,
     });
   });

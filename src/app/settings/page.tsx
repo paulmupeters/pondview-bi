@@ -52,15 +52,6 @@ import {
   setSelectedTheme as setThemeInStorage,
 } from "@/lib/custom-css";
 import { useDefaultPromptModePreference } from "@/lib/default-prompt-mode";
-import {
-  clearDuckDbHttpConfigInStorage,
-  clearDuckDbHttpSessionAuth,
-  getDuckDbHttpConfigFromStorage,
-  hasDuckDbHttpSessionAuth,
-  refreshDuckDbHttpHealth,
-  setDuckDbHttpConfigInStorage,
-  setDuckDbHttpSessionAuth,
-} from "@/lib/duckdb/duckdb-http-browser";
 import { DuckdbWasmClient } from "@/lib/duckdb/duckdb-wasm-client";
 import {
   downloadSnapshotFromS3,
@@ -111,8 +102,6 @@ import {
 } from "@/lib/sql/sql-runtime";
 import {
   useBridgeRuntimeState,
-  useDuckDbHttpConfig,
-  useDuckDbHttpHealthStatus,
   useResolvedSqlBackend,
   useSelectedSqlBackend,
 } from "@/lib/sql/use-sql-backend";
@@ -273,10 +262,6 @@ export default function SettingsPage() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [bridgeSecret, setBridgeSecret] = useState("");
   const [bridgeEndpoint, setBridgeEndpointInput] = useState("");
-  const [duckDbHttpHost, setDuckDbHttpHost] = useState("");
-  const [duckDbHttpPort, setDuckDbHttpPort] = useState("");
-  const [duckDbHttpAuth, setDuckDbHttpAuth] = useState("");
-  const [hasDuckDbHttpAuth, setHasDuckDbHttpAuth] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
   const [bridgeAiConfigured, setBridgeAiConfigured] = useState(false);
@@ -287,7 +272,6 @@ export default function SettingsPage() {
   const [runtimeSettingsSuccess, setRuntimeSettingsSuccess] = useState<
     string | null
   >(null);
-  const [isTestingHttpConnection, setIsTestingHttpConnection] = useState(false);
   const [s3BackupForm, setS3BackupForm] = useState<S3BackupConfig>(
     EMPTY_S3_BACKUP_CONFIG,
   );
@@ -331,8 +315,6 @@ export default function SettingsPage() {
   const projectImportFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
   const bridgeRuntimeState = useBridgeRuntimeState();
-  const duckDbHttpConfig = useDuckDbHttpConfig();
-  const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
   const showToolCalls = useShowToolCallsPreference();
   const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
   const defaultPromptMode = useDefaultPromptModePreference();
@@ -341,7 +323,6 @@ export default function SettingsPage() {
   const hasBridgeSessionSecret = bridgeRuntimeState.hasSessionSecret;
   const isBridgeDiscoverable = bridgeRuntimeState.isDiscoverable;
   const isBridgeQueryReady = bridgeRuntimeState.isQueryReady;
-  const isDuckDbHttpConfigured = Boolean(duckDbHttpConfig);
   const selectedSqlBackend = useSelectedSqlBackend();
   const effectiveSqlBackend = useResolvedSqlBackend();
 
@@ -378,7 +359,6 @@ export default function SettingsPage() {
     setOpenAiCompatibleName(aiSettings.openAiCompatibleName ?? "");
     setCssCode(savedCss);
     setSelectedTheme(savedTheme || (savedCss ? CUSTOM_THEME_VALUE : "default"));
-    setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
     setBridgeEndpointInput(getBridgeEndpoint() || getDefaultBridgeEndpoint());
 
     const savedS3Config = readS3BackupConfigFromStorage();
@@ -388,16 +368,7 @@ export default function SettingsPage() {
     setSavedGitHubProjectConfig(savedGitHubConfig);
     setGitHubProjectForm(savedGitHubConfig);
 
-    const savedDuckDbHttpConfig = getDuckDbHttpConfigFromStorage();
-    setDuckDbHttpHost(savedDuckDbHttpConfig?.host ?? "");
-    setDuckDbHttpPort(
-      savedDuckDbHttpConfig ? String(savedDuckDbHttpConfig.port) : "",
-    );
-
     void refreshBridgeHealth();
-    if (savedDuckDbHttpConfig) {
-      void refreshDuckDbHttpHealth();
-    }
 
     void (async () => {
       try {
@@ -477,30 +448,10 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    setDuckDbHttpHost(duckDbHttpConfig?.host ?? "");
-    setDuckDbHttpPort(duckDbHttpConfig ? String(duckDbHttpConfig.port) : "");
-  }, [duckDbHttpConfig]);
-
-  useEffect(() => {
     if (cssCode && selectedTheme === CUSTOM_THEME_VALUE) {
       applyCustomCss(cssCode);
     }
   }, [cssCode, selectedTheme]);
-
-  useEffect(() => {
-    if (!isDuckDbHttpConfigured) {
-      return;
-    }
-
-    void refreshDuckDbHttpHealth();
-    const intervalId = window.setInterval(() => {
-      void refreshDuckDbHttpHealth();
-    }, 15000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [isDuckDbHttpConfigured]);
 
   useEffect(() => {
     const storedEndpoint = getBridgeEndpoint();
@@ -594,113 +545,15 @@ export default function SettingsPage() {
   const handleSqlBackendChange = (backend: SqlBackend) => {
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(null);
+    if (backend === "bridge" && !isBridgeDiscoverable) {
+      setRuntimeSettingsError(
+        "Bridge is unavailable. Start Pondview Bridge or save a reachable endpoint before selecting it.",
+      );
+      return;
+    }
     setSqlBackendPreferenceInStorage(backend);
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
-  };
-
-  const handleSaveDuckDbHttpConfig = () => {
-    const host = duckDbHttpHost.trim();
-    const port = Number.parseInt(duckDbHttpPort.trim(), 10);
-    const auth = duckDbHttpAuth.trim();
-
-    if (!host) {
-      setRuntimeSettingsError("DuckDB HTTP host is required.");
-      setRuntimeSettingsSuccess(null);
-      return;
-    }
-
-    if (!Number.isFinite(port) || port < 1 || port > 65535) {
-      setRuntimeSettingsError(
-        "DuckDB HTTP port must be a valid number between 1 and 65535.",
-      );
-      setRuntimeSettingsSuccess(null);
-      return;
-    }
-
-    if (auth.length) {
-      setDuckDbHttpSessionAuth(auth);
-      setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
-      setDuckDbHttpAuth("");
-    }
-
-    setDuckDbHttpConfigInStorage({ host, port });
-    setRuntimeSettingsError(null);
-    setRuntimeSettingsSuccess("DuckDB HTTP connection settings saved.");
-    void refreshDuckDbHttpHealth();
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
-  };
-
-  const handleClearDuckDbHttpConfig = () => {
-    clearDuckDbHttpConfigInStorage();
-    setDuckDbHttpHost("");
-    setDuckDbHttpPort("");
-    setRuntimeSettingsError(null);
-    setRuntimeSettingsSuccess("DuckDB HTTP connection settings cleared.");
-    if (selectedSqlBackend === "duckdb-http") {
-      setSqlBackendPreferenceInStorage("duckdb-wasm");
-    }
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
-  };
-
-  const handleClearDuckDbHttpAuth = () => {
-    clearDuckDbHttpSessionAuth();
-    setHasDuckDbHttpAuth(false);
-    setRuntimeSettingsError(null);
-    setRuntimeSettingsSuccess("DuckDB HTTP auth cleared.");
-    void refreshDuckDbHttpHealth();
-    if (selectedSqlBackend === "duckdb-http" && !isDuckDbHttpConfigured) {
-      setSqlBackendPreferenceInStorage("duckdb-wasm");
-    }
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
-  };
-
-  const handleTestDuckDbHttpConnection = async () => {
-    const host = duckDbHttpHost.trim();
-    const port = Number.parseInt(duckDbHttpPort.trim(), 10);
-
-    if (!host) {
-      setRuntimeSettingsError("DuckDB HTTP host is required.");
-      setRuntimeSettingsSuccess(null);
-      return;
-    }
-
-    if (!Number.isFinite(port) || port < 1 || port > 65535) {
-      setRuntimeSettingsError(
-        "DuckDB HTTP port must be a valid number between 1 and 65535.",
-      );
-      setRuntimeSettingsSuccess(null);
-      return;
-    }
-
-    setIsTestingHttpConnection(true);
-    setRuntimeSettingsError(null);
-    setRuntimeSettingsSuccess(null);
-
-    try {
-      setDuckDbHttpConfigInStorage({ host, port });
-      const status = await refreshDuckDbHttpHealth(undefined, { host, port });
-      if (status === "online") {
-        setRuntimeSettingsSuccess(
-          "Connection successful — DuckDB HTTP is reachable.",
-        );
-        setShowSuccessMessage(true);
-        setTimeout(() => setShowSuccessMessage(false), 3000);
-      } else {
-        setRuntimeSettingsSuccess(null);
-        setRuntimeSettingsError(
-          "Connection failed — DuckDB HTTP server is not reachable.",
-        );
-      }
-    } catch {
-      setRuntimeSettingsSuccess(null);
-      setRuntimeSettingsError("Connection test failed unexpectedly.");
-    } finally {
-      setIsTestingHttpConnection(false);
-    }
   };
 
   const updateS3BackupForm = <K extends keyof S3BackupConfig>(
@@ -1341,8 +1194,6 @@ export default function SettingsPage() {
     effectiveSqlBackend,
     isBridgeDiscoverable,
     isBridgeQueryReady,
-    isDuckDbHttpConfigured,
-    duckDbHttpHealthStatus,
   });
   const bridgeOptionLabel = !isBridgeDiscoverable
     ? "Bridge (Unavailable)"
@@ -1506,6 +1357,7 @@ export default function SettingsPage() {
                   selectedSqlBackend={selectedSqlBackend}
                   onSqlBackendChange={handleSqlBackendChange}
                   bridgeOptionLabel={bridgeOptionLabel}
+                  isBridgeSelectable={isBridgeDiscoverable}
                   runtimeSettingsError={runtimeSettingsError}
                   runtimeSettingsSuccess={runtimeSettingsSuccess}
                   bridgeHealthSummary={bridgeHealthSummary}
@@ -1518,22 +1370,6 @@ export default function SettingsPage() {
                   onSetBridgeSecret={handleSetBridgeSecret}
                   onClearBridgeSecret={handleClearBridgeSecret}
                   hasBridgeSessionSecret={hasBridgeSessionSecret}
-                  duckDbHttpHealthStatus={duckDbHttpHealthStatus}
-                  duckDbHttpHost={duckDbHttpHost}
-                  onDuckDbHttpHostChange={setDuckDbHttpHost}
-                  duckDbHttpPort={duckDbHttpPort}
-                  onDuckDbHttpPortChange={setDuckDbHttpPort}
-                  hasDuckDbHttpAuth={hasDuckDbHttpAuth}
-                  duckDbHttpAuth={duckDbHttpAuth}
-                  onDuckDbHttpAuthChange={setDuckDbHttpAuth}
-                  onClearDuckDbHttpAuth={handleClearDuckDbHttpAuth}
-                  onSaveDuckDbHttpConfig={handleSaveDuckDbHttpConfig}
-                  onTestDuckDbHttpConnection={() =>
-                    void handleTestDuckDbHttpConnection()
-                  }
-                  isTestingHttpConnection={isTestingHttpConnection}
-                  onClearDuckDbHttpConfig={handleClearDuckDbHttpConfig}
-                  isDuckDbHttpConfigured={isDuckDbHttpConfigured}
                 />
               )}
 

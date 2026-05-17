@@ -53,7 +53,7 @@ export const trackedProjectSourceRegistrySchema = z.object({
 });
 
 export const localProjectSourceBindingSchema = z.object({
-  runtimeBackend: z.enum(["duckdb-wasm", "duckdb-http", "bridge"]),
+  runtimeBackend: z.enum(["duckdb-wasm", "bridge"]),
   dbIdentifier: z.string().nullable().optional(),
   catalogContext: z.string().nullable().optional(),
 });

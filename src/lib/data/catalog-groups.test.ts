@@ -164,6 +164,69 @@ describe("buildDataCatalogGroups", () => {
     ]);
   });
 
+  test("uses stored quack selections when runtime metadata is empty", () => {
+    expect(
+      buildDataCatalogGroups([], {
+        sqlBackend: "duckdb-wasm",
+        connectedSources: [
+          {
+            type: "quack",
+            attachAs: "test",
+            schema: "main",
+            tables: ["stations"],
+            readOnly: false,
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        catalog: "test",
+        schema: "main",
+        origin: {
+          label: "Quack remote DuckDB",
+          description: "Attached source",
+        },
+        tables: [{ catalog: "test", name: "stations", type: "BASE TABLE" }],
+      },
+    ]);
+  });
+
+  test("deduplicates quack selections already returned by runtime metadata", () => {
+    expect(
+      buildDataCatalogGroups(
+        [
+          {
+            catalog: "test",
+            schema: "main",
+            name: "stations",
+            type: "BASE TABLE",
+          },
+        ],
+        {
+          sqlBackend: "duckdb-wasm",
+          connectedSources: [
+            {
+              type: "quack",
+              attachAs: "test",
+              schema: "main",
+              tables: ["stations"],
+            },
+          ],
+        },
+      ),
+    ).toEqual([
+      {
+        catalog: "test",
+        schema: "main",
+        origin: {
+          label: "Quack remote DuckDB",
+          description: "Attached source",
+        },
+        tables: [{ catalog: "test", name: "stations", type: "BASE TABLE" }],
+      },
+    ]);
+  });
+
   test("labels extension sources when catalog differs from attach alias", () => {
     expect(
       buildDataCatalogGroups(

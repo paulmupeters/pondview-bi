@@ -300,12 +300,12 @@ Example:
   "schemaVersion": 1,
   "bindings": {
     "analytics": {
-      "runtimeBackend": "duckdb-http",
+      "runtimeBackend": "bridge",
       "dbIdentifier": null,
       "catalogContext": "main"
     },
     "warehouse": {
-      "runtimeBackend": "duckdb-http",
+      "runtimeBackend": "bridge",
       "dbIdentifier": "postgres://analytics@warehouse/app",
       "catalogContext": "public"
     }
@@ -315,7 +315,7 @@ Example:
 
 Fields:
 
-- `runtimeBackend`: one of `duckdb-wasm`, `duckdb-http`, `bridge`
+- `runtimeBackend`: one of `duckdb-wasm`, `bridge`
 - `dbIdentifier`: nullable string
 - `catalogContext`: nullable string
 
@@ -896,7 +896,7 @@ runtime:
   project files, and preferences remain browser-local workspace state.
 - Snapshot files are runtime artifacts and remain gitignored by default.
 
-Remote runtime snapshots for Bridge and DuckDB HTTP are future work. Those
+Remote runtime snapshots for Bridge are future work. Those
 flows need explicit server-side file handling because the browser cannot safely
 copy arbitrary remote database files by itself.
 

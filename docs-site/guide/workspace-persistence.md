@@ -43,7 +43,6 @@ Examples of browser storage keys outside IndexedDB:
 
 - AI settings (`AI_PROVIDER`, `AI_MODEL`, provider API key keys)
 - SQL backend preference (`bi.sql.backend.preference`)
-- DuckDB HTTP config (`bi.duckdb.http.config`)
 - Connected sources (`connectedTables`)
 - Uploaded file metadata (`uploadedFiles`)
 - Dashboard join defs (`bi.dashboard.joinDefs.v1`)

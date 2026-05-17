@@ -73,7 +73,7 @@ function resolveStoredChartDbIdentifier(
     return normalized || DEFAULT_WASM_DB_IDENTIFIER;
   }
 
-  if (sqlBackend === "bridge" || sqlBackend === "duckdb-http") {
+  if (sqlBackend === "bridge") {
     return normalized && !isWasmLocalIdentifier(normalized) ? normalized : null;
   }
 

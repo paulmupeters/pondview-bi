@@ -12,14 +12,14 @@ import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 describe("attached dashboard ids", () => {
   test("round-trips catalog-qualified dashboard ids", () => {
     const encoded = encodeAttachedDashboardId({
-      backend: "duckdb-http",
+      backend: "bridge",
       dbIdentifier: null,
       catalog: "sample-data",
       dashboardId: "executive-overview",
     });
 
     expect(decodeAttachedDashboardId(encoded)).toEqual({
-      backend: "duckdb-http",
+      backend: "bridge",
       dbIdentifier: null,
       catalog: "sample-data",
       dashboardId: "executive-overview",
@@ -35,12 +35,12 @@ describe("resolveTargetForSource", () => {
   test("keeps remote runtime-default dashboards on the selected remote backend", () => {
     const target = resolveTargetForSource({
       dbIdentifier: DEFAULT_WASM_DB_IDENTIFIER,
-      sqlBackend: "duckdb-http",
+      sqlBackend: "bridge",
     });
 
     expect(target.kind).toBe("runtime-default");
     expect(target.dbIdentifier).toBeNull();
-    expect(target.sqlBackend).toBe("duckdb-http");
+    expect(target.sqlBackend).toBe("bridge");
     expect(target.storageStatus).toBe("shared");
   });
 
@@ -107,7 +107,7 @@ describe("resolveDashboardExternalConnection", () => {
     expect(
       resolveDashboardExternalConnection({
         sourceDbIdentifier: null,
-        targetSqlBackend: "duckdb-http",
+        targetSqlBackend: "bridge",
       }),
     ).toBeNull();
   });
@@ -116,7 +116,7 @@ describe("resolveDashboardExternalConnection", () => {
     expect(
       resolveDashboardExternalConnection({
         sourceDbIdentifier: "sqlite:/tmp/warehouse.db",
-        targetSqlBackend: "duckdb-http",
+        targetSqlBackend: "bridge",
       }),
     ).toEqual({
       type: "sqlite",
@@ -133,7 +133,7 @@ describe("resolveDashboardSourceMode", () => {
       resolveDashboardSourceMode({
         sourceDbIdentifier:
           "host=db.example.test port=5432 user=admin password=secret dbname=main",
-        targetSqlBackend: "duckdb-http",
+        targetSqlBackend: "bridge",
         probeRuntimeExecution: async () => true,
       }),
     ).resolves.toBe("runtime-direct");
@@ -144,7 +144,7 @@ describe("resolveDashboardSourceMode", () => {
       resolveDashboardSourceMode({
         sourceDbIdentifier:
           "host=db.example.test port=5432 user=admin password=secret dbname=main",
-        targetSqlBackend: "duckdb-http",
+        targetSqlBackend: "bridge",
         probeRuntimeExecution: async () => false,
       }),
     ).resolves.toBe("external-materialize");

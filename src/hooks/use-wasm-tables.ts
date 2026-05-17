@@ -29,12 +29,49 @@ const LIST_WASM_COLUMNS_SQL = `
   ORDER BY table_catalog, table_schema, table_name, ordinal_position
 `;
 
+const WASM_TABLE_DEBUG_STORAGE_KEY = "pondview:debug:wasmTables";
+
+function isWasmTableDebugEnabled(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.localStorage.getItem(WASM_TABLE_DEBUG_STORAGE_KEY) === "1";
+}
+
+function debugWasmTables(label: string, payload: unknown): void {
+  if (!isWasmTableDebugEnabled()) {
+    return;
+  }
+  console.debug(`[useWasmTables] ${label}`, payload);
+}
+
 function tableKey(entry: {
   catalog?: string;
   schema: string;
   name: string;
 }): string {
   return `${entry.catalog ?? ""}.${entry.schema}.${entry.name}`;
+}
+
+function mergeWasmTables(
+  primary: WasmTableEntry[],
+  fallback: WasmTableEntry[],
+): WasmTableEntry[] {
+  const merged = new Map<string, WasmTableEntry>();
+
+  for (const table of fallback) {
+    merged.set(tableKey(table), table);
+  }
+  for (const table of primary) {
+    merged.set(tableKey(table), table);
+  }
+
+  return [...merged.values()].sort(
+    (a, b) =>
+      (a.catalog ?? "").localeCompare(b.catalog ?? "") ||
+      a.schema.localeCompare(b.schema) ||
+      a.name.localeCompare(b.name),
+  );
 }
 
 function attachWasmColumnMetadata(
@@ -102,6 +139,28 @@ export function parseWasmTables(
     );
 }
 
+export function parseShowAllWasmTables(
+  rows: Record<string, unknown>[],
+): WasmTableEntry[] {
+  return rows
+    .filter((row) => !isHiddenRuntimeSchema(String(row.schema ?? "")))
+    .map((row) => ({
+      catalog: String(row.database ?? row.catalog ?? row.table_catalog ?? ""),
+      schema: String(row.schema ?? ""),
+      name: String(row.name ?? ""),
+      type: String(row.type ?? row.table_type ?? "BASE TABLE") || "BASE TABLE",
+      columns: Array.isArray(row.column_names)
+        ? row.column_names.map((name, index) => ({
+            name: String(name),
+            type: Array.isArray(row.column_types)
+              ? String(row.column_types[index] ?? "")
+              : undefined,
+          }))
+        : undefined,
+    }))
+    .filter((entry) => entry.schema.length > 0 && entry.name.length > 0);
+}
+
 export function useWasmTables(
   refreshToken?: number,
   options: { enabled?: boolean } = {},
@@ -137,11 +196,38 @@ export function useWasmTables(
         resolveCurrentCatalog(executeWasmSql),
       ]);
       let tables = parseWasmTables(result.rows);
+      debugWasmTables("information_schema.tables", {
+        rowCount: result.rows.length,
+        rows: result.rows,
+        parsed: tables,
+      });
+
       try {
-        const columnsResult = await executeWasmSql(LIST_WASM_COLUMNS_SQL);
-        tables = attachWasmColumnMetadata(tables, columnsResult.rows);
+        const fallback = await executeWasmSql("SHOW ALL TABLES;");
+        const fallbackTables = parseShowAllWasmTables(fallback.rows);
+        debugWasmTables("SHOW ALL TABLES", {
+          rowCount: fallback.rows.length,
+          rows: fallback.rows,
+          parsed: fallbackTables,
+        });
+        tables = mergeWasmTables(tables, fallbackTables);
       } catch (error) {
-        console.warn("[useWasmTables] Failed to load columns:", error);
+        console.warn("[useWasmTables] Failed to load SHOW ALL TABLES:", error);
+      }
+      debugWasmTables("merged tables", tables);
+
+      if (tables.length > 0) {
+        try {
+          const columnsResult = await executeWasmSql(LIST_WASM_COLUMNS_SQL);
+          tables = attachWasmColumnMetadata(tables, columnsResult.rows);
+          debugWasmTables("information_schema.columns", {
+            rowCount: columnsResult.rows.length,
+            rows: columnsResult.rows,
+            tables,
+          });
+        } catch (error) {
+          console.warn("[useWasmTables] Failed to load columns:", error);
+        }
       }
 
       if (!isMountedRef.current) {
