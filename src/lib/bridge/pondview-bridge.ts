@@ -133,8 +133,29 @@ function getBridgeEndpointFromStorage(): string | null {
   return endpoint.length ? endpoint : null;
 }
 
+function isLoopbackHost(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname === "[::1]"
+  );
+}
+
+export function getBridgeRequestBaseUrl(): string {
+  if (
+    isBrowser() &&
+    !import.meta.env.DEV &&
+    isLoopbackHost(window.location.hostname)
+  ) {
+    return "";
+  }
+
+  return getBridgeEndpointFromStorage() ?? "";
+}
+
 function bridgeUrl(pathname: string): string {
-  const endpoint = getBridgeEndpointFromStorage();
+  const endpoint = getBridgeRequestBaseUrl();
   return endpoint ? `${endpoint}${pathname}` : pathname;
 }
 

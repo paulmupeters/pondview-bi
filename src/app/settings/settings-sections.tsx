@@ -120,7 +120,6 @@ type AiSettingsSectionsProps = {
   apiKey: string;
   onApiKeyChange: (value: string) => void;
   hasStoredBridgeAiKey: boolean;
-  bridgeAiStoredKeyLabel: string;
   ollamaBaseUrl: string;
   onOllamaBaseUrlChange: (value: string) => void;
   openAiCompatibleUrl: string;
@@ -147,7 +146,6 @@ export function AiSettingsSections({
   apiKey,
   onApiKeyChange,
   hasStoredBridgeAiKey,
-  bridgeAiStoredKeyLabel,
   ollamaBaseUrl,
   onOllamaBaseUrlChange,
   openAiCompatibleUrl,
@@ -270,6 +268,11 @@ export function AiSettingsSections({
                 label={getApiKeyStorageKeyForProvider(aiProvider)}
                 htmlFor="api-key"
                 className="mb-4"
+                description={
+                  hasStoredBridgeAiKey
+                    ? "API key is stored in the bridge. Leave blank to keep it."
+                    : undefined
+                }
               >
                 <Input
                   id="api-key"
@@ -281,11 +284,7 @@ export function AiSettingsSections({
                   data-form-type="other"
                   value={apiKey}
                   onChange={(event) => onApiKeyChange(event.target.value)}
-                  placeholder={
-                    hasStoredBridgeAiKey
-                      ? `Bridge has ${bridgeAiStoredKeyLabel || "this provider"} saved; leave blank to keep it`
-                      : "Enter your API key"
-                  }
+                  placeholder="Fill in API Key"
                 />
               </FormField>
             )}

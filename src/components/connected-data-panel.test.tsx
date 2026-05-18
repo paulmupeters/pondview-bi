@@ -93,7 +93,7 @@ describe("connected source explorer helpers", () => {
           id: "memory",
         },
       }),
-    ).toBe("Bridge (127.0.0.1)");
+    ).toBe(":memory: (127.0.0.1)");
   });
 
   test("uses the canonical DuckDB alias for reserved postgres names", () => {

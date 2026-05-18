@@ -265,7 +265,6 @@ export default function SettingsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
   const [bridgeAiConfigured, setBridgeAiConfigured] = useState(false);
-  const [bridgeAiStoredKeyLabel, setBridgeAiStoredKeyLabel] = useState("");
   const [runtimeSettingsError, setRuntimeSettingsError] = useState<
     string | null
   >(null);
@@ -401,16 +400,6 @@ export default function SettingsPage() {
           setModel(status.ai.model ?? "");
           setVisualizationModel(status.ai.visualizationModel ?? "");
           setApiKey("");
-          setBridgeAiStoredKeyLabel(
-            [
-              getAiProviderDisplayName(status.ai.provider),
-              status.ai.model ? `model ${status.ai.model}` : null,
-            ]
-              .filter(Boolean)
-              .join(", "),
-          );
-        } else {
-          setBridgeAiStoredKeyLabel("");
         }
         setBridgeS3BackupConfigured(status.s3Backup?.configured === true);
         if (status.s3Backup?.configured) {
@@ -432,7 +421,6 @@ export default function SettingsPage() {
         if (!cancelled) {
           setBridgeS3BackupConfigured(false);
           setBridgeAiConfigured(false);
-          setBridgeAiStoredKeyLabel("");
         }
       });
     return () => {
@@ -1126,14 +1114,6 @@ export default function SettingsPage() {
             : settings,
         );
         setBridgeAiConfigured(true);
-        setBridgeAiStoredKeyLabel(
-          [
-            getAiProviderDisplayName(settings.provider),
-            settings.model ? `model ${settings.model}` : null,
-          ]
-            .filter(Boolean)
-            .join(", "),
-        );
         saveAiSettingsToStorage({ ...settings, apiKey: "" });
       } else {
         saveAiSettingsToStorage(settings);
@@ -1330,7 +1310,6 @@ export default function SettingsPage() {
                     isBridgeQueryReady &&
                     bridgeAiConfigured
                   }
-                  bridgeAiStoredKeyLabel={bridgeAiStoredKeyLabel}
                   ollamaBaseUrl={ollamaBaseUrl}
                   onOllamaBaseUrlChange={setOllamaBaseUrl}
                   openAiCompatibleUrl={openAiCompatibleUrl}

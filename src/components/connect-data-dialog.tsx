@@ -1318,7 +1318,7 @@ export function ConnectDataDialog({
               )}
               onClick={() => setRemoteDuckdbAttachMode("httpfs")}
             >
-              HTTPFS file
+              HTTPFS file (S3 compatible)
             </button>
             <button
               type="button"

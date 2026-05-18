@@ -16,7 +16,10 @@ import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { CellContent } from "@/features/analysis/components/CellContent";
 import { CellFrame } from "@/features/analysis/components/CellFrame";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
-import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
+import {
+  useBridgeRuntimeState,
+  useResolvedSqlBackend,
+} from "@/lib/sql/use-sql-backend";
 import type { WorkspaceAnalysisCellKind } from "@/lib/workspace/workspace-db";
 
 type CellListProps = {
@@ -150,6 +153,7 @@ export function CellList({
     hasRequiredAiConfigurationInStorage(),
   );
   const effectiveSqlBackend = useResolvedSqlBackend();
+  const bridgeRuntimeState = useBridgeRuntimeState();
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -178,7 +182,7 @@ export function CellList({
         syncAiConfiguration,
       );
     };
-  }, [effectiveSqlBackend]);
+  }, [effectiveSqlBackend, bridgeRuntimeState.isQueryReady]);
 
   useEffect(() => {
     setExplicitChatModeByCellId((previousExplicitChatModeByCellId) => {

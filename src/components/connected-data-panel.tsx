@@ -308,7 +308,9 @@ export function getRemoteRuntimeDisplayLabel(
   }
 
   const databaseName = connectionInfo.database?.name?.trim();
-  const runtimeName = databaseName || "Bridge";
+  const runtimeName =
+    databaseName ||
+    (connectionInfo.database?.mode === "memory" ? ":memory:" : "Bridge");
 
   return `${runtimeName} (${connectionInfo.host})`;
 }
