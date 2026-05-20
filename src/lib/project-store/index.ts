@@ -1,3 +1,13 @@
+import {
+  deleteBridgeProjectFiles,
+  getBridgeCapabilities,
+  getBridgeProject,
+  getBridgeSession,
+  listBridgeProjectFiles,
+  replaceBridgeProjectFiles,
+  saveBridgeProjectFiles,
+  updateBridgeProject,
+} from "@/lib/bridge/pondview-bridge";
 import type { ProjectArtifactTextFile } from "@/lib/project-artifacts/export";
 import {
   deleteByKey,
@@ -13,7 +23,7 @@ import {
 const OPEN_PROJECT_SESSION_KEY = "open-project";
 const PROJECT_REGISTRY_SESSION_KEY = "project-registry";
 
-export type ProjectBackingKind = "browser-indexeddb";
+export type ProjectBackingKind = "browser-indexeddb" | "bridge-filesystem";
 
 export type OpenProjectState = {
   id: string;
@@ -22,6 +32,7 @@ export type OpenProjectState = {
   openedAt: number;
   updatedAt: number;
   defaultSourceRef?: string | null;
+  rootPath?: string;
 };
 
 export type StoredProjectFile = ProjectArtifactTextFile & {
@@ -104,7 +115,8 @@ function isOpenProjectState(value: unknown): value is OpenProjectState {
   return (
     typeof candidate.id === "string" &&
     typeof candidate.name === "string" &&
-    candidate.backingKind === "browser-indexeddb" &&
+    (candidate.backingKind === "browser-indexeddb" ||
+      candidate.backingKind === "bridge-filesystem") &&
     typeof candidate.openedAt === "number" &&
     typeof candidate.updatedAt === "number"
   );
@@ -129,13 +141,15 @@ function normalizeOpenProjectState(
   return {
     id: project.id.trim(),
     name: project.name.trim(),
-    backingKind: "browser-indexeddb",
+    backingKind: project.backingKind,
     openedAt: project.openedAt || now,
     updatedAt: project.updatedAt || now,
     defaultSourceRef:
       typeof project.defaultSourceRef === "string"
         ? project.defaultSourceRef
         : null,
+    rootPath:
+      typeof project.rootPath === "string" ? project.rootPath : undefined,
   };
 }
 
@@ -427,11 +441,173 @@ export class BrowserProjectStore implements ProjectBackingStore {
   }
 }
 
+type BridgeProjectStoreDeps = {
+  getProject: typeof getBridgeProject;
+  updateProject: typeof updateBridgeProject;
+  listFiles: typeof listBridgeProjectFiles;
+  saveFiles: typeof saveBridgeProjectFiles;
+  replaceFiles: typeof replaceBridgeProjectFiles;
+  deleteFiles: typeof deleteBridgeProjectFiles;
+};
+
+const defaultBridgeProjectStoreDeps: BridgeProjectStoreDeps = {
+  getProject: getBridgeProject,
+  updateProject: updateBridgeProject,
+  listFiles: listBridgeProjectFiles,
+  saveFiles: saveBridgeProjectFiles,
+  replaceFiles: replaceBridgeProjectFiles,
+  deleteFiles: deleteBridgeProjectFiles,
+};
+
+export class BridgeProjectStore implements ProjectBackingStore {
+  constructor(
+    private readonly deps: BridgeProjectStoreDeps = defaultBridgeProjectStoreDeps,
+  ) {}
+
+  async getOpenProject(): Promise<OpenProjectState | null> {
+    const { project } = await this.deps.getProject();
+    return project;
+  }
+
+  async setOpenProject(project: OpenProjectState | null): Promise<void> {
+    if (!project) {
+      return;
+    }
+
+    await this.deps.updateProject({
+      name: project.name,
+      defaultSourceRef: project.defaultSourceRef ?? null,
+    });
+  }
+
+  async listProjects(): Promise<OpenProjectState[]> {
+    const project = await this.getOpenProject();
+    return project ? [project] : [];
+  }
+
+  async listProjectFiles(
+    _projectId: string,
+  ): Promise<ProjectArtifactTextFile[]> {
+    return (await this.deps.listFiles()).files;
+  }
+
+  async readProjectFile(
+    projectId: string,
+    path: string,
+  ): Promise<ProjectArtifactTextFile | null> {
+    const files = await this.listProjectFiles(projectId);
+    return (
+      files.find((file) => file.path === normalizeProjectPath(path)) ?? null
+    );
+  }
+
+  async saveProjectFiles(
+    _projectId: string,
+    files: ProjectArtifactTextFile[],
+  ): Promise<void> {
+    await this.deps.saveFiles({ files });
+  }
+
+  async deleteProjectFiles(_projectId: string, paths: string[]): Promise<void> {
+    await this.deps.deleteFiles({ paths });
+  }
+
+  async replaceProjectFiles(
+    _projectId: string,
+    scopePath: string,
+    files: ProjectArtifactTextFile[],
+  ): Promise<void> {
+    await this.deps.replaceFiles({ scopePath, files });
+  }
+}
+
+export class ActiveProjectStore implements ProjectBackingStore {
+  private readonly browser = new BrowserProjectStore();
+  private readonly bridge = new BridgeProjectStore();
+
+  private async activeStore(): Promise<ProjectBackingStore> {
+    return (await isBridgeProjectStoreAvailable()) ? this.bridge : this.browser;
+  }
+
+  async getOpenProject(): Promise<OpenProjectState | null> {
+    return (await this.activeStore()).getOpenProject();
+  }
+
+  async setOpenProject(project: OpenProjectState | null): Promise<void> {
+    await (await this.activeStore()).setOpenProject(project);
+  }
+
+  async listProjects(): Promise<OpenProjectState[]> {
+    return (await this.activeStore()).listProjects();
+  }
+
+  async listProjectFiles(
+    projectId: string,
+  ): Promise<ProjectArtifactTextFile[]> {
+    return (await this.activeStore()).listProjectFiles(projectId);
+  }
+
+  async readProjectFile(
+    projectId: string,
+    path: string,
+  ): Promise<ProjectArtifactTextFile | null> {
+    return (await this.activeStore()).readProjectFile(projectId, path);
+  }
+
+  async saveProjectFiles(
+    projectId: string,
+    files: ProjectArtifactTextFile[],
+  ): Promise<void> {
+    await (await this.activeStore()).saveProjectFiles(projectId, files);
+  }
+
+  async deleteProjectFiles(projectId: string, paths: string[]): Promise<void> {
+    await (await this.activeStore()).deleteProjectFiles(projectId, paths);
+  }
+
+  async replaceProjectFiles(
+    projectId: string,
+    scopePath: string,
+    files: ProjectArtifactTextFile[],
+  ): Promise<void> {
+    await (await this.activeStore()).replaceProjectFiles(
+      projectId,
+      scopePath,
+      files,
+    );
+  }
+}
+
+type BridgeProjectAvailabilityDeps = {
+  getSession: typeof getBridgeSession;
+  getCapabilities: typeof getBridgeCapabilities;
+};
+
+const defaultBridgeProjectAvailabilityDeps: BridgeProjectAvailabilityDeps = {
+  getSession: getBridgeSession,
+  getCapabilities: getBridgeCapabilities,
+};
+
+export async function isBridgeProjectStoreAvailable(
+  deps: BridgeProjectAvailabilityDeps = defaultBridgeProjectAvailabilityDeps,
+): Promise<boolean> {
+  try {
+    const session = await deps.getSession();
+    if (!session.isQueryReady) {
+      return false;
+    }
+    const capabilities = await deps.getCapabilities();
+    return capabilities.projects === true;
+  } catch {
+    return false;
+  }
+}
+
 let defaultProjectStore: ProjectBackingStore | null = null;
 
 export function getProjectStore(): ProjectBackingStore {
   if (!defaultProjectStore) {
-    defaultProjectStore = new BrowserProjectStore();
+    defaultProjectStore = new ActiveProjectStore();
   }
 
   return defaultProjectStore;

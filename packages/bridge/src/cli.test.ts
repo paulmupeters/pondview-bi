@@ -25,7 +25,7 @@ function createNoopClient() {
       catalog: true,
       attachDuckDb: true,
       importFiles: false,
-      projects: false,
+      projects: true,
       readonly: false,
     }),
     attachSource: async () => ({ sources: [] }),

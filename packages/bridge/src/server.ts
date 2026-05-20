@@ -2,6 +2,10 @@ import { existsSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
   bridgeAttachSourceRequestSchema,
+  bridgeProjectDeleteFilesRequestSchema,
+  bridgeProjectReplaceFilesRequestSchema,
+  bridgeProjectSaveFilesRequestSchema,
+  bridgeProjectUpdateRequestSchema,
   bridgeQueryRequestSchema,
   bridgeS3BackupDownloadRequestSchema,
   bridgeS3BackupUploadRequestSchema,
@@ -10,6 +14,7 @@ import {
   bridgeSecretSourceSchema,
 } from "@pondview/bridge-protocol";
 import { handleAiChatRequest } from "./ai";
+import { BridgeProjectStore } from "./project-store";
 import { DuckDbRuntime } from "./runtime/duckdb-runtime";
 import {
   downloadBridgeS3Backup,
@@ -30,6 +35,7 @@ export interface BridgeServerOptions {
   dashboardMode?: boolean;
   staticDir?: string;
   secretsPath?: string;
+  projectDir?: string;
 }
 
 export interface BridgeUiServerOptions {
@@ -56,13 +62,17 @@ export async function startBridgeServer(
     databasePath: options.databasePath,
     resolveSource: (id) => secrets.getSource(id),
   });
+  const projects = new BridgeProjectStore({
+    rootPath: options.projectDir,
+    readonly: options.readonly,
+  });
 
   let boundOptions = { ...options, host, port };
   const server = Bun.serve({
     hostname: host,
     port,
     async fetch(request) {
-      return handleRequest(request, runtime, boundOptions, secrets);
+      return handleRequest(request, runtime, boundOptions, secrets, projects);
     },
   });
   boundOptions = { ...boundOptions, port: readBoundPort(server, port) };
@@ -104,6 +114,10 @@ export async function handleBridgeRequest(
   runtime: DuckDbRuntime,
   options: BridgeServerOptions,
   secrets = new BridgeSecretStore(options.secretsPath),
+  projects = new BridgeProjectStore({
+    rootPath: options.projectDir,
+    readonly: options.readonly,
+  }),
 ): Promise<Response> {
   if (request.method === "OPTIONS") {
     return json(null, { status: 204 });
@@ -149,12 +163,53 @@ export async function handleBridgeRequest(
         catalog: true,
         attachDuckDb: true,
         importFiles: false,
-        projects: false,
+        projects: true,
         readonly: options.readonly ?? false,
         secrets: true,
         ai: Boolean(secrets.getAi()),
         s3Backup: Boolean(secrets.getS3Backup()),
       });
+    }
+
+    if (request.method === "GET" && url.pathname === "/project") {
+      return json({ project: projects.getProject() });
+    }
+
+    if (request.method === "PUT" && url.pathname === "/project") {
+      const input = bridgeProjectUpdateRequestSchema.parse(
+        await request.json(),
+      );
+      return json({ project: await projects.updateProject(input) });
+    }
+
+    if (request.method === "GET" && url.pathname === "/project/files") {
+      return json({ files: projects.listFiles() });
+    }
+
+    if (request.method === "PUT" && url.pathname === "/project/files") {
+      const input = bridgeProjectSaveFilesRequestSchema.parse(
+        await request.json(),
+      );
+      return json({ files: await projects.saveFiles(input.files) });
+    }
+
+    if (
+      request.method === "POST" &&
+      url.pathname === "/project/files/replace"
+    ) {
+      const input = bridgeProjectReplaceFilesRequestSchema.parse(
+        await request.json(),
+      );
+      return json({
+        files: await projects.replaceFiles(input.scopePath, input.files),
+      });
+    }
+
+    if (request.method === "DELETE" && url.pathname === "/project/files") {
+      const input = bridgeProjectDeleteFilesRequestSchema.parse(
+        await request.json(),
+      );
+      return json({ files: await projects.deleteFiles(input.paths) });
     }
 
     if (request.method === "GET" && url.pathname === "/catalog") {
@@ -278,12 +333,14 @@ async function handleRequest(
   runtime: DuckDbRuntime,
   options: BridgeServerOptions,
   secrets: BridgeSecretStore,
+  projects: BridgeProjectStore,
 ): Promise<Response> {
   const apiResponse = await handleBridgeRequest(
     request,
     runtime,
     options,
     secrets,
+    projects,
   );
   if (
     !options.serveUi ||
@@ -343,6 +400,9 @@ function shouldProxyToBridge(request: Request): boolean {
     url.pathname === "/api/duckdb/config" ||
     url.pathname === "/health" ||
     url.pathname === "/capabilities" ||
+    url.pathname === "/project" ||
+    url.pathname === "/project/files" ||
+    url.pathname === "/project/files/replace" ||
     url.pathname === "/catalog" ||
     url.pathname === "/query" ||
     url.pathname === "/ai/chat" ||

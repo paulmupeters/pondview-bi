@@ -49,6 +49,8 @@ Examples of browser storage keys outside IndexedDB:
 
 When Bridge is the active runtime, data-source credentials, AI provider keys, and S3 backup access keys are stored outside browser storage in the Bridge secret store at `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json` unless `PONDVIEW_SECRETS_PATH` overrides it. Browser storage keeps only non-secret metadata and opaque references.
 
+Bridge also provides a filesystem-backed project store. By default it writes raw Pondview artifact files under the directory where the bridge was launched, or under `--project-dir <dir>` when that flag is provided. Existing disk artifacts are loaded into the app first; later dashboard, saved-query, and published-notebook changes update files such as `pondview/...` directly on disk. The project metadata file is `.pondview/project.json`; DuckDB runtime data remains separate in the bridge database or explicit runtime snapshot exports.
+
 ## Dashboard Persistence Model
 
 Saved charts and measures persist:

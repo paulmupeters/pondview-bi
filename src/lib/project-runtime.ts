@@ -1,3 +1,4 @@
+import { importParsedProjectArtifacts } from "@/lib/project-artifacts/import";
 import type { ParsedProjectArtifacts } from "@/lib/project-artifacts/parse";
 import { parseProjectArtifactFileSet } from "@/lib/project-artifacts/parse";
 import {
@@ -201,4 +202,30 @@ export async function hydrateOpenProjectRuntimeFromStore(): Promise<ProjectRunti
     project,
     parsed,
   });
+}
+
+export async function hydrateAndImportOpenProjectFromStore(): Promise<ProjectRuntimeSelection | null> {
+  const project = await getOpenProject();
+  if (!project) {
+    clearProjectRuntimeSelection();
+    return null;
+  }
+
+  const parsed = parseProjectArtifactFileSet(await listOpenProjectFiles());
+  const selection = await hydrateProjectRuntimeFromParsedArtifacts({
+    project,
+    parsed,
+  });
+
+  if (project.backingKind === "bridge-filesystem") {
+    await importParsedProjectArtifacts(parsed, {
+      projectId: project.id,
+      defaultSourceRef:
+        parsed.projectManifest?.defaultSourceRef ??
+        project.defaultSourceRef ??
+        null,
+    });
+  }
+
+  return selection;
 }

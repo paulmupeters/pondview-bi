@@ -109,6 +109,7 @@ async function runBridge(
   const token = readToken(args);
   const readonly = args.flags.has("readonly");
   const databasePath = readStringFlag(args, "database");
+  const projectDir = readStringFlag(args, "project-dir");
 
   const server = await startBridgeServer({
     host,
@@ -116,6 +117,7 @@ async function runBridge(
     token,
     readonly,
     databasePath,
+    projectDir,
   });
   console.log(`Pondview bridge listening at ${server.url}`);
   console.log("Press Ctrl+C to stop.");
@@ -139,6 +141,7 @@ async function runServe(
   const token = readToken(args);
   const readonly = args.flags.has("readonly");
   const databasePath = readStringFlag(args, "database");
+  const projectDir = readStringFlag(args, "project-dir");
 
   const server = await startBridgeServer({
     host,
@@ -146,6 +149,7 @@ async function runServe(
     token,
     readonly,
     databasePath,
+    projectDir,
     serveUi: true,
     dashboardMode: args.flags.has("dashboard-mode"),
   });
@@ -429,6 +433,7 @@ async function runDashboardOpen(
     token: readToken(args),
     readonly: args.flags.has("readonly"),
     databasePath: readStringFlag(args, "database"),
+    projectDir: readStringFlag(args, "project-dir"),
     serveUi: true,
     dashboardMode: true,
   });
@@ -1099,6 +1104,7 @@ function startBridgeProcess(args: ParsedArgs): void {
   appendFlag(childArgs, args, "token");
   appendFlag(childArgs, args, "token-env");
   appendFlag(childArgs, args, "database");
+  appendFlag(childArgs, args, "project-dir");
   if (args.flags.has("readonly")) {
     childArgs.push("--readonly");
   }
@@ -1259,8 +1265,8 @@ function printHelp(): void {
   console.log(`Pondview CLI
 
 Usage:
-  pondview bridge [--host 127.0.0.1] [--port 17817] [--database file.duckdb] [--readonly]
-  pondview serve [--host 127.0.0.1] [--port 17817] [--database file.duckdb] [--readonly] [--dashboard-mode] [--no-open]
+  pondview bridge [--host 127.0.0.1] [--port 17817] [--database file.duckdb] [--project-dir dir] [--readonly]
+  pondview serve [--host 127.0.0.1] [--port 17817] [--database file.duckdb] [--project-dir dir] [--readonly] [--dashboard-mode] [--no-open]
   pondview serve --use-existing [--host 127.0.0.1] [--port 17817] [--ui-port 0] [--dashboard-mode] [--no-open]
   pondview attach <file.duckdb|s3://...> --as <alias> [--readonly]
   pondview list-sources
@@ -1283,6 +1289,7 @@ Client flags:
   --token <token>         Bearer token
   --token-env <name>      Read bearer token from an environment variable
   --database <file>       Open a DuckDB file as the bridge's primary database
+  --project-dir <dir>     Filesystem project root (default: launch directory)
   --file <path>           Read SQL for pondview query from a file
   --title <title>         New title for pondview dashboard rename
   --yes                   Confirm pondview dashboard delete

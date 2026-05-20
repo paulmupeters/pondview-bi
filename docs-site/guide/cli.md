@@ -36,6 +36,7 @@ pondview serve
 pondview serve --port 17818
 pondview serve --host 127.0.0.1 --port 17817 --no-open
 pondview serve --database ./analytics.duckdb
+pondview serve --project-dir ./my-pondview-project
 pondview serve --readonly
 ```
 
@@ -51,6 +52,7 @@ Runs the bridge API only.
 pondview bridge
 pondview bridge --port 17817
 pondview bridge --database ./analytics.duckdb
+pondview bridge --project-dir ./my-pondview-project
 pondview bridge --readonly
 ```
 
@@ -63,6 +65,14 @@ database instead, so unqualified queries such as `SELECT * FROM my_table` run
 against that file. This is different from `pondview attach`, which keeps the
 primary database in memory and exposes the file as an attached catalog that you
 query with its alias, for example `analytics.main.my_table`.
+
+Bridge mode also exposes a filesystem-backed Pondview project. By default the
+project root is the directory where the bridge was launched; pass
+`--project-dir <dir>` to use a different folder. Dashboards, saved queries,
+published notebooks, and source metadata are written as raw project artifact
+files such as `pondview/...`; bridge metadata lives in `.pondview/project.json`.
+When the bridge starts in `--readonly` mode, project files can be read but not
+mutated.
 
 ### Client commands
 
@@ -159,6 +169,7 @@ that port.
 | `--host <host>` | `serve`, `bridge`, client commands | Host for the local bridge. Defaults to `127.0.0.1`. |
 | `--port <port>` | `serve`, `bridge`, `stop`, client commands | Port for the local bridge. Defaults to `17817`. |
 | `--database <file>` | `serve`, `bridge`, client autostart | Opens a DuckDB file as the bridge's primary database instead of using an in-memory database. |
+| `--project-dir <dir>` | `serve`, `bridge`, client autostart | Filesystem project root for raw Pondview artifacts. Defaults to the launch directory. |
 | `--readonly` | `serve`, `bridge`, `attach` | Starts readonly bridge mode, or attaches a DuckDB source readonly. |
 | `--token <token>` | all bridge/client commands | Requires or sends a bridge auth token. |
 | `--token-env <name>` | all bridge/client commands | Reads the bridge auth token from an environment variable. |

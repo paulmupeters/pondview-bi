@@ -3,6 +3,12 @@ import {
   type BridgeCapabilitiesResponse,
   type BridgeCatalogResponse,
   type BridgeHealthResponse,
+  type BridgeProjectDeleteFilesRequest,
+  type BridgeProjectFilesResponse,
+  type BridgeProjectReplaceFilesRequest,
+  type BridgeProjectResponse,
+  type BridgeProjectSaveFilesRequest,
+  type BridgeProjectUpdateRequest,
   type BridgeQueryRequest,
   type BridgeQueryResponse,
   type BridgeS3BackupDownloadRequest,
@@ -21,6 +27,8 @@ import {
   bridgeCatalogResponseSchema,
   bridgeErrorResponseSchema,
   bridgeHealthResponseSchema,
+  bridgeProjectFilesResponseSchema,
+  bridgeProjectResponseSchema,
   bridgeQueryResponseSchema,
   bridgeS3BackupDownloadResponseSchema,
   bridgeS3BackupListResponseSchema,
@@ -57,6 +65,54 @@ export class BridgeClient {
 
   capabilities(): Promise<BridgeCapabilitiesResponse> {
     return this.request("/capabilities", bridgeCapabilitiesResponseSchema);
+  }
+
+  project(): Promise<BridgeProjectResponse> {
+    return this.request("/project", bridgeProjectResponseSchema);
+  }
+
+  updateProject(
+    input: BridgeProjectUpdateRequest,
+  ): Promise<BridgeProjectResponse> {
+    return this.request("/project", bridgeProjectResponseSchema, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+  }
+
+  projectFiles(): Promise<BridgeProjectFilesResponse> {
+    return this.request("/project/files", bridgeProjectFilesResponseSchema);
+  }
+
+  saveProjectFiles(
+    input: BridgeProjectSaveFilesRequest,
+  ): Promise<BridgeProjectFilesResponse> {
+    return this.request("/project/files", bridgeProjectFilesResponseSchema, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+  }
+
+  replaceProjectFiles(
+    input: BridgeProjectReplaceFilesRequest,
+  ): Promise<BridgeProjectFilesResponse> {
+    return this.request(
+      "/project/files/replace",
+      bridgeProjectFilesResponseSchema,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+  }
+
+  deleteProjectFiles(
+    input: BridgeProjectDeleteFilesRequest,
+  ): Promise<BridgeProjectFilesResponse> {
+    return this.request("/project/files", bridgeProjectFilesResponseSchema, {
+      method: "DELETE",
+      body: JSON.stringify(input),
+    });
   }
 
   catalog(): Promise<BridgeCatalogResponse> {

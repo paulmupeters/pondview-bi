@@ -1,10 +1,20 @@
 import {
+  type BridgeCapabilitiesResponse,
+  type BridgeProjectDeleteFilesRequest,
+  type BridgeProjectFilesResponse,
+  type BridgeProjectReplaceFilesRequest,
+  type BridgeProjectResponse,
+  type BridgeProjectSaveFilesRequest,
+  type BridgeProjectUpdateRequest,
   type BridgeSecretAi,
   type BridgeSecretS3Backup,
   type BridgeSecretSource,
   type BridgeSecretsStatusResponse,
   type BridgeSourcesResponse,
+  bridgeCapabilitiesResponseSchema,
   bridgeConfigResponseSchema,
+  bridgeProjectFilesResponseSchema,
+  bridgeProjectResponseSchema,
   bridgeQueryResponseSchema,
   bridgeS3BackupDownloadResponseSchema,
   bridgeS3BackupListResponseSchema,
@@ -146,6 +156,7 @@ export function getBridgeRequestBaseUrl(): string {
   if (
     isBrowser() &&
     !import.meta.env.DEV &&
+    typeof window.location !== "undefined" &&
     isLoopbackHost(window.location.hostname)
   ) {
     return "";
@@ -529,6 +540,96 @@ export async function getBridgeSecretsStatus(
   return bridgeSecretsStatusResponseSchema.parse(await response.json());
 }
 
+export async function getBridgeCapabilities(
+  signal?: AbortSignal,
+): Promise<BridgeCapabilitiesResponse> {
+  const response = await fetch(bridgeUrl("/capabilities"), {
+    method: "GET",
+    headers: getAuthHeaders(),
+    cache: "no-store",
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return bridgeCapabilitiesResponseSchema.parse(await response.json());
+}
+
+export async function getBridgeProject(
+  signal?: AbortSignal,
+): Promise<BridgeProjectResponse> {
+  const response = await fetch(bridgeUrl("/project"), {
+    method: "GET",
+    headers: getAuthHeaders(),
+    cache: "no-store",
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return bridgeProjectResponseSchema.parse(await response.json());
+}
+
+export async function updateBridgeProject(
+  input: BridgeProjectUpdateRequest,
+  signal?: AbortSignal,
+): Promise<BridgeProjectResponse> {
+  const response = await fetch(bridgeUrl("/project"), {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(input),
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return bridgeProjectResponseSchema.parse(await response.json());
+}
+
+export async function listBridgeProjectFiles(
+  signal?: AbortSignal,
+): Promise<BridgeProjectFilesResponse> {
+  const response = await fetch(bridgeUrl("/project/files"), {
+    method: "GET",
+    headers: getAuthHeaders(),
+    cache: "no-store",
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return bridgeProjectFilesResponseSchema.parse(await response.json());
+}
+
+export async function saveBridgeProjectFiles(
+  input: BridgeProjectSaveFilesRequest,
+  signal?: AbortSignal,
+): Promise<BridgeProjectFilesResponse> {
+  return mutateBridgeProjectFiles("PUT", "/project/files", input, signal);
+}
+
+export async function replaceBridgeProjectFiles(
+  input: BridgeProjectReplaceFilesRequest,
+  signal?: AbortSignal,
+): Promise<BridgeProjectFilesResponse> {
+  return mutateBridgeProjectFiles(
+    "POST",
+    "/project/files/replace",
+    input,
+    signal,
+  );
+}
+
+export async function deleteBridgeProjectFiles(
+  input: BridgeProjectDeleteFilesRequest,
+  signal?: AbortSignal,
+): Promise<BridgeProjectFilesResponse> {
+  return mutateBridgeProjectFiles("DELETE", "/project/files", input, signal);
+}
+
 export async function listBridgeSources(
   signal?: AbortSignal,
 ): Promise<BridgeSourcesResponse> {
@@ -683,6 +784,27 @@ async function postBridgeJson(
     throw new Error(await parseError(response));
   }
   return response.json();
+}
+
+async function mutateBridgeProjectFiles(
+  method: "PUT" | "POST" | "DELETE",
+  pathname: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<BridgeProjectFilesResponse> {
+  const response = await fetch(bridgeUrl(pathname), {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return bridgeProjectFilesResponseSchema.parse(await response.json());
 }
 
 function bytesToBase64(bytes: Uint8Array): string {

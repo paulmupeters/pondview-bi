@@ -289,6 +289,11 @@ export default function SettingsPage() {
   const [s3RestoreKey, setS3RestoreKey] = useState<string | null>(null);
   const [s3CorsError, setS3CorsError] = useState(false);
   const [openProjectName, setOpenProjectName] = useState("Untitled Project");
+  const [openProjectBackingKind, setOpenProjectBackingKind] =
+    useState<OpenProjectState["backingKind"]>("browser-indexeddb");
+  const [openProjectRootPath, setOpenProjectRootPath] = useState<string | null>(
+    null,
+  );
   const [projectNameDraft, setProjectNameDraft] = useState("");
   const [knownProjects, setKnownProjects] = useState<OpenProjectState[]>([]);
   const [activeProjectId, setActiveProjectId] = useState("");
@@ -340,6 +345,8 @@ export default function SettingsPage() {
     const projectName = project?.name ?? "Untitled Project";
     setKnownProjects(projects);
     setActiveProjectId(project.id);
+    setOpenProjectBackingKind(project.backingKind);
+    setOpenProjectRootPath(project.rootPath ?? null);
     setOpenProjectName(projectName);
     setProjectNameDraft(projectName);
   }, []);
@@ -957,6 +964,8 @@ export default function SettingsPage() {
     try {
       await setOpenProject(project);
       setActiveProjectId(project.id);
+      setOpenProjectBackingKind(project.backingKind);
+      setOpenProjectRootPath(project.rootPath ?? null);
       setOpenProjectName(project.name);
       setProjectNameDraft(project.name);
       await syncActiveProjectFromFiles(project);
@@ -1363,6 +1372,8 @@ export default function SettingsPage() {
                   onSaveProjectName={() => void handleSaveProjectName()}
                   onCancelProjectNameEdit={handleCancelProjectNameEdit}
                   openProjectName={openProjectName}
+                  openProjectBackingKind={openProjectBackingKind}
+                  openProjectRootPath={openProjectRootPath}
                   onEditProjectName={handleEditProjectName}
                   openProjectError={openProjectError}
                   onOpenProjectDialog={() =>

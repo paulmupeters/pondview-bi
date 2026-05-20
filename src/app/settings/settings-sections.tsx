@@ -648,6 +648,8 @@ type ProjectsSettingsSectionsProps = {
   onSaveProjectName: () => void;
   onCancelProjectNameEdit: () => void;
   openProjectName: string;
+  openProjectBackingKind: "browser-indexeddb" | "bridge-filesystem";
+  openProjectRootPath?: string | null;
   onEditProjectName: () => void;
   openProjectError: string | null;
   onOpenProjectDialog: () => void;
@@ -702,6 +704,8 @@ export function ProjectsSettingsSections({
   onSaveProjectName,
   onCancelProjectNameEdit,
   openProjectName,
+  openProjectBackingKind,
+  openProjectRootPath,
   onEditProjectName,
   openProjectError,
   onOpenProjectDialog,
@@ -815,6 +819,24 @@ export function ProjectsSettingsSections({
     <>
       <SettingsContentSection>
         <div className="space-y-5">
+          <div className="rounded border bg-muted/30 px-3 py-2 text-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Backing store
+            </p>
+            {openProjectBackingKind === "bridge-filesystem" ? (
+              <p className="truncate">
+                Filesystem project{" "}
+                {openProjectRootPath ? (
+                  <span className="font-mono text-xs">
+                    {openProjectRootPath}
+                  </span>
+                ) : null}
+              </p>
+            ) : (
+              <p className="text-muted-foreground">Browser IndexedDB</p>
+            )}
+          </div>
+
           <div className="space-y-3">
             <p className="text-sm font-medium">Project name</p>
             {isEditingProjectName ? (

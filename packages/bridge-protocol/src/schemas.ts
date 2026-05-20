@@ -32,6 +32,47 @@ export const bridgeCapabilitiesResponseSchema = z.object({
   s3Backup: z.boolean().optional(),
 });
 
+export const bridgeProjectSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  backingKind: z.literal("bridge-filesystem"),
+  openedAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+  defaultSourceRef: z.string().min(1).nullable().optional(),
+  rootPath: z.string().min(1),
+});
+
+export const bridgeProjectResponseSchema = z.object({
+  project: bridgeProjectSchema,
+});
+
+export const bridgeProjectUpdateRequestSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  defaultSourceRef: z.string().trim().min(1).nullable().optional(),
+});
+
+export const bridgeProjectTextFileSchema = z.object({
+  path: z.string().trim().min(1),
+  content: z.string(),
+});
+
+export const bridgeProjectFilesResponseSchema = z.object({
+  files: z.array(bridgeProjectTextFileSchema),
+});
+
+export const bridgeProjectSaveFilesRequestSchema = z.object({
+  files: z.array(bridgeProjectTextFileSchema),
+});
+
+export const bridgeProjectReplaceFilesRequestSchema = z.object({
+  scopePath: z.string().optional(),
+  files: z.array(bridgeProjectTextFileSchema),
+});
+
+export const bridgeProjectDeleteFilesRequestSchema = z.object({
+  paths: z.array(z.string().trim().min(1)),
+});
+
 export const bridgeConfigResponseSchema = z.object({
   host: z.string().min(1),
   port: z.number().int().min(1).max(65535),
@@ -241,6 +282,24 @@ export const bridgeS3BackupDownloadResponseSchema = z.object({
 export type BridgeHealthResponse = z.infer<typeof bridgeHealthResponseSchema>;
 export type BridgeCapabilitiesResponse = z.infer<
   typeof bridgeCapabilitiesResponseSchema
+>;
+export type BridgeProject = z.infer<typeof bridgeProjectSchema>;
+export type BridgeProjectResponse = z.infer<typeof bridgeProjectResponseSchema>;
+export type BridgeProjectUpdateRequest = z.infer<
+  typeof bridgeProjectUpdateRequestSchema
+>;
+export type BridgeProjectTextFile = z.infer<typeof bridgeProjectTextFileSchema>;
+export type BridgeProjectFilesResponse = z.infer<
+  typeof bridgeProjectFilesResponseSchema
+>;
+export type BridgeProjectSaveFilesRequest = z.infer<
+  typeof bridgeProjectSaveFilesRequestSchema
+>;
+export type BridgeProjectReplaceFilesRequest = z.infer<
+  typeof bridgeProjectReplaceFilesRequestSchema
+>;
+export type BridgeProjectDeleteFilesRequest = z.infer<
+  typeof bridgeProjectDeleteFilesRequestSchema
 >;
 export type BridgeDatabaseInfo = z.infer<typeof bridgeDatabaseInfoSchema>;
 export type BridgeConfigResponse = z.infer<typeof bridgeConfigResponseSchema>;

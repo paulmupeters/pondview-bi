@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -317,6 +324,129 @@ describe("bridge server modes", () => {
     expect(updatedBody).toContain("pondview");
     expect(updatedBody).not.toContain("sk-secret");
     expect(updatedBody).not.toContain("s3-secret");
+  });
+
+  test("project endpoints read and mutate filesystem artifacts", async () => {
+    const projectDir = createTempDir();
+    mkdirSync(join(projectDir, "pondview", "queries", "shared"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(projectDir, "pondview", "project.json"),
+      '{ "schemaVersion": 1, "name": "Revenue", "defaultSourceRef": "analytics" }\n',
+    );
+    writeFileSync(
+      join(projectDir, "pondview", "queries", "shared", "orders.sql"),
+      "select 1;\n",
+    );
+
+    const server = await startTrackedServer({ projectDir });
+    const capabilities = await fetch(`${server.url}/capabilities`);
+    expect(await capabilities.json()).toMatchObject({ projects: true });
+
+    const project = await fetch(`${server.url}/project`);
+    expect(await project.json()).toMatchObject({
+      project: {
+        name: "Revenue",
+        backingKind: "bridge-filesystem",
+        rootPath: projectDir,
+        defaultSourceRef: "analytics",
+      },
+    });
+
+    const files = await fetch(`${server.url}/project/files`);
+    expect(await files.json()).toMatchObject({
+      files: [
+        {
+          path: "pondview/project.json",
+          content:
+            '{ "schemaVersion": 1, "name": "Revenue", "defaultSourceRef": "analytics" }\n',
+        },
+        {
+          path: "pondview/queries/shared/orders.sql",
+          content: "select 1;\n",
+        },
+      ],
+    });
+
+    const save = await fetch(`${server.url}/project/files`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: [
+          {
+            path: "pondview/queries/shared/revenue.sql",
+            content: "select 2;\n",
+          },
+        ],
+      }),
+    });
+    expect(save.status).toBe(200);
+    expect(
+      readFileSync(
+        join(projectDir, "pondview", "queries", "shared", "revenue.sql"),
+        "utf8",
+      ),
+    ).toBe("select 2;\n");
+
+    const replace = await fetch(`${server.url}/project/files/replace`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scopePath: "pondview/queries/shared",
+        files: [
+          {
+            path: "pondview/queries/shared/revenue.sql",
+            content: "select 3;\n",
+          },
+        ],
+      }),
+    });
+    expect(replace.status).toBe(200);
+    expect(
+      existsSync(
+        join(projectDir, "pondview", "queries", "shared", "orders.sql"),
+      ),
+    ).toBe(false);
+    expect(
+      readFileSync(
+        join(projectDir, "pondview", "queries", "shared", "revenue.sql"),
+        "utf8",
+      ),
+    ).toBe("select 3;\n");
+
+    const metadata = JSON.parse(
+      readFileSync(join(projectDir, ".pondview", "project.json"), "utf8"),
+    );
+    expect(metadata.project.name).toBe("Revenue");
+  });
+
+  test("project endpoints reject traversal and readonly mutations", async () => {
+    const projectDir = createTempDir();
+    const server = await startTrackedServer({ projectDir });
+
+    const escaped = await fetch(`${server.url}/project/files`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: [{ path: "../escape.sql", content: "select 1;" }],
+      }),
+    });
+    expect(escaped.status).toBe(400);
+
+    const readonly = await startTrackedServer({
+      projectDir,
+      readonly: true,
+    });
+    const readonlySave = await fetch(`${readonly.url}/project/files`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: [{ path: "pondview/queries/shared/blocked.sql", content: "" }],
+      }),
+    });
+    expect(readonlySave.status).toBe(400);
+    expect(await readonlySave.text()).toContain("Readonly bridge mode");
   });
 });
 

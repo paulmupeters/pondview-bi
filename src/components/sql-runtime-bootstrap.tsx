@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { hydrateOpenProjectRuntimeFromStore } from "@/lib/project-runtime";
+import { hydrateAndImportOpenProjectFromStore } from "@/lib/project-runtime";
 import { refreshBridgeHealth } from "@/lib/sql/sql-runtime";
 
 const RUNTIME_REFRESH_INTERVAL_MS = 15000;
@@ -30,9 +30,12 @@ export function startSqlRuntimeBootstrap(
 
 export function SqlRuntimeBootstrap() {
   useEffect(() => {
-    void hydrateOpenProjectRuntimeFromStore().catch((error) => {
-      console.error("Failed to hydrate project runtime defaults:", error);
-    });
+    void refreshBridgeHealth()
+      .catch(() => "offline" as const)
+      .then(() => hydrateAndImportOpenProjectFromStore())
+      .catch((error) => {
+        console.error("Failed to hydrate project runtime defaults:", error);
+      });
     return startSqlRuntimeBootstrap();
   }, []);
 

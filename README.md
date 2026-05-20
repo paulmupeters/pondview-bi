@@ -180,9 +180,10 @@ background CLI use.
 Bridge-backed commands such as `pondview attach`, `pondview list-sources`,
 `pondview detach`, and `pondview query` use the same local bridge runtime.
 If a client command auto-starts the bridge in the background, stop it with
-`pondview stop`. See [Pondview CLI](./docs-site/guide/cli.md) for commands,
-flags, bundled UI assets built into `packages/bridge/dist`, autostart behavior,
-and future TODOs.
+`pondview stop`. Bridge mode writes project artifacts directly to a filesystem
+project rooted at the launch directory, or `--project-dir <dir>` when provided.
+See [Pondview CLI](./docs-site/guide/cli.md) for commands, flags, bundled UI
+assets built into `packages/bridge/dist`, autostart behavior, and future TODOs.
 
 ## contributing
 
