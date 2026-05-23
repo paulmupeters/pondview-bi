@@ -28,7 +28,8 @@ describe("AiResponseBanner", () => {
     );
 
     expect(markup).toContain("AI Response");
-    expect(markup).toContain(animations.bars.frames[0]);
+    expect(markup).toContain(animations.wave.frames[0]);
+    expect(markup).toContain("Streaming response");
     expect(markup).not.toContain("Assistant is working...");
   });
 
@@ -43,7 +44,7 @@ describe("AiResponseBanner", () => {
     );
 
     expect(markup).toContain("The streamed response is ready.");
-    expect(markup).not.toContain(animations.bars.frames[0]);
+    expect(markup).not.toContain(animations.wave.frames[0]);
   });
 
   test("renders the latest user message above the assistant response", () => {

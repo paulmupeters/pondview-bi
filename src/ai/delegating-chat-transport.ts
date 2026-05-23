@@ -14,7 +14,9 @@ export function createDelegatingChatTransport<UI_MESSAGE extends UIMessage>(
       return transport.sendMessages(options);
     },
     reconnectToStream(options) {
-      return getTransport()?.reconnectToStream(options) ?? Promise.resolve(null);
+      return (
+        getTransport()?.reconnectToStream(options) ?? Promise.resolve(null)
+      );
     },
   };
 }
