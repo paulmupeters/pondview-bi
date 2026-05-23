@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { BridgeClient } from "@pondview/bridge-protocol";
 import { type BrowserOpener, openBrowser } from "./open-browser";
-import { startBridgeServer, startBridgeUiServer } from "./server";
+import { startBridgeServer } from "./server";
 
 interface ParsedArgs {
   command: string;
@@ -17,6 +17,17 @@ const AUTOSTART_POLL_INTERVAL_MS = 100;
 const DASHBOARD_MODE_PATH = "/dashboards?pondviewMode=dashboard";
 const DASHBOARD_VIEW_PATH = "/dashboards/view";
 const METADATA_SCHEMA = "pondview";
+const CLIENT_FLAGS = [
+  "database",
+  "host",
+  "no-autostart",
+  "port",
+  "project-dir",
+  "readonly",
+  "token",
+  "token-env",
+  "url",
+] as const;
 
 interface BridgeApiClient {
   health: BridgeClient["health"];
@@ -32,7 +43,6 @@ interface CliDeps {
   waitForShutdown?: () => Promise<void>;
   createClient?: (args: ParsedArgs) => BridgeApiClient;
   startBridgeProcess?: (args: ParsedArgs) => void;
-  startBridgeUiServer?: typeof startBridgeUiServer;
   findProcessIdsByPort?: (port: number) => Promise<number[]>;
   isPondviewBridgePort?: (args: ParsedArgs) => Promise<boolean>;
   killProcess?: (pid: number) => void;
@@ -44,7 +54,6 @@ const defaultDeps = {
   waitForShutdown,
   createClient,
   startBridgeProcess,
-  startBridgeUiServer,
   findProcessIdsByPort,
   isPondviewBridgePort,
   killProcess,
@@ -58,12 +67,13 @@ export async function runCli(
   const args = parseArgs(argv);
   const resolvedDeps = { ...defaultDeps, ...deps };
 
+  if (printRequestedHelp(args)) {
+    return;
+  }
+
   switch (args.command) {
-    case "bridge":
-      await runBridge(args, resolvedDeps);
-      break;
-    case "serve":
-      await runServe(args, resolvedDeps);
+    case "start":
+      await runStart(args, resolvedDeps);
       break;
     case "attach":
       await runAttach(args, resolvedDeps);
@@ -86,30 +96,42 @@ export async function runCli(
     case "doctor":
       await runDoctor(args, resolvedDeps);
       break;
-    case "help":
-    case "--help":
-    case "-h":
-      printHelp();
-      break;
     default:
       if (!args.command) {
-        printHelp();
+        printTopLevelHelp();
         return;
       }
       throw new Error(`Unknown command: ${args.command}`);
   }
 }
 
-async function runBridge(
+async function runStart(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, [
+    "dashboard-mode",
+    "database",
+    "host",
+    "no-open",
+    "no-ui",
+    "port",
+    "project-dir",
+    "readonly",
+    "token",
+    "token-env",
+  ]);
+
   const host = readStringFlag(args, "host") ?? DEFAULT_HOST;
   const port = readNumberFlag(args, "port") ?? DEFAULT_PORT;
   const token = readToken(args);
   const readonly = args.flags.has("readonly");
   const databasePath = readStringFlag(args, "database");
   const projectDir = readStringFlag(args, "project-dir");
+
+  if (args.flags.has("no-ui") && args.flags.has("dashboard-mode")) {
+    throw new Error("Use either --no-ui or --dashboard-mode, not both.");
+  }
 
   const server = await startBridgeServer({
     host,
@@ -118,80 +140,20 @@ async function runBridge(
     readonly,
     databasePath,
     projectDir,
-  });
-  console.log(`Pondview bridge listening at ${server.url}`);
-  console.log("Press Ctrl+C to stop.");
-
-  await deps.waitForShutdown();
-  await server.stop();
-}
-
-async function runServe(
-  args: ParsedArgs,
-  deps: Required<CliDeps>,
-): Promise<void> {
-  const host = readStringFlag(args, "host") ?? DEFAULT_HOST;
-  const port = readNumberFlag(args, "port") ?? DEFAULT_PORT;
-
-  if (args.flags.has("use-existing")) {
-    await runServeWithExistingBridge(args, deps, host);
-    return;
-  }
-
-  const token = readToken(args);
-  const readonly = args.flags.has("readonly");
-  const databasePath = readStringFlag(args, "database");
-  const projectDir = readStringFlag(args, "project-dir");
-
-  const server = await startBridgeServer({
-    host,
-    port,
-    token,
-    readonly,
-    databasePath,
-    projectDir,
-    serveUi: true,
+    serveUi: !args.flags.has("no-ui"),
     dashboardMode: args.flags.has("dashboard-mode"),
   });
-  console.log(`Pondview local app listening at ${server.url}`);
+
+  console.log(
+    args.flags.has("no-ui")
+      ? `Pondview bridge listening at ${server.url}`
+      : `Pondview local app listening at ${server.url}`,
+  );
   console.log("Press Ctrl+C to stop.");
 
-  if (!args.flags.has("no-open")) {
+  if (!args.flags.has("no-ui") && !args.flags.has("no-open")) {
     await deps
-      .openBrowser(resolveServeOpenUrl(server.url, args))
-      .catch((error) => {
-        console.warn(
-          `Could not open browser: ${error instanceof Error ? error.message : error}`,
-        );
-      });
-  }
-
-  await deps.waitForShutdown();
-  await server.stop();
-}
-
-async function runServeWithExistingBridge(
-  args: ParsedArgs,
-  deps: Required<CliDeps>,
-  host: string,
-): Promise<void> {
-  const bridgeUrl = getClientBaseUrl(args);
-
-  await deps.createClient(args).health();
-
-  const server = await deps.startBridgeUiServer({
-    host,
-    port: readNumberFlag(args, "ui-port") ?? 0,
-    bridgeUrl,
-    dashboardMode: args.flags.has("dashboard-mode"),
-  });
-  console.log(`Pondview local app listening at ${server.url}`);
-  console.log(`Connected to existing Pondview bridge at ${bridgeUrl}`);
-  console.log("Press Ctrl+C to stop.");
-
-  if (!args.flags.has("no-open")) {
-    await deps
-      .openBrowser(resolveServeOpenUrl(server.url, args))
+      .openBrowser(resolveStartOpenUrl(server.url, args))
       .catch((error) => {
         console.warn(
           `Could not open browser: ${error instanceof Error ? error.message : error}`,
@@ -207,6 +169,19 @@ async function runAttach(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, [
+    "as",
+    "database",
+    "host",
+    "no-autostart",
+    "port",
+    "project-dir",
+    "readonly",
+    "token",
+    "token-env",
+    "url",
+  ]);
+
   const identifier = args.positionals[0];
   if (!identifier) {
     throw new Error("Usage: pondview attach <duckdb-file-or-url> --as <alias>");
@@ -231,6 +206,7 @@ async function runListSources(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, CLIENT_FLAGS);
   printJson(await runClientCommand(args, deps, (client) => client.sources()));
 }
 
@@ -238,6 +214,7 @@ async function runDetach(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, CLIENT_FLAGS);
   const id = args.positionals[0];
   if (!id) {
     throw new Error("Usage: pondview detach <source-id-or-alias>");
@@ -251,6 +228,7 @@ async function runQuery(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, [...CLIENT_FLAGS, "file"]);
   const sql = await readQuerySql(args);
   if (!sql) {
     throw new Error(
@@ -299,6 +277,7 @@ async function runDashboardList(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, CLIENT_FLAGS);
   printJson({
     dashboards: await loadDashboardSummaries(args, deps),
   });
@@ -308,6 +287,7 @@ async function runDashboardShow(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, CLIENT_FLAGS);
   const dashboardId = requireDashboardId(args);
   const snapshot = await loadDashboardSnapshot(args, deps, dashboardId);
   if (!snapshot.dashboard) {
@@ -320,6 +300,7 @@ async function runDashboardValidate(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, CLIENT_FLAGS);
   const dashboardId = args.positionals[0]?.trim();
   const result = await validateDashboards(args, deps, dashboardId || null);
   printJson(result);
@@ -332,6 +313,7 @@ async function runDashboardRename(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, [...CLIENT_FLAGS, "title"]);
   const dashboardId = requireDashboardId(args);
   const title = readStringFlag(args, "title")?.trim();
   if (!title) {
@@ -357,6 +339,7 @@ async function runDashboardDelete(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, [...CLIENT_FLAGS, "yes"]);
   const dashboardId = requireDashboardId(args);
   if (!args.flags.has("yes")) {
     throw new Error("Refusing to delete dashboard without --yes.");
@@ -401,31 +384,22 @@ async function runDashboardOpen(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, [
+    "database",
+    "host",
+    "no-open",
+    "port",
+    "project-dir",
+    "readonly",
+    "token",
+    "token-env",
+  ]);
+
   const dashboardId = args.positionals[0]?.trim();
   const host = readStringFlag(args, "host") ?? DEFAULT_HOST;
   const openPath = dashboardId
     ? `${DASHBOARD_VIEW_PATH}?id=${encodeURIComponent(dashboardId)}&pondviewMode=dashboard`
     : DASHBOARD_MODE_PATH;
-
-  if (args.flags.has("use-existing")) {
-    const bridgeUrl = getClientBaseUrl(args);
-    await deps.createClient(args).health();
-    const server = await deps.startBridgeUiServer({
-      host,
-      port: readNumberFlag(args, "ui-port") ?? 0,
-      bridgeUrl,
-      dashboardMode: true,
-    });
-    console.log(`Pondview local app listening at ${server.url}`);
-    console.log(`Connected to existing Pondview bridge at ${bridgeUrl}`);
-    console.log("Press Ctrl+C to stop.");
-    if (!args.flags.has("no-open")) {
-      await deps.openBrowser(new URL(openPath, server.url).toString());
-    }
-    await deps.waitForShutdown();
-    await server.stop();
-    return;
-  }
 
   const server = await startBridgeServer({
     host,
@@ -450,6 +424,7 @@ async function runStop(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, ["force", "host", "port", "token", "token-env"]);
   const port = readNumberFlag(args, "port") ?? DEFAULT_PORT;
   const pids = await deps.findProcessIdsByPort(port);
 
@@ -477,6 +452,7 @@ async function runDoctor(
   args: ParsedArgs,
   deps: Required<CliDeps>,
 ): Promise<void> {
+  assertAllowedFlags(args, ["host", "port", "token", "token-env", "url"]);
   const url = getClientBaseUrl(args);
   const client = deps.createClient(args);
   const result: {
@@ -1098,7 +1074,7 @@ function getClientBaseUrl(args: ParsedArgs): string {
 }
 
 function startBridgeProcess(args: ParsedArgs): void {
-  const childArgs = [import.meta.path, "bridge"];
+  const childArgs = [import.meta.path, "start", "--no-ui"];
   appendFlag(childArgs, args, "host");
   appendFlag(childArgs, args, "port");
   appendFlag(childArgs, args, "token");
@@ -1201,6 +1177,10 @@ function parseArgs(argv: string[]): ParsedArgs {
 
   for (let index = 0; index < rest.length; index += 1) {
     const value = rest[index];
+    if (value === "-h") {
+      flags.set("help", true);
+      continue;
+    }
     if (!value?.startsWith("--")) {
       if (value) {
         positionals.push(value);
@@ -1230,6 +1210,42 @@ function parseArgs(argv: string[]): ParsedArgs {
   return { command, positionals, flags };
 }
 
+function printRequestedHelp(args: ParsedArgs): boolean {
+  if (!isHelpRequest(args)) {
+    return false;
+  }
+
+  const command = args.command === "help" ? args.positionals[0] : args.command;
+  const subcommand =
+    args.command === "help" ? args.positionals[1] : args.positionals[0];
+  printHelp(command, subcommand);
+  return true;
+}
+
+function isHelpRequest(args: ParsedArgs): boolean {
+  return (
+    !args.command ||
+    args.command === "help" ||
+    args.command === "--help" ||
+    args.command === "-h" ||
+    args.flags.has("help")
+  );
+}
+
+function assertAllowedFlags(
+  args: ParsedArgs,
+  allowedFlags: readonly string[],
+): void {
+  const allowed = new Set(allowedFlags);
+  for (const name of args.flags.keys()) {
+    if (!allowed.has(name)) {
+      throw new Error(
+        `Unsupported flag for pondview ${args.command}: --${name}`,
+      );
+    }
+  }
+}
+
 function readStringFlag(args: ParsedArgs, name: string): string | undefined {
   const value = args.flags.get(name);
   return typeof value === "string" ? value : undefined;
@@ -1244,7 +1260,7 @@ function readNumberFlag(args: ParsedArgs, name: string): number | undefined {
     throw new Error(`Invalid --${name} value: ${value}`);
   }
   const parsed = Number.parseInt(value, 10);
-  if ((name === "port" || name === "ui-port") && parsed > 65_535) {
+  if (name === "port" && parsed > 65_535) {
     throw new Error(`Invalid --${name} value: ${value}`);
   }
   return parsed;
@@ -1254,49 +1270,207 @@ function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
 }
 
-function resolveServeOpenUrl(baseUrl: string, args: ParsedArgs): string {
+function resolveStartOpenUrl(baseUrl: string, args: ParsedArgs): string {
   if (!args.flags.has("dashboard-mode")) {
     return baseUrl;
   }
   return new URL(DASHBOARD_MODE_PATH, baseUrl).toString();
 }
 
-function printHelp(): void {
-  console.log(`Pondview CLI
+function printHelp(command?: string, subcommand?: string): void {
+  switch (command) {
+    case undefined:
+    case "":
+    case "--help":
+    case "-h":
+      printTopLevelHelp();
+      break;
+    case "start":
+      printStartHelp();
+      break;
+    case "attach":
+      printAttachHelp();
+      break;
+    case "list-sources":
+      printListSourcesHelp();
+      break;
+    case "detach":
+      printDetachHelp();
+      break;
+    case "query":
+      printQueryHelp();
+      break;
+    case "dashboard":
+      printDashboardHelp(subcommand);
+      break;
+    case "doctor":
+      printDoctorHelp();
+      break;
+    case "stop":
+      printStopHelp();
+      break;
+    default:
+      throw new Error(`Unknown command: ${command}`);
+  }
+}
+
+function printTopLevelHelp(): void {
+  console.log(`Work with Pondview projects from the command line.
 
 Usage:
-  pondview bridge [--host 127.0.0.1] [--port 17817] [--database file.duckdb] [--project-dir dir] [--readonly]
-  pondview serve [--host 127.0.0.1] [--port 17817] [--database file.duckdb] [--project-dir dir] [--readonly] [--dashboard-mode] [--no-open]
-  pondview serve --use-existing [--host 127.0.0.1] [--port 17817] [--ui-port 0] [--dashboard-mode] [--no-open]
+  pondview <command>
+
+Local Runtime
+  start          Start the local Pondview app and bridge API
+
+Data
+  attach         Attach a DuckDB database source
+  list-sources   List attached database sources
+  detach         Detach a database source
+  query          Run SQL through the bridge
+
+Dashboards
+  dashboard      Inspect, validate, open, and maintain dashboards
+
+Diagnostics
+  doctor         Check bridge connectivity and capabilities
+  stop           Stop a local Pondview bridge by port
+
+Flags:
+  -h, --help              Print usage
+      --host <host>       Local bridge host (default: 127.0.0.1)
+      --port <port>       Local bridge port (default: 17817)
+      --database <file>   Open a DuckDB file as the primary database
+      --project-dir <dir> Filesystem project root
+      --token <token>     Bearer token
+      --token-env <name>  Read bearer token from an environment variable
+
+Use "pondview <command> --help" for more information about a command.
+`);
+}
+
+function printStartHelp(): void {
+  console.log(`Start the local Pondview runtime.
+
+Usage:
+  pondview start [flags]
+
+Examples:
+  pondview start
+  pondview start --database ./analytics.duckdb
+  pondview start --no-ui
+  pondview start --dashboard-mode --no-open
+
+Flags:
+      --host <host>        Local bridge host (default: 127.0.0.1)
+      --port <port>        Local bridge port (default: 17817)
+      --database <file>    Open a DuckDB file as the primary database
+      --project-dir <dir>  Filesystem project root (default: launch directory)
+      --readonly           Start with readonly project and database access
+      --dashboard-mode     Open a view-only dashboards UI
+      --no-open            Do not open the browser
+      --no-ui              Start the bridge API only
+      --token <token>      Require a bearer token
+      --token-env <name>   Read bearer token from an environment variable
+`);
+}
+
+function printAttachHelp(): void {
+  console.log(`Attach a DuckDB database source.
+
+Usage:
   pondview attach <file.duckdb|s3://...> --as <alias> [--readonly]
-  pondview list-sources
-  pondview detach <source-id-or-alias>
+
+Flags:
+      --as <alias>         Source alias
+      --readonly           Attach the source readonly
+      --url <url>          Bridge URL for client commands
+      --no-autostart       Do not start a local bridge if unreachable
+`);
+}
+
+function printListSourcesHelp(): void {
+  console.log(`List attached database sources.
+
+Usage:
+  pondview list-sources [--url <url>] [--no-autostart]
+`);
+}
+
+function printDetachHelp(): void {
+  console.log(`Detach a database source.
+
+Usage:
+  pondview detach <source-id-or-alias> [--url <url>] [--no-autostart]
+`);
+}
+
+function printQueryHelp(): void {
+  console.log(`Run SQL through the bridge.
+
+Usage:
   pondview query <sql>
   pondview query --file statement.sql
-  pondview dashboard list
-  pondview dashboard show <dashboard-id>
-  pondview dashboard validate [dashboard-id]
-  pondview dashboard rename <dashboard-id> --title <title>
-  pondview dashboard delete <dashboard-id> --yes
-  pondview dashboard open [dashboard-id]
-  pondview stop [--port 17817] [--force]
-  pondview doctor
 
-Client flags:
-  --url <url>             Bridge URL for client commands
-  --use-existing          Serve UI for an already-running bridge
-  --ui-port <port>        UI server port with --use-existing (default: free port)
-  --token <token>         Bearer token
-  --token-env <name>      Read bearer token from an environment variable
-  --database <file>       Open a DuckDB file as the bridge's primary database
-  --project-dir <dir>     Filesystem project root (default: launch directory)
-  --file <path>           Read SQL for pondview query from a file
-  --title <title>         New title for pondview dashboard rename
-  --yes                   Confirm pondview dashboard delete
-  --dashboard-mode        Open a view-only dashboards UI
-  --no-autostart          Do not start a local bridge for client commands
-  --no-open               Do not open the browser for pondview serve
-  --force                 Stop whatever is listening on the configured port
+Flags:
+      --file <path>        Read SQL from a UTF-8 file
+      --url <url>          Bridge URL for client commands
+      --no-autostart       Do not start a local bridge if unreachable
+`);
+}
+
+function printDashboardHelp(subcommand?: string): void {
+  if (subcommand === "open") {
+    console.log(`Open dashboards in the local Pondview app.
+
+Usage:
+  pondview dashboard open [dashboard-id] [flags]
+
+Flags:
+      --host <host>        Local bridge host (default: 127.0.0.1)
+      --port <port>        Local bridge port (default: 17817)
+      --database <file>    Open a DuckDB file as the primary database
+      --project-dir <dir>  Filesystem project root
+      --readonly           Start with readonly access
+      --no-open            Do not open the browser
+`);
+    return;
+  }
+
+  console.log(`Inspect and maintain dashboard metadata.
+
+Usage:
+  pondview dashboard <command>
+
+Commands:
+  list                 List dashboards
+  show <dashboard-id>  Print a dashboard metadata snapshot
+  validate [id]        Validate dashboard metadata and stored SQL
+  rename <id> --title  Rename a dashboard
+  delete <id> --yes    Delete a dashboard and dependent metadata
+  open [id]            Open dashboards in the local app
+
+Use "pondview dashboard open --help" for open-specific flags.
+`);
+}
+
+function printDoctorHelp(): void {
+  console.log(`Check bridge connectivity and capabilities.
+
+Usage:
+  pondview doctor [--url <url>]
+`);
+}
+
+function printStopHelp(): void {
+  console.log(`Stop a local Pondview bridge by port.
+
+Usage:
+  pondview stop [--port 17817] [--force]
+
+Flags:
+      --port <port>        Local bridge port (default: 17817)
+      --force              Stop whatever is listening on the port
 `);
 }
 

@@ -1,8 +1,10 @@
-import { existsSync } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
+import { platform } from "node:os";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import {
   bridgeAttachSourceRequestSchema,
   bridgeProjectDeleteFilesRequestSchema,
+  bridgeProjectInitRequestSchema,
   bridgeProjectReplaceFilesRequestSchema,
   bridgeProjectSaveFilesRequestSchema,
   bridgeProjectUpdateRequestSchema,
@@ -24,6 +26,10 @@ import {
 } from "./s3-backup";
 import { BridgeSecretStore } from "./secrets";
 import { BRIDGE_VERSION } from "./version";
+
+const WORKSPACE_DB_NAME = "pondview-workspace";
+const WORKSPACE_DB_NAME_OVERRIDE_KEY = "pondview-workspace-name-override";
+const DEFAULT_PROJECT_DATABASE_PATH = "runtime/pondview-runtime.duckdb";
 
 export interface BridgeServerOptions {
   host?: string;
@@ -57,22 +63,44 @@ export async function startBridgeServer(
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 17817;
   const secrets = new BridgeSecretStore(options.secretsPath);
-  const runtime = new DuckDbRuntime({
-    readonly: options.readonly,
-    databasePath: options.databasePath,
-    resolveSource: (id) => secrets.getSource(id),
-  });
   const projects = new BridgeProjectStore({
     rootPath: options.projectDir,
     readonly: options.readonly,
   });
+  const createRuntime = (databasePath?: string) =>
+    new DuckDbRuntime({
+      readonly: options.readonly,
+      databasePath,
+      resolveSource: (id) => secrets.getSource(id),
+    });
+  let runtime = createRuntime(options.databasePath);
+  const initializeProjectRuntime = async (databasePath?: string) => {
+    if (options.readonly || options.databasePath) {
+      return runtime.databaseInfo();
+    }
+
+    const nextRuntime = createRuntime(
+      createProjectDatabasePath(projects.rootPath, databasePath),
+    );
+    const previousRuntime = runtime;
+    runtime = nextRuntime;
+    await previousRuntime.close();
+    return runtime.databaseInfo();
+  };
 
   let boundOptions = { ...options, host, port };
   const server = Bun.serve({
     hostname: host,
     port,
     async fetch(request) {
-      return handleRequest(request, runtime, boundOptions, secrets, projects);
+      return handleRequest(
+        request,
+        () => runtime,
+        boundOptions,
+        secrets,
+        projects,
+        initializeProjectRuntime,
+      );
     },
   });
   boundOptions = { ...boundOptions, port: readBoundPort(server, port) };
@@ -84,6 +112,30 @@ export async function startBridgeServer(
       await runtime.close();
     },
   };
+}
+
+function createProjectDatabasePath(
+  projectRootPath: string,
+  requestedPath?: string,
+): string {
+  const normalizedPath = requestedPath?.trim();
+  const projectDatabasePath =
+    normalizedPath && normalizedPath.toLowerCase() !== "default"
+      ? normalizedPath
+      : DEFAULT_PROJECT_DATABASE_PATH;
+  const databasePath = isAbsolute(projectDatabasePath)
+    ? resolve(projectDatabasePath)
+    : resolve(projectRootPath, projectDatabasePath);
+
+  if (
+    !isAbsolute(projectDatabasePath) &&
+    !isPathInsideRoot(projectRootPath, databasePath)
+  ) {
+    throw new Error("Project database path must stay inside the project.");
+  }
+
+  mkdirSync(dirname(databasePath), { recursive: true });
+  return databasePath;
 }
 
 export async function startBridgeUiServer(
@@ -118,6 +170,7 @@ export async function handleBridgeRequest(
     rootPath: options.projectDir,
     readonly: options.readonly,
   }),
+  initializeProjectRuntime?: (databasePath?: string) => Promise<unknown>,
 ): Promise<Response> {
   if (request.method === "OPTIONS") {
     return json(null, { status: 204 });
@@ -180,6 +233,25 @@ export async function handleBridgeRequest(
         await request.json(),
       );
       return json({ project: await projects.updateProject(input) });
+    }
+
+    if (request.method === "POST" && url.pathname === "/project/init") {
+      if (options.readonly) {
+        throw new Error(
+          "Readonly bridge mode cannot initialize project files.",
+        );
+      }
+      const input = bridgeProjectInitRequestSchema.parse(await request.json());
+      const files = await projects.saveFiles(input.files);
+      await initializeProjectRuntime?.(input.databasePath);
+      return json({ files });
+    }
+
+    if (
+      request.method === "POST" &&
+      url.pathname === "/project/database-path/pick"
+    ) {
+      return json({ path: await pickProjectDatabasePath(projects.rootPath) });
     }
 
     if (request.method === "GET" && url.pathname === "/project/files") {
@@ -330,17 +402,19 @@ export async function handleBridgeRequest(
 
 async function handleRequest(
   request: Request,
-  runtime: DuckDbRuntime,
+  getRuntime: () => DuckDbRuntime,
   options: BridgeServerOptions,
   secrets: BridgeSecretStore,
   projects: BridgeProjectStore,
+  initializeProjectRuntime?: (databasePath?: string) => Promise<unknown>,
 ): Promise<Response> {
   const apiResponse = await handleBridgeRequest(
     request,
-    runtime,
+    getRuntime(),
     options,
     secrets,
     projects,
+    initializeProjectRuntime,
   );
   if (
     !options.serveUi ||
@@ -357,7 +431,9 @@ async function handleRequest(
     }
   }
 
-  return serveStaticUi(request, options.staticDir);
+  return serveStaticUi(request, options.staticDir, {
+    workspaceDbName: getBridgeWorkspaceDbName(projects),
+  });
 }
 
 async function handleUiRequest(
@@ -401,6 +477,8 @@ function shouldProxyToBridge(request: Request): boolean {
     url.pathname === "/health" ||
     url.pathname === "/capabilities" ||
     url.pathname === "/project" ||
+    url.pathname === "/project/init" ||
+    url.pathname === "/project/database-path/pick" ||
     url.pathname === "/project/files" ||
     url.pathname === "/project/files/replace" ||
     url.pathname === "/catalog" ||
@@ -500,6 +578,7 @@ function errorResponse(
 async function serveStaticUi(
   request: Request,
   staticDir = defaultStaticDir(),
+  bridgeUiOptions: { workspaceDbName?: string } = {},
 ): Promise<Response> {
   const root = resolve(staticDir);
   const url = new URL(request.url);
@@ -519,6 +598,11 @@ async function serveStaticUi(
   if (existsSync(filePath)) {
     const file = Bun.file(filePath);
     if (await file.exists()) {
+      if (filePath.endsWith("index.html")) {
+        return htmlResponse(
+          injectBridgeWorkspaceDbName(await file.text(), bridgeUiOptions),
+        );
+      }
       return new Response(file, {
         headers: {
           "content-type": contentTypeForPath(filePath),
@@ -530,11 +614,9 @@ async function serveStaticUi(
   const indexPath = resolve(root, "index.html");
   const indexFile = Bun.file(indexPath);
   if (await indexFile.exists()) {
-    return new Response(indexFile, {
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-      },
-    });
+    return htmlResponse(
+      injectBridgeWorkspaceDbName(await indexFile.text(), bridgeUiOptions),
+    );
   }
 
   return errorResponse(
@@ -542,6 +624,69 @@ async function serveStaticUi(
     404,
     "ui_not_built",
   );
+}
+
+function getBridgeWorkspaceDbName(projects: BridgeProjectStore): string {
+  return `${WORKSPACE_DB_NAME}-${projects.getProject().id}`;
+}
+
+function htmlResponse(html: string): Response {
+  return new Response(html, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+    },
+  });
+}
+
+function injectBridgeWorkspaceDbName(
+  html: string,
+  options: { workspaceDbName?: string },
+): string {
+  if (!options.workspaceDbName) {
+    return html;
+  }
+
+  const script = `<script data-pondview-bridge-workspace>try{window.localStorage.setItem(${JSON.stringify(WORKSPACE_DB_NAME_OVERRIDE_KEY)},${JSON.stringify(options.workspaceDbName)});}catch{}</script>`;
+  return html.includes("</head>")
+    ? html.replace("</head>", `${script}</head>`)
+    : `${script}${html}`;
+}
+
+async function pickProjectDatabasePath(
+  projectRootPath: string,
+): Promise<string | null> {
+  if (platform() !== "darwin") {
+    throw new Error(
+      "Native DuckDB file picker is not available on this platform.",
+    );
+  }
+
+  const script = [
+    `set selectedFile to choose file name with prompt ${toAppleScriptString("Choose a DuckDB file for this Pondview project")} default name ${toAppleScriptString("pondview-runtime.duckdb")} default location POSIX file ${toAppleScriptString(projectRootPath)}`,
+    "POSIX path of selectedFile",
+  ].join("\n");
+  const process = Bun.spawn(["osascript", "-e", script], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    process.exited,
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+  ]);
+
+  if (exitCode === 0) {
+    return stdout.trim() || null;
+  }
+  if (stderr.toLowerCase().includes("user canceled")) {
+    return null;
+  }
+
+  throw new Error(stderr.trim() || "DuckDB file picker failed.");
+}
+
+function toAppleScriptString(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 function defaultStaticDir(): string {
@@ -553,6 +698,14 @@ function readBoundPort(
   fallbackPort: number,
 ): number {
   return server.port ?? fallbackPort;
+}
+
+function isPathInsideRoot(rootPath: string, targetPath: string): boolean {
+  const relativePath = relative(rootPath, targetPath);
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith("..") && !relativePath.startsWith(`..${sep}`))
+  );
 }
 
 function contentTypeForPath(path: string): string {

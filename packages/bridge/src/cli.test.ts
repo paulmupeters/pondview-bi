@@ -83,11 +83,53 @@ function queryResponse(
   };
 }
 
-describe("bridge CLI serve browser behavior", () => {
-  test("serve opens the local UI by default", async () => {
+describe("bridge CLI help", () => {
+  test("prints a grouped top-level overview", async () => {
+    const output = await captureStdout(() => runCli(["--help"]));
+
+    expect(output).toContain("Usage:\n  pondview <command>");
+    expect(output).toContain("Local Runtime");
+    expect(output).toContain("start          Start the local Pondview app");
+    expect(output).not.toContain("use-existing");
+    expect(output).not.toContain("ui-port");
+    expect(output).not.toContain("pondview bridge");
+    expect(output).not.toContain("pondview serve");
+  });
+
+  test("prints start help without starting a server", async () => {
+    const openedUrls: string[] = [];
+    const output = await captureStdout(() =>
+      runCli(["start", "--help"], {
+        openBrowser: async (url) => {
+          openedUrls.push(url);
+        },
+      }),
+    );
+
+    expect(output).toContain("Usage:\n  pondview start [flags]");
+    expect(output).toContain("--no-ui");
+    expect(output).not.toContain("listening at");
+    expect(openedUrls).toEqual([]);
+  });
+
+  test("prints nested dashboard help", async () => {
+    const output = await captureStdout(() =>
+      runCli(["help", "dashboard", "open"]),
+    );
+
+    expect(output).toContain(
+      "Usage:\n  pondview dashboard open [dashboard-id]",
+    );
+    expect(output).not.toContain("use-existing");
+    expect(output).not.toContain("ui-port");
+  });
+});
+
+describe("bridge CLI start browser behavior", () => {
+  test("start opens the local UI by default", async () => {
     const openedUrls: string[] = [];
 
-    await runCli(["serve", "--port", "0"], {
+    await runCli(["start", "--port", "0"], {
       openBrowser: async (url) => {
         openedUrls.push(url);
       },
@@ -98,10 +140,10 @@ describe("bridge CLI serve browser behavior", () => {
     expect(openedUrls[0]).toStartWith("http://127.0.0.1:");
   });
 
-  test("serve --no-open suppresses browser launch", async () => {
+  test("start --no-open suppresses browser launch", async () => {
     const openedUrls: string[] = [];
 
-    await runCli(["serve", "--port", "0", "--no-open"], {
+    await runCli(["start", "--port", "0", "--no-open"], {
       openBrowser: async (url) => {
         openedUrls.push(url);
       },
@@ -111,10 +153,10 @@ describe("bridge CLI serve browser behavior", () => {
     expect(openedUrls).toEqual([]);
   });
 
-  test("serve --dashboard-mode opens the dashboards UI", async () => {
+  test("start --dashboard-mode opens the dashboards UI", async () => {
     const openedUrls: string[] = [];
 
-    await runCli(["serve", "--port", "0", "--dashboard-mode"], {
+    await runCli(["start", "--port", "0", "--dashboard-mode"], {
       openBrowser: async (url) => {
         openedUrls.push(url);
       },
@@ -125,107 +167,31 @@ describe("bridge CLI serve browser behavior", () => {
     expect(openedUrls[0]).toStartWith("http://127.0.0.1:");
     expect(openedUrls[0]).toEndWith("/dashboards?pondviewMode=dashboard");
   });
-});
 
-describe("bridge CLI serve --use-existing", () => {
-  test("opens a local UI server for the configured bridge port", async () => {
+  test("start --no-ui starts the API without opening the browser", async () => {
     const openedUrls: string[] = [];
-    const uiServers: Array<{
-      host?: string;
-      port?: number;
-      bridgeUrl: string;
-      dashboardMode?: boolean;
-    }> = [];
-
-    await runCli(
-      ["serve", "--use-existing", "--port", "18000", "--ui-port", "0"],
-      {
-        createClient: () => createNoopClient(),
-        startBridgeUiServer: async (options) => {
-          uiServers.push(options);
-          return {
-            url: "http://127.0.0.1:56789",
-            stop: async () => {},
-          };
-        },
+    const output = await captureStdout(() =>
+      runCli(["start", "--port", "0", "--no-ui"], {
         openBrowser: async (url) => {
           openedUrls.push(url);
         },
         waitForShutdown: async () => {},
-      },
-    );
-
-    expect(uiServers).toEqual([
-      {
-        host: "127.0.0.1",
-        port: 0,
-        bridgeUrl: "http://127.0.0.1:18000",
-        dashboardMode: false,
-      },
-    ]);
-    expect(openedUrls).toEqual(["http://127.0.0.1:56789"]);
-  });
-
-  test("opens dashboard mode for an existing bridge", async () => {
-    const openedUrls: string[] = [];
-    const uiServers: Array<{ dashboardMode?: boolean }> = [];
-
-    await runCli(
-      [
-        "serve",
-        "--use-existing",
-        "--port",
-        "18000",
-        "--ui-port",
-        "0",
-        "--dashboard-mode",
-      ],
-      {
-        createClient: () => createNoopClient(),
-        startBridgeUiServer: async (options) => {
-          uiServers.push(options);
-          return {
-            url: "http://127.0.0.1:56789",
-            stop: async () => {},
-          };
-        },
-        openBrowser: async (url) => {
-          openedUrls.push(url);
-        },
-        waitForShutdown: async () => {},
-      },
-    );
-
-    expect(uiServers).toEqual([
-      expect.objectContaining({ dashboardMode: true }),
-    ]);
-    expect(openedUrls).toEqual([
-      "http://127.0.0.1:56789/dashboards?pondviewMode=dashboard",
-    ]);
-  });
-
-  test("fails when the configured bridge is unreachable", async () => {
-    let startedUi = false;
-
-    await expect(
-      runCli(["serve", "--use-existing", "--port", "18000"], {
-        createClient: () => ({
-          ...createNoopClient(),
-          health: async () => {
-            throw new TypeError("fetch failed");
-          },
-        }),
-        startBridgeUiServer: async () => {
-          startedUi = true;
-          return {
-            url: "http://127.0.0.1:56789",
-            stop: async () => {},
-          };
-        },
       }),
-    ).rejects.toThrow("fetch failed");
+    );
 
-    expect(startedUi).toBe(false);
+    expect(output).toContain("Pondview bridge listening at");
+    expect(openedUrls).toEqual([]);
+  });
+
+  test("rejects removed serve/use-existing flags", async () => {
+    await expect(runCli(["serve"])).rejects.toThrow("Unknown command: serve");
+    await expect(runCli(["bridge"])).rejects.toThrow("Unknown command: bridge");
+    await expect(runCli(["start", "--use-existing"])).rejects.toThrow(
+      "Unsupported flag",
+    );
+    await expect(runCli(["start", "--ui-port", "0"])).rejects.toThrow(
+      "Unsupported flag",
+    );
   });
 });
 
@@ -650,33 +616,28 @@ describe("bridge CLI dashboard commands", () => {
   test("dashboard open opens a specific dashboard in dashboard mode", async () => {
     const openedUrls: string[] = [];
 
-    await runCli(
-      [
-        "dashboard",
-        "open",
-        "dash_1",
-        "--use-existing",
-        "--port",
-        "18000",
-        "--ui-port",
-        "0",
-      ],
-      {
-        createClient: () => dashboardClient(),
-        startBridgeUiServer: async () => ({
-          url: "http://127.0.0.1:56789",
-          stop: async () => {},
-        }),
-        openBrowser: async (url) => {
-          openedUrls.push(url);
-        },
-        waitForShutdown: async () => {},
+    await runCli(["dashboard", "open", "dash_1", "--port", "0"], {
+      createClient: () => dashboardClient(),
+      openBrowser: async (url) => {
+        openedUrls.push(url);
       },
-    );
+      waitForShutdown: async () => {},
+    });
 
-    expect(openedUrls).toEqual([
-      "http://127.0.0.1:56789/dashboards/view?id=dash_1&pondviewMode=dashboard",
-    ]);
+    expect(openedUrls).toHaveLength(1);
+    expect(openedUrls[0]).toStartWith("http://127.0.0.1:");
+    expect(openedUrls[0]).toEndWith(
+      "/dashboards/view?id=dash_1&pondviewMode=dashboard",
+    );
+  });
+
+  test("dashboard open rejects removed use-existing flags", async () => {
+    await expect(
+      runCli(["dashboard", "open", "--use-existing"]),
+    ).rejects.toThrow("Unsupported flag");
+    await expect(
+      runCli(["dashboard", "open", "--ui-port", "0"]),
+    ).rejects.toThrow("Unsupported flag");
   });
 });
 

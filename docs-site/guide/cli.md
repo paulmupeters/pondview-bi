@@ -1,7 +1,7 @@
 # Pondview CLI
 
-The Pondview CLI runs a local DuckDB bridge and, when requested, serves the
-Pondview UI from bundled static assets.
+The Pondview CLI runs a local DuckDB bridge and serves the Pondview UI from
+bundled static assets by default.
 
 Use the CLI when you want local files, native DuckDB database attachments, or a
 local app that does not depend on the hosted Pondview deployment.
@@ -12,59 +12,50 @@ From this repository during development:
 
 ```bash
 bun run bridge:build-ui
-bun run bridge -- serve
+bun run bridge -- start
 ```
 
-`pondview serve` starts one localhost server for both the UI and bridge API. By
+`pondview start` starts one localhost server for both the UI and bridge API. By
 default it listens on `127.0.0.1:17817` and opens the local app in your browser.
 
 Use `--no-open` when running from scripts or terminals where opening a browser
 would be noisy:
 
 ```bash
-bun run bridge -- serve --no-open
+bun run bridge -- start --no-open
 ```
 
 ## Commands
 
-### `pondview serve`
+### `pondview start`
 
 Runs the local Pondview app and bridge API together.
 
 ```bash
-pondview serve
-pondview serve --port 17818
-pondview serve --host 127.0.0.1 --port 17817 --no-open
-pondview serve --database ./analytics.duckdb
-pondview serve --project-dir ./my-pondview-project
-pondview serve --readonly
+pondview start
+pondview start --port 17818
+pondview start --host 127.0.0.1 --port 17817 --no-open
+pondview start --database ./analytics.duckdb
+pondview start --project-dir ./my-pondview-project
+pondview start --readonly
+pondview start --no-ui
 ```
 
 This is the default user-facing local mode. API routes win over static UI
 routes, bundled files are served from the CLI package, and unknown `GET` routes
 fall back to `index.html` for React Router.
 
-### `pondview bridge`
+Pass `--no-ui` to run only the bridge API without serving or opening the local
+UI. Use this when the hosted Pondview app should connect to a local bridge, or
+when CLI client commands need a background API runtime.
 
-Runs the bridge API only.
-
-```bash
-pondview bridge
-pondview bridge --port 17817
-pondview bridge --database ./analytics.duckdb
-pondview bridge --project-dir ./my-pondview-project
-pondview bridge --readonly
-```
-
-Use this when the hosted Pondview app should connect to a local bridge, or when
-CLI client commands need a background API runtime without opening the UI.
-
-By default, `serve` and `bridge` use an in-memory DuckDB database as the primary
-catalog. Pass `--database <file.duckdb>` to open a DuckDB file as the primary
-database instead, so unqualified queries such as `SELECT * FROM my_table` run
-against that file. This is different from `pondview attach`, which keeps the
-primary database in memory and exposes the file as an attached catalog that you
-query with its alias, for example `analytics.main.my_table`.
+By default, the local app creates and uses
+`runtime/pondview-runtime.duckdb` in the project folder as the primary catalog.
+Pass `--database <file.duckdb>` to open a different DuckDB file as the primary
+database, so unqualified queries such as `SELECT * FROM my_table` run against
+that file. This is different from `pondview attach`, which exposes a file as an
+attached catalog that you query with its alias, for example
+`analytics.main.my_table`.
 
 Bridge mode also exposes a filesystem-backed Pondview project. By default the
 project root is the directory where the bridge was launched; pass
@@ -73,6 +64,12 @@ published notebooks, and source metadata are written as raw project artifact
 files such as `pondview/...`; bridge metadata lives in `.pondview/project.json`.
 When the bridge starts in `--readonly` mode, project files can be read but not
 mutated.
+
+When `pondview start` opens an empty folder, the local app asks whether to
+initialize local project files or keep working from browser storage. Initializing
+creates `pondview/project.json`, `pondview.sources.local.json`, bridge metadata,
+and the local DuckDB runtime file. Browser mode leaves the folder untouched and
+uses the existing browser IndexedDB workflow for that project folder.
 
 ### Client commands
 
@@ -89,8 +86,9 @@ pondview doctor
 pondview stop
 ```
 
-If no bridge is running, client commands automatically start `pondview bridge`,
-wait for it to become healthy, then retry the original request.
+If no bridge is running, client commands automatically start
+`pondview start --no-ui`, wait for it to become healthy, then retry the original
+request.
 
 Use `--no-autostart` to fail instead of starting a local bridge:
 
@@ -166,11 +164,11 @@ that port.
 
 | Flag | Applies to | Description |
 | --- | --- | --- |
-| `--host <host>` | `serve`, `bridge`, client commands | Host for the local bridge. Defaults to `127.0.0.1`. |
-| `--port <port>` | `serve`, `bridge`, `stop`, client commands | Port for the local bridge. Defaults to `17817`. |
-| `--database <file>` | `serve`, `bridge`, client autostart | Opens a DuckDB file as the bridge's primary database instead of using an in-memory database. |
-| `--project-dir <dir>` | `serve`, `bridge`, client autostart | Filesystem project root for raw Pondview artifacts. Defaults to the launch directory. |
-| `--readonly` | `serve`, `bridge`, `attach` | Starts readonly bridge mode, or attaches a DuckDB source readonly. |
+| `--host <host>` | `start`, client commands | Host for the local bridge. Defaults to `127.0.0.1`. |
+| `--port <port>` | `start`, `stop`, client commands | Port for the local bridge. Defaults to `17817`. |
+| `--database <file>` | `start`, client autostart | Opens a DuckDB file as the bridge's primary database instead of using an in-memory database. |
+| `--project-dir <dir>` | `start`, client autostart | Filesystem project root for raw Pondview artifacts. Defaults to the launch directory. |
+| `--readonly` | `start`, `attach` | Starts readonly bridge mode, or attaches a DuckDB source readonly. |
 | `--token <token>` | all bridge/client commands | Requires or sends a bridge auth token. |
 | `--token-env <name>` | all bridge/client commands | Reads the bridge auth token from an environment variable. |
 | `--url <url>` | client commands | Uses an explicit bridge URL and disables autostart. |
@@ -178,13 +176,14 @@ that port.
 | `--title <title>` | `dashboard rename` | Sets the dashboard title. |
 | `--yes` | `dashboard delete` | Confirms dashboard deletion. |
 | `--no-autostart` | client commands | Fails when no bridge is reachable instead of starting one. |
-| `--no-open` | `serve` | Does not open the browser after starting the local app. |
+| `--no-open` | `start`, `dashboard open` | Does not open the browser after starting the local app. |
+| `--no-ui` | `start` | Starts the bridge API only. |
 | `--force` | `stop` | Stops whatever is listening on the configured port without checking whether it is a Pondview bridge. |
 
 ## Bundled UI assets
 
-`pondview serve` serves the UI from `packages/bridge/dist`. Build those assets
-before using local serve from a fresh checkout:
+`pondview start` serves the UI from `packages/bridge/dist`. Build those assets
+before using local start from a fresh checkout:
 
 ```bash
 bun run bridge:build-ui
@@ -232,7 +231,7 @@ Bridge-managed secrets are stored in `${XDG_CONFIG_HOME:-~/.config}/pondview/sec
 - TODO: Add `pondview ui update` or a similar opt-in command if hosted asset
   syncing becomes useful later.
 - TODO: Add project commands such as `pondview project inspect`,
-  `pondview project run`, and `pondview project serve`.
+  `pondview project run`, and `pondview project start`.
 - TODO: Add file import commands for CSV and Parquet staging, for example
   `pondview import ./customers.csv --table uploads.customers`.
 - TODO: Add persistent local source binding files for project handoff.

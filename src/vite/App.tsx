@@ -10,6 +10,7 @@ import {
 import { CommandPalette } from "@/components/CommandPalette";
 import { CustomCssLoader } from "@/components/custom-css-loader";
 import { DashboardModeNav } from "@/components/dashboard-mode-nav";
+import { ProjectStartupGate } from "@/components/project-startup-gate";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { SqlRuntimeBootstrap } from "@/components/sql-runtime-bootstrap";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -24,6 +25,7 @@ const DataPage = lazy(() => import("@/app/data/page"));
 const HomePage = lazy(() => import("@/app/page"));
 const SettingsPage = lazy(() => import("@/app/settings/page"));
 const SqlEditorPage = lazy(() => import("@/app/sql-editor/page"));
+const StartPreviewPage = lazy(() => import("@/app/start/page"));
 
 function ChatRedirect() {
   const [searchParams] = useSearchParams();
@@ -103,13 +105,19 @@ export function App() {
     () => resolveDashboardMode(location.search),
     [location.search],
   );
+  const isStartPreview = location.pathname === "/start";
 
   return (
     <ThemeProvider defaultTheme="system" storageKey="pondview-theme">
       <TooltipProvider>
         <CustomCssLoader />
         <SqlRuntimeBootstrap />
-        {isDashboardMode ? (
+        {!isDashboardMode && !isStartPreview ? <ProjectStartupGate /> : null}
+        {isStartPreview ? (
+          <Suspense fallback={null}>
+            <StartPreviewPage />
+          </Suspense>
+        ) : isDashboardMode ? (
           <DashboardModeRoutes />
         ) : (
           <>

@@ -61,6 +61,26 @@ describe("bridge server modes", () => {
     expect(await fallback.text()).toContain("Pondview test shell");
   });
 
+  test("serve mode scopes browser workspace storage to the bridge project", async () => {
+    const staticDir = createStaticDir();
+    const projectDir = createTempDir();
+    const server = await startTrackedServer({
+      serveUi: true,
+      staticDir,
+      projectDir,
+    });
+
+    const project = (await (await fetch(`${server.url}/project`)).json()) as {
+      project: { id: string };
+    };
+    const root = await fetch(`${server.url}/`);
+    const html = await root.text();
+
+    expect(html).toContain("data-pondview-bridge-workspace");
+    expect(html).toContain("pondview-workspace-name-override");
+    expect(html).toContain(`pondview-workspace-${project.project.id}`);
+  });
+
   test("serve mode rejects encoded static path traversal", async () => {
     const rootDir = createTempDir();
     const staticDir = join(rootDir, "app");
@@ -102,7 +122,13 @@ describe("bridge server modes", () => {
 
   test("serve mode keeps API routes ahead of static routing", async () => {
     const staticDir = createStaticDir();
-    const server = await startTrackedServer({ serveUi: true, staticDir });
+    const projectDir = createTempDir();
+    const runtimePath = join(projectDir, "runtime", "pondview-runtime.duckdb");
+    const server = await startTrackedServer({
+      serveUi: true,
+      staticDir,
+      projectDir,
+    });
 
     const ping = await fetch(`${server.url}/ping`);
     expect(await ping.json()).toEqual({ status: "ok" });
@@ -112,6 +138,57 @@ describe("bridge server modes", () => {
       host: "127.0.0.1",
       port: Number(new URL(server.url).port),
       requires_auth: false,
+      database: {
+        mode: "memory",
+      },
+    });
+    expect(existsSync(runtimePath)).toBe(false);
+
+    const query = await fetch(`${server.url}/query`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sql: "SELECT 7 AS value;" }),
+    });
+    expect(await query.json()).toMatchObject({
+      rows: [{ value: 7 }],
+      rowCount: 1,
+    });
+    expect(existsSync(runtimePath)).toBe(false);
+  });
+
+  test("project init creates local runtime database after explicit choice", async () => {
+    const projectDir = createTempDir();
+    const runtimePath = join(projectDir, "runtime", "pondview-runtime.duckdb");
+    const server = await startTrackedServer({
+      serveUi: true,
+      staticDir: createStaticDir(),
+      projectDir,
+    });
+
+    const health = await fetch(`${server.url}/health`);
+    expect(health.status).toBe(200);
+    expect(existsSync(runtimePath)).toBe(false);
+
+    const init = await fetch(`${server.url}/project/init`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: [
+          {
+            path: "pondview/project.json",
+            content: '{ "schemaVersion": 1, "name": "Local" }\n',
+          },
+        ],
+      }),
+    });
+    expect(init.status).toBe(200);
+
+    const config = await fetch(`${server.url}/api/duckdb/config`);
+    expect(await config.json()).toMatchObject({
+      database: {
+        mode: "file",
+        name: "pondview-runtime.duckdb",
+      },
     });
 
     const query = await fetch(`${server.url}/query`, {
@@ -123,6 +200,51 @@ describe("bridge server modes", () => {
       rows: [{ value: 7 }],
       rowCount: 1,
     });
+    expect(existsSync(runtimePath)).toBe(true);
+  });
+
+  test("project init can use a custom local runtime database path", async () => {
+    const projectDir = createTempDir();
+    const runtimePath = join(projectDir, "data", "custom.duckdb");
+    const server = await startTrackedServer({
+      serveUi: true,
+      staticDir: createStaticDir(),
+      projectDir,
+    });
+
+    const init = await fetch(`${server.url}/project/init`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: [
+          {
+            path: "pondview/project.json",
+            content: '{ "schemaVersion": 1, "name": "Local" }\n',
+          },
+        ],
+        databasePath: "data/custom.duckdb",
+      }),
+    });
+    expect(init.status).toBe(200);
+
+    const config = await fetch(`${server.url}/api/duckdb/config`);
+    expect(await config.json()).toMatchObject({
+      database: {
+        mode: "file",
+        name: "custom.duckdb",
+      },
+    });
+
+    const query = await fetch(`${server.url}/query`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sql: "SELECT 11 AS value;" }),
+    });
+    expect(await query.json()).toMatchObject({
+      rows: [{ value: 11 }],
+      rowCount: 1,
+    });
+    expect(existsSync(runtimePath)).toBe(true);
   });
 
   test("database-backed bridge runs queries against the primary DuckDB file", async () => {
@@ -419,6 +541,36 @@ describe("bridge server modes", () => {
       readFileSync(join(projectDir, ".pondview", "project.json"), "utf8"),
     );
     expect(metadata.project.name).toBe("Revenue");
+  });
+
+  test("project endpoints read settings export metadata", async () => {
+    const projectDir = createTempDir();
+    mkdirSync(join(projectDir, ".pondview"), { recursive: true });
+    writeFileSync(
+      join(projectDir, ".pondview", "project.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        project: {
+          id: "browser-project-exported",
+          name: "Exported Revenue",
+          backingKind: "browser-indexeddb",
+          openedAt: 1,
+          updatedAt: 1,
+          defaultSourceRef: "analytics",
+        },
+      }),
+    );
+
+    const server = await startTrackedServer({ projectDir });
+    const project = await fetch(`${server.url}/project`);
+
+    expect(await project.json()).toMatchObject({
+      project: {
+        name: "Exported Revenue",
+        defaultSourceRef: "analytics",
+        backingKind: "bridge-filesystem",
+      },
+    });
   });
 
   test("project endpoints reject traversal and readonly mutations", async () => {

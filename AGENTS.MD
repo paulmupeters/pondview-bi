@@ -35,8 +35,8 @@ Bridge CLI/runtime commands:
 
 ```bash
 bun run bridge -- help
-bun run bridge -- bridge
-bun run bridge -- serve
+bun run bridge -- start
+bun run bridge -- start --no-ui
 bun run bridge:build-ui
 bun run bridge:typecheck
 bun run bridge-protocol:typecheck
@@ -121,8 +121,8 @@ The repository includes a Bun CLI exposed as the `pondview` bin and developed vi
 
 Current commands include:
 
-- `pondview bridge` — start the bridge API server.
-- `pondview serve` — start the bridge API server, serve the built Pondview UI from `packages/bridge/dist`, and open the browser unless `--no-open` is passed.
+- `pondview start` — start the bridge API server, serve the built Pondview UI from `packages/bridge/dist`, and open the browser unless `--no-open` is passed.
+- `pondview start --no-ui` — start the bridge API server without serving the UI.
 - `pondview attach <file.duckdb|s3://...> --as <alias>` — attach a DuckDB database source.
 - `pondview list-sources`, `pondview detach <source-id-or-alias>`, and `pondview query <sql>` — client commands against a running bridge.
 
@@ -132,7 +132,7 @@ When changing the bridge CLI/server/protocol:
 - Update both server tests and browser bridge client tests when auth, config discovery, or query response shapes change.
 - Treat `--token`, `--token-env`, `PONDVIEW_TOKEN`, connection strings, and source identifiers as sensitive in logs and docs.
 - Run focused checks such as `bun test packages/bridge/src/*.test.ts`, `bun test packages/bridge/src/runtime/*.test.ts`, `bun run bridge:typecheck`, and `bun run bridge-protocol:typecheck`.
-- If `pondview serve` behavior changes, rebuild or document the bundled UI with `bun run bridge:build-ui`.
+- If `pondview start` UI-serving behavior changes, rebuild or document the bundled UI with `bun run bridge:build-ui`.
 
 ## AI feature guidance
 

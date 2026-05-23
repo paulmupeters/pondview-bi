@@ -171,21 +171,25 @@ export class BridgeProjectStore {
     name?: string;
     defaultSourceRef?: string;
   } | null {
-    const manifestPath = this.resolveProjectPath("pondview/project.json");
-    if (!existsSync(manifestPath)) {
+    const manifestPath = ["pondview/project.json", ".pondview/project.json"]
+      .map((path) => this.resolveProjectPath(path))
+      .find((path) => existsSync(path));
+    if (!manifestPath) {
       return null;
     }
 
     try {
       const parsed = JSON.parse(readFileSync(manifestPath, "utf8")) as {
         name?: unknown;
+        project?: { name?: unknown; defaultSourceRef?: unknown };
         defaultSourceRef?: unknown;
       };
+      const metadata = parsed.project ?? parsed;
       return {
-        name: typeof parsed.name === "string" ? parsed.name : undefined,
+        name: typeof metadata.name === "string" ? metadata.name : undefined,
         defaultSourceRef:
-          typeof parsed.defaultSourceRef === "string"
-            ? parsed.defaultSourceRef
+          typeof metadata.defaultSourceRef === "string"
+            ? metadata.defaultSourceRef
             : undefined,
       };
     } catch {

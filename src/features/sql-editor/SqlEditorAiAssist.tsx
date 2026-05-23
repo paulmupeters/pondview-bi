@@ -15,7 +15,6 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { nanoid } from "nanoid";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { canUseBridgeAi, createBridgeChatTransport } from "@/ai/bridge-chat";
 import { createSqlEditorAssistAgent } from "@/ai/client/agent";
@@ -271,7 +270,6 @@ export function SqlEditorAiAssist({
 
     try {
       await sendMessage({
-        messageId: nanoid(),
         text: prompt,
       });
     } catch (error) {

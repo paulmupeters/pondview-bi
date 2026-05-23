@@ -6,10 +6,41 @@ import type {
 import type { ProjectArtifactTextFile } from "@/lib/project-artifacts/export";
 import {
   BridgeProjectStore,
+  getProjectStoreMode,
   isBridgeProjectStoreAvailable,
+  setProjectStoreMode,
 } from "@/lib/project-store";
 
 describe("BridgeProjectStore", () => {
+  test("stores explicit project store mode per bridge project", () => {
+    const values = new Map<string, string>();
+    const previousWindow = globalThis.window;
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        localStorage: {
+          getItem: (key: string) => values.get(key) ?? null,
+          setItem: (key: string, value: string) => {
+            values.set(key, value);
+          },
+        },
+      },
+    });
+
+    try {
+      setProjectStoreMode("bridge-project-a", "browser-indexeddb");
+      setProjectStoreMode("bridge-project-b", "bridge-filesystem");
+
+      expect(getProjectStoreMode("bridge-project-a")).toBe("browser-indexeddb");
+      expect(getProjectStoreMode("bridge-project-b")).toBe("bridge-filesystem");
+    } finally {
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: previousWindow,
+      });
+    }
+  });
+
   test("reads and mutates project files through bridge project endpoints", async () => {
     let project: BridgeProject = {
       id: "bridge-project-root",

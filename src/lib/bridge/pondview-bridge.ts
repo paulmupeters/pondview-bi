@@ -1,7 +1,9 @@
 import {
   type BridgeCapabilitiesResponse,
+  type BridgeProjectDatabasePathPickResponse,
   type BridgeProjectDeleteFilesRequest,
   type BridgeProjectFilesResponse,
+  type BridgeProjectInitRequest,
   type BridgeProjectReplaceFilesRequest,
   type BridgeProjectResponse,
   type BridgeProjectSaveFilesRequest,
@@ -13,6 +15,7 @@ import {
   type BridgeSourcesResponse,
   bridgeCapabilitiesResponseSchema,
   bridgeConfigResponseSchema,
+  bridgeProjectDatabasePathPickResponseSchema,
   bridgeProjectFilesResponseSchema,
   bridgeProjectResponseSchema,
   bridgeQueryResponseSchema,
@@ -609,6 +612,29 @@ export async function saveBridgeProjectFiles(
   signal?: AbortSignal,
 ): Promise<BridgeProjectFilesResponse> {
   return mutateBridgeProjectFiles("PUT", "/project/files", input, signal);
+}
+
+export async function initializeBridgeProject(
+  input: BridgeProjectInitRequest,
+  signal?: AbortSignal,
+): Promise<BridgeProjectFilesResponse> {
+  return mutateBridgeProjectFiles("POST", "/project/init", input, signal);
+}
+
+export async function pickBridgeProjectDatabasePath(
+  signal?: AbortSignal,
+): Promise<BridgeProjectDatabasePathPickResponse> {
+  const response = await fetch(bridgeUrl("/project/database-path/pick"), {
+    method: "POST",
+    headers: getAuthHeaders(),
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+  return bridgeProjectDatabasePathPickResponseSchema.parse(
+    await response.json(),
+  );
 }
 
 export async function replaceBridgeProjectFiles(

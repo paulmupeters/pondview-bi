@@ -22,8 +22,10 @@ import {
 
 const OPEN_PROJECT_SESSION_KEY = "open-project";
 const PROJECT_REGISTRY_SESSION_KEY = "project-registry";
+const PROJECT_STORE_MODE_KEY_PREFIX = "pondview.project-store-mode";
 
 export type ProjectBackingKind = "browser-indexeddb" | "bridge-filesystem";
+export type ProjectStoreMode = ProjectBackingKind;
 
 export type OpenProjectState = {
   id: string;
@@ -210,6 +212,40 @@ function toArtifactTextFile(row: ProjectFileRow): ProjectArtifactTextFile {
     path: row.path,
     content: row.content,
   };
+}
+
+function isBrowser(): boolean {
+  return (
+    typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+  );
+}
+
+function getProjectStoreModeKey(projectId: string): string {
+  return `${PROJECT_STORE_MODE_KEY_PREFIX}:${projectId}`;
+}
+
+export function getProjectStoreMode(
+  projectId: string,
+): ProjectStoreMode | null {
+  if (!isBrowser()) {
+    return null;
+  }
+
+  const value = window.localStorage.getItem(getProjectStoreModeKey(projectId));
+  return value === "browser-indexeddb" || value === "bridge-filesystem"
+    ? value
+    : null;
+}
+
+export function setProjectStoreMode(
+  projectId: string,
+  mode: ProjectStoreMode,
+): void {
+  if (!isBrowser()) {
+    return;
+  }
+
+  window.localStorage.setItem(getProjectStoreModeKey(projectId), mode);
 }
 
 async function ensureProjectStores(): Promise<void> {
@@ -526,7 +562,19 @@ export class ActiveProjectStore implements ProjectBackingStore {
   private readonly bridge = new BridgeProjectStore();
 
   private async activeStore(): Promise<ProjectBackingStore> {
-    return (await isBridgeProjectStoreAvailable()) ? this.bridge : this.browser;
+    if (!(await isBridgeProjectStoreAvailable())) {
+      return this.browser;
+    }
+
+    const bridgeProject = await this.bridge.getOpenProject();
+    if (
+      bridgeProject &&
+      getProjectStoreMode(bridgeProject.id) === "browser-indexeddb"
+    ) {
+      return this.browser;
+    }
+
+    return this.bridge;
   }
 
   async getOpenProject(): Promise<OpenProjectState | null> {

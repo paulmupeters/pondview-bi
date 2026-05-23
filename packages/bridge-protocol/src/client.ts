@@ -3,8 +3,10 @@ import {
   type BridgeCapabilitiesResponse,
   type BridgeCatalogResponse,
   type BridgeHealthResponse,
+  type BridgeProjectDatabasePathPickResponse,
   type BridgeProjectDeleteFilesRequest,
   type BridgeProjectFilesResponse,
+  type BridgeProjectInitRequest,
   type BridgeProjectReplaceFilesRequest,
   type BridgeProjectResponse,
   type BridgeProjectSaveFilesRequest,
@@ -27,6 +29,7 @@ import {
   bridgeCatalogResponseSchema,
   bridgeErrorResponseSchema,
   bridgeHealthResponseSchema,
+  bridgeProjectDatabasePathPickResponseSchema,
   bridgeProjectFilesResponseSchema,
   bridgeProjectResponseSchema,
   bridgeQueryResponseSchema,
@@ -91,6 +94,23 @@ export class BridgeClient {
       method: "PUT",
       body: JSON.stringify(input),
     });
+  }
+
+  initProject(
+    input: BridgeProjectInitRequest,
+  ): Promise<BridgeProjectFilesResponse> {
+    return this.request("/project/init", bridgeProjectFilesResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  pickProjectDatabasePath(): Promise<BridgeProjectDatabasePathPickResponse> {
+    return this.request(
+      "/project/database-path/pick",
+      bridgeProjectDatabasePathPickResponseSchema,
+      { method: "POST" },
+    );
   }
 
   replaceProjectFiles(

@@ -342,3 +342,155 @@
   font-family: var(--font-mono);
   font-weight: bold;
 } */
+
+@keyframes startup-gate-enter {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes startup-gate-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes startup-gate-fade-right {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes startup-gate-ripple {
+  0% {
+    transform: scale(0.65);
+    opacity: 0;
+  }
+
+  12% {
+    opacity: 0.32;
+  }
+
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+
+@keyframes startup-gate-path-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.startup-gate-overlay {
+  background: color-mix(in oklch, var(--background) 95%, transparent);
+}
+
+.startup-gate-ripple-ring {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 12rem;
+  width: 12rem;
+  margin-top: -6rem;
+  margin-left: -6rem;
+  border: 1px solid color-mix(in oklch, var(--primary) 28%, transparent);
+  border-radius: 9999px;
+  animation: startup-gate-ripple 7s ease-out infinite;
+  animation-fill-mode: backwards;
+  pointer-events: none;
+}
+
+.startup-gate-ripple-ring-delay-1 {
+  animation-delay: 2.3s;
+}
+
+.startup-gate-ripple-ring-delay-2 {
+  animation-delay: 4.6s;
+}
+
+.startup-gate-panel {
+  animation: startup-gate-enter 0.85s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.startup-gate-intro-item {
+  animation: startup-gate-fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.startup-gate-choice {
+  animation: startup-gate-fade-right 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.startup-gate-choice-icon {
+  transition:
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.35s ease,
+    background-color 0.35s ease;
+}
+
+.startup-gate-choice-arrow {
+  opacity: 0;
+  transform: translateX(-8px);
+  transition:
+    opacity 0.3s ease,
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.startup-gate-choice:hover .startup-gate-choice-icon {
+  transform: scale(1.08) translateY(-1px);
+  border-color: color-mix(in oklch, var(--primary) 40%, var(--border));
+  background: color-mix(in oklch, var(--primary) 8%, var(--background));
+}
+
+.startup-gate-choice:hover .startup-gate-choice-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.startup-gate-footer {
+  animation: startup-gate-fade-right 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.startup-gate-path {
+  animation: startup-gate-path-pulse 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .startup-gate-ripple-ring,
+  .startup-gate-panel,
+  .startup-gate-intro-item,
+  .startup-gate-choice,
+  .startup-gate-footer,
+  .startup-gate-path {
+    animation: none;
+  }
+
+  .startup-gate-choice-arrow {
+    opacity: 1;
+    transform: none;
+  }
+}
