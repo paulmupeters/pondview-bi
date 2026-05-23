@@ -770,13 +770,13 @@ async function listen(
   });
 }
 
-async function closeServer(
-  server: Server,
-): Promise<void> {
+async function closeServer(server: Server): Promise<void> {
   await new Promise<void>((resolveClose, rejectClose) => {
     server.close((error) => {
       if (error) {
-        if ((error as NodeJS.ErrnoException).code === "ERR_SERVER_NOT_RUNNING") {
+        if (
+          (error as NodeJS.ErrnoException).code === "ERR_SERVER_NOT_RUNNING"
+        ) {
           resolveClose();
           return;
         }
@@ -837,9 +837,7 @@ async function writeResponse(
   outgoing.end(bytes);
 }
 
-async function readIncomingBody(
-  incoming: IncomingMessage,
-): Promise<Buffer> {
+async function readIncomingBody(incoming: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of incoming) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
