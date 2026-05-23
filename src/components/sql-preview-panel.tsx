@@ -92,6 +92,7 @@ export interface SqlPreviewPanelProps {
   backendPreference?: SqlBackendPreference;
   catalogContext?: string | null;
   defaultOpen?: boolean;
+  alwaysOpen?: boolean;
   onQueryChange?: (newSql: string) => void;
   onSave?: (newSql: string) => Promise<void>;
   onRunStart?: () => void;
@@ -109,6 +110,7 @@ export const SqlPreviewPanel = forwardRef<
     backendPreference,
     catalogContext,
     defaultOpen = false,
+    alwaysOpen = false,
     onQueryChange,
     onSave,
     onRunStart,
@@ -231,6 +233,109 @@ export const SqlPreviewPanel = forwardRef<
   const isBusy = isSaving || isRunning;
   const hasChanges = editedSql !== query;
 
+  const editorContent = (
+    <>
+      <Textarea
+        ref={textareaRef}
+        value={editedSql}
+        onChange={(event) => {
+          const nextSql = event.target.value;
+          setEditedSql(nextSql);
+          onQueryChange?.(nextSql);
+        }}
+        readOnly={!onSave}
+        className={cn(
+          "min-h-35 font-mono text-sm",
+          !onSave && "cursor-default opacity-80",
+        )}
+        placeholder="SELECT * FROM ..."
+        onKeyDown={(event) => {
+          if (
+            ((event.metaKey || event.ctrlKey) && event.key === "Enter") ||
+            (event.shiftKey && event.key === "Enter")
+          ) {
+            event.preventDefault();
+            if (!isBusy) {
+              void handleRun();
+            }
+          }
+        }}
+      />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-muted-foreground">
+            Cmd/Ctrl/Shift + Enter to run
+          </span>
+          {lastRunDuration !== null && (
+            <span className="text-[11px] text-muted-foreground">
+              {Math.round(lastRunDuration)}ms
+            </span>
+          )}
+          {hasChanges && onSave && (
+            <span className="text-[11px] text-amber-600 dark:text-amber-400">
+              unsaved changes — save to persist
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {onSave && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCancel}
+              disabled={isBusy}
+            >
+              Cancel
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void handleRun()}
+            disabled={isBusy || !editedSql.trim()}
+          >
+            {isRunning ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Running
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <Play className="h-3 w-3" />
+                Run
+              </span>
+            )}
+          </Button>
+          {onSave && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void handleSave()}
+              disabled={!hasChanges || isBusy}
+            >
+              {isSaving ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Saving...
+                </span>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </>
+  );
+
+  if (alwaysOpen) {
+    return <div className="space-y-2">{editorContent}</div>;
+  }
+
   return (
     <Collapsible defaultOpen={defaultOpen} className="inline-block w-full">
       <CollapsibleTrigger asChild>
@@ -248,102 +353,7 @@ export const SqlPreviewPanel = forwardRef<
           </span>
         </button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-2 pt-2">
-        <Textarea
-          ref={textareaRef}
-          value={editedSql}
-          onChange={(event) => {
-            const nextSql = event.target.value;
-            setEditedSql(nextSql);
-            onQueryChange?.(nextSql);
-          }}
-          readOnly={!onSave}
-          className={cn(
-            "min-h-35 font-mono text-sm",
-            !onSave && "cursor-default opacity-80",
-          )}
-          placeholder="SELECT * FROM ..."
-          onKeyDown={(event) => {
-            if (
-              ((event.metaKey || event.ctrlKey) && event.key === "Enter") ||
-              (event.shiftKey && event.key === "Enter")
-            ) {
-              event.preventDefault();
-              if (!isBusy) {
-                void handleRun();
-              }
-            }
-          }}
-        />
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] text-muted-foreground">
-              Cmd/Ctrl/Shift + Enter to run
-            </span>
-            {lastRunDuration !== null && (
-              <span className="text-[11px] text-muted-foreground">
-                {Math.round(lastRunDuration)}ms
-              </span>
-            )}
-            {hasChanges && onSave && (
-              <span className="text-[11px] text-amber-600 dark:text-amber-400">
-                unsaved changes — save to persist
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {onSave && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleCancel}
-                disabled={isBusy}
-              >
-                Cancel
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void handleRun()}
-              disabled={isBusy || !editedSql.trim()}
-            >
-              {isRunning ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Running
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5">
-                  <Play className="h-3 w-3" />
-                  Run
-                </span>
-              )}
-            </Button>
-            {onSave && (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void handleSave()}
-                disabled={!hasChanges || isBusy}
-              >
-                {isSaving ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Saving...
-                  </span>
-                ) : (
-                  "Save"
-                )}
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {error && <p className="text-xs text-destructive">{error}</p>}
-      </CollapsibleContent>
+      <CollapsibleContent className="space-y-2 pt-2"></CollapsibleContent>
     </Collapsible>
   );
 });

@@ -7,7 +7,7 @@ import {
 } from "@/lib/sql/sql-runtime";
 
 export type DashboardSourceKind = "runtime" | "motherduck" | "external";
-export type DashboardExternalType = "postgres" | "mysql" | "sqlite";
+export type DashboardExternalType = "postgres" | "mysql" | "sqlite" | "quack";
 
 export type DashboardSourceDescriptor = {
   kind: DashboardSourceKind;
@@ -81,7 +81,8 @@ export function buildDashboardSourceDescriptor(input: {
     external &&
     (external.type === "postgres" ||
       external.type === "mysql" ||
-      external.type === "sqlite")
+      external.type === "sqlite" ||
+      external.type === "quack")
   ) {
     return normalizeDashboardSourceDescriptor({
       kind: "external",
@@ -116,9 +117,7 @@ export function parseDashboardSourceDescriptor(
   const runtimeBackend = candidate.runtimeBackend;
   if (
     (kind !== "runtime" && kind !== "motherduck" && kind !== "external") ||
-    (runtimeBackend !== "duckdb-wasm" &&
-      runtimeBackend !== "bridge" &&
-      runtimeBackend !== "duckdb-http")
+    (runtimeBackend !== "duckdb-wasm" && runtimeBackend !== "bridge")
   ) {
     return null;
   }
@@ -134,7 +133,8 @@ export function parseDashboardSourceDescriptor(
     kind === "external" &&
     (candidate.externalType === "postgres" ||
       candidate.externalType === "mysql" ||
-      candidate.externalType === "sqlite")
+      candidate.externalType === "sqlite" ||
+      candidate.externalType === "quack")
   ) {
     descriptor.externalType = candidate.externalType;
   }

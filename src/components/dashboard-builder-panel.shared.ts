@@ -52,7 +52,7 @@ export function resolveStoredChartDbIdentifier(options: {
     return candidates[0] ?? DEFAULT_WASM_DB_IDENTIFIER;
   }
 
-  if (options.sqlBackend === "bridge" || options.sqlBackend === "duckdb-http") {
+  if (options.sqlBackend === "bridge") {
     return (
       candidates
         .filter((value) => value === options.payloadDbIdentifier?.trim())

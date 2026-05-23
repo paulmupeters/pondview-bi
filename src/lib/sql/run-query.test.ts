@@ -33,40 +33,6 @@ describe("runQuery routing", () => {
     expect(result.rows).toEqual([{ ok: true }]);
   });
 
-  test("routes to duckdb-http and returns backend metadata", async () => {
-    let receivedSignal: AbortSignal | undefined;
-
-    const runQuery = createRunQuery({
-      resolveBackend: () => "duckdb-http",
-      runDuckDbHttp: async (_sql, signal) => {
-        receivedSignal = signal;
-        return {
-          rows: [{ ok: true }],
-          columns: [{ name: "ok", type: "BOOLEAN" }],
-          durationMs: 8,
-        };
-      },
-      runBridge: async () => {
-        throw new Error("should not reach bridge");
-      },
-      runWasm: async () => {
-        throw new Error("should not reach wasm");
-      },
-      assertWasmCompatibleIdentifier: () => {},
-    });
-
-    const controller = new AbortController();
-    const result = await runQuery({
-      sql: "SELECT 1",
-      signal: controller.signal,
-      backendPreference: "duckdb-http",
-    });
-
-    expect(receivedSignal).toBe(controller.signal);
-    expect(result.backend).toBe("duckdb-http");
-    expect(result.rows).toEqual([{ ok: true }]);
-  });
-
   test("routes to duckdb-wasm and validates identifier compatibility", async () => {
     let validatedIdentifier: string | undefined;
 
@@ -123,10 +89,10 @@ describe("runQuery routing", () => {
     expect(result.backend).toBe("bridge");
   });
 
-  test("routes placeholder identifiers to duckdb-http when http is selected", async () => {
+  test("routes placeholder identifiers to bridge when bridge is selected", async () => {
     const runQuery = createRunQuery({
-      resolveBackend: () => "duckdb-http",
-      runDuckDbHttp: async () => ({
+      resolveBackend: () => "bridge",
+      runBridge: async () => ({
         rows: [{ ok: true }],
         columns: [{ name: "ok", type: "BOOLEAN" }],
         durationMs: 6,
@@ -140,18 +106,18 @@ describe("runQuery routing", () => {
     const result = await runQuery({
       sql: "SELECT 1",
       dbIdentifier: "wasm:local",
-      backendPreference: "duckdb-http",
+      backendPreference: "bridge",
     });
 
-    expect(result.backend).toBe("duckdb-http");
+    expect(result.backend).toBe("bridge");
   });
 
-  test("runs MotherDuck queries through duckdb-http attach lifecycle", async () => {
+  test("runs MotherDuck queries through bridge attach lifecycle", async () => {
     const receivedSql: string[] = [];
     let receivedSignal: AbortSignal | undefined;
     const runQuery = createRunQuery({
-      resolveBackend: () => "duckdb-http",
-      runDuckDbHttp: async (sql, signal) => {
+      resolveBackend: () => "bridge",
+      runBridge: async (sql, signal) => {
         receivedSql.push(sql);
         receivedSignal = signal;
         if (sql.includes("current_catalog()")) {
@@ -188,7 +154,7 @@ describe("runQuery routing", () => {
       sql: "SELECT * FROM unicorns",
       dbIdentifier: "md:my_db",
       signal: controller.signal,
-      backendPreference: "duckdb-http",
+      backendPreference: "bridge",
     });
 
     expect(receivedSignal).toBe(controller.signal);
@@ -202,7 +168,7 @@ describe("runQuery routing", () => {
       'USE "duckdb";',
       'DETACH DATABASE IF EXISTS "motherduck";',
     ]);
-    expect(result.backend).toBe("duckdb-http");
+    expect(result.backend).toBe("bridge");
     expect(result.columns).toEqual([
       { name: "company", type: "VARCHAR" },
       { name: "valuation", type: "VARCHAR" },
@@ -213,8 +179,8 @@ describe("runQuery routing", () => {
   test("preserves explicit catalog-qualified MotherDuck queries", async () => {
     const receivedSql: string[] = [];
     const runQuery = createRunQuery({
-      resolveBackend: () => "duckdb-http",
-      runDuckDbHttp: async (sql) => {
+      resolveBackend: () => "bridge",
+      runBridge: async (sql) => {
         receivedSql.push(sql);
         if (sql.includes("current_catalog()")) {
           return {
@@ -245,7 +211,7 @@ describe("runQuery routing", () => {
     const result = await runQuery({
       sql: "SELECT * FROM motherduck.unicorns",
       dbIdentifier: "md:my_db",
-      backendPreference: "duckdb-http",
+      backendPreference: "bridge",
     });
 
     expect(receivedSql).toEqual([
@@ -264,8 +230,8 @@ describe("runQuery routing", () => {
   test("rewrites default-schema MotherDuck queries to catalog-qualified refs", async () => {
     const receivedSql: string[] = [];
     const runQuery = createRunQuery({
-      resolveBackend: () => "duckdb-http",
-      runDuckDbHttp: async (sql) => {
+      resolveBackend: () => "bridge",
+      runBridge: async (sql) => {
         receivedSql.push(sql);
         if (sql.includes("current_catalog()")) {
           return {
@@ -289,7 +255,7 @@ describe("runQuery routing", () => {
     await runQuery({
       sql: "SELECT * FROM main.unicorns",
       dbIdentifier: "md:my_db",
-      backendPreference: "duckdb-http",
+      backendPreference: "bridge",
     });
 
     expect(receivedSql).toEqual([
@@ -363,34 +329,6 @@ describe("runQuery routing", () => {
 
     await expect(runQuery({ sql: "SELECT 1" })).rejects.toThrow(
       "Bridge authentication failed",
-    );
-    expect(wasmCalled).toBe(false);
-  });
-
-  test("does not fallback when duckdb-http execution fails", async () => {
-    let wasmCalled = false;
-
-    const runQuery = createRunQuery({
-      resolveBackend: () => "duckdb-http",
-      runDuckDbHttp: async () => {
-        throw new Error("DuckDB HTTP authentication failed");
-      },
-      runBridge: async () => {
-        throw new Error("should not reach bridge");
-      },
-      runWasm: async () => {
-        wasmCalled = true;
-        return {
-          rows: [],
-          columns: [],
-          durationMs: 0,
-        };
-      },
-      assertWasmCompatibleIdentifier: () => {},
-    });
-
-    await expect(runQuery({ sql: "SELECT 1" })).rejects.toThrow(
-      "DuckDB HTTP authentication failed",
     );
     expect(wasmCalled).toBe(false);
   });

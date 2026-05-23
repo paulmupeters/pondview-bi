@@ -1,6 +1,9 @@
 # AI Provider Configuration
 
-BI Chat uses a browser-first AI configuration flow for the primary chat UI. Provider choice, model ID, and API keys are saved in local storage and used directly by the client-side agent.
+BI Chat supports two AI configuration paths:
+
+- With Bridge query-ready, provider credentials can be saved in the Bridge secret store and chat requests are sent to Bridge.
+- Without Bridge, the browser-first flow stores provider keys in session storage and uses the client-side agent directly.
 
 ## Where configuration is set
 
@@ -12,7 +15,7 @@ Open **Settings -> AI Provider Configuration** and set:
 - For Ollama: optional base URL, defaulting to `http://localhost:11434/v1`
 - For OpenAI Compatible: base URL and provider name
 
-All of these values are saved by `saveAiSettingsToStorage()` and reloaded by `loadAiSettingsFromStorage()`.
+In browser-only mode these values are saved by `saveAiSettingsToStorage()` and reloaded by `loadAiSettingsFromStorage()`. In Bridge mode the provider secret is also written to `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json` through the authenticated Bridge API.
 
 ## Provider and required fields
 
@@ -29,11 +32,11 @@ Validation is enforced by `getMissingRequiredSetting()` before saving and when m
 
 ## Storage model
 
-### Local storage keys
+### Browser storage keys
 
 - `AI_PROVIDER`
 - `AI_MODEL`
-- Provider-specific API key key:
+- Provider-specific API key key, stored in session storage for browser-only fallback:
   - `AI_GATEWAY_API_KEY`
   - `OPENAI_API_KEY`
   - `ANTHROPIC_API_KEY`
@@ -53,9 +56,9 @@ Validation is enforced by `getMissingRequiredSetting()` before saving and when m
 
 ## Runtime behavior: browser only
 
-### Primary chat flow (browser)
+### Primary chat flow
 
-The main chat UI uses `DirectChatTransport` with `createPondviewAgent(...)`. Model resolution comes from `resolveGatewayModel(...)`, which reads settings from browser local storage.
+When Bridge has AI configuration, chat UI uses an HTTP chat transport to `/ai/chat`; Bridge resolves the provider credentials server-side. Otherwise the main chat UI uses `DirectChatTransport` with `createPondviewAgent(...)`, and model resolution comes from `resolveGatewayModel(...)`.
 
 ## Common failures and fixes
 

@@ -391,6 +391,7 @@ export async function executeDashboardChartsWithFilters(
     charts: DbDashboardChart[];
     dashboardFilters: Filter[];
     chartFiltersById: Record<string, Filter[]>;
+    forceRefresh?: boolean;
   },
   depsOverride: Partial<BrowserFilterEngineDeps> = {},
 ): Promise<DashboardFilterExecutionResult> {
@@ -416,6 +417,7 @@ export async function executeDashboardChartsWithFilters(
       joinDefs,
       backend,
       deps,
+      options.forceRefresh,
     );
     filterPlanningReady = materialization.tableRefs.length > 0;
   }
@@ -563,6 +565,7 @@ export async function executeDashboardScopedQuery(
     sql: string;
     sourceDescriptor?: DashboardSourceDescriptor | null;
     snapshotId?: string | null;
+    forceRefresh?: boolean;
   },
   depsOverride: Partial<BrowserFilterEngineDeps> = {},
 ): Promise<{ rows: Result[]; backend: SqlBackend }> {
@@ -600,6 +603,7 @@ export async function executeDashboardScopedQuery(
     joinDefs,
     backend,
     deps,
+    options.forceRefresh,
   );
   const sql = rewriteSqlToResolvedReferences(
     options.sql,
@@ -845,6 +849,7 @@ async function ensureDashboardMaterialization(
   joinDefs: JoinDefinition[],
   backend: SqlBackend,
   deps: BrowserFilterEngineDeps,
+  forceRefresh = false,
 ): Promise<MaterializationCacheEntry> {
   const tableRefs = buildMaterializationTableRefs(charts, joinDefs);
   const plannedTables = planMaterializedTables(tableRefs);
@@ -852,6 +857,10 @@ async function ensureDashboardMaterialization(
   const runtimeFingerprint = await deps.resolveRuntimeFingerprint(backend);
   const cache = deps.getMaterializationCache();
   const cacheKey = `${dashboardId}:${backend}:${runtimeFingerprint}`;
+  if (forceRefresh) {
+    cache.delete(cacheKey);
+    inflightMaterializationCache.delete(cacheKey);
+  }
   const cached = cache.get(cacheKey);
   if (cached && cached.signature === signature) {
     return cached;

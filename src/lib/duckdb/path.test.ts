@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveDbPath } from "@/lib/duckdb/path";
+import { detectExternalConnection, resolveDbPath } from "@/lib/duckdb/path";
 
 describe("resolveDbPath", () => {
   test("preserves explicit MotherDuck tokens", () => {
@@ -14,5 +14,18 @@ describe("resolveDbPath", () => {
 
   test("normalizes duckdb-prefixed MotherDuck identifiers", () => {
     expect(resolveDbPath("duckdb:md:my_db")).toBe("md:my_db");
+  });
+
+  test("detects Quack remote identifiers", () => {
+    expect(detectExternalConnection("quack:localhost:9494")).toEqual({
+      type: "quack",
+      identifier: "quack:localhost:9494",
+      duckdbExtension: "quack",
+      duckdbExtensionRepository: "core_nightly",
+      readOnly: false,
+      attachOptions: {
+        type: "quack",
+      },
+    });
   });
 });

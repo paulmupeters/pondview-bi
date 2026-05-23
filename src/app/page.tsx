@@ -1,6 +1,7 @@
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useState } from "react";
+import { hasRequiredAiConfigurationForBackend } from "@/ai/configuration-status";
 import {
   AI_SETTINGS_UPDATED_EVENT,
   hasRequiredAiConfigurationInStorage,
@@ -56,7 +57,7 @@ function deriveManualQueryTitle(sql: string): string {
 
 export async function runHomepageExampleCommand(params: {
   command: string;
-  backendPreference: "bridge" | "duckdb-http" | "duckdb-wasm";
+  backendPreference: "bridge" | "duckdb-wasm";
   ensureSampleData?: typeof ensureSampleDataForEmptyRuntime;
   submit: (command: string) => void;
 }) {
@@ -116,7 +117,14 @@ export default function Home() {
     }
 
     const syncAiConfiguration = () => {
-      setHasAiConfiguration(hasRequiredAiConfigurationInStorage());
+      const storedConfiguration = hasRequiredAiConfigurationInStorage();
+      setHasAiConfiguration(storedConfiguration);
+
+      if (!storedConfiguration && effectiveSqlBackend === "bridge") {
+        void hasRequiredAiConfigurationForBackend(effectiveSqlBackend).then(
+          setHasAiConfiguration,
+        );
+      }
     };
 
     syncAiConfiguration();
@@ -130,7 +138,7 @@ export default function Home() {
         syncAiConfiguration,
       );
     };
-  }, []);
+  }, [effectiveSqlBackend]);
 
   useEffect(() => {
     if (effectiveSqlBackend === "duckdb-wasm") {

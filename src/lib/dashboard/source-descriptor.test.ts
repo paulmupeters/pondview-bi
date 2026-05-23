@@ -22,12 +22,12 @@ describe("dashboard source descriptors", () => {
   test("classifies motherduck descriptors distinctly from runtime sources", () => {
     expect(
       buildDashboardSourceDescriptor({
-        runtimeBackend: "duckdb-http",
+        runtimeBackend: "bridge",
         dbIdentifier: "md:analytics",
       }),
     ).toEqual({
       kind: "motherduck",
-      runtimeBackend: "duckdb-http",
+      runtimeBackend: "bridge",
       dbIdentifier: "md:analytics",
       catalogContext: null,
     });
@@ -45,5 +45,21 @@ describe("dashboard source descriptors", () => {
         serializeDashboardSourceDescriptor(descriptor),
       ),
     ).toEqual(descriptor);
+  });
+
+  test("classifies Quack descriptors as external DuckDB sources", () => {
+    expect(
+      buildDashboardSourceDescriptor({
+        runtimeBackend: "bridge",
+        dbIdentifier: "quack:analytics.example.com:443",
+        catalogContext: "analytics",
+      }),
+    ).toEqual({
+      kind: "external",
+      runtimeBackend: "bridge",
+      dbIdentifier: "quack:analytics.example.com:443",
+      catalogContext: "analytics",
+      externalType: "quack",
+    });
   });
 });

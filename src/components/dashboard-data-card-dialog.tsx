@@ -68,7 +68,7 @@ function resolveStoredDbIdentifier(
     return DEFAULT_WASM_DB_IDENTIFIER;
   }
 
-  if (sqlBackend === "bridge" || sqlBackend === "duckdb-http") {
+  if (sqlBackend === "bridge") {
     return null;
   }
 

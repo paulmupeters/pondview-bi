@@ -2,7 +2,9 @@ import { type UIMessage, useChat } from "@ai-sdk/react";
 import { type ChatTransport, DirectChatTransport } from "ai";
 import { nanoid } from "nanoid";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { canUseBridgeAi, createBridgeChatTransport } from "@/ai/bridge-chat";
 import { createPondviewAgent } from "@/ai/client/agent";
+import { createDelegatingChatTransport } from "@/ai/delegating-chat-transport";
 import { toPromptErrorMessage } from "@/components/chat/hooks/chat-session-utils";
 import {
   analysisCellEntryToUiMessage,
@@ -16,6 +18,10 @@ import {
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
+import {
+  useBridgeRuntimeState,
+  useSelectedSqlBackend,
+} from "@/lib/sql/use-sql-backend";
 import type { WorkspaceAnalysisCellEntry } from "@/lib/workspace/workspace-db";
 
 type UseAnalysisCellAiParams = {
@@ -27,6 +33,11 @@ type UseAnalysisCellAiParams = {
   >;
 };
 
+const MISSING_AI_CONFIGURATION_MESSAGE =
+  "Missing AI configuration. Open Settings and configure provider, API key, and model.";
+
+type BridgeAiAvailability = "checking" | "available" | "unavailable";
+
 export function useAnalysisCellAi({
   cell,
   entries,
@@ -35,6 +46,12 @@ export function useAnalysisCellAi({
   const connectedTables = useConnectedTables();
   const [promptDraft, setPromptDraft] = useState(cell.promptText);
   const [promptError, setPromptError] = useState<string | null>(null);
+  const [bridgeAiAvailability, setBridgeAiAvailability] =
+    useState<BridgeAiAvailability>("checking");
+  const bridgeRuntimeState = useBridgeRuntimeState();
+  const selectedSqlBackend = useSelectedSqlBackend();
+  const shouldUseBridgeRuntime =
+    selectedSqlBackend === "bridge" || bridgeRuntimeState.isQueryReady;
   const persistedMessages = useMemo(
     () => entries.map(analysisCellEntryToUiMessage),
     [entries],
@@ -59,7 +76,14 @@ export function useAnalysisCellAi({
       };
     }
   }, [connectedTables]);
-  const directTransport = useMemo<ChatTransport<UIMessage> | null>(() => {
+  const selectedTransport = useMemo<ChatTransport<UIMessage> | null>(() => {
+    if (shouldUseBridgeRuntime) {
+      if (bridgeAiAvailability !== "available") {
+        return null;
+      }
+      return createBridgeChatTransport(connectedTables, "analysis");
+    }
+
     if (!agentResult.agent) {
       return null;
     }
@@ -69,12 +93,71 @@ export function useAnalysisCellAi({
       sendReasoning: false,
       sendSources: false,
     }) as unknown as ChatTransport<UIMessage>;
-  }, [agentResult.agent]);
+  }, [
+    agentResult.agent,
+    bridgeAiAvailability,
+    connectedTables,
+    shouldUseBridgeRuntime,
+  ]);
+  const selectedTransportRef = useRef<ChatTransport<UIMessage> | null>(null);
+  selectedTransportRef.current = selectedTransport;
+  const chatTransport = useMemo(
+    () =>
+      createDelegatingChatTransport(
+        () => selectedTransportRef.current,
+        () => MISSING_AI_CONFIGURATION_MESSAGE,
+      ),
+    [],
+  );
+
+  useEffect(() => {
+    if (!shouldUseBridgeRuntime) {
+      setBridgeAiAvailability("unavailable");
+      return;
+    }
+
+    let cancelled = false;
+    setBridgeAiAvailability("checking");
+    void canUseBridgeAi().then((available) => {
+      if (!cancelled) {
+        setBridgeAiAvailability(available ? "available" : "unavailable");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldUseBridgeRuntime]);
+
+  useEffect(() => {
+    if (
+      bridgeAiAvailability === "available" &&
+      promptError === MISSING_AI_CONFIGURATION_MESSAGE
+    ) {
+      setPromptError(null);
+      if (cell.status === "error") {
+        void notebookSession
+          .updateCell(cell.id, { status: "idle" })
+          .then(() => notebookSession.refreshUpdatedAt())
+          .catch((error) => {
+            console.error(
+              "Failed to clear stale AI configuration error:",
+              error,
+            );
+          });
+      }
+    }
+  }, [
+    bridgeAiAvailability,
+    cell.id,
+    cell.status,
+    notebookSession,
+    promptError,
+  ]);
 
   const { messages, setMessages, sendMessage, status } = useChat<UIMessage>({
     id: `analysis-cell:${cell.id}`,
     messages: persistedMessages,
-    transport: directTransport ?? undefined,
+    transport: chatTransport,
     onError: (error) => {
       setPromptError(toPromptErrorMessage(error));
       void notebookSession
@@ -192,10 +275,8 @@ export function useAnalysisCellAi({
       return;
     }
 
-    if (!directTransport) {
-      setPromptError(
-        "Missing AI configuration. Open Settings and configure provider, API key, and model.",
-      );
+    if (!selectedTransport) {
+      setPromptError(MISSING_AI_CONFIGURATION_MESSAGE);
       return;
     }
 

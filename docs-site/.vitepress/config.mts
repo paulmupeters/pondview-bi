@@ -21,6 +21,7 @@ export default defineConfig({
         text: "AI Provider Configuration",
         link: "/guide/ai-provider-configuration",
       },
+      { text: "Pondview CLI", link: "/guide/cli" },
       { text: "Connected Data Sources", link: "/guide/connected-data-sources" },
       {
         text: "Uploads and Browser Storage",

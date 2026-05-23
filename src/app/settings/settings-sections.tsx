@@ -119,6 +119,7 @@ type AiSettingsSectionsProps = {
   onVisualizationModelChange: (value: string) => void;
   apiKey: string;
   onApiKeyChange: (value: string) => void;
+  hasStoredBridgeAiKey: boolean;
   ollamaBaseUrl: string;
   onOllamaBaseUrlChange: (value: string) => void;
   openAiCompatibleUrl: string;
@@ -144,6 +145,7 @@ export function AiSettingsSections({
   onVisualizationModelChange,
   apiKey,
   onApiKeyChange,
+  hasStoredBridgeAiKey,
   ollamaBaseUrl,
   onOllamaBaseUrlChange,
   openAiCompatibleUrl,
@@ -266,6 +268,11 @@ export function AiSettingsSections({
                 label={getApiKeyStorageKeyForProvider(aiProvider)}
                 htmlFor="api-key"
                 className="mb-4"
+                description={
+                  hasStoredBridgeAiKey
+                    ? "API key is stored in the bridge. Leave blank to keep it."
+                    : undefined
+                }
               >
                 <Input
                   id="api-key"
@@ -277,7 +284,7 @@ export function AiSettingsSections({
                   data-form-type="other"
                   value={apiKey}
                   onChange={(event) => onApiKeyChange(event.target.value)}
-                  placeholder="Enter your API key"
+                  placeholder="Fill in API Key"
                 />
               </FormField>
             )}
@@ -459,30 +466,20 @@ type RuntimeSettingsSectionProps = {
   effectiveRuntimeLabel: string;
   selectedSqlBackend: SqlBackend;
   onSqlBackendChange: (backend: SqlBackend) => void;
-  isBridgeDiscoverable: boolean;
   bridgeOptionLabel: string;
+  isBridgeSelectable: boolean;
   runtimeSettingsError: string | null;
   runtimeSettingsSuccess: string | null;
   bridgeHealthSummary: string;
+  bridgeEndpoint: string;
+  onBridgeEndpointChange: (value: string) => void;
+  onSaveBridgeEndpoint: () => void;
+  onClearBridgeEndpoint: () => void;
   bridgeSecret: string;
   onBridgeSecretChange: (value: string) => void;
   onSetBridgeSecret: () => void;
   onClearBridgeSecret: () => void;
   hasBridgeSessionSecret: boolean;
-  duckDbHttpHealthStatus: string;
-  duckDbHttpHost: string;
-  onDuckDbHttpHostChange: (value: string) => void;
-  duckDbHttpPort: string;
-  onDuckDbHttpPortChange: (value: string) => void;
-  hasDuckDbHttpAuth: boolean;
-  duckDbHttpAuth: string;
-  onDuckDbHttpAuthChange: (value: string) => void;
-  onClearDuckDbHttpAuth: () => void;
-  onSaveDuckDbHttpConfig: () => void;
-  onTestDuckDbHttpConnection: () => void;
-  isTestingHttpConnection: boolean;
-  onClearDuckDbHttpConfig: () => void;
-  isDuckDbHttpConfigured: boolean;
 };
 
 export function RuntimeSettingsSection({
@@ -490,30 +487,20 @@ export function RuntimeSettingsSection({
   effectiveRuntimeLabel,
   selectedSqlBackend,
   onSqlBackendChange,
-  isBridgeDiscoverable,
   bridgeOptionLabel,
+  isBridgeSelectable,
   runtimeSettingsError,
   runtimeSettingsSuccess,
   bridgeHealthSummary,
+  bridgeEndpoint,
+  onBridgeEndpointChange,
+  onSaveBridgeEndpoint,
+  onClearBridgeEndpoint,
   bridgeSecret,
   onBridgeSecretChange,
   onSetBridgeSecret,
   onClearBridgeSecret,
   hasBridgeSessionSecret,
-  duckDbHttpHealthStatus,
-  duckDbHttpHost,
-  onDuckDbHttpHostChange,
-  duckDbHttpPort,
-  onDuckDbHttpPortChange,
-  hasDuckDbHttpAuth,
-  duckDbHttpAuth,
-  onDuckDbHttpAuthChange,
-  onClearDuckDbHttpAuth,
-  onSaveDuckDbHttpConfig,
-  onTestDuckDbHttpConnection,
-  isTestingHttpConnection,
-  onClearDuckDbHttpConfig,
-  isDuckDbHttpConfigured,
 }: RuntimeSettingsSectionProps) {
   return (
     <SettingsContentSection>
@@ -521,9 +508,8 @@ export function RuntimeSettingsSection({
         <div>
           <h3 className="text-lg font-semibold">SQL runtime</h3>
           <p className="text-sm text-muted-foreground">
-            Choose where SQL runs. Bridge uses Pondview endpoints, while DuckDB
-            over HTTP connects directly from the browser to a DuckDB{" "}
-            `httpserver` instance.
+            Choose where SQL runs. Bridge uses Pondview endpoints for local or
+            remote DuckDB execution.
           </p>
         </div>
 
@@ -540,7 +526,15 @@ export function RuntimeSettingsSection({
           </span>
         </div>
 
-        <FormField label="Query runtime" htmlFor="sql-backend-select">
+        <FormField
+          label="Query runtime"
+          htmlFor="sql-backend-select"
+          description={
+            isBridgeSelectable
+              ? undefined
+              : "Start Pondview Bridge or save a reachable endpoint before selecting Bridge."
+          }
+        >
           <Select
             value={selectedSqlBackend}
             onValueChange={(value) => onSqlBackendChange(value as SqlBackend)}
@@ -550,10 +544,9 @@ export function RuntimeSettingsSection({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="duckdb-wasm">DuckDB WASM</SelectItem>
-              <SelectItem value="bridge" disabled={!isBridgeDiscoverable}>
+              <SelectItem value="bridge" disabled={!isBridgeSelectable}>
                 {bridgeOptionLabel}
               </SelectItem>
-              <SelectItem value="duckdb-http">DuckDB over HTTP</SelectItem>
             </SelectContent>
           </Select>
         </FormField>
@@ -566,134 +559,73 @@ export function RuntimeSettingsSection({
         )}
 
         {selectedSqlBackend === "bridge" && (
-          <div className="space-y-3 border-t pt-5">
-            <div>
-              <h4 className="text-sm font-semibold">Bridge auth</h4>
-              <p className="text-sm text-muted-foreground">
-                Optional session-only Pondview secret for authenticated bridge
-                queries. Leave empty when Pondview is started with an empty
-                secret.
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {bridgeHealthSummary}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                type="password"
-                name="settings-bridge-secret"
-                autoComplete="off"
-                data-1p-ignore="true"
-                data-lpignore="true"
-                data-form-type="other"
-                value={bridgeSecret}
-                onChange={(event) => onBridgeSecretChange(event.target.value)}
-                placeholder="Enter Pondview secret"
-              />
-              <Button
-                onClick={onSetBridgeSecret}
-                disabled={!bridgeSecret.trim().length}
-              >
-                Set Session Secret
-              </Button>
-              <Button
-                variant="outline"
-                onClick={onClearBridgeSecret}
-                disabled={!hasBridgeSessionSecret}
-              >
-                Clear
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {selectedSqlBackend === "duckdb-http" && (
-          <div className="space-y-4 border-t pt-5">
-            <div>
-              <h4 className="text-sm font-semibold">DuckDB HTTP connection</h4>
-              <p className="text-sm text-muted-foreground">
-                Configure host, port, and optional auth for a remote DuckDB{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  httpserver
-                </code>{" "}
-                instance.
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Health: {duckDbHttpHealthStatus}
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-              <Input
-                type="text"
-                value={duckDbHttpHost}
-                onChange={(event) => onDuckDbHttpHostChange(event.target.value)}
-                placeholder="http://127.0.0.1 or duckdb-host.local"
-              />
-              <Input
-                type="text"
-                value={duckDbHttpPort}
-                onChange={(event) => onDuckDbHttpPortChange(event.target.value)}
-                placeholder="8123"
-              />
-            </div>
-
-            <FormField
-              label={
-                <>
-                  Auth{" "}
-                  <span className="font-normal text-muted-foreground">
-                    ({hasDuckDbHttpAuth ? "set" : "not set"})
-                  </span>
-                </>
-              }
-              htmlFor="duckdb-http-auth"
-            >
+          <div className="space-y-5 border-t pt-5">
+            <div className="space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold">Bridge endpoint</h4>
+                <p className="text-sm text-muted-foreground">
+                  Override the Pondview bridge URL when the bridge is not served
+                  from the same origin as this app. Leave empty to use this app
+                  origin.
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {bridgeHealthSummary}
+                </p>
+              </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
-                  id="duckdb-http-auth"
+                  type="url"
+                  value={bridgeEndpoint}
+                  onChange={(event) =>
+                    onBridgeEndpointChange(event.target.value)
+                  }
+                />
+                <Button onClick={onSaveBridgeEndpoint}>Save Endpoint</Button>
+                <Button
+                  variant="outline"
+                  onClick={onClearBridgeEndpoint}
+                  disabled={!bridgeEndpoint.trim().length}
+                >
+                  Reset
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold">Bridge auth</h4>
+                <p className="text-sm text-muted-foreground">
+                  Optional session-only Pondview secret for authenticated bridge
+                  queries. Leave empty when Pondview is started with an empty
+                  secret.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
                   type="password"
-                  name="settings-duckdb-http-auth"
+                  name="settings-bridge-secret"
                   autoComplete="off"
                   data-1p-ignore="true"
                   data-lpignore="true"
                   data-form-type="other"
-                  value={duckDbHttpAuth}
-                  onChange={(event) =>
-                    onDuckDbHttpAuthChange(event.target.value)
-                  }
-                  placeholder={
-                    hasDuckDbHttpAuth
-                      ? "••••••••  (enter new value, then Save Config)"
-                      : "token or user:pass"
-                  }
+                  value={bridgeSecret}
+                  onChange={(event) => onBridgeSecretChange(event.target.value)}
+                  placeholder="Enter Pondview secret"
                 />
                 <Button
+                  onClick={onSetBridgeSecret}
+                  disabled={!bridgeSecret.trim().length}
+                >
+                  Set Session Secret
+                </Button>
+                <Button
                   variant="outline"
-                  onClick={onClearDuckDbHttpAuth}
-                  disabled={!hasDuckDbHttpAuth}
+                  onClick={onClearBridgeSecret}
+                  disabled={!hasBridgeSessionSecret}
                 >
                   Clear
                 </Button>
               </div>
-            </FormField>
-
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={onSaveDuckDbHttpConfig}>Save Connection</Button>
-              <Button
-                variant="outline"
-                onClick={onTestDuckDbHttpConnection}
-                disabled={isTestingHttpConnection}
-              >
-                {isTestingHttpConnection ? "Testing..." : "Test Connection"}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={onClearDuckDbHttpConfig}
-                disabled={!isDuckDbHttpConfigured}
-              >
-                Clear Config
-              </Button>
             </div>
           </div>
         )}
@@ -716,6 +648,8 @@ type ProjectsSettingsSectionsProps = {
   onSaveProjectName: () => void;
   onCancelProjectNameEdit: () => void;
   openProjectName: string;
+  openProjectBackingKind: "browser-indexeddb" | "bridge-filesystem";
+  openProjectRootPath?: string | null;
   onEditProjectName: () => void;
   openProjectError: string | null;
   onOpenProjectDialog: () => void;
@@ -770,6 +704,8 @@ export function ProjectsSettingsSections({
   onSaveProjectName,
   onCancelProjectNameEdit,
   openProjectName,
+  openProjectBackingKind,
+  openProjectRootPath,
   onEditProjectName,
   openProjectError,
   onOpenProjectDialog,
@@ -883,6 +819,24 @@ export function ProjectsSettingsSections({
     <>
       <SettingsContentSection>
         <div className="space-y-5">
+          <div className="rounded border bg-muted/30 px-3 py-2 text-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Backing store
+            </p>
+            {openProjectBackingKind === "bridge-filesystem" ? (
+              <p className="truncate">
+                Filesystem project{" "}
+                {openProjectRootPath ? (
+                  <span className="font-mono text-xs">
+                    {openProjectRootPath}
+                  </span>
+                ) : null}
+              </p>
+            ) : (
+              <p className="text-muted-foreground">Browser IndexedDB</p>
+            )}
+          </div>
+
           <div className="space-y-3">
             <p className="text-sm font-medium">Project name</p>
             {isEditingProjectName ? (

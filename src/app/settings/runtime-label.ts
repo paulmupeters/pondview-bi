@@ -1,12 +1,10 @@
-import type { DuckDbHttpHealthStatus, SqlBackend } from "@/lib/sql/sql-runtime";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
 
 type RuntimeLabelOptions = {
   selectedSqlBackend: SqlBackend;
   effectiveSqlBackend: SqlBackend;
   isBridgeDiscoverable: boolean;
   isBridgeQueryReady: boolean;
-  isDuckDbHttpConfigured: boolean;
-  duckDbHttpHealthStatus: DuckDbHttpHealthStatus;
 };
 
 export function getActiveRuntimeLabel({
@@ -14,8 +12,6 @@ export function getActiveRuntimeLabel({
   effectiveSqlBackend,
   isBridgeDiscoverable,
   isBridgeQueryReady,
-  isDuckDbHttpConfigured,
-  duckDbHttpHealthStatus,
 }: RuntimeLabelOptions): string {
   if (selectedSqlBackend === "duckdb-wasm") {
     return "DuckDB WASM";
@@ -36,18 +32,5 @@ export function getActiveRuntimeLabel({
 
     return "Bridge (using DuckDB WASM)";
   }
-
-  if (effectiveSqlBackend === "duckdb-http") {
-    return "DuckDB over HTTP";
-  }
-
-  if (!isDuckDbHttpConfigured) {
-    return "DuckDB over HTTP (not configured, using DuckDB WASM)";
-  }
-
-  if (duckDbHttpHealthStatus === "offline") {
-    return "DuckDB over HTTP (unavailable, using DuckDB WASM)";
-  }
-
-  return "DuckDB over HTTP (pending, using DuckDB WASM)";
+  return "DuckDB WASM";
 }

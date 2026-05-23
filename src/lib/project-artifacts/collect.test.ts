@@ -25,10 +25,10 @@ describe("project artifact collectors", () => {
       columns: 3,
       autoFitRows: false,
       homeDbIdentifier: "md:analytics",
-      homeSqlBackend: "duckdb-http",
+      homeSqlBackend: "bridge",
     };
     const sourceDescriptor = buildDashboardSourceDescriptor({
-      runtimeBackend: "duckdb-http",
+      runtimeBackend: "bridge",
       dbIdentifier: "md:analytics",
       catalogContext: "main",
     });
@@ -44,7 +44,7 @@ describe("project artifact collectors", () => {
         snapshotId: "runtime-only",
         dbIdentifier: "md:analytics",
         catalogContext: "main",
-        sqlBackend: "duckdb-http",
+        sqlBackend: "bridge",
         chartConfigJson: JSON.stringify({
           visualType: "chart",
           type: "line",
@@ -74,7 +74,7 @@ describe("project artifact collectors", () => {
         snapshotId: null,
         dbIdentifier: "md:analytics",
         catalogContext: "main",
-        sqlBackend: "duckdb-http",
+        sqlBackend: "bridge",
         createdAt: 5,
         updatedAt: 6,
       },
@@ -99,7 +99,7 @@ describe("project artifact collectors", () => {
           {
             sourceRef: "analytics",
             dbIdentifier: "md:analytics",
-            sqlBackend: "duckdb-http",
+            sqlBackend: "bridge",
           },
         ],
         requireSourceRefs: true,
@@ -126,7 +126,7 @@ describe("project artifact collectors", () => {
       createdAt: 1,
       updatedAt: 2,
       homeDbIdentifier: "md:analytics",
-      homeSqlBackend: "duckdb-http",
+      homeSqlBackend: "bridge",
     };
 
     await expect(

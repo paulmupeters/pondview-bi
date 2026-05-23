@@ -171,6 +171,22 @@ bun run typecheck
 bun run test
 ```
 
+### Pondview bridge CLI
+
+`pondview start` runs the local Pondview UI and bridge API together.
+`pondview start --no-ui` runs the API-only bridge for hosted UI connections or
+background CLI use.
+
+Bridge-backed commands such as `pondview attach`, `pondview list-sources`,
+`pondview detach`, and `pondview query` use the same local bridge runtime.
+If a client command auto-starts the bridge in the background, stop it with
+`pondview stop`. Bridge mode writes project artifacts directly to a filesystem
+project rooted at the launch directory, or `--project-dir <dir>` when provided.
+When starting the local app in an empty folder, Pondview asks whether to
+initialize local project files or keep using browser storage for that folder.
+See [Pondview CLI](./docs-site/guide/cli.md) for commands, flags, bundled UI
+assets built into `packages/bridge/dist`, autostart behavior, and future TODOs.
+
 ## contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow and local checks.

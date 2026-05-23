@@ -15,9 +15,10 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { nanoid } from "nanoid";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { canUseBridgeAi, createBridgeChatTransport } from "@/ai/bridge-chat";
 import { createSqlEditorAssistAgent } from "@/ai/client/agent";
+import { createDelegatingChatTransport } from "@/ai/delegating-chat-transport";
 import { Response } from "@/components/ai-elements/response";
 import { toPromptErrorMessage } from "@/components/chat/hooks/chat-session-utils";
 import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
@@ -35,6 +36,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
+import {
+  useBridgeRuntimeState,
+  useSelectedSqlBackend,
+} from "@/lib/sql/use-sql-backend";
 import { cn } from "@/lib/utils";
 import {
   buildSqlEditorAssistPrompt,
@@ -49,6 +54,8 @@ type PendingSuggestion = {
   sql: string;
   assistantText: string;
 };
+
+type BridgeAiAvailability = "checking" | "available" | "unavailable";
 
 export type SqlEditorAiAssistProps = {
   currentSql: string;
@@ -119,10 +126,16 @@ export function SqlEditorAiAssist({
   const [promptDraft, setPromptDraft] = useState("");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [assistantText, setAssistantText] = useState<string | null>(null);
+  const [bridgeAiAvailability, setBridgeAiAvailability] =
+    useState<BridgeAiAvailability>("checking");
   const [pendingSuggestion, setPendingSuggestion] =
     useState<PendingSuggestion | null>(null);
   const [showInput, setShowInput] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const bridgeRuntimeState = useBridgeRuntimeState();
+  const selectedSqlBackend = useSelectedSqlBackend();
+  const shouldUseBridgeRuntime =
+    selectedSqlBackend === "bridge" || bridgeRuntimeState.isQueryReady;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const agentResult = useMemo(() => {
@@ -142,7 +155,14 @@ export function SqlEditorAiAssist({
     }
   }, [connectedTables]);
 
-  const transport = useMemo<ChatTransport<UIMessage> | null>(() => {
+  const selectedTransport = useMemo<ChatTransport<UIMessage> | null>(() => {
+    if (shouldUseBridgeRuntime) {
+      if (bridgeAiAvailability !== "available") {
+        return null;
+      }
+      return createBridgeChatTransport(connectedTables, "sql-editor");
+    }
+
     if (!agentResult.agent) {
       return null;
     }
@@ -152,12 +172,46 @@ export function SqlEditorAiAssist({
       sendReasoning: false,
       sendSources: false,
     }) as unknown as ChatTransport<UIMessage>;
-  }, [agentResult.agent]);
+  }, [
+    agentResult.agent,
+    bridgeAiAvailability,
+    connectedTables,
+    shouldUseBridgeRuntime,
+  ]);
+  const selectedTransportRef = useRef<ChatTransport<UIMessage> | null>(null);
+  selectedTransportRef.current = selectedTransport;
+  const chatTransport = useMemo(
+    () =>
+      createDelegatingChatTransport(
+        () => selectedTransportRef.current,
+        () =>
+          "Missing AI configuration. Open Settings and configure provider, API key, and model.",
+      ),
+    [],
+  );
+
+  useEffect(() => {
+    if (!shouldUseBridgeRuntime) {
+      setBridgeAiAvailability("unavailable");
+      return;
+    }
+
+    let cancelled = false;
+    setBridgeAiAvailability("checking");
+    void canUseBridgeAi().then((available) => {
+      if (!cancelled) {
+        setBridgeAiAvailability(available ? "available" : "unavailable");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldUseBridgeRuntime]);
 
   const { sendMessage, status } = useChat<UIMessage>({
     id: "sql-editor-ai-assist",
     messages: [],
-    transport: transport ?? undefined,
+    transport: chatTransport,
     onError: (error) => {
       setPromptError(toPromptErrorMessage(error));
     },
@@ -190,7 +244,7 @@ export function SqlEditorAiAssist({
       return;
     }
 
-    if (!transport) {
+    if (!selectedTransport) {
       const error = agentResult.error;
       setPromptError(
         error
@@ -216,7 +270,6 @@ export function SqlEditorAiAssist({
 
     try {
       await sendMessage({
-        messageId: nanoid(),
         text: prompt,
       });
     } catch (error) {

@@ -38,6 +38,32 @@ describe("sanitizeConnectedTableForStorage", () => {
       readOnly: true,
     });
   });
+
+  test("keeps non-secret quack connection metadata for wasm catalog fallback", () => {
+    expect(
+      sanitizeConnectedTableForStorage({
+        type: "quack",
+        connectionId: "quack:test",
+        databaseName: "quack:localhost",
+        attachAs: "test",
+        schema: "main",
+        tables: ["stations"],
+        readOnly: false,
+        duckdbExtension: "quack",
+        duckdbExtensionRepository: "core_nightly",
+      }),
+    ).toEqual({
+      type: "quack",
+      connectionId: "quack:test",
+      databaseName: "quack:localhost",
+      attachAs: "test",
+      schema: "main",
+      tables: ["stations"],
+      readOnly: false,
+      duckdbExtension: "quack",
+      duckdbExtensionRepository: "core_nightly",
+    });
+  });
 });
 
 describe("sanitizeConnectedTablesForStorage", () => {

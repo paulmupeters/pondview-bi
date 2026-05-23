@@ -1,5 +1,6 @@
 import { ChartNetwork, FileText, Plus, Type } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { hasRequiredAiConfigurationForBackend } from "@/ai/configuration-status";
 import {
   AI_SETTINGS_UPDATED_EVENT,
   hasRequiredAiConfigurationInStorage,
@@ -15,6 +16,7 @@ import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { CellContent } from "@/features/analysis/components/CellContent";
 import { CellFrame } from "@/features/analysis/components/CellFrame";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
+import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import type { WorkspaceAnalysisCellKind } from "@/lib/workspace/workspace-db";
 
 type CellListProps = {
@@ -147,6 +149,7 @@ export function CellList({
   const [hasAiConfiguration, setHasAiConfiguration] = useState(() =>
     hasRequiredAiConfigurationInStorage(),
   );
+  const effectiveSqlBackend = useResolvedSqlBackend();
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -154,7 +157,14 @@ export function CellList({
     }
 
     const syncAiConfiguration = () => {
-      setHasAiConfiguration(hasRequiredAiConfigurationInStorage());
+      const storedConfiguration = hasRequiredAiConfigurationInStorage();
+      setHasAiConfiguration(storedConfiguration);
+
+      if (!storedConfiguration && effectiveSqlBackend === "bridge") {
+        void hasRequiredAiConfigurationForBackend(effectiveSqlBackend).then(
+          setHasAiConfiguration,
+        );
+      }
     };
 
     syncAiConfiguration();
@@ -168,7 +178,7 @@ export function CellList({
         syncAiConfiguration,
       );
     };
-  }, []);
+  }, [effectiveSqlBackend]);
 
   useEffect(() => {
     setExplicitChatModeByCellId((previousExplicitChatModeByCellId) => {

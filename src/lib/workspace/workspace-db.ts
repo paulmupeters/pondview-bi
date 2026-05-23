@@ -84,6 +84,9 @@ export interface WorkspaceDashboard {
   homeSqlBackend?: SqlBackend | null;
   storageStatus?: DashboardStorageStatus | null;
   projectPath?: string | null;
+  sourceKind?: "attached" | null;
+  sourceCatalog?: string | null;
+  originalId?: string | null;
 }
 
 export interface WorkspaceChart {
@@ -102,6 +105,10 @@ export interface WorkspaceChart {
   semanticQueryJson: string | null;
   exploreName: string | null;
   position: number;
+  layoutX?: number | null;
+  layoutY?: number | null;
+  layoutW?: number | null;
+  layoutH?: number | null;
   createdAt: number;
   updatedAt: number;
   sourceSql?: string | null;

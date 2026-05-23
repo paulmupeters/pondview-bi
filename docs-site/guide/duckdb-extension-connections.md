@@ -24,6 +24,7 @@ Examples include:
 - Postgres: `postgres://...`, `postgresql://...`, `pg:alias`
 - MySQL: `mysql://...`, `mysql:alias`
 - SQLite: `sqlite:/path/to/file.db`
+- Quack Remote DuckDB: `quack:host[:port]`
 
 The returned config includes:
 
@@ -76,6 +77,8 @@ To support another external backend:
    - direct interactive SQL attachment
    - dashboard execution-time caching or binding
 5. Update the docs for supported identifiers and any required env vars.
+
+Quack is the first connector that needs an extension repository and attach options. It installs `quack` from `core_nightly`, attaches with `TYPE quack`, and can provide a token and `DISABLE_SSL` option through the typed attachment plan.
 
 ## Notes
 

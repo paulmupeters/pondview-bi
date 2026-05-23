@@ -25,6 +25,9 @@ export type Dashboard = {
   homeDbIdentifier?: string | null;
   homeSqlBackend?: SqlBackend | null;
   storageStatus?: "shared" | "best-effort" | null;
+  sourceKind?: "attached" | null;
+  sourceCatalog?: string | null;
+  originalId?: string | null;
 };
 
 export type DashboardChart = {
@@ -38,6 +41,10 @@ export type DashboardChart = {
   sqlBackend?: SqlBackend | null;
   chartConfigJson: string;
   position: number;
+  layoutX?: number | null;
+  layoutY?: number | null;
+  layoutW?: number | null;
+  layoutH?: number | null;
   createdAt: number;
   updatedAt: number;
   filtersApplied?: boolean;
@@ -56,6 +63,13 @@ export type LayoutRow = {
   groups: ChartGroup[];
 };
 
+export type DashboardChartLayout = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
 export type ResizeMode = "single" | "equalize" | "fit";
 
 export type ResizePreviewItem = {
@@ -65,15 +79,7 @@ export type ResizePreviewItem = {
   kind: ChartGroup["type"];
 };
 
-export type ResizeState = {
-  chartId: string;
-  mode: ResizeMode;
-  previewSpans: ResizePreviewItem[];
-  canFit: boolean;
-  canEqualize: boolean;
-} | null;
-
-export type SortableChartCardProps = {
+export type DashboardChartCardProps = {
   chart: DashboardChart & { filtersApplied?: boolean };
   config: Config | CardConfig | TableConfig | TextConfig | null;
   rows: Result[];
@@ -90,54 +96,13 @@ export type SortableChartCardProps = {
   expandedSqlChartId: string | null;
   onToggleSql: (chartId: string) => void;
   onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
-  totalColumns: number;
   isInGroup?: boolean;
-  onResizeOpen?: (chartId: string, currentColSpan: number) => void;
-  previewColSpan?: number | null;
   isSelected?: boolean;
   onSelect?: (chartId: string) => void;
   onPreviewChart?: (chartId: string) => void;
-};
-
-export type MetricCardGroupProps = {
-  charts: DashboardChart[];
-  chartData: Record<string, Result[]>;
-  measuresById: Record<string, WorkspaceDashboardMeasure>;
-  measureValuesById: Record<string, string>;
-  onConfigChange: (chartId: string, newJson: string) => Promise<void>;
-  onMeasureChange: (
-    measureId: string,
-    updates: Pick<WorkspaceDashboardMeasure, "label" | "sql">,
-  ) => Promise<void>;
-  onDelete: (chartId: string) => Promise<void>;
-  expandedSqlChartId: string | null;
-  onToggleSql: (chartId: string) => void;
-  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
-  totalColumns: number;
-  selectedChartId: string | null;
-  onChartSelect: (chartId: string) => void;
-  onPreviewChart: (chartId: string) => void;
-};
-
-export type MetricCardInGroupProps = {
-  chart: DashboardChart;
-  chartData: Record<string, Result[]>;
-  measure?: WorkspaceDashboardMeasure | null;
-  measureValue?: string;
-  onConfigChange: (chartId: string, newJson: string) => Promise<void>;
-  onMeasureChange: (
-    measureId: string,
-    updates: Pick<WorkspaceDashboardMeasure, "label" | "sql">,
-  ) => Promise<void>;
-  onDelete: (chartId: string) => Promise<void>;
-  expandedSqlChartId: string | null;
-  onToggleSql: (chartId: string) => void;
-  onSqlUpdate: (chartId: string, newSql: string) => Promise<void>;
-  isFirst: boolean;
-  isLast: boolean;
-  isSelected: boolean;
-  onSelect: (chartId: string) => void;
-  onPreviewChart: (chartId: string) => void;
+  onRefresh?: (chartId: string) => Promise<void>;
+  isRefreshing?: boolean;
+  readOnly?: boolean;
 };
 
 export type MetricCardSqlEditorProps = {

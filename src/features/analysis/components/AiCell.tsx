@@ -36,7 +36,7 @@ type AiResponseBannerProps = {
   showPromptError?: boolean;
 };
 
-const STREAMING_ANIMATION = "bars";
+const STREAMING_ANIMATION = "wave";
 
 export function AiResponseBanner({
   ai,

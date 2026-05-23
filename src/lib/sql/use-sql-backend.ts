@@ -7,16 +7,8 @@ import {
   subscribeBridgeSessionSecret,
 } from "@/lib/bridge/pondview-bridge";
 import {
-  getDuckDbHttpConfigFromStorage,
-  getDuckDbHttpHealthStatus,
-  type StoredDuckDbHttpConfig,
-  subscribeDuckDbHttpConfig,
-  subscribeDuckDbHttpHealth,
-} from "@/lib/duckdb/duckdb-http-browser";
-import {
   type BridgeHealthStatus,
   type BridgeRuntimeState,
-  type DuckDbHttpHealthStatus,
   getBridgeHealthStatus,
   getSqlBackendPreference,
   type ResolveSqlBackendOptions,
@@ -83,36 +75,16 @@ export function useBridgeRuntimeState(): BridgeRuntimeState {
   }, [config, hasSessionSecret, healthStatus]);
 }
 
-export function useDuckDbHttpHealthStatus(): DuckDbHttpHealthStatus {
-  return useSyncExternalStore(
-    subscribeDuckDbHttpHealth,
-    getDuckDbHttpHealthStatus,
-    getDuckDbHttpHealthStatus,
-  );
-}
-
-export function useDuckDbHttpConfig(): StoredDuckDbHttpConfig | null {
-  return useSyncExternalStore(
-    subscribeDuckDbHttpConfig,
-    getDuckDbHttpConfigFromStorage,
-    getDuckDbHttpConfigFromStorage,
-  );
-}
-
 function useRuntimeDeps(): RuntimeDeps {
   const bridgeRuntimeState = useBridgeRuntimeState();
-  const duckDbHttpConfig = useDuckDbHttpConfig();
-  const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
 
   return useMemo(
     () => ({
       hasBridgeSecret: () => bridgeRuntimeState.hasSessionSecret,
       getBridgeHealthStatus: () => bridgeRuntimeState.healthStatus,
       getBridgeConfig: () => bridgeRuntimeState.config,
-      hasDuckDbHttpConfig: () => Boolean(duckDbHttpConfig),
-      getDuckDbHttpHealthStatus: () => duckDbHttpHealthStatus,
     }),
-    [bridgeRuntimeState, duckDbHttpConfig, duckDbHttpHealthStatus],
+    [bridgeRuntimeState],
   );
 }
 

@@ -334,8 +334,8 @@ describe("browser-filter-engine", () => {
         chartFiltersById: {},
       },
       {
-        resolveBackend: () => "duckdb-http",
-        resolveRuntimeFingerprint: async () => "duckdb-http:alpha:8080",
+        resolveBackend: () => "bridge",
+        resolveRuntimeFingerprint: async () => "bridge:alpha:8080",
         readJoinDefs: async () => [],
         listCharts: async () => [chart],
         getMaterializationCache: () => cache,
@@ -355,8 +355,8 @@ describe("browser-filter-engine", () => {
         chartFiltersById: {},
       },
       {
-        resolveBackend: () => "duckdb-http",
-        resolveRuntimeFingerprint: async () => "duckdb-http:beta:8080",
+        resolveBackend: () => "bridge",
+        resolveRuntimeFingerprint: async () => "bridge:beta:8080",
         readJoinDefs: async () => [],
         listCharts: async () => [chart],
         getMaterializationCache: () => cache,
@@ -399,8 +399,8 @@ describe("browser-filter-engine", () => {
           chartFiltersById: {},
         },
         {
-          resolveBackend: () => "duckdb-http",
-          resolveRuntimeFingerprint: async () => "duckdb-http:shared:8080",
+          resolveBackend: () => "bridge",
+          resolveRuntimeFingerprint: async () => "bridge:shared:8080",
           readJoinDefs: async () => [],
           listCharts: async () => [chart],
           getMaterializationCache: () => cache,
@@ -419,8 +419,8 @@ describe("browser-filter-engine", () => {
           chartFiltersById: {},
         },
         {
-          resolveBackend: () => "duckdb-http",
-          resolveRuntimeFingerprint: async () => "duckdb-http:shared:8080",
+          resolveBackend: () => "bridge",
+          resolveRuntimeFingerprint: async () => "bridge:shared:8080",
           readJoinDefs: async () => [],
           listCharts: async () => [chart],
           getMaterializationCache: () => cache,
@@ -438,6 +438,60 @@ describe("browser-filter-engine", () => {
         sql.includes('CREATE OR REPLACE VIEW "pondview_exec"."orders"'),
       ).length,
     ).toBe(1);
+  });
+
+  test("force refresh rebuilds cached dashboard materialization", async () => {
+    const cache = new Map();
+    const runtimeSqlCalls: string[] = [];
+    const chart = createChart({
+      id: "chart-1",
+      sql: "SELECT * FROM orders",
+    });
+    const filters: Filter[] = [
+      {
+        field: "orders.region",
+        op: "eq",
+        values: ["EMEA"],
+      },
+    ];
+    const deps = {
+      resolveBackend: () => "bridge" as const,
+      resolveRuntimeFingerprint: async () => "bridge:shared:8080",
+      readJoinDefs: async () => [],
+      listCharts: async () => [chart],
+      getMaterializationCache: () => cache,
+      runRuntimeSql: async (sql: string) => {
+        runtimeSqlCalls.push(sql);
+        return [];
+      },
+      runChartSql: async () => [],
+    };
+
+    await executeDashboardChartsWithFilters(
+      {
+        dashboardId: "dashboard-1",
+        charts: [chart],
+        dashboardFilters: filters,
+        chartFiltersById: {},
+      },
+      deps,
+    );
+    await executeDashboardChartsWithFilters(
+      {
+        dashboardId: "dashboard-1",
+        charts: [chart],
+        dashboardFilters: filters,
+        chartFiltersById: {},
+        forceRefresh: true,
+      },
+      deps,
+    );
+
+    expect(
+      runtimeSqlCalls.filter((sql) =>
+        sql.includes('CREATE OR REPLACE VIEW "pondview_exec"."orders"'),
+      ).length,
+    ).toBe(2);
   });
 
   test("lists view aliases as materialized tables", async () => {
@@ -460,7 +514,7 @@ describe("browser-filter-engine", () => {
     const chart = createChart({
       id: "chart-1",
       sql: "SELECT * FROM customer",
-      sqlBackend: "duckdb-http",
+      sqlBackend: "bridge",
     });
 
     const result = await executeDashboardChartsWithFilters(
@@ -481,9 +535,9 @@ describe("browser-filter-engine", () => {
       },
     );
 
-    expect(backendCalls).toEqual(["duckdb-http"]);
-    expect(result.backend).toBe("duckdb-http");
-    expect(result.rowsByChartId[chart.id]).toEqual([{ source: "duckdb-http" }]);
+    expect(backendCalls).toEqual(["bridge"]);
+    expect(result.backend).toBe("bridge");
+    expect(result.rowsByChartId[chart.id]).toEqual([{ source: "bridge" }]);
   });
 
   test("uses chart catalog context for alias creation but not alias-backed execution", async () => {
@@ -511,8 +565,8 @@ describe("browser-filter-engine", () => {
         chartFiltersById: {},
       },
       {
-        resolveBackend: () => "duckdb-http",
-        resolveRuntimeFingerprint: async () => "duckdb-http:test",
+        resolveBackend: () => "bridge",
+        resolveRuntimeFingerprint: async () => "bridge:test",
         readJoinDefs: async () => [],
         listCharts: async () => [chart],
         getMaterializationCache: () => new Map(),
@@ -552,11 +606,11 @@ describe("browser-filter-engine", () => {
     const chart = createChart({
       id: "chart-external",
       sql: "SELECT * FROM duck.astronomy",
-      sqlBackend: "duckdb-http",
+      sqlBackend: "bridge",
       dbIdentifier: "postgres://user:pass@localhost:5432/astronomy",
       sourceDescriptor: {
         kind: "external",
-        runtimeBackend: "duckdb-http",
+        runtimeBackend: "bridge",
         dbIdentifier: "postgres://user:pass@localhost:5432/astronomy",
         catalogContext: null,
         externalType: "postgres",
@@ -571,8 +625,8 @@ describe("browser-filter-engine", () => {
         chartFiltersById: {},
       },
       {
-        resolveBackend: () => "duckdb-http",
-        resolveRuntimeFingerprint: async () => "duckdb-http:test",
+        resolveBackend: () => "bridge",
+        resolveRuntimeFingerprint: async () => "bridge:test",
         readJoinDefs: async () => [],
         listCharts: async () => [chart],
         getMaterializationCache: () => new Map(),
@@ -607,19 +661,19 @@ describe("browser-filter-engine", () => {
     const chart = createChart({
       id: "chart-motherduck",
       sql: "SELECT * FROM unicorns",
-      sqlBackend: "duckdb-http",
+      sqlBackend: "bridge",
       dbIdentifier: "md:analytics",
       sourceDescriptor: {
         kind: "motherduck",
-        runtimeBackend: "duckdb-http",
+        runtimeBackend: "bridge",
         dbIdentifier: "md:analytics",
         catalogContext: null,
       },
     });
 
     await loadDashboardDimensions("dashboard-motherduck", {
-      resolveBackend: () => "duckdb-http",
-      resolveRuntimeFingerprint: async () => "duckdb-http:test",
+      resolveBackend: () => "bridge",
+      resolveRuntimeFingerprint: async () => "bridge:test",
       readJoinDefs: async () => [],
       listCharts: async () => [chart],
       getMaterializationCache: () => new Map(),

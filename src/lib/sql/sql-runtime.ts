@@ -6,16 +6,10 @@ import {
   pingBridge,
   refreshBridgeConfig,
 } from "@/lib/bridge/pondview-bridge";
-import {
-  type DuckDbHttpHealthStatus,
-  getDuckDbHttpHealthStatus,
-  hasDuckDbHttpConfig,
-} from "@/lib/duckdb/duckdb-http-browser";
 
-export type SqlBackend = "bridge" | "duckdb-http" | "duckdb-wasm";
+export type SqlBackend = "bridge" | "duckdb-wasm";
 export type SqlBackendPreference = "auto" | SqlBackend;
 export type BridgeHealthStatus = "unknown" | "online" | "offline";
-export type { DuckDbHttpHealthStatus };
 export type DbIdentifierKind = "local-wasm" | "bridge-remote" | "unknown";
 export type BridgeRuntimeState = {
   healthStatus: BridgeHealthStatus;
@@ -40,6 +34,7 @@ const REMOTE_IDENTIFIER_PREFIXES = [
   "mysql://",
   "mysql:",
   "sqlite:",
+  "quack:",
   "duckdb:md:",
   "md:",
 ] as const;
@@ -53,16 +48,12 @@ export type RuntimeDeps = {
   hasBridgeSecret: () => boolean;
   getBridgeHealthStatus: () => BridgeHealthStatus;
   getBridgeConfig: () => PondviewBridgeConfig | null;
-  hasDuckDbHttpConfig: () => boolean;
-  getDuckDbHttpHealthStatus: () => DuckDbHttpHealthStatus;
 };
 
 const defaultDeps: RuntimeDeps = {
   hasBridgeSecret: hasSessionSecret,
   getBridgeHealthStatus: getBridgeHealthStatus,
   getBridgeConfig: getBridgeConfigFromCache,
-  hasDuckDbHttpConfig,
-  getDuckDbHttpHealthStatus,
 };
 
 function isBrowser(): boolean {
@@ -105,12 +96,7 @@ export function isRuntimeDefaultDbIdentifier(dbIdentifier?: string): boolean {
 }
 
 function parseSqlBackendPreference(raw: string | null): SqlBackendPreference {
-  if (
-    raw === "bridge" ||
-    raw === "duckdb-http" ||
-    raw === "duckdb-wasm" ||
-    raw === "auto"
-  ) {
+  if (raw === "bridge" || raw === "duckdb-wasm" || raw === "auto") {
     return raw;
   }
   return "auto";
@@ -292,12 +278,6 @@ function isBridgeAvailable(deps: RuntimeDeps): boolean {
   return isBridgeQueryReady(deps);
 }
 
-function isDuckDbHttpAvailable(deps: RuntimeDeps): boolean {
-  return (
-    deps.hasDuckDbHttpConfig() && deps.getDuckDbHttpHealthStatus() !== "offline"
-  );
-}
-
 function resolvePreference(
   backendPreference: SqlBackendPreference | undefined,
 ): SqlBackendPreference {
@@ -310,18 +290,14 @@ function getBackendFallbackOrder(
   preference: SqlBackendPreference,
 ): SqlBackend[] {
   if (preference === "bridge") {
-    return ["bridge", "duckdb-http", "duckdb-wasm"];
-  }
-
-  if (preference === "duckdb-http") {
-    return ["duckdb-http", "bridge", "duckdb-wasm"];
+    return ["bridge", "duckdb-wasm"];
   }
 
   if (preference === "duckdb-wasm") {
-    return ["duckdb-wasm", "bridge", "duckdb-http"];
+    return ["duckdb-wasm", "bridge"];
   }
 
-  return ["bridge", "duckdb-http", "duckdb-wasm"];
+  return ["bridge", "duckdb-wasm"];
 }
 
 function pickAvailableBackend(
@@ -337,10 +313,6 @@ function pickAvailableBackend(
 function isBackendAvailable(backend: SqlBackend, deps: RuntimeDeps): boolean {
   if (backend === "bridge") {
     return isBridgeAvailable(deps);
-  }
-
-  if (backend === "duckdb-http") {
-    return isDuckDbHttpAvailable(deps);
   }
 
   return true;

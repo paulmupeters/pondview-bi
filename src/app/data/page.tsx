@@ -8,35 +8,30 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
-import { useDuckdbHttpTables } from "@/hooks/use-duckdb-http-tables";
+import { useRemoteRuntimeTables } from "@/hooks/use-remote-runtime-tables";
 import { useWasmTables } from "@/hooks/use-wasm-tables";
-import { refreshDuckDbHttpHealth } from "@/lib/duckdb/duckdb-http-browser";
+import { listBridgeSources } from "@/lib/bridge/pondview-bridge";
+import {
+  CONNECTED_TABLES_STORAGE_KEY,
+  CONNECTED_TABLES_UPDATED_EVENT,
+  type ConnectedTable,
+  readConnectedTablesFromStorage,
+} from "@/lib/connected-tables";
+import {
+  buildDataCatalogGroups,
+  type DataCatalogGroup,
+  type DataCatalogSourceInput,
+} from "@/lib/data/catalog-groups";
 import {
   clearJoinDefsInStorage,
   readJoinDefsRawFromStorage,
   saveJoinDefsRawToStorage,
 } from "@/lib/joins/browser-storage";
-import { isHiddenRuntimeSchema } from "@/lib/sql/runtime-table-schemas";
-import {
-  useBridgeRuntimeState,
-  useDuckDbHttpConfig,
-  useDuckDbHttpHealthStatus,
-  useResolvedSqlBackend,
-  useSelectedSqlBackend,
-} from "@/lib/sql/use-sql-backend";
-import { cn } from "@/lib/utils";
+import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
 /* ------------------------------------------------------------------ */
-
-type TableEntry = {
-  catalog?: string;
-  name: string;
-  type: string;
-  columns?: { name: string; type?: string }[];
-};
-type SchemaGroup = { schema: string; tables: TableEntry[] };
 
 const SCHEMA_SKELETON_KEYS = [
   "schema-skeleton-1",
@@ -77,7 +72,7 @@ function TableCatalog({
   groups,
   gridVisible,
 }: {
-  groups: SchemaGroup[];
+  groups: DataCatalogGroup[];
   gridVisible: boolean;
 }) {
   if (groups.length === 0) {
@@ -103,7 +98,7 @@ function TableCatalog({
 
         return (
           <div
-            key={group.schema}
+            key={`${group.catalog}.${group.schema}`}
             className="overflow-hidden rounded-lg border border-border bg-card"
             style={{
               transition: gridVisible
@@ -113,15 +108,38 @@ function TableCatalog({
               transform: gridVisible ? "translateY(0)" : "translateY(8px)",
             }}
           >
-            {/* Schema header */}
-            <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-2.5">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary/70">
-                  Schema
-                </span>
-                <span className="truncate font-mono text-sm font-semibold text-foreground">
-                  {group.schema}
-                </span>
+            {/* Catalog/schema header */}
+            <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-2.5">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary/70">
+                    Database
+                  </span>
+                  <span className="truncate font-mono text-sm font-semibold text-foreground">
+                    {group.catalog}
+                  </span>
+                </div>
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary/70">
+                    Schema
+                  </span>
+                  <span className="truncate font-mono text-sm font-semibold text-foreground">
+                    {group.schema}
+                  </span>
+                </div>
+                {group.origin && (
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary/70">
+                      Source
+                    </span>
+                    <span
+                      className="inline-flex max-w-full items-center rounded border border-border bg-background px-2 py-0.5 font-mono text-[10px] font-medium text-muted-foreground"
+                      title={group.origin.description}
+                    >
+                      <span className="truncate">{group.origin.label}</span>
+                    </span>
+                  </div>
+                )}
               </div>
               <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
                 {group.tables.length} table
@@ -137,7 +155,7 @@ function TableCatalog({
             <div className="divide-y divide-border">
               {group.tables.map((table) => (
                 <Collapsible
-                  key={`${table.catalog ?? "default"}.${group.schema}.${table.name}`}
+                  key={`${group.catalog}.${group.schema}.${table.name}`}
                 >
                   <CollapsibleTrigger asChild>
                     <button
@@ -166,7 +184,7 @@ function TableCatalog({
                         <div className="flex flex-wrap gap-1.5">
                           {table.columns.map((column) => (
                             <span
-                              key={`${table.catalog ?? "default"}.${group.schema}.${table.name}.${column.name}`}
+                              key={`${group.catalog}.${group.schema}.${table.name}.${column.name}`}
                               className="inline-flex max-w-full items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
                             >
                               <span className="truncate text-foreground">
@@ -197,37 +215,12 @@ function TableCatalog({
   );
 }
 
-function StatusBadge({
-  kind,
-  label,
-}: {
-  kind: "active" | "warning" | "inactive";
-  label: string;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span
-        className={cn("h-2 w-2 shrink-0 rounded-full", {
-          "bg-primary": kind === "active",
-          "bg-amber-500": kind === "warning",
-          "bg-muted-foreground/40": kind === "inactive",
-        })}
-      />
-      <span className="text-sm font-medium text-foreground">{label}</span>
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /*  Main page                                                           */
 /* ------------------------------------------------------------------ */
 
 export default function ViewDataPage() {
   /* ── Backend state ── */
-  const bridgeRuntimeState = useBridgeRuntimeState();
-  const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
-  const duckDbHttpConfig = useDuckDbHttpConfig();
-  const selectedSqlBackend = useSelectedSqlBackend();
   const effectiveSqlBackend = useResolvedSqlBackend();
 
   /* ── Refresh token ── */
@@ -236,14 +229,15 @@ export default function ViewDataPage() {
   /* ── Table loaders ── */
   const {
     tables: duckdbTables,
+    currentCatalog: duckdbCurrentCatalog,
     isLoading: isDuckdbTablesLoading,
     error: duckdbTablesError,
-    isConfigured: isDuckdbHttpConfigured,
-    connectionInfo: duckdbHttpConnectionInfo,
-  } = useDuckdbHttpTables(effectiveSqlBackend, runtimeRefreshToken);
+    connectionInfo: duckdbConnectionInfo,
+  } = useRemoteRuntimeTables(effectiveSqlBackend, runtimeRefreshToken);
 
   const {
     tables: wasmTables,
+    currentCatalog: wasmCurrentCatalog,
     isLoading: isWasmTablesLoading,
     error: wasmTablesError,
   } = useWasmTables(runtimeRefreshToken, {
@@ -260,6 +254,12 @@ export default function ViewDataPage() {
 
   /* ── Dialogs ── */
   const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
+  const [connectedSources, setConnectedSources] = useState<ConnectedTable[]>(
+    () => readConnectedTablesFromStorage(),
+  );
+  const [bridgeSources, setBridgeSources] = useState<DataCatalogSourceInput[]>(
+    [],
+  );
 
   /* ── Join definitions ── */
   const [joinDefsRaw, setJoinDefsRaw] = useState("[]");
@@ -271,82 +271,102 @@ export default function ViewDataPage() {
 
   /* ── Effects ── */
   useEffect(() => {
-    if (!duckDbHttpConfig || selectedSqlBackend !== "duckdb-http") {
-      return;
-    }
-    void refreshDuckDbHttpHealth();
-    const intervalId = window.setInterval(() => {
-      void refreshDuckDbHttpHealth();
-    }, 15000);
-    return () => window.clearInterval(intervalId);
-  }, [duckDbHttpConfig, selectedSqlBackend]);
-
-  useEffect(() => {
     setJoinDefsRaw(readJoinDefsRawFromStorage());
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateConnectedSources = () => {
+      setConnectedSources(readConnectedTablesFromStorage());
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === CONNECTED_TABLES_STORAGE_KEY) {
+        updateConnectedSources();
+      }
+    };
+
+    window.addEventListener(
+      CONNECTED_TABLES_UPDATED_EVENT,
+      updateConnectedSources,
+    );
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(
+        CONNECTED_TABLES_UPDATED_EVENT,
+        updateConnectedSources,
+      );
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runtimeRefreshToken intentionally reloads bridge source metadata
+  useEffect(() => {
+    if (effectiveSqlBackend !== "bridge") {
+      setBridgeSources([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    void listBridgeSources(controller.signal)
+      .then((response) => {
+        setBridgeSources(
+          response.sources.map((source) => ({
+            type: source.type,
+            alias: source.alias,
+            readOnly: source.readonly,
+          })),
+        );
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          console.warn("[ViewDataPage] Failed to load bridge sources:", error);
+          setBridgeSources([]);
+        }
+      });
+
+    return () => controller.abort();
+  }, [effectiveSqlBackend, runtimeRefreshToken]);
+
   /* ── Derived data ── */
-  const tablesBySchema = useMemo(() => {
-    const grouped = new Map<string, TableEntry[]>();
+  const catalogGroups = useMemo(() => {
     const sourceTables =
       effectiveSqlBackend === "duckdb-wasm" ? wasmTables : duckdbTables;
 
-    for (const table of sourceTables) {
-      const schema = table.schema.trim();
-      const catalog = table.catalog?.trim();
-      if (isHiddenRuntimeSchema(schema)) {
-        continue;
-      }
-      if (catalog && isHiddenRuntimeSchema(catalog)) {
-        continue;
-      }
+    return buildDataCatalogGroups(sourceTables, {
+      sqlBackend: effectiveSqlBackend,
+      currentCatalog:
+        effectiveSqlBackend === "duckdb-wasm"
+          ? wasmCurrentCatalog
+          : duckdbCurrentCatalog,
+      bridgeDatabaseMode: duckdbConnectionInfo?.database?.mode,
+      connectedSources: [...connectedSources, ...bridgeSources],
+    });
+  }, [
+    bridgeSources,
+    connectedSources,
+    duckdbConnectionInfo?.database?.mode,
+    duckdbCurrentCatalog,
+    duckdbTables,
+    effectiveSqlBackend,
+    wasmCurrentCatalog,
+    wasmTables,
+  ]);
 
-      const existing = grouped.get(schema);
-      if (existing) {
-        existing.push({
-          catalog,
-          name: table.name,
-          type: table.type,
-          columns: table.columns,
-        });
-      } else {
-        grouped.set(schema, [
-          {
-            catalog,
-            name: table.name,
-            type: table.type,
-            columns: table.columns,
-          },
-        ]);
-      }
-    }
-
-    return Array.from(grouped.entries())
-      .map(([schema, entries]) => ({
-        schema,
-        tables: [...entries].sort((a, b) => a.name.localeCompare(b.name)),
-      }))
-      .sort((a, b) => a.schema.localeCompare(b.schema));
-  }, [duckdbTables, effectiveSqlBackend, wasmTables]);
+  const catalogTableCount = useMemo(
+    () => catalogGroups.reduce((acc, group) => acc + group.tables.length, 0),
+    [catalogGroups],
+  );
 
   useEffect(() => {
-    if (!isTablesLoading && tablesBySchema.length > 0) {
+    if (!isTablesLoading && catalogGroups.length > 0) {
       const id = requestAnimationFrame(() => setGridVisible(true));
       return () => cancelAnimationFrame(id);
     }
     if (isTablesLoading) setGridVisible(false);
-  }, [isTablesLoading, tablesBySchema.length]);
-
-  /* ── Labels ── */
-  const remoteRuntimeLabel =
-    effectiveSqlBackend === "bridge" ? "Bridge" : "DuckDB over HTTP";
-  const selectedRuntimeLabel =
-    selectedSqlBackend === "bridge" ? "Bridge" : "DuckDB over HTTP";
-  const bridgeConnectionLabel = bridgeRuntimeState.config
-    ? `${bridgeRuntimeState.config.host}:${bridgeRuntimeState.config.port}`
-    : "configured";
-  const isBridgeSelectedButNotReady =
-    selectedSqlBackend === "bridge" && effectiveSqlBackend !== "bridge";
+  }, [catalogGroups.length, isTablesLoading]);
 
   /* ── Handlers ── */
   const handleSaveJoinDefs = useCallback(() => {
@@ -373,30 +393,6 @@ export default function ViewDataPage() {
     setJoinDefsError(null);
     setJoinDefsSuccess("Cleared join definitions.");
   }, []);
-
-  /* ── Status card content ── */
-  const statusAccent = isBridgeSelectedButNotReady
-    ? "border-l-amber-500"
-    : effectiveSqlBackend === "duckdb-wasm" ||
-        (effectiveSqlBackend === "duckdb-http" && isDuckdbHttpConfigured)
-      ? "border-l-primary"
-      : "border-l-muted-foreground/30";
-
-  const statusKind: "active" | "warning" | "inactive" =
-    isBridgeSelectedButNotReady
-      ? "warning"
-      : effectiveSqlBackend === "duckdb-wasm" ||
-          (effectiveSqlBackend === "duckdb-http" && isDuckdbHttpConfigured)
-        ? "active"
-        : "inactive";
-
-  const statusLabel = isBridgeSelectedButNotReady
-    ? `Bridge • ${bridgeConnectionLabel}`
-    : effectiveSqlBackend === "duckdb-wasm"
-      ? "DuckDB WASM"
-      : effectiveSqlBackend === "duckdb-http" && isDuckdbHttpConfigured
-        ? `${remoteRuntimeLabel} • ${duckdbHttpConnectionInfo ? `${duckdbHttpConnectionInfo.host}:${duckdbHttpConnectionInfo.port}` : "configured"}`
-        : `${selectedRuntimeLabel} • Unavailable`;
 
   return (
     <div className="relative flex h-full flex-col">
@@ -441,66 +437,6 @@ export default function ViewDataPage() {
           </header>
 
           <div className="space-y-16">
-            {/* Connection Status */}
-            <section className="space-y-4">
-              <div className="flex items-center gap-2">
-                <p className="font-mono text-[10px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
-                  Active Runtime
-                </p>
-              </div>
-
-              <div
-                className={cn(
-                  "rounded-lg border border-border bg-card p-5 text-left border-l-[3px]",
-                  statusAccent,
-                )}
-              >
-                <StatusBadge kind={statusKind} label={statusLabel} />
-
-                <div className="mt-4 space-y-3">
-                  {isBridgeSelectedButNotReady ? (
-                    <>
-                      <p className="text-sm leading-relaxed text-muted-foreground">
-                        {bridgeRuntimeState.isDiscoverable
-                          ? "Bridge is selected, but Pondview still needs your session secret before queries can run through the active DuckDB instance."
-                          : "Bridge is selected, but the Pondview bridge is currently unavailable."}
-                      </p>
-                      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Health: {bridgeRuntimeState.healthStatus}
-                        {bridgeRuntimeState.config
-                          ? ` · Auth: ${bridgeRuntimeState.config.requiresAuth ? (bridgeRuntimeState.hasSessionSecret ? "session secret set" : "required") : "not required"}`
-                          : ""}
-                      </p>
-                    </>
-                  ) : effectiveSqlBackend === "duckdb-wasm" ? (
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      Queries are running against the browser-local DuckDB WASM
-                      database.
-                    </p>
-                  ) : effectiveSqlBackend === "duckdb-http" &&
-                    isDuckdbHttpConfigured ? (
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      Remote DuckDB instance connected. Tables are listed in the
-                      catalog below.
-                    </p>
-                  ) : (
-                    <>
-                      <p className="text-sm leading-relaxed text-muted-foreground">
-                        {selectedRuntimeLabel} is selected, but remote metadata
-                        is unavailable.
-                      </p>
-                      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Health:{" "}
-                        {selectedSqlBackend === "bridge"
-                          ? bridgeRuntimeState.healthStatus
-                          : duckDbHttpHealthStatus}
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
-            </section>
-
             {/* Data Catalog */}
             <section className="space-y-4">
               <div className="flex items-center justify-between gap-4">
@@ -508,21 +444,12 @@ export default function ViewDataPage() {
                   <p className="font-mono text-[10px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
                     Data Catalog
                   </p>
-                  {tablesBySchema.length > 0 && !isTablesLoading && (
+                  {catalogGroups.length > 0 && !isTablesLoading && (
                     <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                      {tablesBySchema.reduce(
-                        (acc, g) => acc + g.tables.length,
-                        0,
-                      )}{" "}
-                      table
-                      {tablesBySchema.reduce(
-                        (acc, g) => acc + g.tables.length,
-                        0,
-                      ) !== 1
-                        ? "s"
-                        : ""}{" "}
-                      across {tablesBySchema.length} schema
-                      {tablesBySchema.length !== 1 ? "s" : ""}
+                      {catalogTableCount} table
+                      {catalogTableCount !== 1 ? "s" : ""} across{" "}
+                      {catalogGroups.length} database/schema group
+                      {catalogGroups.length !== 1 ? "s" : ""}
                     </span>
                   )}
                 </div>
@@ -543,7 +470,7 @@ export default function ViewDataPage() {
                 </div>
               ) : (
                 <TableCatalog
-                  groups={tablesBySchema}
+                  groups={catalogGroups}
                   gridVisible={gridVisible}
                 />
               )}

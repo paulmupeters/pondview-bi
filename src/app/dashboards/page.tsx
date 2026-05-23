@@ -1,6 +1,7 @@
 import {
   ArrowRight,
   ClockIcon,
+  Database,
   LayoutDashboard,
   Plus,
   Trash2,
@@ -16,6 +17,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { addSampleDashboard } from "@/lib/dashboard/sample-dashboard";
+import { resolveDashboardMode } from "@/lib/dashboard-mode";
 import { cn } from "@/lib/utils";
 import {
   createDashboard,
@@ -33,6 +36,8 @@ type DashboardLite = {
   title: string | null;
   updatedAt: number;
   storageStatus?: "shared" | "best-effort" | null;
+  sourceKind?: "attached" | null;
+  sourceCatalog?: string | null;
 };
 
 const EMPTY_INITIAL_DASHBOARDS: DashboardLite[] = [];
@@ -99,7 +104,17 @@ function SkeletonGrid() {
   );
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState({
+  onAddSample,
+  onCreate,
+  sampleError,
+  sampleLoading,
+}: {
+  onAddSample?: () => void;
+  onCreate?: () => void;
+  sampleError?: string | null;
+  sampleLoading?: boolean;
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in zoom-in-95 duration-500">
       <div className="relative mb-8">
@@ -111,17 +126,46 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <h2 className="text-2xl font-bold tracking-tight text-foreground">
         No dashboards yet
       </h2>
-      <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
-        Create your first dashboard to organize visuals from your analyses.
-      </p>
-      <Button
-        size="lg"
-        className="mt-8 gap-2 rounded-full px-6 shadow-lg shadow-primary/20"
-        onClick={onCreate}
-      >
-        <Plus className="h-4 w-4" />
-        Create Dashboard
-      </Button>
+      {onCreate ? (
+        <>
+          <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
+            Create your first dashboard, or attach the sample stations dashboard
+            to explore Pondview.
+          </p>
+          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
+            {onAddSample ? (
+              <Button
+                size="lg"
+                className="gap-2 rounded-full px-6 shadow-lg shadow-primary/20"
+                onClick={onAddSample}
+                disabled={sampleLoading}
+              >
+                <Database className="h-4 w-4" />
+                {sampleLoading ? "Adding sample..." : "Add sample dashboard"}
+              </Button>
+            ) : null}
+            <Button
+              size="lg"
+              variant={onAddSample ? "outline" : "default"}
+              className="gap-2 rounded-full px-6"
+              onClick={onCreate}
+              disabled={sampleLoading}
+            >
+              <Plus className="h-4 w-4" />
+              Create Dashboard
+            </Button>
+          </div>
+          {sampleError ? (
+            <p className="mt-4 max-w-md text-sm text-destructive">
+              {sampleError}
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
+          No dashboards are available to view.
+        </p>
+      )}
     </div>
   );
 }
@@ -154,6 +198,9 @@ function ErrorState({
 
 export default function DashboardsPage() {
   const rtf = useRelativeTimeFormatter();
+  const isDashboardMode = resolveDashboardMode(
+    typeof window === "undefined" ? "" : window.location.search,
+  );
 
   const [dashboards, setDashboards] = useState<DashboardLite[]>(
     EMPTY_INITIAL_DASHBOARDS,
@@ -166,6 +213,8 @@ export default function DashboardsPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
+  const [isAddingSample, setIsAddingSample] = useState(false);
+  const [sampleError, setSampleError] = useState<string | null>(null);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [dashboardToDelete, setDashboardToDelete] =
@@ -220,6 +269,23 @@ export default function DashboardsPage() {
     }
   }, [createTitle, load]);
 
+  const handleAddSampleDashboard = useCallback(async () => {
+    setIsAddingSample(true);
+    setSampleError(null);
+    try {
+      await addSampleDashboard();
+      await load();
+    } catch (error) {
+      setSampleError(
+        error instanceof Error
+          ? error.message
+          : "Failed to add sample dashboard.",
+      );
+    } finally {
+      setIsAddingSample(false);
+    }
+  }, [load]);
+
   const confirmDelete = useCallback(async () => {
     if (!dashboardToDelete) return;
     setDeletingId(dashboardToDelete.id);
@@ -269,18 +335,20 @@ export default function DashboardsPage() {
                 </p>
               </div>
             )}
-            <Button
-              size="lg"
-              className="gap-2 rounded-full px-6 shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-primary/35"
-              onClick={() => {
-                setCreateTitle("");
-                setCreateDialogOpen(true);
-              }}
-              disabled={isCreating}
-            >
-              <Plus className="h-4 w-4" />
-              New Dashboard
-            </Button>
+            {!isDashboardMode ? (
+              <Button
+                size="lg"
+                className="gap-2 rounded-full px-6 shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-primary/35"
+                onClick={() => {
+                  setCreateTitle("");
+                  setCreateDialogOpen(true);
+                }}
+                disabled={isCreating}
+              >
+                <Plus className="h-4 w-4" />
+                New Dashboard
+              </Button>
+            ) : null}
           </div>
         </header>
 
@@ -290,7 +358,18 @@ export default function DashboardsPage() {
         ) : loadError ? (
           <ErrorState error={loadError} onRetry={() => void load()} />
         ) : sortedDashboards.length === 0 ? (
-          <EmptyState onCreate={() => setCreateDialogOpen(true)} />
+          <EmptyState
+            onAddSample={
+              isDashboardMode
+                ? undefined
+                : () => void handleAddSampleDashboard()
+            }
+            onCreate={
+              isDashboardMode ? undefined : () => setCreateDialogOpen(true)
+            }
+            sampleError={sampleError}
+            sampleLoading={isAddingSample}
+          />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {sortedDashboards.map((dashboard, i) => {
@@ -337,9 +416,16 @@ export default function DashboardsPage() {
                             Latest
                           </span>
                         )}
-                        {dashboard.storageStatus === "best-effort" && (
-                          <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                            Local
+                        {dashboard.sourceKind === "attached" && (
+                          <span
+                            className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400"
+                            title={
+                              dashboard.sourceCatalog
+                                ? `Attached from ${dashboard.sourceCatalog}`
+                                : "Attached dashboard"
+                            }
+                          >
+                            Attached
                           </span>
                         )}
                       </div>
@@ -353,16 +439,18 @@ export default function DashboardsPage() {
                       </h3>
                     </div>
 
-                    <button
-                      type="button"
-                      className="pointer-events-auto relative z-20 mt-0.5 inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-0 ring-offset-background transition-all hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100"
-                      onClick={() => setDashboardToDelete(dashboard)}
-                      disabled={deletingId === dashboard.id}
-                      aria-label="Delete dashboard"
-                      title="Delete dashboard"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {!isDashboardMode && dashboard.sourceKind !== "attached" ? (
+                      <button
+                        type="button"
+                        className="pointer-events-auto relative z-20 mt-0.5 inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-0 ring-offset-background transition-all hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100"
+                        onClick={() => setDashboardToDelete(dashboard)}
+                        disabled={deletingId === dashboard.id}
+                        aria-label="Delete dashboard"
+                        title="Delete dashboard"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    ) : null}
                   </div>
 
                   <div className="pointer-events-none relative z-20 mt-auto flex items-center justify-between">
@@ -379,82 +467,86 @@ export default function DashboardsPage() {
         )}
       </div>
 
-      {/* Create dashboard dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>New Dashboard</DialogTitle>
-            <DialogDescription>
-              Give your dashboard a name to get started.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <Input
-              placeholder="Dashboard title"
-              value={createTitle}
-              onChange={(e) => setCreateTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && createTitle.trim()) {
-                  void handleCreate();
-                }
-              }}
-              autoFocus
-            />
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setCreateDialogOpen(false)}
-              disabled={isCreating}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => void handleCreate()}
-              disabled={!createTitle.trim() || isCreating}
-            >
-              {isCreating ? "Creating..." : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {!isDashboardMode ? (
+        <>
+          {/* Create dashboard dialog */}
+          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>New Dashboard</DialogTitle>
+                <DialogDescription>
+                  Give your dashboard a name to get started.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-2">
+                <Input
+                  placeholder="Dashboard title"
+                  value={createTitle}
+                  onChange={(e) => setCreateTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && createTitle.trim()) {
+                      void handleCreate();
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  variant="outline"
+                  onClick={() => setCreateDialogOpen(false)}
+                  disabled={isCreating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => void handleCreate()}
+                  disabled={!createTitle.trim() || isCreating}
+                >
+                  {isCreating ? "Creating..." : "Create"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-      {/* Delete confirmation dialog */}
-      <Dialog
-        open={!!dashboardToDelete}
-        onOpenChange={(open) => !open && setDashboardToDelete(null)}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete Dashboard</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete{" "}
-              <span className="font-semibold text-foreground">
-                &ldquo;
-                {dashboardToDelete?.title || "Untitled Dashboard"}
-                &rdquo;
-              </span>
-              ? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setDashboardToDelete(null)}
-              disabled={!!deletingId}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => void confirmDelete()}
-              disabled={!!deletingId}
-            >
-              {deletingId ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          {/* Delete confirmation dialog */}
+          <Dialog
+            open={!!dashboardToDelete}
+            onOpenChange={(open) => !open && setDashboardToDelete(null)}
+          >
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Delete Dashboard</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete{" "}
+                  <span className="font-semibold text-foreground">
+                    &ldquo;
+                    {dashboardToDelete?.title || "Untitled Dashboard"}
+                    &rdquo;
+                  </span>
+                  ? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  variant="outline"
+                  onClick={() => setDashboardToDelete(null)}
+                  disabled={!!deletingId}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => void confirmDelete()}
+                  disabled={!!deletingId}
+                >
+                  {deletingId ? "Deleting..." : "Delete"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      ) : null}
     </div>
   );
 }

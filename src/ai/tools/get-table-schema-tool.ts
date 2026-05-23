@@ -2,7 +2,10 @@ import { tool } from "ai";
 import { z } from "zod";
 import { runQuery } from "@/lib/sql/run-query";
 import type { Result } from "@/lib/types";
-import { resolveToolRuntimeTarget } from "./sql-tool-shared";
+import {
+  resolveRuntimeTableReference,
+  resolveToolRuntimeTarget,
+} from "./sql-tool-shared";
 
 function normalizeRows(rows: Record<string, unknown>[]): Result[] {
   const normalizeValue = (value: unknown): string | number | boolean | Date => {
@@ -49,7 +52,11 @@ export const getTableSchemaTool = tool({
       ),
   }),
   execute: async ({ table, databasePath }) => {
-    const describeSql = `DESCRIBE ${table}`;
+    const resolvedTable = await resolveRuntimeTableReference(
+      table,
+      databasePath,
+    );
+    const describeSql = `DESCRIBE ${resolvedTable}`;
 
     const schemaRows = (await runSqlForRuntime(
       databasePath,
@@ -67,7 +74,7 @@ export const getTableSchemaTool = tool({
     try {
       sampleRows = await runSqlForRuntime(
         databasePath,
-        `SELECT * FROM ${table} LIMIT 5`,
+        `SELECT * FROM ${resolvedTable} LIMIT 5`,
       );
     } catch (error) {
       console.warn(
@@ -77,7 +84,8 @@ export const getTableSchemaTool = tool({
     }
 
     return {
-      table,
+      table: resolvedTable,
+      requestedTable: table,
       columns: schemaRows.map((col) => ({
         name: col.column_name,
         type: col.column_type,

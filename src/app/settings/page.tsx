@@ -9,8 +9,10 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AiProvider,
+  getAiProviderDisplayName,
   getMissingRequiredSetting,
   getProviderApiKeyFromStorage,
+  isAiProvider,
   loadAiSettingsFromStorage,
   saveAiSettingsToStorage,
 } from "@/ai/settings";
@@ -24,7 +26,18 @@ import {
 } from "@/components/ui/select";
 import {
   clearSessionSecret,
+  deleteBridgeS3BackupSecret,
+  downloadBridgeS3Backup,
+  getBridgeEndpoint,
+  getBridgeSecretsStatus,
+  listBridgeS3Backup,
+  type PondviewBridgeConfig,
+  saveBridgeAiSecret,
+  saveBridgeS3BackupSecret,
+  setBridgeEndpoint,
   setSessionSecret,
+  testBridgeS3Backup,
+  uploadBridgeS3Backup,
 } from "@/lib/bridge/pondview-bridge";
 import {
   setExecuteSqlRawOutputPreference,
@@ -39,15 +52,6 @@ import {
   setSelectedTheme as setThemeInStorage,
 } from "@/lib/custom-css";
 import { useDefaultPromptModePreference } from "@/lib/default-prompt-mode";
-import {
-  clearDuckDbHttpConfigInStorage,
-  clearDuckDbHttpSessionAuth,
-  getDuckDbHttpConfigFromStorage,
-  hasDuckDbHttpSessionAuth,
-  refreshDuckDbHttpHealth,
-  setDuckDbHttpConfigInStorage,
-  setDuckDbHttpSessionAuth,
-} from "@/lib/duckdb/duckdb-http-browser";
 import { DuckdbWasmClient } from "@/lib/duckdb/duckdb-wasm-client";
 import {
   downloadSnapshotFromS3,
@@ -98,8 +102,6 @@ import {
 } from "@/lib/sql/sql-runtime";
 import {
   useBridgeRuntimeState,
-  useDuckDbHttpConfig,
-  useDuckDbHttpHealthStatus,
   useResolvedSqlBackend,
   useSelectedSqlBackend,
 } from "@/lib/sql/use-sql-backend";
@@ -203,6 +205,26 @@ function createBrowserProjectState(name: string): OpenProjectState {
   };
 }
 
+function getDefaultBridgeEndpoint(
+  config?: PondviewBridgeConfig | null,
+): string {
+  if (config) {
+    const host =
+      config.host === "0.0.0.0" || config.host === "::"
+        ? "127.0.0.1"
+        : config.host;
+    const protocol =
+      typeof window === "undefined" ? "http:" : window.location.protocol;
+    return `${protocol}//${host}:${config.port}`;
+  }
+
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return window.location.origin;
+}
+
 function formatSnapshotSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) {
     return "0 B";
@@ -239,19 +261,16 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [bridgeSecret, setBridgeSecret] = useState("");
-  const [duckDbHttpHost, setDuckDbHttpHost] = useState("");
-  const [duckDbHttpPort, setDuckDbHttpPort] = useState("");
-  const [duckDbHttpAuth, setDuckDbHttpAuth] = useState("");
-  const [hasDuckDbHttpAuth, setHasDuckDbHttpAuth] = useState(false);
+  const [bridgeEndpoint, setBridgeEndpointInput] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
+  const [bridgeAiConfigured, setBridgeAiConfigured] = useState(false);
   const [runtimeSettingsError, setRuntimeSettingsError] = useState<
     string | null
   >(null);
   const [runtimeSettingsSuccess, setRuntimeSettingsSuccess] = useState<
     string | null
   >(null);
-  const [isTestingHttpConnection, setIsTestingHttpConnection] = useState(false);
   const [s3BackupForm, setS3BackupForm] = useState<S3BackupConfig>(
     EMPTY_S3_BACKUP_CONFIG,
   );
@@ -259,6 +278,8 @@ export default function SettingsPage() {
     useState<S3BackupConfig>(EMPTY_S3_BACKUP_CONFIG);
   const [s3BackupError, setS3BackupError] = useState<string | null>(null);
   const [s3BackupSuccess, setS3BackupSuccess] = useState<string | null>(null);
+  const [bridgeS3BackupConfigured, setBridgeS3BackupConfigured] =
+    useState(false);
   const [isTestingS3Connection, setIsTestingS3Connection] = useState(false);
   const [isListingS3Snapshots, setIsListingS3Snapshots] = useState(false);
   const [isRestoringFromS3, setIsRestoringFromS3] = useState(false);
@@ -268,6 +289,11 @@ export default function SettingsPage() {
   const [s3RestoreKey, setS3RestoreKey] = useState<string | null>(null);
   const [s3CorsError, setS3CorsError] = useState(false);
   const [openProjectName, setOpenProjectName] = useState("Untitled Project");
+  const [openProjectBackingKind, setOpenProjectBackingKind] =
+    useState<OpenProjectState["backingKind"]>("browser-indexeddb");
+  const [openProjectRootPath, setOpenProjectRootPath] = useState<string | null>(
+    null,
+  );
   const [projectNameDraft, setProjectNameDraft] = useState("");
   const [knownProjects, setKnownProjects] = useState<OpenProjectState[]>([]);
   const [activeProjectId, setActiveProjectId] = useState("");
@@ -293,8 +319,6 @@ export default function SettingsPage() {
   const projectImportFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
   const bridgeRuntimeState = useBridgeRuntimeState();
-  const duckDbHttpConfig = useDuckDbHttpConfig();
-  const duckDbHttpHealthStatus = useDuckDbHttpHealthStatus();
   const showToolCalls = useShowToolCallsPreference();
   const showExecuteSqlRawOutput = useExecuteSqlRawOutputPreference();
   const defaultPromptMode = useDefaultPromptModePreference();
@@ -303,7 +327,6 @@ export default function SettingsPage() {
   const hasBridgeSessionSecret = bridgeRuntimeState.hasSessionSecret;
   const isBridgeDiscoverable = bridgeRuntimeState.isDiscoverable;
   const isBridgeQueryReady = bridgeRuntimeState.isQueryReady;
-  const isDuckDbHttpConfigured = Boolean(duckDbHttpConfig);
   const selectedSqlBackend = useSelectedSqlBackend();
   const effectiveSqlBackend = useResolvedSqlBackend();
 
@@ -322,6 +345,8 @@ export default function SettingsPage() {
     const projectName = project?.name ?? "Untitled Project";
     setKnownProjects(projects);
     setActiveProjectId(project.id);
+    setOpenProjectBackingKind(project.backingKind);
+    setOpenProjectRootPath(project.rootPath ?? null);
     setOpenProjectName(projectName);
     setProjectNameDraft(projectName);
   }, []);
@@ -340,7 +365,7 @@ export default function SettingsPage() {
     setOpenAiCompatibleName(aiSettings.openAiCompatibleName ?? "");
     setCssCode(savedCss);
     setSelectedTheme(savedTheme || (savedCss ? CUSTOM_THEME_VALUE : "default"));
-    setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
+    setBridgeEndpointInput(getBridgeEndpoint() || getDefaultBridgeEndpoint());
 
     const savedS3Config = readS3BackupConfigFromStorage();
     setSavedS3BackupConfig(savedS3Config);
@@ -349,16 +374,7 @@ export default function SettingsPage() {
     setSavedGitHubProjectConfig(savedGitHubConfig);
     setGitHubProjectForm(savedGitHubConfig);
 
-    const savedDuckDbHttpConfig = getDuckDbHttpConfigFromStorage();
-    setDuckDbHttpHost(savedDuckDbHttpConfig?.host ?? "");
-    setDuckDbHttpPort(
-      savedDuckDbHttpConfig ? String(savedDuckDbHttpConfig.port) : "",
-    );
-
     void refreshBridgeHealth();
-    if (savedDuckDbHttpConfig) {
-      void refreshDuckDbHttpHealth();
-    }
 
     void (async () => {
       try {
@@ -374,16 +390,57 @@ export default function SettingsPage() {
   }, [refreshOpenProjectSummary]);
 
   useEffect(() => {
+    if (!isBridgeQueryReady) {
+      setBridgeS3BackupConfigured(false);
+      return;
+    }
+
+    let cancelled = false;
+    void getBridgeSecretsStatus()
+      .then((status) => {
+        if (cancelled) {
+          return;
+        }
+        setBridgeAiConfigured(status.ai?.configured === true);
+        if (status.ai?.configured && isAiProvider(status.ai.provider)) {
+          setAiProvider(status.ai.provider);
+          setModel(status.ai.model ?? "");
+          setVisualizationModel(status.ai.visualizationModel ?? "");
+          setApiKey("");
+        }
+        setBridgeS3BackupConfigured(status.s3Backup?.configured === true);
+        if (status.s3Backup?.configured) {
+          setSavedS3BackupConfig((previous) => ({
+            ...previous,
+            endpoint: status.s3Backup?.endpoint ?? previous.endpoint,
+            region: status.s3Backup?.region ?? previous.region,
+            bucket: status.s3Backup?.bucket ?? previous.bucket,
+            accessKeyId: "",
+            secretAccessKey: "",
+            credentialsStored: true,
+            prefix: status.s3Backup?.prefix ?? previous.prefix,
+            forcePathStyle:
+              status.s3Backup?.forcePathStyle ?? previous.forcePathStyle,
+          }));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBridgeS3BackupConfigured(false);
+          setBridgeAiConfigured(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isBridgeQueryReady]);
+
+  useEffect(() => {
     const hash = window.location.hash.replace(/^#/, "");
     if (SECTION_NAV.some((item) => item.id === hash)) {
       setActiveSection(hash as SettingsSection);
     }
   }, []);
-
-  useEffect(() => {
-    setDuckDbHttpHost(duckDbHttpConfig?.host ?? "");
-    setDuckDbHttpPort(duckDbHttpConfig ? String(duckDbHttpConfig.port) : "");
-  }, [duckDbHttpConfig]);
 
   useEffect(() => {
     if (cssCode && selectedTheme === CUSTOM_THEME_VALUE) {
@@ -392,25 +449,73 @@ export default function SettingsPage() {
   }, [cssCode, selectedTheme]);
 
   useEffect(() => {
-    if (!isDuckDbHttpConfigured) {
+    const storedEndpoint = getBridgeEndpoint();
+    if (storedEndpoint) {
       return;
     }
 
-    void refreshDuckDbHttpHealth();
-    const intervalId = window.setInterval(() => {
-      void refreshDuckDbHttpHealth();
-    }, 15000);
+    setBridgeEndpointInput((currentEndpoint) => {
+      const previousDefault = getDefaultBridgeEndpoint();
+      if (
+        currentEndpoint.trim() &&
+        currentEndpoint.trim() !== previousDefault
+      ) {
+        return currentEndpoint;
+      }
 
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [isDuckDbHttpConfigured]);
+      return getDefaultBridgeEndpoint(bridgeConfig);
+    });
+  }, [bridgeConfig]);
 
   const navigateToSection = (id: SettingsSection) => {
     setActiveSection(id);
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", `#${id}`);
     }
+  };
+
+  const handleSaveBridgeEndpoint = () => {
+    const endpoint = bridgeEndpoint.trim();
+    if (endpoint.length) {
+      try {
+        const url = new URL(endpoint);
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+          setRuntimeSettingsError("Bridge endpoint must use http or https.");
+          setRuntimeSettingsSuccess(null);
+          return;
+        }
+      } catch {
+        setRuntimeSettingsError("Bridge endpoint must be a valid URL.");
+        setRuntimeSettingsSuccess(null);
+        return;
+      }
+    }
+
+    const defaultEndpoint = getDefaultBridgeEndpoint(bridgeConfig);
+    const shouldUseDefaultEndpoint = endpoint === defaultEndpoint;
+    setBridgeEndpoint(shouldUseDefaultEndpoint ? "" : endpoint);
+    setBridgeEndpointInput(endpoint || defaultEndpoint);
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(
+      endpoint && !shouldUseDefaultEndpoint
+        ? "Bridge endpoint saved."
+        : "Bridge endpoint reset to the current Bridge endpoint.",
+    );
+    void refreshBridgeHealth();
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleClearBridgeEndpoint = () => {
+    setBridgeEndpointInput(getDefaultBridgeEndpoint(bridgeConfig));
+    setBridgeEndpoint("");
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(
+      "Bridge endpoint reset to the current Bridge endpoint.",
+    );
+    void refreshBridgeHealth();
+    setShowSuccessMessage(true);
+    setTimeout(() => setShowSuccessMessage(false), 3000);
   };
 
   const handleSetBridgeSecret = () => {
@@ -433,119 +538,17 @@ export default function SettingsPage() {
   };
 
   const handleSqlBackendChange = (backend: SqlBackend) => {
-    if (backend === "bridge" && !isBridgeDiscoverable) {
-      return;
-    }
-
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(null);
+    if (backend === "bridge" && !isBridgeDiscoverable) {
+      setRuntimeSettingsError(
+        "Bridge is unavailable. Start Pondview Bridge or save a reachable endpoint before selecting it.",
+      );
+      return;
+    }
     setSqlBackendPreferenceInStorage(backend);
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
-  };
-
-  const handleSaveDuckDbHttpConfig = () => {
-    const host = duckDbHttpHost.trim();
-    const port = Number.parseInt(duckDbHttpPort.trim(), 10);
-    const auth = duckDbHttpAuth.trim();
-
-    if (!host) {
-      setRuntimeSettingsError("DuckDB HTTP host is required.");
-      setRuntimeSettingsSuccess(null);
-      return;
-    }
-
-    if (!Number.isFinite(port) || port < 1 || port > 65535) {
-      setRuntimeSettingsError(
-        "DuckDB HTTP port must be a valid number between 1 and 65535.",
-      );
-      setRuntimeSettingsSuccess(null);
-      return;
-    }
-
-    if (auth.length) {
-      setDuckDbHttpSessionAuth(auth);
-      setHasDuckDbHttpAuth(hasDuckDbHttpSessionAuth());
-      setDuckDbHttpAuth("");
-    }
-
-    setDuckDbHttpConfigInStorage({ host, port });
-    setRuntimeSettingsError(null);
-    setRuntimeSettingsSuccess("DuckDB HTTP connection settings saved.");
-    void refreshDuckDbHttpHealth();
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
-  };
-
-  const handleClearDuckDbHttpConfig = () => {
-    clearDuckDbHttpConfigInStorage();
-    setDuckDbHttpHost("");
-    setDuckDbHttpPort("");
-    setRuntimeSettingsError(null);
-    setRuntimeSettingsSuccess("DuckDB HTTP connection settings cleared.");
-    if (selectedSqlBackend === "duckdb-http") {
-      setSqlBackendPreferenceInStorage("duckdb-wasm");
-    }
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
-  };
-
-  const handleClearDuckDbHttpAuth = () => {
-    clearDuckDbHttpSessionAuth();
-    setHasDuckDbHttpAuth(false);
-    setRuntimeSettingsError(null);
-    setRuntimeSettingsSuccess("DuckDB HTTP auth cleared.");
-    void refreshDuckDbHttpHealth();
-    if (selectedSqlBackend === "duckdb-http" && !isDuckDbHttpConfigured) {
-      setSqlBackendPreferenceInStorage("duckdb-wasm");
-    }
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
-  };
-
-  const handleTestDuckDbHttpConnection = async () => {
-    const host = duckDbHttpHost.trim();
-    const port = Number.parseInt(duckDbHttpPort.trim(), 10);
-
-    if (!host) {
-      setRuntimeSettingsError("DuckDB HTTP host is required.");
-      setRuntimeSettingsSuccess(null);
-      return;
-    }
-
-    if (!Number.isFinite(port) || port < 1 || port > 65535) {
-      setRuntimeSettingsError(
-        "DuckDB HTTP port must be a valid number between 1 and 65535.",
-      );
-      setRuntimeSettingsSuccess(null);
-      return;
-    }
-
-    setIsTestingHttpConnection(true);
-    setRuntimeSettingsError(null);
-    setRuntimeSettingsSuccess(null);
-
-    try {
-      setDuckDbHttpConfigInStorage({ host, port });
-      const status = await refreshDuckDbHttpHealth(undefined, { host, port });
-      if (status === "online") {
-        setRuntimeSettingsSuccess(
-          "Connection successful — DuckDB HTTP is reachable.",
-        );
-        setShowSuccessMessage(true);
-        setTimeout(() => setShowSuccessMessage(false), 3000);
-      } else {
-        setRuntimeSettingsSuccess(null);
-        setRuntimeSettingsError(
-          "Connection failed — DuckDB HTTP server is not reachable.",
-        );
-      }
-    } catch {
-      setRuntimeSettingsSuccess(null);
-      setRuntimeSettingsError("Connection test failed unexpectedly.");
-    } finally {
-      setIsTestingHttpConnection(false);
-    }
   };
 
   const updateS3BackupForm = <K extends keyof S3BackupConfig>(
@@ -591,7 +594,7 @@ export default function SettingsPage() {
     setTimeout(() => setShowSuccessMessage(false), 3000);
   };
 
-  const handleSaveS3BackupConfig = () => {
+  const handleSaveS3BackupConfig = async () => {
     if (!isS3BackupConfigComplete(s3BackupForm)) {
       setS3BackupError(
         "Endpoint, region, bucket, access key, and secret are all required.",
@@ -600,19 +603,50 @@ export default function SettingsPage() {
       return;
     }
 
-    saveS3BackupConfigToStorage(s3BackupForm);
+    if (effectiveSqlBackend === "bridge" && isBridgeQueryReady) {
+      await saveBridgeS3BackupSecret({
+        endpoint: s3BackupForm.endpoint,
+        region: s3BackupForm.region,
+        bucket: s3BackupForm.bucket,
+        accessKeyId: s3BackupForm.accessKeyId,
+        secretAccessKey: s3BackupForm.secretAccessKey,
+        prefix: s3BackupForm.prefix,
+        forcePathStyle: s3BackupForm.forcePathStyle,
+      });
+      setBridgeS3BackupConfigured(true);
+      saveS3BackupConfigToStorage({
+        ...s3BackupForm,
+        accessKeyId: "",
+        secretAccessKey: "",
+        credentialsStored: true,
+      });
+    } else {
+      saveS3BackupConfigToStorage(s3BackupForm);
+    }
     const stored = readS3BackupConfigFromStorage();
-    setSavedS3BackupConfig(stored);
+    setSavedS3BackupConfig(
+      effectiveSqlBackend === "bridge" && isBridgeQueryReady
+        ? { ...stored, credentialsStored: true }
+        : stored,
+    );
     setS3BackupForm(stored);
     setS3BackupError(null);
     setS3CorsError(false);
-    setS3BackupSuccess("S3 backup configuration saved.");
+    setS3BackupSuccess(
+      effectiveSqlBackend === "bridge" && isBridgeQueryReady
+        ? "S3 backup configuration saved to Bridge."
+        : "S3 backup configuration saved.",
+    );
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
   };
 
-  const handleClearS3BackupConfig = () => {
+  const handleClearS3BackupConfig = async () => {
+    if (isBridgeQueryReady) {
+      await deleteBridgeS3BackupSecret().catch(() => undefined);
+    }
     clearS3BackupConfigInStorage();
+    setBridgeS3BackupConfigured(false);
     setSavedS3BackupConfig(EMPTY_S3_BACKUP_CONFIG);
     setS3BackupForm(EMPTY_S3_BACKUP_CONFIG);
     setS3SnapshotList(null);
@@ -625,7 +659,10 @@ export default function SettingsPage() {
   };
 
   const handleTestS3BackupConnection = async () => {
-    if (!isS3BackupConfigComplete(s3BackupForm)) {
+    if (
+      !(effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured) &&
+      !isS3BackupConfigComplete(s3BackupForm)
+    ) {
       setS3BackupError("Fill in all S3 fields before testing the connection.");
       setS3BackupSuccess(null);
       return;
@@ -636,20 +673,26 @@ export default function SettingsPage() {
     setS3BackupSuccess(null);
     setS3CorsError(false);
 
-    const result = await testS3BackupConnection(s3BackupForm);
+    const result =
+      effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured
+        ? await testBridgeS3Backup()
+        : await testS3BackupConnection(s3BackupForm);
     if (result.ok) {
       setS3BackupSuccess("Connection successful — bucket is reachable.");
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } else {
-      setS3CorsError(result.likelyCors);
+      setS3CorsError(result.likelyCors ?? false);
       setS3BackupError(`Connection failed: ${result.error}`);
     }
     setIsTestingS3Connection(false);
   };
 
   const handleRefreshS3SnapshotList = async () => {
-    if (!isS3BackupConfigComplete(savedS3BackupConfig)) {
+    if (
+      !(effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured) &&
+      !isS3BackupConfigComplete(savedS3BackupConfig)
+    ) {
       setS3BackupError(
         "Save the S3 configuration and enter credentials for this browser session before listing snapshots.",
       );
@@ -660,7 +703,15 @@ export default function SettingsPage() {
     setS3BackupError(null);
 
     try {
-      const snapshots = await listSnapshotsInS3(savedS3BackupConfig);
+      const snapshots =
+        effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured
+          ? (await listBridgeS3Backup()).objects.map((object) => ({
+              ...object,
+              lastModified: object.lastModified
+                ? new Date(object.lastModified)
+                : null,
+            }))
+          : await listSnapshotsInS3(savedS3BackupConfig);
       setS3SnapshotList(snapshots);
       if (snapshots.length === 0) {
         setS3BackupSuccess("No snapshots found at the configured prefix.");
@@ -691,7 +742,10 @@ export default function SettingsPage() {
     setS3BackupSuccess(null);
 
     try {
-      const bytes = await downloadSnapshotFromS3(savedS3BackupConfig, key);
+      const bytes =
+        effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured
+          ? await downloadBridgeS3Backup(key)
+          : await downloadSnapshotFromS3(savedS3BackupConfig, key);
       await new DuckdbWasmClient().importDatabaseSnapshot(bytes);
       setSqlBackendPreferenceInStorage("duckdb-wasm");
       location.reload();
@@ -733,6 +787,7 @@ export default function SettingsPage() {
 
     if (
       uploadSnapshotToS3Backup &&
+      !(effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured) &&
       !isS3BackupConfigComplete(savedS3BackupConfig)
     ) {
       setS3BackupError(
@@ -776,10 +831,10 @@ export default function SettingsPage() {
       }
 
       if (uploadSnapshotToS3Backup && snapshotBytes) {
-        const result = await uploadSnapshotToS3(
-          savedS3BackupConfig,
-          snapshotBytes,
-        );
+        const result =
+          effectiveSqlBackend === "bridge" && bridgeS3BackupConfigured
+            ? await uploadBridgeS3Backup(snapshotBytes)
+            : await uploadSnapshotToS3(savedS3BackupConfig, snapshotBytes);
         s3Key = result.key;
       }
 
@@ -909,6 +964,8 @@ export default function SettingsPage() {
     try {
       await setOpenProject(project);
       setActiveProjectId(project.id);
+      setOpenProjectBackingKind(project.backingKind);
+      setOpenProjectRootPath(project.rootPath ?? null);
       setOpenProjectName(project.name);
       setProjectNameDraft(project.name);
       await syncActiveProjectFromFiles(project);
@@ -1047,14 +1104,29 @@ export default function SettingsPage() {
       openAiCompatibleName,
     };
     const missingSetting = getMissingRequiredSetting(settings);
-    if (missingSetting) {
+    const bridgeKeepsExistingSecret =
+      effectiveSqlBackend === "bridge" &&
+      isBridgeQueryReady &&
+      bridgeAiConfigured &&
+      missingSetting === `${getAiProviderDisplayName(aiProvider)} API key`;
+    if (missingSetting && !bridgeKeepsExistingSecret) {
       setAiSettingsError(`Missing ${missingSetting}.`);
       return;
     }
 
     setIsSaving(true);
     try {
-      saveAiSettingsToStorage(settings);
+      if (effectiveSqlBackend === "bridge" && isBridgeQueryReady) {
+        await saveBridgeAiSecret(
+          bridgeKeepsExistingSecret
+            ? { ...settings, apiKey: undefined }
+            : settings,
+        );
+        setBridgeAiConfigured(true);
+        saveAiSettingsToStorage({ ...settings, apiKey: "" });
+      } else {
+        saveAiSettingsToStorage(settings);
+      }
       setAiSettingsError(null);
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
@@ -1111,8 +1183,6 @@ export default function SettingsPage() {
     effectiveSqlBackend,
     isBridgeDiscoverable,
     isBridgeQueryReady,
-    isDuckDbHttpConfigured,
-    duckDbHttpHealthStatus,
   });
   const bridgeOptionLabel = !isBridgeDiscoverable
     ? "Bridge (Unavailable)"
@@ -1244,6 +1314,11 @@ export default function SettingsPage() {
                   onVisualizationModelChange={setVisualizationModel}
                   apiKey={apiKey}
                   onApiKeyChange={setApiKey}
+                  hasStoredBridgeAiKey={
+                    effectiveSqlBackend === "bridge" &&
+                    isBridgeQueryReady &&
+                    bridgeAiConfigured
+                  }
                   ollamaBaseUrl={ollamaBaseUrl}
                   onOllamaBaseUrlChange={setOllamaBaseUrl}
                   openAiCompatibleUrl={openAiCompatibleUrl}
@@ -1269,32 +1344,20 @@ export default function SettingsPage() {
                   effectiveRuntimeLabel={effectiveRuntimeLabel}
                   selectedSqlBackend={selectedSqlBackend}
                   onSqlBackendChange={handleSqlBackendChange}
-                  isBridgeDiscoverable={isBridgeDiscoverable}
                   bridgeOptionLabel={bridgeOptionLabel}
+                  isBridgeSelectable={isBridgeDiscoverable}
                   runtimeSettingsError={runtimeSettingsError}
                   runtimeSettingsSuccess={runtimeSettingsSuccess}
                   bridgeHealthSummary={bridgeHealthSummary}
+                  bridgeEndpoint={bridgeEndpoint}
+                  onBridgeEndpointChange={setBridgeEndpointInput}
+                  onSaveBridgeEndpoint={handleSaveBridgeEndpoint}
+                  onClearBridgeEndpoint={handleClearBridgeEndpoint}
                   bridgeSecret={bridgeSecret}
                   onBridgeSecretChange={setBridgeSecret}
                   onSetBridgeSecret={handleSetBridgeSecret}
                   onClearBridgeSecret={handleClearBridgeSecret}
                   hasBridgeSessionSecret={hasBridgeSessionSecret}
-                  duckDbHttpHealthStatus={duckDbHttpHealthStatus}
-                  duckDbHttpHost={duckDbHttpHost}
-                  onDuckDbHttpHostChange={setDuckDbHttpHost}
-                  duckDbHttpPort={duckDbHttpPort}
-                  onDuckDbHttpPortChange={setDuckDbHttpPort}
-                  hasDuckDbHttpAuth={hasDuckDbHttpAuth}
-                  duckDbHttpAuth={duckDbHttpAuth}
-                  onDuckDbHttpAuthChange={setDuckDbHttpAuth}
-                  onClearDuckDbHttpAuth={handleClearDuckDbHttpAuth}
-                  onSaveDuckDbHttpConfig={handleSaveDuckDbHttpConfig}
-                  onTestDuckDbHttpConnection={() =>
-                    void handleTestDuckDbHttpConnection()
-                  }
-                  isTestingHttpConnection={isTestingHttpConnection}
-                  onClearDuckDbHttpConfig={handleClearDuckDbHttpConfig}
-                  isDuckDbHttpConfigured={isDuckDbHttpConfigured}
                 />
               )}
 
@@ -1309,6 +1372,8 @@ export default function SettingsPage() {
                   onSaveProjectName={() => void handleSaveProjectName()}
                   onCancelProjectNameEdit={handleCancelProjectNameEdit}
                   openProjectName={openProjectName}
+                  openProjectBackingKind={openProjectBackingKind}
+                  openProjectRootPath={openProjectRootPath}
                   onEditProjectName={handleEditProjectName}
                   openProjectError={openProjectError}
                   onOpenProjectDialog={() =>

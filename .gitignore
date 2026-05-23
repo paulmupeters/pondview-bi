@@ -1,6 +1,6 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 # dependencies
-/node_modules
+node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -86,9 +86,15 @@ skills-lock.json
 docs-site/.vitepress/dist/
 docs-site/.vitepress/cache/
 
+# bridge bundled UI output
+packages/bridge/dist/
+packages/bridge/lib/
+packages/bridge-protocol/dist/
+
 # analyzer
 stats.html
 notes.md
 
 # local app state
 /state/
+example/

@@ -93,7 +93,7 @@ describe("runHomepageExampleCommand", () => {
     await expect(
       runHomepageExampleCommand({
         command: "Create a dashboard for financial metrics",
-        backendPreference: "duckdb-http",
+        backendPreference: "bridge",
         ensureSampleData: async () => {
           throw new Error("network down");
         },

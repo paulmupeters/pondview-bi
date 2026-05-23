@@ -5,6 +5,7 @@ This docs set covers setup, runtime behavior, connected data, uploads, and persi
 - [Getting Started](/guide/getting-started)
 - [Dashboards](/guide/dashboards)
 - [AI Provider Configuration](/guide/ai-provider-configuration)
+- [Pondview CLI](/guide/cli)
 - [Connected Data Sources](/guide/connected-data-sources)
 - [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
 - [SQL Runtime Backends](/guide/sql-runtime-backends)
@@ -19,7 +20,7 @@ This docs set covers setup, runtime behavior, connected data, uploads, and persi
 ## Suggested reading path
 
 1. Start with [Getting Started](/guide/getting-started).
-2. Review [AI Provider Configuration](/guide/ai-provider-configuration) and [SQL Runtime Backends](/guide/sql-runtime-backends).
+2. Review [AI Provider Configuration](/guide/ai-provider-configuration), [Pondview CLI](/guide/cli), and [SQL Runtime Backends](/guide/sql-runtime-backends).
 3. Add data with [Connected Data Sources](/guide/connected-data-sources) and [Uploads and Browser Storage](/guide/uploads-and-browser-storage).
 4. Build reusable views with [Dashboards](/guide/dashboards).
 5. Understand state management in [Workspace Persistence](/guide/workspace-persistence).

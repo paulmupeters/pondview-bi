@@ -37,12 +37,6 @@ import {
   buildAttachmentPlan,
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
-import {
-  getDuckDbHttpHealthStatus,
-  hasDuckDbHttpConfig,
-  hasDuckDbHttpSessionAuth,
-  runDuckDbHttpQuery,
-} from "@/lib/duckdb/duckdb-http-browser";
 import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
 import type { SourceConnectionConfig } from "@/lib/sources/source-config";
@@ -70,33 +64,14 @@ function createQueryWarning(message: string): Error {
 function getRemoteRuntimeWarning(params: {
   sourceType: ConnectedTable["type"];
   backendPreference: SqlBackendPreference;
-  isDuckDbHttpConfigured: boolean;
-  duckDbHttpHealthStatus: "unknown" | "online" | "offline";
 }): string {
-  const {
-    sourceType,
-    backendPreference,
-    isDuckDbHttpConfigured,
-    duckDbHttpHealthStatus,
-  } = params;
-
-  const shouldMentionDuckDbHttp =
-    backendPreference === "duckdb-http" ||
-    (backendPreference === "auto" &&
-      isDuckDbHttpConfigured &&
-      duckDbHttpHealthStatus !== "online");
-
-  if (shouldMentionDuckDbHttp) {
-    return hasDuckDbHttpSessionAuth()
-      ? `DuckDB over HTTP is currently unavailable, so this query fell back to DuckDB WASM. DuckDB WASM cannot query external ${sourceType} sources. Check the DuckDB HTTP server in Settings and retry.`
-      : `DuckDB over HTTP is not authenticated, so this query fell back to DuckDB WASM. DuckDB WASM cannot query external ${sourceType} sources. Re-enter your DuckDB HTTP auth in Settings and retry.`;
-  }
+  const { sourceType, backendPreference } = params;
 
   if (backendPreference === "bridge") {
     return `Bridge is not currently query-ready, so this query fell back to DuckDB WASM. DuckDB WASM cannot query external ${sourceType} sources. Re-authenticate Bridge in Settings or switch runtimes and retry.`;
   }
 
-  return `DuckDB WASM cannot query external ${sourceType} sources. Switch to Bridge or DuckDB over HTTP before running this query.`;
+  return `DuckDB WASM cannot query external ${sourceType} sources. Switch to Bridge before running this query.`;
 }
 
 const SQL_SAMPLE_SQL = `-- Create a sample table with two columns (col1, col2)
@@ -244,7 +219,6 @@ export function createDuckdbReplAutocompleteAction(
   deps: {
     createSharedAutocompleteAction?: typeof createSqlAutocompleteAction;
     runBridgeSql?: typeof runBridgeQuery;
-    runDuckDbHttpSql?: typeof runDuckDbHttpQuery;
     runWasmSql?: typeof runQuery;
   } = {},
 ): AutocompleteQueryFn {
@@ -253,7 +227,6 @@ export function createDuckdbReplAutocompleteAction(
   const createSharedAutocompleteAction =
     deps.createSharedAutocompleteAction ?? createSqlAutocompleteAction;
   const runBridgeSql = deps.runBridgeSql ?? runBridgeQuery;
-  const runDuckDbHttpSql = deps.runDuckDbHttpSql ?? runDuckDbHttpQuery;
   const runWasmSql = deps.runWasmSql ?? runQuery;
 
   if (!connectedEntry?.databasePath || connectedEntry.type === "duckdb") {
@@ -284,15 +257,13 @@ export function createDuckdbReplAutocompleteAction(
       alias: connectedEntry.attachAs || "source",
       readOnly: connectedEntry.readOnly,
       duckdbExtension: connectedEntry.duckdbExtension,
+      duckdbExtensionRepository: connectedEntry.duckdbExtensionRepository,
     };
     const plan = buildAttachmentPlan(connectionConfig);
 
     const runAttached = async (statement: string) => {
       if (options.effectiveSqlBackend === "bridge") {
         return runBridgeSql(statement, signal);
-      }
-      if (options.effectiveSqlBackend === "duckdb-http") {
-        return runDuckDbHttpSql(statement, signal);
       }
       return runWasmSql({ sql: statement, signal });
     };
@@ -416,7 +387,7 @@ export function DuckdbRepl({
       effectiveSqlBackend === "duckdb-wasm"
     ) {
       throw new Error(
-        "MotherDuck requires Bridge or DuckDB over HTTP. Switch the SQL runtime in Settings before running this source.",
+        "MotherDuck requires Bridge. Switch the SQL runtime in Settings before running this source.",
       );
     }
 
@@ -429,8 +400,6 @@ export function DuckdbRepl({
         getRemoteRuntimeWarning({
           sourceType: connectedEntry.type,
           backendPreference: getSqlBackendPreference(),
-          isDuckDbHttpConfigured: hasDuckDbHttpConfig(),
-          duckDbHttpHealthStatus: getDuckDbHttpHealthStatus(),
         }),
       );
     }
@@ -443,14 +412,13 @@ export function DuckdbRepl({
         alias: connectedEntry.attachAs || "source",
         readOnly: connectedEntry.readOnly,
         duckdbExtension: connectedEntry.duckdbExtension,
+        duckdbExtensionRepository: connectedEntry.duckdbExtensionRepository,
       };
       const plan = buildAttachmentPlan(connectionConfig);
 
       const runRemote = async (stmt: string) => {
         if (effectiveSqlBackend === "bridge") {
           await runBridgeQuery(stmt, signal);
-        } else if (effectiveSqlBackend === "duckdb-http") {
-          await runDuckDbHttpQuery(stmt, signal);
         } else {
           await runQuery({ sql: stmt, signal });
         }
@@ -474,9 +442,6 @@ export function DuckdbRepl({
         const runAttachedSql = async (statement: string) => {
           if (effectiveSqlBackend === "bridge") {
             return runBridgeQuery(statement, signal);
-          }
-          if (effectiveSqlBackend === "duckdb-http") {
-            return runDuckDbHttpQuery(statement, signal);
           }
           return runQuery({ sql: statement, signal });
         };
@@ -520,9 +485,7 @@ export function DuckdbRepl({
     return {
       ...result,
       dbIdentifier:
-        (effectiveSqlBackend === "bridge" ||
-          effectiveSqlBackend === "duckdb-http") &&
-        !isMotherDuckIdentifier(effectiveDb)
+        effectiveSqlBackend === "bridge" && !isMotherDuckIdentifier(effectiveDb)
           ? undefined
           : effectiveDb,
       catalogContext: effectiveCatalogContext,

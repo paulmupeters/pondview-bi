@@ -23,7 +23,7 @@ describe("resolveCurrentCatalog", () => {
         rows: [{ current_catalog: "duck" }],
         columns: [],
         durationMs: 0,
-        backend: "duckdb-http" as const,
+        backend: "bridge" as const,
       };
     });
 
@@ -49,7 +49,7 @@ describe("runWithCatalogContext", () => {
           rows: sql.startsWith("SELECT") ? [{ company: "Stripe" }] : [],
           columns: [],
           durationMs: 0,
-          backend: "duckdb-http" as const,
+          backend: "bridge" as const,
         };
       },
     });
@@ -75,7 +75,7 @@ describe("runWithCatalogContext", () => {
           rows: [],
           columns: [],
           durationMs: 0,
-          backend: "duckdb-http" as const,
+          backend: "bridge" as const,
         };
       },
     });

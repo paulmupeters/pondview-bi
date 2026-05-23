@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  connectedEntriesToExplorerTables,
   getConnectedEntryCatalog,
   getConnectedEntryDisplayName,
   getExplorerTableDisplayLabel,
+  getRemoteRuntimeDisplayLabel,
   getSampleDataActionState,
   getVisibleConnectedEntryTables,
   resolveActiveRuntimeExplorer,
@@ -67,6 +69,31 @@ describe("connected source explorer helpers", () => {
         table: "local_table",
       }),
     ).toBe("local_table");
+  });
+
+  test("labels bridge runtime with the connected database filename when available", () => {
+    expect(
+      getRemoteRuntimeDisplayLabel({
+        host: "127.0.0.1",
+        port: 17817,
+        database: {
+          mode: "file",
+          id: "database-hash",
+          name: "stations.duckdb",
+        },
+      }),
+    ).toBe("stations.duckdb (127.0.0.1)");
+
+    expect(
+      getRemoteRuntimeDisplayLabel({
+        host: "127.0.0.1",
+        port: 17817,
+        database: {
+          mode: "memory",
+          id: "memory",
+        },
+      }),
+    ).toBe(":memory: (127.0.0.1)");
   });
 
   test("uses the canonical DuckDB alias for reserved postgres names", () => {
@@ -179,6 +206,28 @@ describe("connected source explorer helpers", () => {
 
     expect(getVisibleConnectedEntryTables(entry)).toEqual(["keywords"]);
     expect(shouldShowConnectedEntry(entry, new Set())).toBe(true);
+  });
+
+  test("maps quack connected entries into wasm explorer tables", () => {
+    expect(
+      connectedEntriesToExplorerTables([
+        {
+          type: "quack",
+          connectionId: "quack:test",
+          databaseName: "quack:localhost",
+          attachAs: "test",
+          schema: "main",
+          tables: ["stations"],
+        },
+        {
+          type: "postgres",
+          connectionId: "pg:warehouse",
+          attachAs: "warehouse",
+          schema: "public",
+          tables: ["orders"],
+        },
+      ]),
+    ).toEqual([{ catalog: "test", schema: "main", name: "stations" }]);
   });
 
   test("marks remote connected entries as disconnected when validation fails", async () => {

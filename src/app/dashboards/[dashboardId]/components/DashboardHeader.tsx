@@ -1,4 +1,4 @@
-import { Pencil } from "lucide-react";
+import { Pencil, RefreshCw } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,17 @@ import type { Dashboard } from "../types";
 type DashboardHeaderProps = {
   dashboard: Dashboard;
   onTitleUpdate: (newTitle: string) => Promise<void>;
+  onRefresh?: () => Promise<void>;
+  isRefreshing?: boolean;
+  readOnly?: boolean;
 };
 
 export function DashboardHeader({
   dashboard,
   onTitleUpdate,
+  onRefresh,
+  isRefreshing = false,
+  readOnly = false,
 }: DashboardHeaderProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(dashboard.title);
@@ -129,17 +135,34 @@ export function DashboardHeader({
               {dashboard.title}
             </h1>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={startEditingTitle}
-            aria-label="Edit dashboard title"
-            title="Edit title"
-            className="opacity-0 transition-opacity group-hover:opacity-100"
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
+          {onRefresh ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => void onRefresh()}
+              disabled={isRefreshing}
+              aria-label="Refresh dashboard"
+              title="Refresh dashboard"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+              />
+            </Button>
+          ) : null}
+          {!readOnly ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={startEditingTitle}
+              aria-label="Edit dashboard title"
+              title="Edit title"
+              className="opacity-0 transition-opacity group-hover:opacity-100"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
       )}
     </div>

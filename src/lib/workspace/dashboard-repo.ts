@@ -121,6 +121,13 @@ export const updateChartSql = (
   now = Date.now(),
 ) => dashboardStorageService.updateChartSql(chartId, sql, now);
 
+export const updateChartLayout = (
+  chartId: string,
+  layout: { x: number; y: number; w: number; h: number },
+  position: number,
+  now = Date.now(),
+) => dashboardStorageService.updateChartLayout(chartId, layout, position, now);
+
 export const reorderDashboardCharts = (
   dashboardId: string,
   orderedChartIds: string[],

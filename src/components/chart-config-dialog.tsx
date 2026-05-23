@@ -4,6 +4,8 @@ import {
   Layers,
   LineChart,
   PieChart,
+  Settings2,
+  Type,
 } from "lucide-react";
 import type React from "react";
 import { useRef, useState } from "react";
@@ -267,224 +269,242 @@ export function ChartConfigForm({
     onConfigChange(newConfig);
   };
 
+  const pillToggle = (
+    name: string,
+    value: string,
+    label: string,
+    checked: boolean,
+  ) => (
+    <label className="cursor-pointer">
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        defaultChecked={checked}
+        className="sr-only peer"
+      />
+      <div className="px-3 py-1.5 border rounded-md text-sm transition-colors hover:bg-muted peer-checked:bg-primary/10 peer-checked:border-primary/30 peer-checked:text-primary">
+        {label}
+      </div>
+    </label>
+  );
+
   const formContent = (
     <div ref={inline ? containerRef : undefined}>
       <Tabs defaultValue="data" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="data">Data</TabsTrigger>
-          <TabsTrigger value="content">Content</TabsTrigger>
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="advanced">Advanced</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 h-10">
+          <TabsTrigger value="data" className="gap-1.5">
+            <Settings2 className="h-4 w-4" />
+            Data & Content
+          </TabsTrigger>
+          <TabsTrigger value="style" className="gap-1.5">
+            <Type className="h-4 w-4" />
+            Appearance
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="data" className="space-y-6 mt-4">
+        <TabsContent value="data" className="mt-5">
           {sqlEditor ? (
             <>
               {sqlEditor}
-              <Separator />
+              <Separator className="my-5" />
             </>
           ) : null}
 
-          {/* Chart Type */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Chart type</legend>
-            <div className="flex gap-2">
-              {(
-                [
-                  { type: "line", icon: LineChart, label: "Line" },
-                  { type: "bar", icon: BarChart3, label: "Bar" },
-                  { type: "pie", icon: PieChart, label: "Pie" },
-                  { type: "stackbar", icon: Layers, label: "StackBar" },
-                  { type: "area", icon: AreaChart, label: "Area" },
-                ] as const
-              ).map(({ type, icon: Icon, label }) => (
-                <label key={type} className="cursor-pointer">
-                  <input
-                    type="radio"
-                    name="type"
-                    value={type}
-                    checked={chartType === type}
-                    onChange={(e) => setChartType(e.target.value)}
-                    className="sr-only peer"
-                  />
-                  <div
-                    className="flex flex-col items-center gap-1 px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20"
-                    title={label}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="text-xs">{label}</span>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
+            {/* Left column – Data mapping */}
+            <div className="space-y-5">
+              {/* Chart Type */}
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-semibold">Chart type</legend>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      { type: "line", icon: LineChart, label: "Line" },
+                      { type: "bar", icon: BarChart3, label: "Bar" },
+                      { type: "pie", icon: PieChart, label: "Pie" },
+                      { type: "stackbar", icon: Layers, label: "StackBar" },
+                      { type: "area", icon: AreaChart, label: "Area" },
+                    ] as const
+                  ).map(({ type, icon: Icon, label }) => (
+                    <label key={type} className="cursor-pointer">
+                      <input
+                        type="radio"
+                        name="type"
+                        value={type}
+                        checked={chartType === type}
+                        onChange={(e) => setChartType(e.target.value)}
+                        className="sr-only peer"
+                      />
+                      <div
+                        className="flex items-center gap-1.5 px-3 py-1.5 border rounded-md text-sm transition-colors hover:bg-muted peer-checked:bg-primary/10 peer-checked:border-primary/30 peer-checked:text-primary"
+                        title={label}
+                      >
+                        <Icon className="w-4 h-4" />
+                        {label}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
-          <Separator />
-
-          {/* X-Axis Configuration */}
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="xKey" className="text-sm font-medium">
-                X-Axis Column (categories)
-              </label>
-            </div>
-            <select
-              id="xKey"
-              name="xKey"
-              defaultValue={config?.xKey || columns[0]?.name || ""}
-              className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
-            >
-              {columns.map((column) => (
-                <option key={column.name} value={column.name}>
-                  {column.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <Separator />
-
-          {/* Y-Axis Configuration */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">
-              Y-Axis Columns (values)
-            </legend>
-            <div className="space-y-2 max-h-32 overflow-y-auto border rounded-md p-2">
-              {columns.map((column) => (
-                <label
-                  key={column.name}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    name="yKeys"
-                    value={column.name}
-                    defaultChecked={
-                      config?.yKeys?.includes(column.name) ||
-                      (!config?.yKeys && column.name === columns[1]?.name)
-                    }
-                    className="rounded border-input"
-                  />
-                  <span className="text-sm">{column.name}</span>
-                </label>
-              ))}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="countMode"
-                  value="true"
-                  defaultChecked={config?.countMode}
-                  className="rounded border-input"
-                />
-                <span className="text-sm">Count (aggregate by X-axis)</span>
-              </label>
-            </div>
-          </fieldset>
-
-          {/* Multi-line Configuration (for line charts only) */}
-          {chartType === "line" && (
-            <>
               <Separator />
 
-              <fieldset className="space-y-3">
-                <legend className="text-sm font-medium">
-                  Multi-line Chart
-                </legend>
-                <p className="text-xs text-gray-500">
-                  Enable to compare multiple categories as separate lines
+              {/* X-Axis Configuration */}
+              <div className="space-y-2">
+                <label htmlFor="xKey" className="text-sm font-semibold">
+                  X-Axis Column
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Category or label column
                 </p>
-                <div className="flex gap-2">
-                  <label className="cursor-pointer">
+                <select
+                  id="xKey"
+                  name="xKey"
+                  defaultValue={config?.xKey || columns[0]?.name || ""}
+                  className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
+                >
+                  {columns.map((column) => (
+                    <option key={column.name} value={column.name}>
+                      {column.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Y-Axis Configuration */}
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-semibold">
+                  Y-Axis Columns (values)
+                </legend>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto border rounded-md p-2 bg-muted/20">
+                  {columns.map((column) => (
+                    <label
+                      key={column.name}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        name="yKeys"
+                        value={column.name}
+                        defaultChecked={
+                          config?.yKeys?.includes(column.name) ||
+                          (!config?.yKeys && column.name === columns[1]?.name)
+                        }
+                        className="rounded border-input"
+                      />
+                      <span className="text-sm">{column.name}</span>
+                    </label>
+                  ))}
+                  <label className="flex items-center gap-2 cursor-pointer pt-1 border-t mt-1">
                     <input
-                      type="radio"
-                      name="multipleLines"
-                      value="yes"
-                      checked={multipleLines}
-                      onChange={() => setMultipleLines(true)}
-                      className="sr-only peer"
+                      type="checkbox"
+                      name="countMode"
+                      value="true"
+                      defaultChecked={config?.countMode}
+                      className="rounded border-input"
                     />
-                    <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                      Yes
-                    </div>
-                  </label>
-                  <label className="cursor-pointer">
-                    <input
-                      type="radio"
-                      name="multipleLines"
-                      value="no"
-                      checked={!multipleLines}
-                      onChange={() => setMultipleLines(false)}
-                      className="sr-only peer"
-                    />
-                    <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                      No
-                    </div>
+                    <span className="text-sm">Count (aggregate by X-axis)</span>
                   </label>
                 </div>
               </fieldset>
 
-              {multipleLines && (
-                <>
+              {/* Multi-line Configuration (for line charts only) */}
+              {chartType === "line" && (
+                <div className="space-y-4">
                   <Separator />
 
-                  {/* Category Column */}
-                  <div className="space-y-3">
-                    <div>
-                      <label
-                        htmlFor="categoryColumn"
-                        className="text-sm font-medium"
-                      >
-                        Category Column
+                  <fieldset className="space-y-2">
+                    <legend className="text-sm font-semibold">
+                      Multi-line Chart
+                    </legend>
+                    <p className="text-xs text-muted-foreground">
+                      Compare multiple categories as separate lines
+                    </p>
+                    <div className="flex gap-1.5">
+                      <label className="cursor-pointer">
+                        <input
+                          type="radio"
+                          name="multipleLines"
+                          value="yes"
+                          checked={multipleLines}
+                          onChange={() => setMultipleLines(true)}
+                          className="sr-only peer"
+                        />
+                        <div className="px-3 py-1.5 border rounded-md text-sm transition-colors hover:bg-muted peer-checked:bg-primary/10 peer-checked:border-primary/30 peer-checked:text-primary">
+                          On
+                        </div>
                       </label>
-                      <p className="text-xs text-gray-500">
-                        Column to group lines by (e.g., Country, Region)
-                      </p>
+                      <label className="cursor-pointer">
+                        <input
+                          type="radio"
+                          name="multipleLines"
+                          value="no"
+                          checked={!multipleLines}
+                          onChange={() => setMultipleLines(false)}
+                          className="sr-only peer"
+                        />
+                        <div className="px-3 py-1.5 border rounded-md text-sm transition-colors hover:bg-muted peer-checked:bg-primary/10 peer-checked:border-primary/30 peer-checked:text-primary">
+                          Off
+                        </div>
+                      </label>
                     </div>
-                    <select
-                      id="categoryColumn"
-                      name="categoryColumn"
-                      value={categoryColumn}
-                      onChange={(e) => {
-                        setCategoryColumn(e.target.value);
-                        setSelectedCategories([]);
-                      }}
-                      className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
-                    >
-                      <option value="">Select a column</option>
-                      {columns.map((column) => (
-                        <option key={column.name} value={column.name}>
-                          {column.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  </fieldset>
 
-                  {categoryColumn && availableCategories.length > 0 && (
-                    <>
-                      <Separator />
-
-                      {/* Line Categories */}
-                      <fieldset className="space-y-3">
-                        <legend className="text-sm font-medium">
-                          Categories
-                        </legend>
-                        <p className="text-xs text-gray-500">
-                          Select which categories to display as lines
+                  {multipleLines && (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label
+                          htmlFor="categoryColumn"
+                          className="text-sm font-semibold"
+                        >
+                          Category Column
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          Column to group lines by
                         </p>
-                        <div className="space-y-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={toggleAllCategories}
-                            className="mb-2"
-                          >
-                            {selectedCategories.length ===
-                            availableCategories.length
-                              ? "Deselect All"
-                              : "Select All"}
-                          </Button>
-                          <div className="space-y-2 max-h-32 overflow-y-auto border rounded-md p-2">
+                        <select
+                          id="categoryColumn"
+                          name="categoryColumn"
+                          value={categoryColumn}
+                          onChange={(e) => {
+                            setCategoryColumn(e.target.value);
+                            setSelectedCategories([]);
+                          }}
+                          className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
+                        >
+                          <option value="">Select a column</option>
+                          {columns.map((column) => (
+                            <option key={column.name} value={column.name}>
+                              {column.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {categoryColumn && availableCategories.length > 0 && (
+                        <fieldset className="space-y-2">
+                          <legend className="text-sm font-semibold">
+                            Categories
+                          </legend>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-muted-foreground">
+                              Select which categories to display
+                            </p>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={toggleAllCategories}
+                              className="h-6 text-xs"
+                            >
+                              {selectedCategories.length ===
+                              availableCategories.length
+                                ? "Deselect All"
+                                : "Select All"}
+                            </Button>
+                          </div>
+                          <div className="space-y-1.5 max-h-32 overflow-y-auto border rounded-md p-2 bg-muted/20">
                             {availableCategories.map((category) => (
                               <label
                                 key={category}
@@ -504,391 +524,246 @@ export function ChartConfigForm({
                               </label>
                             ))}
                           </div>
-                        </div>
-                      </fieldset>
-                    </>
-                  )}
+                        </fieldset>
+                      )}
 
-                  <Separator />
-
-                  {/* Measurement Column */}
-                  <div className="space-y-3">
-                    <div>
-                      <label
-                        htmlFor="measurementColumn"
-                        className="text-sm font-medium"
-                      >
-                        Measurement Column
-                      </label>
-                      <p className="text-xs text-gray-500">
-                        The numeric column to measure (e.g., num_unicorns,
-                        revenue)
-                      </p>
+                      <div className="space-y-2">
+                        <label
+                          htmlFor="measurementColumn"
+                          className="text-sm font-semibold"
+                        >
+                          Measurement Column
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          Numeric column to measure
+                        </p>
+                        <select
+                          id="measurementColumn"
+                          name="measurementColumn"
+                          defaultValue={config?.measurementColumn || ""}
+                          className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
+                        >
+                          <option value="">Select a column</option>
+                          {columns.map((column) => (
+                            <option key={column.name} value={column.name}>
+                              {column.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <select
-                      id="measurementColumn"
-                      name="measurementColumn"
-                      defaultValue={config?.measurementColumn || ""}
-                      className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm"
-                    >
-                      <option value="">Select a column</option>
-                      {columns.map((column) => (
-                        <option key={column.name} value={column.name}>
-                          {column.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
+                  )}
+                </div>
               )}
-            </>
-          )}
-        </TabsContent>
-
-        <TabsContent value="content" className="space-y-6 mt-4">
-          {/* Chart Title */}
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="title" className="text-sm font-medium">
-                Chart Title
-              </label>
-              <p className="text-xs text-gray-500">
-                Title to display above the chart
-              </p>
             </div>
-            <Input
-              id="title"
-              name="title"
-              defaultValue={config?.title || "Chart"}
-              placeholder="Enter chart title"
-            />
-          </div>
 
-          <Separator />
-
-          {/* Chart Description */}
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="description" className="text-sm font-medium">
-                Description
-              </label>
-              <p className="text-xs text-gray-500">
-                Brief description of what the chart shows
-              </p>
-            </div>
-            <Input
-              id="description"
-              name="description"
-              defaultValue={config?.description || "Chart"}
-              placeholder="Enter chart description"
-            />
-          </div>
-
-          <Separator />
-
-          {/* Chart Takeaway */}
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="takeaway" className="text-sm font-medium">
-                Key Takeaway
-              </label>
-              <p className="text-xs text-gray-500">
-                Main insight or conclusion from the chart
-              </p>
-            </div>
-            <Input
-              id="takeaway"
-              name="takeaway"
-              defaultValue={config?.takeaway || "Data visualization"}
-              placeholder="Enter key takeaway"
-            />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="appearance" className="space-y-6 mt-4">
-          {/* Hide Legend */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Legend</legend>
-            <div className="flex gap-2">
-              <label className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="legend"
-                  value="yes"
-                  defaultChecked={config?.legend}
-                  className="sr-only peer"
-                />
-                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Show
-                </div>
-              </label>
-              <label className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="legend"
-                  value="no"
-                  defaultChecked={!config?.legend}
-                  className="sr-only peer"
-                />
-                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Hide
-                </div>
-              </label>
-            </div>
-          </fieldset>
-
-          <Separator />
-
-          {/* Hide Grid */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Grid</legend>
-            <div className="flex gap-2">
-              <label className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="showGrid"
-                  value="true"
-                  defaultChecked={config?.showGrid ?? true}
-                  className="sr-only peer"
-                />
-                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Show
-                </div>
-              </label>
-              <label className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="showGrid"
-                  value="false"
-                  defaultChecked={config?.showGrid === false}
-                  className="sr-only peer"
-                />
-                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Hide
-                </div>
-              </label>
-            </div>
-          </fieldset>
-
-          <Separator />
-
-          {/* Hide Dots */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Dots</legend>
-            <div className="flex gap-2">
-              <label className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="showDots"
-                  value="true"
-                  defaultChecked={config?.showDots ?? true}
-                  className="sr-only peer"
-                />
-                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Show
-                </div>
-              </label>
-              <label className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="showDots"
-                  value="false"
-                  defaultChecked={config?.showDots === false}
-                  className="sr-only peer"
-                />
-                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Hide
-                </div>
-              </label>
-            </div>
-          </fieldset>
-
-          <Separator />
-
-          {/* Hide Tooltip */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Tooltip</legend>
-            <p className="text-xs text-gray-500">
-              Show/Hide tooltip when hover on graph
-            </p>
-            <div className="flex gap-2">
-              <label className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="showTooltip"
-                  value="true"
-                  defaultChecked={config?.showTooltip ?? true}
-                  className="sr-only peer"
-                />
-                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Show
-                </div>
-              </label>
-              <label className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="showTooltip"
-                  value="false"
-                  defaultChecked={config?.showTooltip === false}
-                  className="sr-only peer"
-                />
-                <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                  Hide
-                </div>
-              </label>
-            </div>
-          </fieldset>
-
-          <Separator />
-
-          {/* Size of line */}
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="lineSize" className="text-sm font-medium">
-                Size of line
-              </label>
-              <p className="text-xs text-gray-500">
-                Size of line unit in pixel
-              </p>
-            </div>
-            <Input
-              id="lineSize"
-              name="lineSize"
-              type="number"
-              defaultValue={config?.lineSize ?? 2}
-              min="1"
-              max="10"
-            />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="advanced" className="space-y-6 mt-4">
-          {/* X Axis and Y Axis side by side */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Hide X Axis */}
-            <fieldset className="space-y-3">
-              <legend className="text-sm font-medium">X Axis</legend>
-              <div className="flex gap-2">
-                <label className="cursor-pointer">
-                  <input
-                    type="radio"
-                    name="showXAxis"
-                    value="true"
-                    defaultChecked={config?.showXAxis ?? true}
-                    className="sr-only peer"
-                  />
-                  <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                    Show
-                  </div>
+            {/* Right column – Content */}
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <label htmlFor="title" className="text-sm font-semibold">
+                  Chart Title
                 </label>
-                <label className="cursor-pointer">
-                  <input
-                    type="radio"
-                    name="showXAxis"
-                    value="false"
-                    defaultChecked={config?.showXAxis === false}
-                    className="sr-only peer"
-                  />
-                  <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                    Hide
-                  </div>
+                <Input
+                  id="title"
+                  name="title"
+                  defaultValue={config?.title || ""}
+                  placeholder="Title shown above the chart"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="description" className="text-sm font-semibold">
+                  Description
                 </label>
+                <Input
+                  id="description"
+                  name="description"
+                  defaultValue={config?.description || ""}
+                  placeholder="Brief description of what the chart shows"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="takeaway" className="text-sm font-semibold">
+                  Key Takeaway
+                </label>
+                <Input
+                  id="takeaway"
+                  name="takeaway"
+                  defaultValue={config?.takeaway || ""}
+                  placeholder="Main insight or conclusion"
+                />
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="style" className="mt-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-6">
+            {/* Visibility toggles */}
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-semibold">Legend</legend>
+              <div className="flex gap-1.5">
+                {pillToggle("legend", "yes", "Show", config?.legend || false)}
+                {pillToggle("legend", "no", "Hide", !config?.legend)}
               </div>
             </fieldset>
 
-            {/* Hide Y Axis */}
-            <fieldset className="space-y-3">
-              <legend className="text-sm font-medium">Y Axis</legend>
-              <div className="flex gap-2">
-                <label className="cursor-pointer">
-                  <input
-                    type="radio"
-                    name="showYAxis"
-                    value="true"
-                    defaultChecked={config?.showYAxis ?? true}
-                    className="sr-only peer"
-                  />
-                  <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                    Show
-                  </div>
-                </label>
-                <label className="cursor-pointer">
-                  <input
-                    type="radio"
-                    name="showYAxis"
-                    value="false"
-                    defaultChecked={config?.showYAxis === false}
-                    className="sr-only peer"
-                  />
-                  <div className="px-4 py-2 border rounded-lg hover:bg-card-foreground/10 peer-checked:bg-card-foreground/10 peer-checked:border-card-foreground/20">
-                    Hide
-                  </div>
-                </label>
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-semibold">Grid</legend>
+              <div className="flex gap-1.5">
+                {pillToggle(
+                  "showGrid",
+                  "true",
+                  "Show",
+                  config?.showGrid ?? true,
+                )}
+                {pillToggle(
+                  "showGrid",
+                  "false",
+                  "Hide",
+                  config?.showGrid === false,
+                )}
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-semibold">Dots</legend>
+              <div className="flex gap-1.5">
+                {pillToggle(
+                  "showDots",
+                  "true",
+                  "Show",
+                  config?.showDots ?? true,
+                )}
+                {pillToggle(
+                  "showDots",
+                  "false",
+                  "Hide",
+                  config?.showDots === false,
+                )}
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-semibold">Tooltip</legend>
+              <p className="text-xs text-muted-foreground">On hover</p>
+              <div className="flex gap-1.5">
+                {pillToggle(
+                  "showTooltip",
+                  "true",
+                  "Show",
+                  config?.showTooltip ?? true,
+                )}
+                {pillToggle(
+                  "showTooltip",
+                  "false",
+                  "Hide",
+                  config?.showTooltip === false,
+                )}
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-semibold">X Axis</legend>
+              <div className="flex gap-1.5">
+                {pillToggle(
+                  "showXAxis",
+                  "true",
+                  "Show",
+                  config?.showXAxis ?? true,
+                )}
+                {pillToggle(
+                  "showXAxis",
+                  "false",
+                  "Hide",
+                  config?.showXAxis === false,
+                )}
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-semibold">Y Axis</legend>
+              <div className="flex gap-1.5">
+                {pillToggle(
+                  "showYAxis",
+                  "true",
+                  "Show",
+                  config?.showYAxis ?? true,
+                )}
+                {pillToggle(
+                  "showYAxis",
+                  "false",
+                  "Hide",
+                  config?.showYAxis === false,
+                )}
               </div>
             </fieldset>
           </div>
 
-          <Separator />
+          <Separator className="my-6" />
 
-          {/* Suffix for label Y */}
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="suffixLabelY" className="text-sm font-medium">
-                Suffix for label Y
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-5">
+            <div className="space-y-2">
+              <label htmlFor="lineSize" className="text-sm font-semibold">
+                Line Width
               </label>
-              <p className="text-xs text-gray-500">
-                Suffix for label Y for display something like unit
+              <p className="text-xs text-muted-foreground">In pixels</p>
+              <Input
+                id="lineSize"
+                name="lineSize"
+                type="number"
+                defaultValue={config?.lineSize ?? 2}
+                min="1"
+                max="10"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="labelYAngle" className="text-sm font-semibold">
+                Y-Label Angle
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Rotation in degrees
               </p>
+              <Input
+                id="labelYAngle"
+                name="labelYAngle"
+                type="number"
+                defaultValue={config?.labelYAngle ?? -90}
+                min="-90"
+                max="90"
+              />
             </div>
-            <Input
-              id="suffixLabelY"
-              name="suffixLabelY"
-              placeholder=""
-              defaultValue={config?.suffixLabelY ?? ""}
-            />
-          </div>
 
-          <Separator />
-
-          {/* Label Y angle */}
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="labelYAngle" className="text-sm font-medium">
-                Label Y angle
+            <div className="space-y-2">
+              <label htmlFor="suffixLabelY" className="text-sm font-semibold">
+                Y-Label Suffix
               </label>
-              <p className="text-xs text-gray-500">Angle for rotate Y label</p>
+              <p className="text-xs text-muted-foreground">e.g. %, USD, kg</p>
+              <Input
+                id="suffixLabelY"
+                name="suffixLabelY"
+                placeholder=""
+                defaultValue={config?.suffixLabelY ?? ""}
+              />
             </div>
-            <Input
-              id="labelYAngle"
-              name="labelYAngle"
-              type="number"
-              defaultValue={config?.labelYAngle ?? -90}
-              min="-90"
-              max="90"
-            />
-          </div>
 
-          <Separator />
-
-          {/* Reference line label */}
-          <div className="space-y-3">
-            <div>
+            <div className="space-y-2">
               <label
                 htmlFor="referenceLineLabel"
-                className="text-sm font-medium"
+                className="text-sm font-semibold"
               >
-                Reference line label
+                Reference Line Label
               </label>
-              <p className="text-xs text-gray-500">
-                Display reference line label
-              </p>
+              <p className="text-xs text-muted-foreground">Optional</p>
+              <Input
+                id="referenceLineLabel"
+                name="referenceLineLabel"
+                placeholder=""
+                defaultValue={config?.referenceLineLabel ?? ""}
+              />
             </div>
-            <Input
-              id="referenceLineLabel"
-              name="referenceLineLabel"
-              placeholder=""
-              defaultValue={config?.referenceLineLabel ?? ""}
-            />
           </div>
         </TabsContent>
 
@@ -978,7 +853,7 @@ export function ChartConfigDialog({
       query={sql ?? ""}
       dbIdentifier={dbIdentifier}
       backendPreference={backendPreference}
-      defaultOpen={false}
+      alwaysOpen
       onSave={handleSqlSave}
       onRunStart={() => {
         setSqlPreviewRows([]);
@@ -1006,11 +881,11 @@ export function ChartConfigDialog({
       ) : (
         <DialogTrigger asChild>{trigger}</DialogTrigger>
       )}
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-card">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span className="text-gray-500">⚙️</span>
-            Parameters
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-card p-6">
+        <DialogHeader className="pb-2">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <Settings2 className="h-5 w-5 text-muted-foreground" />
+            Chart Settings
           </DialogTitle>
         </DialogHeader>
         <ChartConfigForm

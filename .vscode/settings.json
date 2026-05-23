@@ -1,7 +1,0 @@
-{
-  "editor.codeActionsOnSave": {
-    "source.organizeImports.biome": "explicit",
-    "source.fixAll.biome": "explicit"
-  },
-  "typescript.tsdk": "node_modules/typescript/lib"
-}

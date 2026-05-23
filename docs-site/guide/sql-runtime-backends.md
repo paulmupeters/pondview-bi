@@ -1,72 +1,81 @@
 # SQL Runtime Backends
 
-BI Chat can run SQL on three backends:
+Pondview runs SQL on two backends:
 
-- `duckdb-wasm` (browser-local DuckDB)
-- `bridge` (remote Pondview bridge endpoints)
-- `duckdb-http` (remote DuckDB `httpserver`)
+- `duckdb-wasm` for browser-local DuckDB execution
+- `bridge` for Pondview Bridge execution
 
 Backend selection is controlled by Settings and resolved by `resolveSqlBackend(...)`.
 
 ## Backend overview
 
-| Backend | Where execution happens | Typical use |
-| --- | --- | --- |
-| `duckdb-wasm` | Browser | Local uploads, local exploration, no remote DB attachment. |
-| `bridge` | Remote service (Pondview) | Remote/external data, extension attachment flows, bridge-managed auth. |
-| `duckdb-http` | Remote DuckDB HTTP server | Remote DuckDB query execution from browser with host/port config. |
+| Backend       | Where execution happens | Typical use                                                            |
+| ------------- | ----------------------- | ---------------------------------------------------------------------- |
+| `duckdb-wasm` | Browser                 | Local uploads, local exploration, HTTPS remote DuckDB file attachment. |
+| `bridge`      | Pondview Bridge         | Remote/external data, extension attachment flows, bridge-managed auth. |
+
+Remote DuckDB sources are attached data sources, not separate query runtimes.
+The Connect Data dialog exposes one **Remote DuckDB** option with two attach
+modes:
+
+- HTTPFS file attachment for HTTPS/S3-compatible DuckDB files
+- Quack endpoint attachment for DuckDB servers exposed through Quack
 
 ## Selection rules
 
-Backend resolution combines user preference and runtime availability:
+Runtime resolution combines the saved user preference and runtime availability:
 
-1. If `dbIdentifier` is explicitly local (`wasm:local` or empty), force `duckdb-wasm`.
-2. If preference is `bridge` but bridge is unavailable, fallback to `duckdb-wasm`.
-3. If preference is `duckdb-http` but HTTP config is missing, fallback to `duckdb-wasm`.
-4. If preference is `auto`, pick `bridge` when available, otherwise `duckdb-wasm`.
+1. Settings lets you save `duckdb-wasm` or `bridge`.
+2. If preference is `bridge` but Bridge is not query-ready, query execution falls
+   back to `duckdb-wasm` until Bridge becomes available.
+3. If preference is `auto`, Pondview picks `bridge` when query-ready, otherwise
+   `duckdb-wasm`.
 
-In `runQuery(...)`, `md:` identifiers are a special case: they route to `/api/duckdb/query` and return backend label `bridge`.
+The Settings page distinguishes the selected runtime preference from the active
+runtime. For example, you may see `Bridge` in the selector while the active
+runtime shows DuckDB WASM; after bridge health/config/auth become ready, the
+same saved preference resolves to Bridge automatically.
 
-## Availability and health
+## Bridge
 
-### Bridge
-
-- Availability: session secret exists and bridge health is `online`
+- Availability for query execution: bridge health is `online`, bridge config is
+  discoverable, and either auth is not required or a session secret exists.
 - Health probe: `pingBridge()` against `/ping`
+- Config probe: `refreshBridgeConfig()` against `/api/duckdb/config`
+- Endpoint: defaults to the current app origin. When running only the
+  Vite/frontend app against a separately started bridge, set the Bridge endpoint
+  in Settings to the bridge URL, for example `http://127.0.0.1:17817`.
 - Secret: session-only via Settings (`setSessionSecret(...)`)
+- Server-side secrets: Bridge stores data-source, AI provider, and S3 backup
+  credentials in `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json`, or
+  `PONDVIEW_SECRETS_PATH` when set.
 
-### DuckDB over HTTP
-
-- Availability for selection fallback: config exists (`host`, `port`)
-- Health probe: `pingDuckDbHttp(...)`
-- Auth: optional session auth stored in session storage
-
-### DuckDB WASM
+## DuckDB WASM
 
 - Always available as local fallback
 - Rejects remote identifiers via `assertWasmCompatibleDbIdentifier(...)`
+- Can attach browser-compatible HTTPS remote DuckDB files
+- Does not provide a server-side secret boundary
 
-## Backend preference storage
+## Runtime fingerprints
 
-Query runtime preference is stored in local storage key:
-
-- `bi.sql.backend.preference`
-
-Runtime config/state also uses browser storage and events for reactive UI updates.
-
-## Runtime fingerprints and caches
-
-`resolveSqlRuntimeFingerprint(...)` gives a backend-specific fingerprint used by runtime-sensitive cache logic:
+`resolveSqlRuntimeFingerprint(...)` gives a backend-specific fingerprint used by
+runtime-sensitive cache logic:
 
 - WASM: `duckdb-wasm:local`
-- HTTP: `duckdb-http:<host>:<port>` (or `duckdb-http:unknown`)
 - Bridge: `bridge:<host>:<port>` (or `bridge:unknown`)
 
-When runtime changes, cache keys tied to this fingerprint should be treated as different execution contexts.
+When runtime changes, cache keys tied to this fingerprint should be treated as
+different execution contexts.
 
 ## Troubleshooting checklist
 
-- Query unexpectedly ran in WASM: check selected backend availability and fallback conditions.
-- Bridge selected but offline: verify session secret and bridge `/ping`.
-- HTTP selected but unavailable: verify host/port config and auth, then test connection.
-- Remote identifier error in WASM: switch runtime to Bridge or DuckDB over HTTP.
+- Query unexpectedly ran in WASM: check selected backend availability and
+  fallback conditions. A saved Bridge preference can still execute on WASM while
+  Bridge is not query-ready.
+- Bridge selected but unavailable in a frontend-only dev server: set the Bridge
+  endpoint in Settings to the separately running bridge origin, then verify
+  `/ping` and `/api/duckdb/config` are reachable from the browser.
+- Bridge selected but offline: verify the endpoint, session secret, and bridge
+  `/ping`.
+- Remote identifier error in WASM: switch runtime to Bridge.

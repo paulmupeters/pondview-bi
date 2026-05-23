@@ -9,7 +9,7 @@ describe("resolveStoredChartDbIdentifier", () => {
   test("does not fall back to selectedDbIdentifier for remote runtime charts", () => {
     expect(
       resolveStoredChartDbIdentifier({
-        sqlBackend: "duckdb-http",
+        sqlBackend: "bridge",
         payloadDbIdentifier: undefined,
         selectedDbIdentifier: "duckdb:connected-runtime",
       }),
@@ -19,7 +19,7 @@ describe("resolveStoredChartDbIdentifier", () => {
   test("keeps explicit non-wasm db identifiers for remote external sources", () => {
     expect(
       resolveStoredChartDbIdentifier({
-        sqlBackend: "duckdb-http",
+        sqlBackend: "bridge",
         payloadDbIdentifier: "sqlite:/tmp/warehouse.db",
         selectedDbIdentifier: "duckdb:connected-runtime",
       }),
