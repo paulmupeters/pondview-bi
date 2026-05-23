@@ -8,7 +8,11 @@
     "skipLibCheck": true,
     "noEmit": true,
     "isolatedModules": true,
-    "types": ["bun", "node"]
+    "types": ["bun", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@pondview/bridge-protocol": ["../bridge-protocol/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

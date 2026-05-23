@@ -1,19 +1,44 @@
 {
-  "name": "@pondview/bridge",
+  "name": "pondview",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "description": "Pondview CLI for running the local DuckDB bridge and bundled Pondview app.",
   "type": "module",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/paulmupeters/pondview-ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paulmupeters/pondview-ui.git",
+    "directory": "packages/bridge"
+  },
+  "bugs": {
+    "url": "https://github.com/paulmupeters/pondview-ui/issues"
+  },
+  "keywords": [
+    "pondview",
+    "duckdb",
+    "bi",
+    "analytics",
+    "cli"
+  ],
   "files": [
-    "src",
     "dist",
+    "lib",
     "package.json",
     "README.md"
   ],
   "bin": {
-    "pondview": "./src/cli.ts"
+    "pondview": "./lib/cli.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
-    "prepack": "bun run --cwd ../.. bridge:build-ui",
+    "build": "bun run --cwd ../.. bridge:build-cli",
+    "prepack": "bun run --cwd ../.. bridge:build-ui && bun run build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test"
   },
@@ -23,7 +48,7 @@
     "@ai-sdk/openai-compatible": "^2.0.41",
     "@aws-sdk/client-s3": "^3.1037.0",
     "@duckdb/node-api": "^1.5.2-r.1",
-    "@pondview/bridge-protocol": "workspace:*",
+    "@pondview/bridge-protocol": "^0.1.0",
     "ai": "^6.0.154",
     "zod": "^4.3.6"
   },

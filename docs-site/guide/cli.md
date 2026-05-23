@@ -8,6 +8,19 @@ local app that does not depend on the hosted Pondview deployment.
 
 ## Quick start
 
+Install the published CLI with npm:
+
+```bash
+npm install -g pondview
+pondview
+```
+
+Or run it without installing globally:
+
+```bash
+npx pondview
+```
+
 From this repository during development:
 
 ```bash
@@ -227,7 +240,6 @@ Bridge-managed secrets are stored in `${XDG_CONFIG_HOME:-~/.config}/pondview/sec
 
 ## TODO: future improvements
 
-- TODO: Publish a packaged `pondview` binary so users do not need `bun run bridge -- ...`.
 - TODO: Add `pondview ui update` or a similar opt-in command if hosted asset
   syncing becomes useful later.
 - TODO: Add project commands such as `pondview project inspect`,

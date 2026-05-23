@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+
 export type BrowserOpener = (url: string) => Promise<void>;
 
 export const openBrowser: BrowserOpener = async (url) => {
@@ -6,10 +8,11 @@ export const openBrowser: BrowserOpener = async (url) => {
     return;
   }
 
-  Bun.spawn(command, {
-    stdout: "ignore",
-    stderr: "ignore",
+  const child = spawn(command[0] ?? "", command.slice(1), {
+    detached: true,
+    stdio: "ignore",
   });
+  child.unref();
 };
 
 function openCommand(url: string): string[] | null {

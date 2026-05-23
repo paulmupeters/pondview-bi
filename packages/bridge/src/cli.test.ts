@@ -87,7 +87,7 @@ describe("bridge CLI help", () => {
   test("prints a grouped top-level overview", async () => {
     const output = await captureStdout(() => runCli(["--help"]));
 
-    expect(output).toContain("Usage:\n  pondview <command>");
+    expect(output).toContain("Usage:\n  pondview [command]");
     expect(output).toContain("Local Runtime");
     expect(output).toContain("start          Start the local Pondview app");
     expect(output).not.toContain("use-existing");
@@ -126,6 +126,33 @@ describe("bridge CLI help", () => {
 });
 
 describe("bridge CLI start browser behavior", () => {
+  test("bare pondview starts the local UI", async () => {
+    const openedUrls: string[] = [];
+
+    await runCli(["--port", "0"], {
+      openBrowser: async (url) => {
+        openedUrls.push(url);
+      },
+      waitForShutdown: async () => {},
+    });
+
+    expect(openedUrls).toHaveLength(1);
+    expect(openedUrls[0]).toStartWith("http://127.0.0.1:");
+  });
+
+  test("bare pondview accepts start flags", async () => {
+    const openedUrls: string[] = [];
+
+    await runCli(["--port", "0", "--no-open"], {
+      openBrowser: async (url) => {
+        openedUrls.push(url);
+      },
+      waitForShutdown: async () => {},
+    });
+
+    expect(openedUrls).toEqual([]);
+  });
+
   test("start opens the local UI by default", async () => {
     const openedUrls: string[] = [];
 

@@ -1,5 +1,7 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { BridgeClient } from "@pondview/bridge-protocol";
 import { type BrowserOpener, openBrowser } from "./open-browser";
 import { startBridgeServer } from "./server";
@@ -72,6 +74,7 @@ export async function runCli(
   }
 
   switch (args.command) {
+    case "":
     case "start":
       await runStart(args, resolvedDeps);
       break;
@@ -97,10 +100,6 @@ export async function runCli(
       await runDoctor(args, resolvedDeps);
       break;
     default:
-      if (!args.command) {
-        printTopLevelHelp();
-        return;
-      }
       throw new Error(`Unknown command: ${args.command}`);
   }
 }
@@ -1074,7 +1073,7 @@ function getClientBaseUrl(args: ParsedArgs): string {
 }
 
 function startBridgeProcess(args: ParsedArgs): void {
-  const childArgs = [import.meta.path, "start", "--no-ui"];
+  const childArgs = [fileURLToPath(import.meta.url), "start", "--no-ui"];
   appendFlag(childArgs, args, "host");
   appendFlag(childArgs, args, "port");
   appendFlag(childArgs, args, "token");
@@ -1085,10 +1084,9 @@ function startBridgeProcess(args: ParsedArgs): void {
     childArgs.push("--readonly");
   }
 
-  const subprocess = Bun.spawn([process.execPath, ...childArgs], {
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "ignore",
+  const subprocess = spawn(process.execPath, childArgs, {
+    detached: true,
+    stdio: "ignore",
   });
   subprocess.unref();
 }
@@ -1101,12 +1099,11 @@ function appendFlag(target: string[], args: ParsedArgs, name: string): void {
 }
 
 async function findProcessIdsByPort(port: number): Promise<number[]> {
-  const proc = Bun.spawn(["lsof", "-ti", `tcp:${port}`, "-sTCP:LISTEN"], {
-    stdout: "pipe",
-    stderr: "pipe",
+  const proc = spawn("lsof", ["-ti", `tcp:${port}`, "-sTCP:LISTEN"], {
+    stdio: ["ignore", "pipe", "pipe"],
   });
-  const output = await new Response(proc.stdout).text();
-  await proc.exited;
+  const output = await readStream(proc.stdout);
+  await waitForExit(proc);
 
   return output
     .split(/\s+/)
@@ -1134,6 +1131,21 @@ function killProcess(pid: number): void {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readStream(stream: NodeJS.ReadableStream): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function waitForExit(child: ReturnType<typeof spawn>): Promise<void> {
+  await new Promise<void>((resolveExit, rejectExit) => {
+    child.once("error", rejectExit);
+    child.once("close", () => resolveExit());
+  });
 }
 
 function formatError(error: unknown): string {
@@ -1171,7 +1183,9 @@ function readToken(args: ParsedArgs): string | undefined {
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
-  const [command = "", ...rest] = argv;
+  const first = argv[0];
+  const command = first && !first.startsWith("-") ? first : "";
+  const rest = command ? argv.slice(1) : argv;
   const flags = new Map<string, string | boolean>();
   const positionals: string[] = [];
 
@@ -1224,7 +1238,6 @@ function printRequestedHelp(args: ParsedArgs): boolean {
 
 function isHelpRequest(args: ParsedArgs): boolean {
   return (
-    !args.command ||
     args.command === "help" ||
     args.command === "--help" ||
     args.command === "-h" ||
@@ -1318,7 +1331,7 @@ function printTopLevelHelp(): void {
   console.log(`Work with Pondview projects from the command line.
 
 Usage:
-  pondview <command>
+  pondview [command]
 
 Local Runtime
   start          Start the local Pondview app and bridge API
@@ -1345,6 +1358,7 @@ Flags:
       --token <token>     Bearer token
       --token-env <name>  Read bearer token from an environment variable
 
+Run "pondview" without a command to start the local app.
 Use "pondview <command> --help" for more information about a command.
 `);
 }

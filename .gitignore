@@ -88,6 +88,8 @@ docs-site/.vitepress/cache/
 
 # bridge bundled UI output
 packages/bridge/dist/
+packages/bridge/lib/
+packages/bridge-protocol/dist/
 
 # analyzer
 stats.html

@@ -1,6 +1,15 @@
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import { platform } from "node:os";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   bridgeAttachSourceRequestSchema,
   bridgeProjectDeleteFilesRequestSchema,
@@ -89,26 +98,31 @@ export async function startBridgeServer(
   };
 
   let boundOptions = { ...options, host, port };
-  const server = Bun.serve({
-    hostname: host,
-    port,
-    async fetch(request) {
-      return handleRequest(
-        request,
+  const server = createServer(async (incoming, outgoing) => {
+    await writeResponse(
+      outgoing,
+      await handleRequest(
+        await requestFromIncomingMessage(incoming),
         () => runtime,
         boundOptions,
         secrets,
         projects,
         initializeProjectRuntime,
-      );
-    },
+      ),
+    );
   });
+  await listen(server, host, port);
   boundOptions = { ...boundOptions, port: readBoundPort(server, port) };
+  let stopped = false;
 
   return {
-    url: `http://${server.hostname}:${server.port}`,
+    url: `http://${formatHostForUrl(host)}:${readBoundPort(server, port)}`,
     stop: async () => {
-      server.stop(true);
+      if (stopped) {
+        return;
+      }
+      stopped = true;
+      await closeServer(server);
       await runtime.close();
     },
   };
@@ -146,18 +160,29 @@ export async function startBridgeUiServer(
   const bridgeUrl = new URL(options.bridgeUrl).toString().replace(/\/$/, "");
   let boundOptions = { ...options, host, port };
 
-  const server = Bun.serve({
-    hostname: host,
-    port,
-    async fetch(request) {
-      return handleUiRequest(request, bridgeUrl, boundOptions);
-    },
+  const server = createServer(async (incoming, outgoing) => {
+    await writeResponse(
+      outgoing,
+      await handleUiRequest(
+        await requestFromIncomingMessage(incoming),
+        bridgeUrl,
+        boundOptions,
+      ),
+    );
   });
+  await listen(server, host, port);
   boundOptions = { ...boundOptions, port: readBoundPort(server, port) };
+  let stopped = false;
 
   return {
-    url: `http://${server.hostname}:${server.port}`,
-    stop: () => Promise.resolve(server.stop(true)),
+    url: `http://${formatHostForUrl(host)}:${readBoundPort(server, port)}`,
+    stop: async () => {
+      if (stopped) {
+        return;
+      }
+      stopped = true;
+      await closeServer(server);
+    },
   };
 }
 
@@ -596,26 +621,30 @@ async function serveStaticUi(
   }
 
   if (existsSync(filePath)) {
-    const file = Bun.file(filePath);
-    if (await file.exists()) {
+    try {
+      const bytes = await readFile(filePath);
       if (filePath.endsWith("index.html")) {
         return htmlResponse(
-          injectBridgeWorkspaceDbName(await file.text(), bridgeUiOptions),
+          injectBridgeWorkspaceDbName(bytes.toString("utf8"), bridgeUiOptions),
         );
       }
-      return new Response(file, {
+      return new Response(bytes, {
         headers: {
           "content-type": contentTypeForPath(filePath),
         },
       });
+    } catch {
+      // Fall through to the React Router index fallback.
     }
   }
 
   const indexPath = resolve(root, "index.html");
-  const indexFile = Bun.file(indexPath);
-  if (await indexFile.exists()) {
+  if (existsSync(indexPath)) {
     return htmlResponse(
-      injectBridgeWorkspaceDbName(await indexFile.text(), bridgeUiOptions),
+      injectBridgeWorkspaceDbName(
+        await readFile(indexPath, "utf8"),
+        bridgeUiOptions,
+      ),
     );
   }
 
@@ -665,14 +694,13 @@ async function pickProjectDatabasePath(
     `set selectedFile to choose file name with prompt ${toAppleScriptString("Choose a DuckDB file for this Pondview project")} default name ${toAppleScriptString("pondview-runtime.duckdb")} default location POSIX file ${toAppleScriptString(projectRootPath)}`,
     "POSIX path of selectedFile",
   ].join("\n");
-  const process = Bun.spawn(["osascript", "-e", script], {
-    stdout: "pipe",
-    stderr: "pipe",
+  const process = spawn("osascript", ["-e", script], {
+    stdio: ["ignore", "pipe", "pipe"],
   });
   const [exitCode, stdout, stderr] = await Promise.all([
-    process.exited,
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
+    waitForExit(process),
+    readStream(process.stdout),
+    readStream(process.stderr),
   ]);
 
   if (exitCode === 0) {
@@ -690,14 +718,15 @@ function toAppleScriptString(value: string): string {
 }
 
 function defaultStaticDir(): string {
-  return resolve(import.meta.dirname, "../dist");
+  return resolve(dirname(fileURLToPath(import.meta.url)), "../dist");
 }
 
 function readBoundPort(
-  server: { port?: number },
+  server: { address: () => string | { port: number } | null },
   fallbackPort: number,
 ): number {
-  return server.port ?? fallbackPort;
+  const address = server.address();
+  return typeof address === "object" && address ? address.port : fallbackPort;
 }
 
 function isPathInsideRoot(rootPath: string, targetPath: string): boolean {
@@ -719,4 +748,122 @@ function contentTypeForPath(path: string): string {
   if (path.endsWith(".ico")) return "image/x-icon";
   if (path.endsWith(".wasm")) return "application/wasm";
   return "application/octet-stream";
+}
+
+async function listen(
+  server: Server,
+  host: string,
+  port: number,
+): Promise<void> {
+  await new Promise<void>((resolveListen, rejectListen) => {
+    const onError = (error: Error) => {
+      server.off("listening", onListening);
+      rejectListen(error);
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolveListen();
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(port, host);
+  });
+}
+
+async function closeServer(
+  server: Server,
+): Promise<void> {
+  await new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => {
+      if (error) {
+        if ((error as NodeJS.ErrnoException).code === "ERR_SERVER_NOT_RUNNING") {
+          resolveClose();
+          return;
+        }
+        rejectClose(error);
+        return;
+      }
+      resolveClose();
+    });
+  });
+  server.closeAllConnections?.();
+}
+
+async function requestFromIncomingMessage(
+  incoming: IncomingMessage,
+): Promise<Request> {
+  const host = incoming.headers.host ?? "127.0.0.1";
+  const url = new URL(incoming.url ?? "/", `http://${host}`);
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(incoming.headers)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        headers.append(name, item);
+      }
+      continue;
+    }
+    if (value !== undefined) {
+      headers.set(name, value);
+    }
+  }
+
+  const method = incoming.method ?? "GET";
+  const body =
+    method === "GET" || method === "HEAD"
+      ? undefined
+      : await readIncomingBody(incoming);
+  return new Request(url, {
+    method,
+    headers,
+    body: body ? new Uint8Array(body) : undefined,
+  });
+}
+
+async function writeResponse(
+  outgoing: ServerResponse,
+  response: Response,
+): Promise<void> {
+  outgoing.statusCode = response.status;
+  outgoing.statusMessage = response.statusText;
+  response.headers.forEach((value, name) => {
+    outgoing.setHeader(name, value);
+  });
+
+  if (!response.body) {
+    outgoing.end();
+    return;
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  outgoing.end(bytes);
+}
+
+async function readIncomingBody(
+  incoming: IncomingMessage,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of incoming) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+async function readStream(stream: NodeJS.ReadableStream): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function waitForExit(
+  child: ReturnType<typeof spawn>,
+): Promise<number | null> {
+  return new Promise((resolveExit, rejectExit) => {
+    child.once("error", rejectExit);
+    child.once("close", resolveExit);
+  });
+}
+
+function formatHostForUrl(host: string): string {
+  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
