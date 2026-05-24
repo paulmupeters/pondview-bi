@@ -10,9 +10,12 @@ Current Connect Data dialog options:
 - MotherDuck
 - MySQL
 - SQLite
-- Remote DuckDB (HTTPFS file or Quack endpoint)
+- HTTPFS DuckDB files (`s3://`, `r2://`, `gcs://`, `gs://`)
+- Quack remote DuckDB endpoints
 
-The runtime can also represent additional source types in metadata, but the primary UI picker currently exposes the four options above.
+The CLI can also write typed custom DuckDB attachment bindings to
+`pondview.sources.local.json` for sources that are attach-compatible but not
+exposed in the primary UI picker.
 
 ## Runtime requirement
 
@@ -26,7 +29,7 @@ To connect sources:
 
 ## How a connection is resolved
 
-For Postgres/MySQL/SQLite/Quack, the dialog:
+For Postgres/MySQL/SQLite/HTTPFS/Quack, the dialog:
 
 1. Builds a source identifier (e.g. `postgres://...`, `mysql://...`, `sqlite:/path`).
 2. Creates an attachment plan with `buildAttachmentPlan(...)`.
@@ -46,6 +49,28 @@ ATTACH 'quack:host:9494' AS remote (TYPE quack, TOKEN '...');
 
 Quack is a DuckDB beta feature that currently requires DuckDB v1.5.2 or newer in the active remote runtime. Use Bridge for Quack connections when possible so the Quack token is stored in the Bridge secret store instead of browser-visible state.
 
+## Custom CLI sources
+
+Custom sources are configured locally with `pondview source add` or by editing
+`pondview.sources.local.json`. They must still map to a DuckDB-compatible
+attachment: Pondview can install/load an extension and build `ATTACH`, but it
+does not run arbitrary source setup SQL.
+
+Example:
+
+```bash
+pondview source add ga4 \
+  --type custom \
+  --identifier ga4:property-id \
+  --as ga4 \
+  --extension ga4 \
+  --attach-type ga4 \
+  --readonly
+```
+
+This only works if the active DuckDB runtime can actually install/load the
+configured extension and attach the identifier.
+
 ## What gets stored locally
 
 Connected-source entries are stored under local storage key:
@@ -64,6 +89,7 @@ Each entry can include:
 - `attachAs`
 - `readOnly`
 - `duckdbExtension`
+- `duckdbExtensionRepository`
 
 Writes dispatch `connectedTablesUpdated` so UI consumers refresh.
 
@@ -89,5 +115,5 @@ DuckDB WASM does not have this server-side boundary. Do not use WASM for credent
 
 - Source connection discovery requires a remote runtime; it cannot run in pure WASM mode.
 - Quack support depends on DuckDB's beta `quack` extension from `core_nightly`; protocol details may change before DuckDB v2.0.
-- Schema table preview is intentionally limited (`LIMIT 20` in dialog metadata queries).
+- Schema table preview is intentionally limited in the dialog, but the persisted schema stores the full table list.
 - Removing a source only does best-effort remote detach; persisted connection metadata is always removed locally.

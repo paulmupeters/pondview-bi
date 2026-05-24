@@ -50,7 +50,6 @@ pondview start --port 17818
 pondview start --host 127.0.0.1 --port 17817 --no-open
 pondview start --database ./analytics.duckdb
 pondview start --project-dir ./my-pondview-project
-pondview start --readonly
 pondview start --no-ui
 ```
 
@@ -75,8 +74,6 @@ project root is the directory where the bridge was launched; pass
 `--project-dir <dir>` to use a different folder. Dashboards, saved queries,
 published notebooks, and source metadata are written as raw project artifact
 files such as `pondview/...`; bridge metadata lives in `.pondview/project.json`.
-When the bridge starts in `--readonly` mode, project files can be read but not
-mutated.
 
 When `pondview start` opens an empty folder, the local app asks whether to
 initialize local project files or keep working from browser storage. Initializing
@@ -122,6 +119,29 @@ scripts:
 ```bash
 pondview query --file ./dashboard-metadata.sql --database ./analytics.duckdb
 ```
+
+### Local source bindings
+
+`pondview source` manages local source bindings in
+`pondview.sources.local.json`. This file is private to the local project
+checkout and should not be committed.
+
+```bash
+pondview source add ga4 \
+  --type custom \
+  --identifier ga4:property-id \
+  --as ga4 \
+  --extension ga4 \
+  --attach-type ga4 \
+  --readonly
+
+pondview source list
+pondview source remove ga4
+```
+
+Custom sources must still be DuckDB attach-compatible. The CLI stores typed
+attachment metadata; Pondview builds the `INSTALL`, `LOAD`, and `ATTACH`
+statements from that metadata instead of running arbitrary setup SQL.
 
 ### Dashboard maintenance
 
@@ -181,7 +201,7 @@ that port.
 | `--port <port>` | `start`, `stop`, client commands | Port for the local bridge. Defaults to `17817`. |
 | `--database <file>` | `start`, client autostart | Opens a DuckDB file as the bridge's primary database instead of using an in-memory database. |
 | `--project-dir <dir>` | `start`, client autostart | Filesystem project root for raw Pondview artifacts. Defaults to the launch directory. |
-| `--readonly` | `start`, `attach` | Starts readonly bridge mode, or attaches a DuckDB source readonly. |
+| `--readonly` | `attach`, `source add` | Attaches a source with DuckDB `READ_ONLY`. |
 | `--token <token>` | all bridge/client commands | Requires or sends a bridge auth token. |
 | `--token-env <name>` | all bridge/client commands | Reads the bridge auth token from an environment variable. |
 | `--url <url>` | client commands | Uses an explicit bridge URL and disables autostart. |

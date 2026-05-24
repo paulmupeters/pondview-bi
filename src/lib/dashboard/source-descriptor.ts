@@ -1,5 +1,6 @@
 import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import { detectExternalConnection } from "@/lib/duckdb/path";
+import type { SourceConnectionConfig } from "@/lib/sources/source-config";
 import {
   DEFAULT_WASM_DB_IDENTIFIER,
   isWasmLocalIdentifier,
@@ -7,7 +8,13 @@ import {
 } from "@/lib/sql/sql-runtime";
 
 export type DashboardSourceKind = "runtime" | "motherduck" | "external";
-export type DashboardExternalType = "postgres" | "mysql" | "sqlite" | "quack";
+export type DashboardExternalType =
+  | "postgres"
+  | "mysql"
+  | "sqlite"
+  | "quack"
+  | "httpfs"
+  | "custom";
 
 export type DashboardSourceDescriptor = {
   kind: DashboardSourceKind;
@@ -15,6 +22,7 @@ export type DashboardSourceDescriptor = {
   dbIdentifier: string | null;
   catalogContext: string | null;
   externalType?: DashboardExternalType;
+  connection?: SourceConnectionConfig;
 };
 
 function toNullableString(value: unknown): string | null {
@@ -56,6 +64,7 @@ export function normalizeDashboardSourceDescriptor(
     dbIdentifier,
     catalogContext,
     externalType: descriptor.externalType,
+    connection: descriptor.connection,
   };
 }
 
@@ -82,7 +91,8 @@ export function buildDashboardSourceDescriptor(input: {
     (external.type === "postgres" ||
       external.type === "mysql" ||
       external.type === "sqlite" ||
-      external.type === "quack")
+      external.type === "quack" ||
+      external.type === "httpfs")
   ) {
     return normalizeDashboardSourceDescriptor({
       kind: "external",
@@ -134,9 +144,14 @@ export function parseDashboardSourceDescriptor(
     (candidate.externalType === "postgres" ||
       candidate.externalType === "mysql" ||
       candidate.externalType === "sqlite" ||
-      candidate.externalType === "quack")
+      candidate.externalType === "quack" ||
+      candidate.externalType === "httpfs" ||
+      candidate.externalType === "custom")
   ) {
     descriptor.externalType = candidate.externalType;
+  }
+  if (kind === "external" && isSourceConnectionConfig(candidate.connection)) {
+    descriptor.connection = candidate.connection;
   }
 
   return normalizeDashboardSourceDescriptor(descriptor);
@@ -192,4 +207,50 @@ export function isDashboardSourceDescriptorExternal(
   descriptor: DashboardSourceDescriptor | null | undefined,
 ): boolean {
   return descriptor?.kind === "external";
+}
+
+function isSourceConnectionConfig(
+  value: unknown,
+): value is SourceConnectionConfig {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.type !== "string" || !candidate.type.trim()) {
+    return false;
+  }
+  if (
+    candidate.identifier !== undefined &&
+    typeof candidate.identifier !== "string"
+  ) {
+    return false;
+  }
+  if (
+    candidate.connectionId !== undefined &&
+    typeof candidate.connectionId !== "string"
+  ) {
+    return false;
+  }
+  if (candidate.alias !== undefined && typeof candidate.alias !== "string") {
+    return false;
+  }
+  if (
+    candidate.readOnly !== undefined &&
+    typeof candidate.readOnly !== "boolean"
+  ) {
+    return false;
+  }
+  if (
+    candidate.duckdbExtension !== undefined &&
+    typeof candidate.duckdbExtension !== "string"
+  ) {
+    return false;
+  }
+  if (
+    candidate.duckdbExtensionRepository !== undefined &&
+    typeof candidate.duckdbExtensionRepository !== "string"
+  ) {
+    return false;
+  }
+  return true;
 }

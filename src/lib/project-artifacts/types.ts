@@ -24,6 +24,9 @@ export const projectSourceExternalTypeSchema = z.enum([
   "postgres",
   "mysql",
   "sqlite",
+  "quack",
+  "httpfs",
+  "custom",
 ]);
 
 export const projectVisualConfigSchema = z.union([
@@ -52,10 +55,32 @@ export const trackedProjectSourceRegistrySchema = z.object({
   sources: z.array(trackedProjectSourceSchema),
 });
 
+export const localProjectSourceConnectionSchema = z
+  .object({
+    type: z.string().trim().min(1),
+    identifier: z.string().trim().min(1).optional(),
+    connectionId: z.string().trim().min(1).optional(),
+    alias: z.string().trim().min(1).optional(),
+    readOnly: z.boolean().optional(),
+    duckdbExtension: z.string().trim().min(1).optional(),
+    duckdbExtensionRepository: z.string().trim().min(1).optional(),
+    attachOptions: z
+      .object({
+        type: z.string().trim().min(1).optional(),
+        token: z.string().optional(),
+        disableSsl: z.boolean().optional(),
+      })
+      .optional(),
+  })
+  .refine((connection) => connection.identifier || connection.connectionId, {
+    message: "Source connection requires identifier or connectionId",
+  });
+
 export const localProjectSourceBindingSchema = z.object({
   runtimeBackend: z.enum(["duckdb-wasm", "bridge"]),
   dbIdentifier: z.string().nullable().optional(),
   catalogContext: z.string().nullable().optional(),
+  connection: localProjectSourceConnectionSchema.optional(),
 });
 
 export const localProjectSourceBindingsSchema = z.object({
@@ -162,6 +187,9 @@ export type TrackedProjectSourceRegistry = z.infer<
 >;
 export type LocalProjectSourceBinding = z.infer<
   typeof localProjectSourceBindingSchema
+>;
+export type LocalProjectSourceConnection = z.infer<
+  typeof localProjectSourceConnectionSchema
 >;
 export type LocalProjectSourceBindings = z.infer<
   typeof localProjectSourceBindingsSchema

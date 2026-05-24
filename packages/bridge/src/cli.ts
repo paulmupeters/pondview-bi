@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BridgeClient } from "@pondview/bridge-protocol";
 import { type BrowserOpener, openBrowser } from "./open-browser";
@@ -19,13 +21,13 @@ const AUTOSTART_POLL_INTERVAL_MS = 100;
 const DASHBOARD_MODE_PATH = "/dashboards?pondviewMode=dashboard";
 const DASHBOARD_VIEW_PATH = "/dashboards/view";
 const METADATA_SCHEMA = "pondview";
+const LOCAL_SOURCE_BINDINGS_PATH = "pondview.sources.local.json";
 const CLIENT_FLAGS = [
   "database",
   "host",
   "no-autostart",
   "port",
   "project-dir",
-  "readonly",
   "token",
   "token-env",
   "url",
@@ -93,6 +95,9 @@ export async function runCli(
     case "dashboard":
       await runDashboard(args, resolvedDeps);
       break;
+    case "source":
+      await runSource(args);
+      break;
     case "stop":
       await runStop(args, resolvedDeps);
       break;
@@ -102,6 +107,131 @@ export async function runCli(
     default:
       throw new Error(`Unknown command: ${args.command}`);
   }
+}
+
+async function runSource(args: ParsedArgs): Promise<void> {
+  const subcommand = args.positionals[0];
+  switch (subcommand) {
+    case "add":
+      await runSourceAdd(args);
+      break;
+    case "list":
+      await runSourceList(args);
+      break;
+    case "remove":
+      await runSourceRemove(args);
+      break;
+    default:
+      throw new Error("Usage: pondview source <add|list|remove>");
+  }
+}
+
+type LocalSourceBindingsFile = {
+  schemaVersion: 1;
+  bindings: Record<string, LocalSourceBinding>;
+};
+
+type LocalSourceBinding = {
+  runtimeBackend: "duckdb-wasm" | "bridge";
+  dbIdentifier?: string | null;
+  catalogContext?: string | null;
+  connection?: {
+    type: string;
+    identifier?: string;
+    connectionId?: string;
+    alias?: string;
+    readOnly?: boolean;
+    duckdbExtension?: string;
+    duckdbExtensionRepository?: string;
+    attachOptions?: {
+      type?: string;
+      disableSsl?: boolean;
+    };
+  };
+};
+
+async function runSourceAdd(args: ParsedArgs): Promise<void> {
+  assertAllowedFlags(args, [
+    "as",
+    "attach-type",
+    "catalog-context",
+    "connection-id",
+    "disable-ssl",
+    "extension",
+    "extension-repository",
+    "identifier",
+    "project-dir",
+    "readonly",
+    "runtime",
+    "type",
+  ]);
+
+  const sourceRef = args.positionals[1];
+  if (!sourceRef || !isProjectSourceRef(sourceRef)) {
+    throw new Error(
+      "Usage: pondview source add <source-ref> --type <type> --identifier <identifier> --as <alias>",
+    );
+  }
+
+  const type = readRequiredStringFlag(args, "type");
+  const alias = readRequiredStringFlag(args, "as");
+  const identifier = readStringFlag(args, "identifier");
+  const connectionId = readStringFlag(args, "connection-id");
+  if (!identifier && !connectionId) {
+    throw new Error(
+      "Provide --identifier <identifier> or --connection-id <id>.",
+    );
+  }
+
+  const runtime = readStringFlag(args, "runtime") ?? "bridge";
+  if (runtime !== "bridge" && runtime !== "duckdb-wasm") {
+    throw new Error("--runtime must be bridge or duckdb-wasm.");
+  }
+
+  const attachType = readStringFlag(args, "attach-type");
+  const binding: LocalSourceBinding = {
+    runtimeBackend: runtime,
+    dbIdentifier: connectionId ?? identifier ?? null,
+    catalogContext: readStringFlag(args, "catalog-context") ?? null,
+    connection: {
+      type,
+      identifier,
+      connectionId,
+      alias,
+      readOnly: args.flags.has("readonly") ? true : undefined,
+      duckdbExtension: readStringFlag(args, "extension"),
+      duckdbExtensionRepository: readStringFlag(args, "extension-repository"),
+      attachOptions:
+        attachType || args.flags.has("disable-ssl")
+          ? {
+              type: attachType,
+              disableSsl: args.flags.has("disable-ssl") ? true : undefined,
+            }
+          : undefined,
+    },
+  };
+
+  const file = await readLocalSourceBindings(args);
+  file.bindings[sourceRef] = stripUndefined(binding);
+  await writeLocalSourceBindings(args, file);
+  printJson({ sourceRef, binding: file.bindings[sourceRef] });
+}
+
+async function runSourceList(args: ParsedArgs): Promise<void> {
+  assertAllowedFlags(args, ["project-dir"]);
+  printJson(await readLocalSourceBindings(args));
+}
+
+async function runSourceRemove(args: ParsedArgs): Promise<void> {
+  assertAllowedFlags(args, ["project-dir"]);
+  const sourceRef = args.positionals[1];
+  if (!sourceRef || !isProjectSourceRef(sourceRef)) {
+    throw new Error("Usage: pondview source remove <source-ref>");
+  }
+  const file = await readLocalSourceBindings(args);
+  delete file.bindings[sourceRef];
+  await writeLocalSourceBindings(args, file);
+  printJson({ removed: sourceRef, bindings: file.bindings });
 }
 
 async function runStart(
@@ -116,7 +246,6 @@ async function runStart(
     "no-ui",
     "port",
     "project-dir",
-    "readonly",
     "token",
     "token-env",
   ]);
@@ -124,7 +253,6 @@ async function runStart(
   const host = readStringFlag(args, "host") ?? DEFAULT_HOST;
   const port = readNumberFlag(args, "port") ?? DEFAULT_PORT;
   const token = readToken(args);
-  const readonly = args.flags.has("readonly");
   const databasePath = readStringFlag(args, "database");
   const projectDir = readStringFlag(args, "project-dir");
 
@@ -136,7 +264,6 @@ async function runStart(
     host,
     port,
     token,
-    readonly,
     databasePath,
     projectDir,
     serveUi: !args.flags.has("no-ui"),
@@ -389,7 +516,6 @@ async function runDashboardOpen(
     "no-open",
     "port",
     "project-dir",
-    "readonly",
     "token",
     "token-env",
   ]);
@@ -404,7 +530,6 @@ async function runDashboardOpen(
     host,
     port: readNumberFlag(args, "port") ?? DEFAULT_PORT,
     token: readToken(args),
-    readonly: args.flags.has("readonly"),
     databasePath: readStringFlag(args, "database"),
     projectDir: readStringFlag(args, "project-dir"),
     serveUi: true,
@@ -1080,9 +1205,6 @@ function startBridgeProcess(args: ParsedArgs): void {
   appendFlag(childArgs, args, "token-env");
   appendFlag(childArgs, args, "database");
   appendFlag(childArgs, args, "project-dir");
-  if (args.flags.has("readonly")) {
-    childArgs.push("--readonly");
-  }
 
   const subprocess = spawn(process.execPath, childArgs, {
     detached: true,
@@ -1264,6 +1386,14 @@ function readStringFlag(args: ParsedArgs, name: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function readRequiredStringFlag(args: ParsedArgs, name: string): string {
+  const value = readStringFlag(args, name)?.trim();
+  if (!value) {
+    throw new Error(`Missing required --${name} <value> flag.`);
+  }
+  return value;
+}
+
 function readNumberFlag(args: ParsedArgs, name: string): number | undefined {
   const value = readStringFlag(args, name);
   if (!value) {
@@ -1281,6 +1411,74 @@ function readNumberFlag(args: ParsedArgs, name: string): number | undefined {
 
 function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
+}
+
+function localSourceBindingsFilePath(args: ParsedArgs): string {
+  return resolve(
+    readStringFlag(args, "project-dir") ??
+      process.env.INIT_CWD ??
+      process.cwd(),
+    LOCAL_SOURCE_BINDINGS_PATH,
+  );
+}
+
+async function readLocalSourceBindings(
+  args: ParsedArgs,
+): Promise<LocalSourceBindingsFile> {
+  const path = localSourceBindingsFilePath(args);
+  if (!existsSync(path)) {
+    return { schemaVersion: 1, bindings: {} };
+  }
+
+  const parsed = JSON.parse(
+    await readFile(path, "utf8"),
+  ) as Partial<LocalSourceBindingsFile>;
+  if (parsed.schemaVersion !== 1 || typeof parsed.bindings !== "object") {
+    throw new Error(
+      `${LOCAL_SOURCE_BINDINGS_PATH} is not a valid source file.`,
+    );
+  }
+
+  return {
+    schemaVersion: 1,
+    bindings: parsed.bindings ?? {},
+  };
+}
+
+async function writeLocalSourceBindings(
+  args: ParsedArgs,
+  file: LocalSourceBindingsFile,
+): Promise<void> {
+  const path = localSourceBindingsFilePath(args);
+  const sorted: LocalSourceBindingsFile = {
+    schemaVersion: 1,
+    bindings: Object.fromEntries(
+      Object.entries(file.bindings).sort(([left], [right]) =>
+        left.localeCompare(right),
+      ),
+    ),
+  };
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(sorted, null, 2)}\n`, "utf8");
+}
+
+function isProjectSourceRef(value: string): boolean {
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+}
+
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => stripUndefined(item))
+      .filter((item) => item !== undefined) as T;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value)
+      .filter(([, entryValue]) => entryValue !== undefined)
+      .map(([key, entryValue]) => [key, stripUndefined(entryValue)]);
+    return Object.fromEntries(entries) as T;
+  }
+  return value;
 }
 
 function resolveStartOpenUrl(baseUrl: string, args: ParsedArgs): string {
@@ -1316,6 +1514,9 @@ function printHelp(command?: string, subcommand?: string): void {
     case "dashboard":
       printDashboardHelp(subcommand);
       break;
+    case "source":
+      printSourceHelp(subcommand);
+      break;
     case "doctor":
       printDoctorHelp();
       break;
@@ -1340,6 +1541,7 @@ Data
   attach         Attach a DuckDB database source
   list-sources   List attached database sources
   detach         Detach a database source
+  source         Manage project-local source bindings
   query          Run SQL through the bridge
 
 Dashboards
@@ -1380,7 +1582,6 @@ Flags:
       --port <port>        Local bridge port (default: 17817)
       --database <file>    Open a DuckDB file as the primary database
       --project-dir <dir>  Filesystem project root (default: launch directory)
-      --readonly           Start with readonly project and database access
       --dashboard-mode     Open a view-only dashboards UI
       --no-open            Do not open the browser
       --no-ui              Start the bridge API only
@@ -1408,6 +1609,41 @@ function printListSourcesHelp(): void {
 
 Usage:
   pondview list-sources [--url <url>] [--no-autostart]
+`);
+}
+
+function printSourceHelp(subcommand?: string): void {
+  if (subcommand === "add") {
+    console.log(`Add a project-local source binding.
+
+Usage:
+  pondview source add <source-ref> --type <type> --identifier <identifier> --as <alias> [flags]
+
+Flags:
+      --type <type>                       Source type stored in the binding
+      --identifier <identifier>           DuckDB attachment identifier
+      --connection-id <id>                Opaque Bridge secret id instead of an identifier
+      --as <alias>                        Runtime attachment alias
+      --extension <name>                  DuckDB extension to install/load
+      --extension-repository <repo>       DuckDB extension repository
+      --attach-type <type>                ATTACH TYPE option
+      --disable-ssl                       Add DISABLE_SSL true to attach options
+      --readonly                          Attach with READ_ONLY
+      --catalog-context <schema>          Default catalog/schema context
+      --runtime <bridge|duckdb-wasm>      Runtime backend (default: bridge)
+      --project-dir <dir>                 Filesystem project root
+`);
+    return;
+  }
+
+  console.log(`Manage project-local source bindings.
+
+Usage:
+  pondview source add <source-ref> --type <type> --identifier <identifier> --as <alias>
+  pondview source list
+  pondview source remove <source-ref>
+
+Source bindings are written to ${LOCAL_SOURCE_BINDINGS_PATH}.
 `);
 }
 
@@ -1445,7 +1681,6 @@ Flags:
       --port <port>        Local bridge port (default: 17817)
       --database <file>    Open a DuckDB file as the primary database
       --project-dir <dir>  Filesystem project root
-      --readonly           Start with readonly access
       --no-open            Do not open the browser
 `);
     return;

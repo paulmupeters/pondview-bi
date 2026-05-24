@@ -33,19 +33,16 @@ type BridgeProjectMetadataFile = {
 
 export interface BridgeProjectStoreOptions {
   rootPath?: string;
-  readonly?: boolean;
 }
 
 export class BridgeProjectStore {
   readonly rootPath: string;
-  private readonly readonly: boolean;
 
   constructor(options: BridgeProjectStoreOptions = {}) {
     this.rootPath = resolve(
       options.rootPath?.trim() || process.env.INIT_CWD || process.cwd(),
     );
-    this.readonly = options.readonly ?? false;
-    if (!existsSync(this.rootPath) && !this.readonly) {
+    if (!existsSync(this.rootPath)) {
       mkdirSync(this.rootPath, { recursive: true });
     }
   }
@@ -57,7 +54,6 @@ export class BridgeProjectStore {
   async updateProject(
     input: BridgeProjectUpdateRequest,
   ): Promise<BridgeProject> {
-    this.assertWritable();
     const previous = this.getProject();
     const project: BridgeProject = {
       ...previous,
@@ -99,7 +95,6 @@ export class BridgeProjectStore {
   async saveFiles(
     files: BridgeProjectTextFile[],
   ): Promise<BridgeProjectTextFile[]> {
-    this.assertWritable();
     for (const file of normalizeProjectFiles(files)) {
       await this.writeTextFile(file.path, file.content);
     }
@@ -108,7 +103,6 @@ export class BridgeProjectStore {
   }
 
   async deleteFiles(paths: string[]): Promise<BridgeProjectTextFile[]> {
-    this.assertWritable();
     for (const path of paths) {
       const normalizedPath = normalizeProjectPath(path);
       if (!isProjectArtifactFilePath(normalizedPath)) {
@@ -126,7 +120,6 @@ export class BridgeProjectStore {
     scopePath: string | undefined,
     files: BridgeProjectTextFile[],
   ): Promise<BridgeProjectTextFile[]> {
-    this.assertWritable();
     const normalizedScope = normalizeScopePath(scopePath ?? "");
     const nextFiles = normalizeProjectFiles(files);
     const nextPaths = new Set(nextFiles.map((file) => file.path));
@@ -311,12 +304,6 @@ export class BridgeProjectStore {
       throw new Error(`Project file path "${path}" escapes the project root.`);
     }
     return targetPath;
-  }
-
-  private assertWritable(): void {
-    if (this.readonly) {
-      throw new Error("Readonly bridge mode cannot mutate project files.");
-    }
   }
 }
 

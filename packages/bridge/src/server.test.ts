@@ -573,7 +573,7 @@ describe("bridge server modes", () => {
     });
   });
 
-  test("project endpoints reject traversal and readonly mutations", async () => {
+  test("project endpoints reject traversal", async () => {
     const projectDir = createTempDir();
     const server = await startTrackedServer({ projectDir });
 
@@ -585,20 +585,6 @@ describe("bridge server modes", () => {
       }),
     });
     expect(escaped.status).toBe(400);
-
-    const readonly = await startTrackedServer({
-      projectDir,
-      readonly: true,
-    });
-    const readonlySave = await fetch(`${readonly.url}/project/files`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        files: [{ path: "pondview/queries/shared/blocked.sql", content: "" }],
-      }),
-    });
-    expect(readonlySave.status).toBe(400);
-    expect(await readonlySave.text()).toContain("Readonly bridge mode");
   });
 });
 

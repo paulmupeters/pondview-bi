@@ -8,7 +8,7 @@ const ATTACH_TYPE_BY_SOURCE: Record<string, string | undefined> = {
 };
 
 const DEFAULT_EXTENSION_BY_SOURCE: Record<string, string | undefined> = {
-  duckdb_remote: "httpfs",
+  httpfs: "httpfs",
   motherduck: "motherduck",
   quack: "quack",
   postgres: "postgres",

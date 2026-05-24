@@ -26,7 +26,6 @@ export const bridgeCapabilitiesResponseSchema = z.object({
   attachDuckDb: z.boolean(),
   importFiles: z.boolean(),
   projects: z.boolean(),
-  readonly: z.boolean(),
   secrets: z.boolean().optional(),
   ai: z.boolean().optional(),
   s3Backup: z.boolean().optional(),

@@ -939,9 +939,9 @@ async function ensureDashboardMaterialization(
           }
         } else if (tableRef.mode === "external-cache") {
           const dbIdentifier = tableRef.sourceDescriptor.dbIdentifier;
-          const externalConnection = dbIdentifier
-            ? detectExternalConnection(dbIdentifier)
-            : null;
+          const externalConnection =
+            tableRef.sourceDescriptor.connection ??
+            (dbIdentifier ? detectExternalConnection(dbIdentifier) : null);
           if (!externalConnection) {
             throw new Error(
               `External cache source ${tableRef.tableName} is missing a resolvable connection.`,

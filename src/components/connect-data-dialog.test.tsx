@@ -9,8 +9,8 @@ import {
 } from "@/components/connect-data-dialog";
 
 describe("ConnectDataDialog runtime source support", () => {
-  test("allows browser-compatible DuckDB sources in WASM mode", () => {
-    expect(isWasmCompatibleDatabase("duckdb_remote")).toBe(true);
+  test("keeps external sources off the WASM-only picker", () => {
+    expect(isWasmCompatibleDatabase("httpfs")).toBe(false);
     expect(isWasmCompatibleDatabase("quack")).toBe(false);
   });
 
@@ -40,7 +40,7 @@ describe("ConnectDataDialog runtime source support", () => {
   });
 
   test("still loads the Quack extension before attaching in WASM", () => {
-    expect(shouldSkipExtensionLoadForWasm("duckdb_remote")).toBe(true);
+    expect(shouldSkipExtensionLoadForWasm("httpfs")).toBe(true);
     expect(shouldSkipExtensionLoadForWasm("quack")).toBe(false);
   });
 
@@ -59,6 +59,7 @@ describe("ConnectDataDialog runtime source support", () => {
         sourceType: "quack",
         alias: "station",
         schema: "main",
+        limit: 20,
       }),
     ).toBe(
       `SELECT table_name FROM "station".query('SELECT table_name FROM information_schema.tables WHERE table_schema = ''main'' AND table_type = ''BASE TABLE'' ORDER BY table_name LIMIT 20')`,

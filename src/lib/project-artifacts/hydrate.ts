@@ -5,6 +5,7 @@ import {
   getDashboardSourceDescriptorCatalogContext,
   getDashboardSourceDescriptorDbIdentifier,
   getDashboardSourceDescriptorRuntimeBackend,
+  normalizeDashboardSourceDescriptor,
   serializeDashboardSourceDescriptor,
 } from "@/lib/dashboard/source-descriptor";
 import type { JoinDefinition } from "@/lib/joins/graph";
@@ -95,11 +96,26 @@ function resolveHydratedSource(
   const binding = resolvedSourceRef
     ? (options.localSourceBindings?.bindings[resolvedSourceRef] ?? null)
     : null;
-  const sourceDescriptor = buildDashboardSourceDescriptor({
-    runtimeBackend: binding?.runtimeBackend ?? getFallbackSqlBackend(options),
-    dbIdentifier: binding?.dbIdentifier ?? null,
-    catalogContext: binding?.catalogContext ?? null,
-  });
+  const runtimeBackend =
+    binding?.runtimeBackend ?? getFallbackSqlBackend(options);
+  const sourceDescriptor = binding?.connection
+    ? normalizeDashboardSourceDescriptor({
+        kind: "external",
+        runtimeBackend,
+        dbIdentifier:
+          binding.connection.connectionId ??
+          binding.connection.identifier ??
+          binding.dbIdentifier ??
+          null,
+        catalogContext: binding.catalogContext ?? null,
+        externalType: toDashboardExternalType(binding.connection.type),
+        connection: binding.connection,
+      })
+    : buildDashboardSourceDescriptor({
+        runtimeBackend,
+        dbIdentifier: binding?.dbIdentifier ?? null,
+        catalogContext: binding?.catalogContext ?? null,
+      });
 
   return {
     sourceRef: resolvedSourceRef,
@@ -112,6 +128,18 @@ function resolveHydratedSource(
       getDashboardSourceDescriptorRuntimeBackend(sourceDescriptor) ??
       getFallbackSqlBackend(options),
   };
+}
+
+function toDashboardExternalType(
+  type: string,
+): DashboardSourceDescriptor["externalType"] {
+  return type === "postgres" ||
+    type === "mysql" ||
+    type === "sqlite" ||
+    type === "quack" ||
+    type === "httpfs"
+    ? type
+    : "custom";
 }
 
 function getProjectPathId(path: string, fallback: string): string {

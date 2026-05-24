@@ -25,6 +25,7 @@ Examples include:
 - MySQL: `mysql://...`, `mysql:alias`
 - SQLite: `sqlite:/path/to/file.db`
 - Quack Remote DuckDB: `quack:host[:port]`
+- HTTPFS DuckDB files: `s3://...`, `r2://...`, `gcs://...`, `gs://...`
 
 The returned config includes:
 
@@ -68,7 +69,11 @@ That means external caching is an execution concern, not a persistence concern.
 
 ## Adding New Connectors
 
-To support another external backend:
+Built-in UI connectors are added in code. Project-local custom sources can be
+added with `pondview source add` when the source is already DuckDB
+attach-compatible.
+
+To support another external backend in the UI:
 
 1. Extend `detectExternalConnection(...)` in `@/lib/duckdb/path.ts`.
 2. Return a `SourceConnectionConfig` with the correct source type and DuckDB extension.

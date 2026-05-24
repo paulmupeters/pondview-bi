@@ -178,4 +178,76 @@ describe("project artifact hydration", () => {
       hydrated.publishedNotebooks[0]?.cells[1]?.resultPayloadJson,
     ).toContain('"tableConfig"');
   });
+
+  test("hydrates typed local source connections", () => {
+    const parsed = parseProjectArtifactFileSet([
+      jsonFile("pondview/project.json", {
+        schemaVersion: 1,
+        name: "Custom Source",
+        defaultSourceRef: "ga4",
+      }),
+      jsonFile("pondview.sources.local.json", {
+        schemaVersion: 1,
+        bindings: {
+          ga4: {
+            runtimeBackend: "bridge",
+            catalogContext: "main",
+            connection: {
+              type: "custom",
+              identifier: "ga4:property",
+              alias: "ga4",
+              readOnly: true,
+              duckdbExtension: "ga4",
+              attachOptions: { type: "ga4" },
+            },
+          },
+        },
+      }),
+      jsonFile("pondview/dashboards/traffic/dashboard.json", {
+        schemaVersion: 1,
+        id: "traffic",
+        title: "Traffic",
+        sourceRef: "ga4",
+        measures: [],
+        visuals: [
+          {
+            id: "sessions",
+            metadataFile: "visuals/sessions.visual.json",
+            sqlFile: "visuals/sessions.sql",
+          },
+        ],
+      }),
+      jsonFile("pondview/dashboards/traffic/visuals/sessions.visual.json", {
+        schemaVersion: 1,
+        id: "sessions",
+        config: {
+          configType: "table",
+          title: "Sessions",
+          description: "GA sessions",
+        },
+      }),
+      {
+        path: "pondview/dashboards/traffic/visuals/sessions.sql",
+        content: "select * from sessions\n",
+      },
+    ]);
+
+    const hydrated = hydrateProjectArtifacts(parsed);
+
+    expect(hydrated.dashboards[0]?.charts[0]?.sourceDescriptor).toMatchObject({
+      kind: "external",
+      runtimeBackend: "bridge",
+      dbIdentifier: "ga4:property",
+      catalogContext: "main",
+      externalType: "custom",
+      connection: {
+        type: "custom",
+        identifier: "ga4:property",
+        alias: "ga4",
+        readOnly: true,
+        duckdbExtension: "ga4",
+        attachOptions: { type: "ga4" },
+      },
+    });
+  });
 });

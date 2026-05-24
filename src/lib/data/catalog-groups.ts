@@ -211,7 +211,7 @@ function resolveCatalogOrigin(
       return {
         label: "Bridge attached database",
         description:
-          matchedSource.type.trim().toLowerCase() === "duckdb_remote"
+          matchedSource.type.trim().toLowerCase() === "httpfs"
             ? "Remote DuckDB file attached via Bridge"
             : "DuckDB file attached via Bridge",
       };
@@ -307,14 +307,14 @@ function findMatchingSourceBySelection(
 
 function isAttachedDuckDbSourceType(type: string): boolean {
   const normalizedType = type.trim().toLowerCase();
-  return normalizedType === "duckdb" || normalizedType === "duckdb_remote";
+  return normalizedType === "duckdb" || normalizedType === "httpfs";
 }
 
 function getSourceTypeLabel(type: string): string {
   switch (type.trim().toLowerCase()) {
     case "duckdb":
       return "DuckDB file";
-    case "duckdb_remote":
+    case "httpfs":
       return "Remote DuckDB file";
     case "motherduck":
       return "MotherDuck";
