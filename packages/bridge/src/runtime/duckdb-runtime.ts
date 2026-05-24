@@ -15,7 +15,6 @@ import type {
 } from "@pondview/bridge-protocol";
 
 interface DuckDbRuntimeOptions {
-  readonly?: boolean;
   databasePath?: string;
   resolveSource?: (id: string) => BridgeSecretSource | undefined;
 }
@@ -32,7 +31,6 @@ export class DuckDbRuntime {
   private connectionHandle: DuckDBConnection | null = null;
   private instance: DuckDBInstance | null = null;
   private readonly sources = new Map<string, BridgeSource>();
-  private readonly readonly: boolean;
   private readonly databasePath: string | null;
   private readonly databaseId: string;
   private readonly resolveSource?: (
@@ -40,7 +38,6 @@ export class DuckDbRuntime {
   ) => BridgeSecretSource | undefined;
 
   constructor(options: DuckDbRuntimeOptions = {}) {
-    this.readonly = options.readonly ?? false;
     this.databasePath = options.databasePath
       ? resolve(options.databasePath.trim())
       : null;
@@ -88,10 +85,6 @@ export class DuckDbRuntime {
   }
 
   async query(sql: string, limit?: number): Promise<BridgeQueryResponse> {
-    if (this.readonly && !isReadOnlySql(sql)) {
-      throw new Error("Readonly bridge mode allows only read-only SQL.");
-    }
-
     const reader = await (await this.connection()).runAndReadAll(
       this.resolveSecretAttachmentSql(sql),
     );
@@ -133,10 +126,6 @@ export class DuckDbRuntime {
       disableSsl?: boolean;
     };
   }): Promise<BridgeSource> {
-    if (this.readonly && input.readonly === false) {
-      throw new Error("Readonly bridge mode cannot attach writable sources.");
-    }
-
     const resolvedSource = input.connectionId
       ? this.resolveSource?.(input.connectionId)
       : undefined;
@@ -169,7 +158,7 @@ export class DuckDbRuntime {
       type:
         resolvedSource?.type ??
         input.type ??
-        (normalizedIdentifier.startsWith("s3://") ? "duckdb_remote" : "duckdb"),
+        (normalizedIdentifier.startsWith("s3://") ? "httpfs" : "duckdb"),
     };
     this.sources.set(source.id, source);
     return source;
@@ -204,7 +193,6 @@ export class DuckDbRuntime {
   private async createConnection() {
     const instance = await DuckDBInstance.create(
       this.databasePath ?? ":memory:",
-      this.readonly && this.databasePath ? { access_mode: "READ_ONLY" } : {},
     );
     const connection = await instance.connect();
     this.instance = instance;
@@ -317,16 +305,6 @@ function normalizeAlias(alias: string): string {
     );
   }
   return trimmed;
-}
-
-function isReadOnlySql(sql: string): boolean {
-  const normalized = sql
-    .trimStart()
-    .replace(/^--.*\n/gm, "")
-    .trimStart();
-  return /^(select|with|show|describe|desc|explain|summarize|pragma\s+(show|version|database_list|table_info))/i.test(
-    normalized,
-  );
 }
 
 function quoteIdentifier(identifier: string): string {

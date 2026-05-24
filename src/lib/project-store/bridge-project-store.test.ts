@@ -121,7 +121,6 @@ describe("BridgeProjectStore", () => {
       attachDuckDb: true,
       importFiles: false,
       projects: true,
-      readonly: false,
     };
 
     const deps = {

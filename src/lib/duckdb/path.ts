@@ -220,6 +220,28 @@ export function detectQuackConnection(
   };
 }
 
+export function detectHttpfsConnection(
+  dbIdentifier: string,
+): SourceConnectionConfig | null {
+  const id = (dbIdentifier ?? "").trim();
+  const normalized = id.toLowerCase();
+  if (
+    !normalized.startsWith("s3://") &&
+    !normalized.startsWith("r2://") &&
+    !normalized.startsWith("gcs://") &&
+    !normalized.startsWith("gs://")
+  ) {
+    return null;
+  }
+
+  return {
+    type: "httpfs",
+    identifier: id,
+    duckdbExtension: "httpfs",
+    readOnly: true,
+  };
+}
+
 /**
  * Detects if a database identifier is a PostgreSQL URI and converts it to a SourceConnectionConfig.
  * Returns null if it's not a postgres URI.
@@ -290,6 +312,7 @@ export function detectExternalConnection(
   dbIdentifier: string,
 ): SourceConnectionConfig | null {
   return (
+    detectHttpfsConnection(dbIdentifier) ??
     detectPostgresConnection(dbIdentifier) ??
     detectMysqlConnection(dbIdentifier) ??
     detectSqliteConnection(dbIdentifier) ??

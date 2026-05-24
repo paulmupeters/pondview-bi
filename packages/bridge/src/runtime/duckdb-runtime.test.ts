@@ -39,22 +39,6 @@ describe("DuckDbRuntime", () => {
     expect(result.rowCount).toBe(1);
   });
 
-  test("allows read-only SQL in readonly mode", async () => {
-    const runtime = createRuntime({ readonly: true });
-
-    const result = await runtime.query("SHOW TABLES;");
-
-    expect(result.rows).toEqual([]);
-  });
-
-  test("blocks mutating SQL in readonly mode", async () => {
-    const runtime = createRuntime({ readonly: true });
-
-    await expect(
-      runtime.query("CREATE TABLE nope AS SELECT 1 AS value;"),
-    ).rejects.toThrow("Readonly bridge mode allows only read-only SQL.");
-  });
-
   test("opens a DuckDB file as the primary database", async () => {
     const databasePath = join(createTempDir(), "analytics.duckdb");
     const writer = createRuntime({ databasePath });

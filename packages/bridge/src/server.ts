@@ -44,7 +44,6 @@ export interface BridgeServerOptions {
   host?: string;
   port?: number;
   token?: string;
-  readonly?: boolean;
   databasePath?: string;
   serveUi?: boolean;
   dashboardMode?: boolean;
@@ -74,17 +73,15 @@ export async function startBridgeServer(
   const secrets = new BridgeSecretStore(options.secretsPath);
   const projects = new BridgeProjectStore({
     rootPath: options.projectDir,
-    readonly: options.readonly,
   });
   const createRuntime = (databasePath?: string) =>
     new DuckDbRuntime({
-      readonly: options.readonly,
       databasePath,
       resolveSource: (id) => secrets.getSource(id),
     });
   let runtime = createRuntime(options.databasePath);
   const initializeProjectRuntime = async (databasePath?: string) => {
-    if (options.readonly || options.databasePath) {
+    if (options.databasePath) {
       return runtime.databaseInfo();
     }
 
@@ -193,7 +190,6 @@ export async function handleBridgeRequest(
   secrets = new BridgeSecretStore(options.secretsPath),
   projects = new BridgeProjectStore({
     rootPath: options.projectDir,
-    readonly: options.readonly,
   }),
   initializeProjectRuntime?: (databasePath?: string) => Promise<unknown>,
 ): Promise<Response> {
@@ -242,7 +238,6 @@ export async function handleBridgeRequest(
         attachDuckDb: true,
         importFiles: false,
         projects: true,
-        readonly: options.readonly ?? false,
         secrets: true,
         ai: Boolean(secrets.getAi()),
         s3Backup: Boolean(secrets.getS3Backup()),
@@ -261,11 +256,6 @@ export async function handleBridgeRequest(
     }
 
     if (request.method === "POST" && url.pathname === "/project/init") {
-      if (options.readonly) {
-        throw new Error(
-          "Readonly bridge mode cannot initialize project files.",
-        );
-      }
       const input = bridgeProjectInitRequestSchema.parse(await request.json());
       const files = await projects.saveFiles(input.files);
       await initializeProjectRuntime?.(input.databasePath);

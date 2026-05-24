@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -26,7 +26,6 @@ function createNoopClient() {
       attachDuckDb: true,
       importFiles: false,
       projects: true,
-      readonly: false,
     }),
     attachSource: async () => ({ sources: [] }),
     sources: async () => ({ sources: [] }),
@@ -122,6 +121,87 @@ describe("bridge CLI help", () => {
     );
     expect(output).not.toContain("use-existing");
     expect(output).not.toContain("ui-port");
+  });
+});
+
+describe("bridge CLI source bindings", () => {
+  test("source add writes project-local typed connection config", async () => {
+    const projectDir = createTempDir();
+
+    await captureStdout(() =>
+      runCli([
+        "source",
+        "add",
+        "ga4",
+        "--project-dir",
+        projectDir,
+        "--type",
+        "custom",
+        "--identifier",
+        "ga4:property",
+        "--as",
+        "ga4",
+        "--extension",
+        "ga4",
+        "--attach-type",
+        "ga4",
+        "--readonly",
+      ]),
+    );
+
+    const parsed = JSON.parse(
+      readFileSync(join(projectDir, "pondview.sources.local.json"), "utf8"),
+    ) as {
+      bindings: Record<string, unknown>;
+    };
+    expect(parsed.bindings.ga4).toEqual({
+      runtimeBackend: "bridge",
+      dbIdentifier: "ga4:property",
+      catalogContext: null,
+      connection: {
+        type: "custom",
+        identifier: "ga4:property",
+        alias: "ga4",
+        readOnly: true,
+        duckdbExtension: "ga4",
+        attachOptions: { type: "ga4" },
+      },
+    });
+
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  test("source remove deletes a binding", async () => {
+    const projectDir = createTempDir();
+    writeFileSync(
+      join(projectDir, "pondview.sources.local.json"),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          bindings: {
+            warehouse: {
+              runtimeBackend: "bridge",
+              dbIdentifier: "pg:warehouse",
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    await captureStdout(() =>
+      runCli(["source", "remove", "warehouse", "--project-dir", projectDir]),
+    );
+
+    const parsed = JSON.parse(
+      readFileSync(join(projectDir, "pondview.sources.local.json"), "utf8"),
+    ) as {
+      bindings: Record<string, unknown>;
+    };
+    expect(parsed.bindings).toEqual({});
+
+    rmSync(projectDir, { recursive: true, force: true });
   });
 });
 
@@ -290,7 +370,7 @@ describe("bridge CLI client autostart", () => {
     expect(started).toBe(false);
   });
 
-  test("autostart receives host, port, token, token-env, database, and readonly flags", async () => {
+  test("autostart receives host, port, token-env, and database flags", async () => {
     const startedFlags: Record<string, string | boolean> = {};
     let attachCalls = 0;
 
@@ -310,7 +390,6 @@ describe("bridge CLI client autostart", () => {
         "PONDVIEW_TEST_TOKEN",
         "--database",
         "./analytics.duckdb",
-        "--readonly",
       ],
       {
         createClient: () => ({
@@ -338,7 +417,6 @@ describe("bridge CLI client autostart", () => {
       token: "secret",
       "token-env": "PONDVIEW_TEST_TOKEN",
       database: "./analytics.duckdb",
-      readonly: true,
     });
   });
 });

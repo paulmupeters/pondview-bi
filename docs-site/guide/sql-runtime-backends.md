@@ -11,14 +11,13 @@ Backend selection is controlled by Settings and resolved by `resolveSqlBackend(.
 
 | Backend       | Where execution happens | Typical use                                                            |
 | ------------- | ----------------------- | ---------------------------------------------------------------------- |
-| `duckdb-wasm` | Browser                 | Local uploads, local exploration, HTTPS remote DuckDB file attachment. |
+| `duckdb-wasm` | Browser                 | Local uploads and browser-local exploration. |
 | `bridge`      | Pondview Bridge         | Remote/external data, extension attachment flows, bridge-managed auth. |
 
 Remote DuckDB sources are attached data sources, not separate query runtimes.
-The Connect Data dialog exposes one **Remote DuckDB** option with two attach
-modes:
+The Connect Data dialog exposes two remote DuckDB attachment options:
 
-- HTTPFS file attachment for HTTPS/S3-compatible DuckDB files
+- HTTPFS file attachment for object-store DuckDB files (`s3://`, `r2://`, `gcs://`, `gs://`)
 - Quack endpoint attachment for DuckDB servers exposed through Quack
 
 ## Selection rules
@@ -54,7 +53,6 @@ same saved preference resolves to Bridge automatically.
 
 - Always available as local fallback
 - Rejects remote identifiers via `assertWasmCompatibleDbIdentifier(...)`
-- Can attach browser-compatible HTTPS remote DuckDB files
 - Does not provide a server-side secret boundary
 
 ## Runtime fingerprints

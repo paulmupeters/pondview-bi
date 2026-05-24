@@ -311,7 +311,7 @@ describe("buildDataCatalogGroups", () => {
           currentCatalog: "memory",
           connectedSources: [
             {
-              type: "duckdb_remote",
+              type: "httpfs",
               attachAs: "remote_file",
               schema: "main",
               tables: ["events"],

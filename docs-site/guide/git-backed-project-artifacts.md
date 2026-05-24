@@ -282,7 +282,7 @@ Fields:
 - `id`: required stable source reference
 - `kind`: required, one of `runtime`, `motherduck`, `external`
 - `externalType`: required when `kind` is `external`; one of `postgres`,
-  `mysql`, `sqlite`
+  `mysql`, `sqlite`, `quack`, `httpfs`, `custom`
 - `description`: optional string
 
 ### Local source bindings
@@ -308,6 +308,20 @@ Example:
       "runtimeBackend": "bridge",
       "dbIdentifier": "postgres://analytics@warehouse/app",
       "catalogContext": "public"
+    },
+    "ga4": {
+      "runtimeBackend": "bridge",
+      "catalogContext": "main",
+      "connection": {
+        "type": "custom",
+        "identifier": "ga4:property-id",
+        "alias": "ga4",
+        "readOnly": true,
+        "duckdbExtension": "ga4",
+        "attachOptions": {
+          "type": "ga4"
+        }
+      }
     }
   }
 }
@@ -318,6 +332,8 @@ Fields:
 - `runtimeBackend`: one of `duckdb-wasm`, `bridge`
 - `dbIdentifier`: nullable string
 - `catalogContext`: nullable string
+- `connection`: optional typed DuckDB attachment config; when present it takes
+  precedence over `dbIdentifier`
 
 Import into a live workspace requires local bindings for every referenced
 `sourceRef`. Missing bindings are a runtime import error, not a Git artifact

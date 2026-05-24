@@ -32,7 +32,7 @@ async function resolveSampleDashboardBackend(): Promise<SqlBackend> {
 export async function addSampleDashboard(): Promise<AddSampleDashboardResult> {
   const backend = await resolveSampleDashboardBackend();
   const plan = buildAttachmentPlan({
-    type: "duckdb_remote",
+    type: "httpfs",
     identifier: SAMPLE_DASHBOARD_URL,
     alias: SAMPLE_DASHBOARD_ALIAS,
     readOnly: true,

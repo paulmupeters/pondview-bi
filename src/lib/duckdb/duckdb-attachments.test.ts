@@ -53,7 +53,7 @@ describe("buildAttachmentPlan", () => {
 
   test("loads httpfs for remote DuckDB attachments on native runtimes", () => {
     const plan = buildAttachmentPlan({
-      type: "duckdb_remote",
+      type: "httpfs",
       identifier: "s3://bucket/warehouse.duckdb",
       alias: "warehouse",
       readOnly: true,
@@ -67,11 +67,11 @@ describe("buildAttachmentPlan", () => {
     ]);
   });
 
-  test("can skip extension loading for remote DuckDB attachments in WASM", () => {
+  test("can skip extension loading for HTTPFS attachments", () => {
     const plan = buildAttachmentPlan(
       {
-        type: "duckdb_remote",
-        identifier: "https://example.com/warehouse.duckdb",
+        type: "httpfs",
+        identifier: "s3://bucket/warehouse.duckdb",
         alias: "warehouse",
         readOnly: true,
       },
@@ -79,7 +79,7 @@ describe("buildAttachmentPlan", () => {
     );
 
     expect(plan.statements).toEqual([
-      `ATTACH 'https://example.com/warehouse.duckdb' AS "warehouse" (READ_ONLY);`,
+      `ATTACH 's3://bucket/warehouse.duckdb' AS "warehouse" (READ_ONLY);`,
     ]);
   });
 
