@@ -877,7 +877,7 @@ async function hasMetadataTables(
            target.kind === "attached-catalog" && target.catalog
              ? `AND table_catalog = ${quoteString(target.catalog)}`
              : ""
-         }
+}
          AND table_name = 'dashboards'
        LIMIT 1;`,
     );

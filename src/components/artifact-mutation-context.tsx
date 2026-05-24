@@ -55,7 +55,7 @@ function hasArtifactInParts(
       return true;
     }
 
-    if (!partType || !partType.startsWith("tool-")) {
+    if (!partType?.startsWith("tool-")) {
       return false;
     }
 
@@ -112,7 +112,7 @@ function updateArtifactInParts({
       };
     }
 
-    if (!partType || !partType.startsWith("tool-")) {
+    if (!partType?.startsWith("tool-")) {
       return part;
     }
 
