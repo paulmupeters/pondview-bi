@@ -72,6 +72,11 @@ export const bridgeProjectDatabasePathPickResponseSchema = z.object({
   path: z.string().min(1).nullable(),
 });
 
+export const bridgeProjectDatabasePathsResponseSchema = z.object({
+  paths: z.array(z.string().min(1)),
+  configuredDatabasePath: z.string().min(1).optional(),
+});
+
 export const bridgeProjectReplaceFilesRequestSchema = z.object({
   scopePath: z.string().optional(),
   files: z.array(bridgeProjectTextFileSchema),
@@ -308,6 +313,9 @@ export type BridgeProjectInitRequest = z.infer<
 >;
 export type BridgeProjectDatabasePathPickResponse = z.infer<
   typeof bridgeProjectDatabasePathPickResponseSchema
+>;
+export type BridgeProjectDatabasePathsResponse = z.infer<
+  typeof bridgeProjectDatabasePathsResponseSchema
 >;
 export type BridgeProjectReplaceFilesRequest = z.infer<
   typeof bridgeProjectReplaceFilesRequestSchema

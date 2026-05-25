@@ -4,6 +4,7 @@ import {
   type BridgeCatalogResponse,
   type BridgeHealthResponse,
   type BridgeProjectDatabasePathPickResponse,
+  type BridgeProjectDatabasePathsResponse,
   type BridgeProjectDeleteFilesRequest,
   type BridgeProjectFilesResponse,
   type BridgeProjectInitRequest,
@@ -30,6 +31,7 @@ import {
   bridgeErrorResponseSchema,
   bridgeHealthResponseSchema,
   bridgeProjectDatabasePathPickResponseSchema,
+  bridgeProjectDatabasePathsResponseSchema,
   bridgeProjectFilesResponseSchema,
   bridgeProjectResponseSchema,
   bridgeQueryResponseSchema,
@@ -110,6 +112,13 @@ export class BridgeClient {
       "/project/database-path/pick",
       bridgeProjectDatabasePathPickResponseSchema,
       { method: "POST" },
+    );
+  }
+
+  projectDatabasePaths(): Promise<BridgeProjectDatabasePathsResponse> {
+    return this.request(
+      "/project/database-paths",
+      bridgeProjectDatabasePathsResponseSchema,
     );
   }
 

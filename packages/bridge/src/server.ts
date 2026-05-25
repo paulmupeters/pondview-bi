@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import {
   createServer,
@@ -257,7 +257,8 @@ export async function handleBridgeRequest(
 
     if (request.method === "POST" && url.pathname === "/project/init") {
       const input = bridgeProjectInitRequestSchema.parse(await request.json());
-      const files = await projects.saveFiles(input.files);
+      const files =
+        input.files.length > 0 ? await projects.saveFiles(input.files) : [];
       await initializeProjectRuntime?.(input.databasePath);
       return json({ files });
     }
@@ -267,6 +268,18 @@ export async function handleBridgeRequest(
       url.pathname === "/project/database-path/pick"
     ) {
       return json({ path: await pickProjectDatabasePath(projects.rootPath) });
+    }
+
+    if (
+      request.method === "GET" &&
+      url.pathname === "/project/database-paths"
+    ) {
+      return json({
+        paths: detectProjectDuckDbPaths(projects.rootPath),
+        ...(options.databasePath
+          ? { configuredDatabasePath: options.databasePath }
+          : {}),
+      });
     }
 
     if (request.method === "GET" && url.pathname === "/project/files") {
@@ -494,6 +507,7 @@ function shouldProxyToBridge(request: Request): boolean {
     url.pathname === "/project" ||
     url.pathname === "/project/init" ||
     url.pathname === "/project/database-path/pick" ||
+    url.pathname === "/project/database-paths" ||
     url.pathname === "/project/files" ||
     url.pathname === "/project/files/replace" ||
     url.pathname === "/catalog" ||
@@ -701,6 +715,26 @@ async function pickProjectDatabasePath(
   }
 
   throw new Error(stderr.trim() || "DuckDB file picker failed.");
+}
+
+function detectProjectDuckDbPaths(projectRootPath: string): string[] {
+  if (!existsSync(projectRootPath)) {
+    return [];
+  }
+
+  return readdirSync(projectRootPath)
+    .filter((entry) => {
+      if (!entry.toLowerCase().endsWith(".duckdb")) {
+        return false;
+      }
+
+      try {
+        return statSync(resolve(projectRootPath, entry)).isFile();
+      } catch {
+        return false;
+      }
+    })
+    .sort((left, right) => left.localeCompare(right));
 }
 
 function toAppleScriptString(value: string): string {
