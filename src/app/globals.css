@@ -38,6 +38,7 @@
   --sidebar-ring: oklch(0.6334 0.0745 136.8547);
   --font-sans: Roboto, ui-sans-serif, sans-serif, system-ui;
   --font-serif: Geist, ui-sans-serif, sans-serif, system-ui;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
   --font-mono: "Space Mono", "Courier New", monospace;
   --radius: 0.35rem;
   --shadow-x: 0px;
@@ -97,6 +98,7 @@
   --sidebar-ring: oklch(0.6334 0.0745 136.8547);
   --font-sans: Roboto, ui-sans-serif, sans-serif, system-ui;
   --font-serif: Geist, ui-sans-serif, sans-serif, system-ui;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
   --font-mono: "Space Mono", "Courier New", monospace;
   --radius: 0.35rem;
   --shadow-x: 0px;
@@ -381,16 +383,16 @@
 
 @keyframes startup-gate-ripple {
   0% {
-    transform: scale(0.65);
+    transform: scale(0.5);
     opacity: 0;
   }
 
-  12% {
-    opacity: 0.32;
+  10% {
+    opacity: 0.2;
   }
 
   100% {
-    transform: scale(2.8);
+    transform: scale(2.6);
     opacity: 0;
   }
 }
@@ -410,6 +412,20 @@
   background: color-mix(in oklch, var(--background) 95%, transparent);
 }
 
+.startup-gate-display {
+  font-family: var(--font-display);
+}
+
+.startup-gate-primary-action {
+  background: color-mix(in oklch, var(--primary) 92%, black 8%);
+  box-shadow: 0 10px 28px -14px
+    color-mix(in oklch, var(--primary) 70%, transparent);
+}
+
+.startup-gate-primary-action:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--primary) 88%, black 12%);
+}
+
 .startup-gate-ripple-ring {
   position: absolute;
   top: 0;
@@ -420,17 +436,17 @@
   margin-left: -6rem;
   border: 1px solid color-mix(in oklch, var(--primary) 28%, transparent);
   border-radius: 9999px;
-  animation: startup-gate-ripple 7s ease-out infinite;
-  animation-fill-mode: backwards;
+  opacity: 0;
+  animation: startup-gate-ripple 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   pointer-events: none;
 }
 
 .startup-gate-ripple-ring-delay-1 {
-  animation-delay: 2.3s;
+  animation-delay: 0.16s;
 }
 
 .startup-gate-ripple-ring-delay-2 {
-  animation-delay: 4.6s;
+  animation-delay: 0.32s;
 }
 
 .startup-gate-panel {

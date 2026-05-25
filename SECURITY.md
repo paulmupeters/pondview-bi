@@ -15,3 +15,4 @@ Include a clear description of the issue, the affected area, any reproduction st
 ## Response
 
 The maintainers will review the report, confirm the impact, and coordinate next steps before public disclosure.
+

@@ -4,7 +4,7 @@
   "private": true,
   "license": "Apache-2.0",
   "bin": {
-    "pondview": "./packages/bridge/src/cli.ts"
+    "pondview": "./packages/bridge/bin/pondview-dev.mjs"
   },
   "repository": {
     "type": "git",

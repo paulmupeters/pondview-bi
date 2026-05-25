@@ -22,6 +22,11 @@ describe("BridgeClient project endpoints", () => {
             },
           });
         }
+        if (String(url).endsWith("/project/database-paths")) {
+          return jsonResponse({
+            paths: ["analytics.duckdb"],
+          });
+        }
         return jsonResponse({
           files: [
             {
@@ -35,6 +40,7 @@ describe("BridgeClient project endpoints", () => {
 
     await client.project();
     await client.updateProject({ name: "Revenue 2026" });
+    await client.projectDatabasePaths();
     await client.projectFiles();
     await client.saveProjectFiles({
       files: [{ path: "pondview/queries/shared/revenue.sql", content: "" }],
@@ -50,6 +56,7 @@ describe("BridgeClient project endpoints", () => {
     expect(requests.map((request) => request.url)).toEqual([
       "http://bridge.test/project",
       "http://bridge.test/project",
+      "http://bridge.test/project/database-paths",
       "http://bridge.test/project/files",
       "http://bridge.test/project/files",
       "http://bridge.test/project/files/replace",
@@ -58,6 +65,7 @@ describe("BridgeClient project endpoints", () => {
     expect(requests.map((request) => request.init.method ?? "GET")).toEqual([
       "GET",
       "PUT",
+      "GET",
       "GET",
       "PUT",
       "POST",

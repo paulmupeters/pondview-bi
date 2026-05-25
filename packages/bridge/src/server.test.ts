@@ -247,6 +247,70 @@ describe("bridge server modes", () => {
     expect(existsSync(runtimePath)).toBe(true);
   });
 
+  test("project init can switch runtime without writing project files", async () => {
+    const projectDir = createTempDir();
+    const runtimePath = join(projectDir, "runtime", "pondview-runtime.duckdb");
+    const server = await startTrackedServer({ projectDir });
+
+    const init = await fetch(`${server.url}/project/init`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ files: [] }),
+    });
+
+    expect(init.status).toBe(200);
+    expect(await init.json()).toEqual({ files: [] });
+    const config = await fetch(`${server.url}/api/duckdb/config`);
+    expect(await config.json()).toMatchObject({
+      database: {
+        mode: "file",
+        name: "pondview-runtime.duckdb",
+      },
+    });
+    const query = await fetch(`${server.url}/query`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sql: "SELECT 13 AS value;" }),
+    });
+    expect(await query.json()).toMatchObject({
+      rows: [{ value: 13 }],
+      rowCount: 1,
+    });
+    expect(existsSync(runtimePath)).toBe(true);
+    expect(existsSync(join(projectDir, "pondview", "project.json"))).toBe(
+      false,
+    );
+  });
+
+  test("detects root-level DuckDB files for startup choices", async () => {
+    const projectDir = createTempDir();
+    mkdirSync(join(projectDir, "nested"));
+    writeFileSync(join(projectDir, "analytics.duckdb"), "");
+    writeFileSync(join(projectDir, "report.DUCKDB"), "");
+    writeFileSync(join(projectDir, "analytics.duckdb.wal"), "");
+    writeFileSync(join(projectDir, "nested", "ignored.duckdb"), "");
+    const server = await startTrackedServer({ projectDir });
+
+    const response = await fetch(`${server.url}/project/database-paths`);
+
+    expect(await response.json()).toEqual({
+      paths: ["analytics.duckdb", "report.DUCKDB"],
+    });
+  });
+
+  test("reports explicit database path separately from detected files", async () => {
+    const projectDir = createTempDir();
+    const databasePath = join(projectDir, "analytics.duckdb");
+    const server = await startTrackedServer({ projectDir, databasePath });
+
+    const response = await fetch(`${server.url}/project/database-paths`);
+
+    expect(await response.json()).toEqual({
+      paths: [],
+      configuredDatabasePath: databasePath,
+    });
+  });
+
   test("database-backed bridge runs queries against the primary DuckDB file", async () => {
     const databasePath = join(createTempDir(), "analytics.duckdb");
     const setup = await startBridgeServer({ databasePath, port: 0 });

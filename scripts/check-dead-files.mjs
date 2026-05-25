@@ -122,3 +122,4 @@ for (const file of deadFiles) {
 }
 
 process.exit(1);
+

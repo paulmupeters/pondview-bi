@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "id": "bridge-project-f99a86d2b3c21a53",
+    "name": "pondview-ui",
+    "backingKind": "bridge-filesystem",
+    "openedAt": 1779741399114,
+    "updatedAt": 1779741399114,
+    "defaultSourceRef": "local",
+    "rootPath": "/Users/paulpeters/Developer/pondview/pondview-ui"
+  }
+}
