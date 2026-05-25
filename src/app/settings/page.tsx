@@ -80,15 +80,6 @@ import {
   setOpenProject,
 } from "@/lib/project-store";
 import {
-  clearGitHubProjectConfigInStorage,
-  EMPTY_GITHUB_PROJECT_CONFIG,
-  type GitHubProjectConfig,
-  isGitHubProjectConfigComplete,
-  readGitHubProjectConfigFromStorage,
-  saveGitHubProjectConfigToStorage,
-  uploadProjectArtifactsToGitHub,
-} from "@/lib/project-store/github-project-sync";
-import {
   type BrowserProjectBundle,
   createBrowserProjectArchive,
   parseBrowserProjectArchive,
@@ -306,16 +297,6 @@ export default function SettingsPage() {
   const [isImportingProject, setIsImportingProject] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [exportIncludeSnapshot, setExportIncludeSnapshot] = useState(false);
-  const [githubProjectForm, setGitHubProjectForm] =
-    useState<GitHubProjectConfig>(EMPTY_GITHUB_PROJECT_CONFIG);
-  const [savedGitHubProjectConfig, setSavedGitHubProjectConfig] =
-    useState<GitHubProjectConfig>(EMPTY_GITHUB_PROJECT_CONFIG);
-  const [githubProjectError, setGitHubProjectError] = useState<string | null>(
-    null,
-  );
-  const [githubProjectSuccess, setGitHubProjectSuccess] = useState<
-    string | null
-  >(null);
   const projectImportFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
   const bridgeRuntimeState = useBridgeRuntimeState();
@@ -370,9 +351,6 @@ export default function SettingsPage() {
     const savedS3Config = readS3BackupConfigFromStorage();
     setSavedS3BackupConfig(savedS3Config);
     setS3BackupForm(savedS3Config);
-    const savedGitHubConfig = readGitHubProjectConfigFromStorage();
-    setSavedGitHubProjectConfig(savedGitHubConfig);
-    setGitHubProjectForm(savedGitHubConfig);
 
     void refreshBridgeHealth();
 
@@ -558,42 +536,6 @@ export default function SettingsPage() {
     setS3BackupForm((previous) => ({ ...previous, [field]: value }));
   };
 
-  const updateGitHubProjectForm = <K extends keyof GitHubProjectConfig>(
-    field: K,
-    value: GitHubProjectConfig[K],
-  ) => {
-    setGitHubProjectForm((previous) => ({ ...previous, [field]: value }));
-  };
-
-  const handleSaveGitHubProjectConfig = () => {
-    if (!isGitHubProjectConfigComplete(githubProjectForm)) {
-      setGitHubProjectError(
-        "Owner, repository, branch, and token are required.",
-      );
-      setGitHubProjectSuccess(null);
-      return;
-    }
-
-    saveGitHubProjectConfigToStorage(githubProjectForm);
-    const stored = readGitHubProjectConfigFromStorage();
-    setSavedGitHubProjectConfig(stored);
-    setGitHubProjectForm(stored);
-    setGitHubProjectError(null);
-    setGitHubProjectSuccess("GitHub project sync configuration saved.");
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
-  };
-
-  const handleClearGitHubProjectConfig = () => {
-    clearGitHubProjectConfigInStorage();
-    setSavedGitHubProjectConfig(EMPTY_GITHUB_PROJECT_CONFIG);
-    setGitHubProjectForm(EMPTY_GITHUB_PROJECT_CONFIG);
-    setGitHubProjectError(null);
-    setGitHubProjectSuccess("GitHub project sync configuration cleared.");
-    setShowSuccessMessage(true);
-    setTimeout(() => setShowSuccessMessage(false), 3000);
-  };
-
   const handleSaveS3BackupConfig = async () => {
     if (!isS3BackupConfigComplete(s3BackupForm)) {
       setS3BackupError(
@@ -761,7 +703,6 @@ export default function SettingsPage() {
   const handleOpenExportDialog = () => {
     setOpenProjectError(null);
     setS3BackupError(null);
-    setGitHubProjectError(null);
     setIsExportDialogOpen(true);
   };
 
@@ -769,18 +710,12 @@ export default function SettingsPage() {
     downloadArchive = true,
     includeSnapshot = exportIncludeSnapshot,
     uploadSnapshotToS3Backup = false,
-    uploadArtifactsToGitHub = false,
   }: {
     downloadArchive?: boolean;
     includeSnapshot?: boolean;
     uploadSnapshotToS3Backup?: boolean;
-    uploadArtifactsToGitHub?: boolean;
   } = {}) => {
-    if (
-      !downloadArchive &&
-      !uploadSnapshotToS3Backup &&
-      !uploadArtifactsToGitHub
-    ) {
+    if (!downloadArchive && !uploadSnapshotToS3Backup) {
       setOpenProjectError("Choose at least one export action.");
       return;
     }
@@ -796,23 +731,11 @@ export default function SettingsPage() {
       return;
     }
 
-    if (
-      uploadArtifactsToGitHub &&
-      !isGitHubProjectConfigComplete(savedGitHubProjectConfig)
-    ) {
-      setGitHubProjectError(
-        "Save the GitHub project sync configuration and enter a token for this browser session before uploading project artifacts.",
-      );
-      return;
-    }
-
     setIsExportingProject(true);
     setOpenProjectError(null);
     setS3BackupError(null);
     setS3BackupSuccess(null);
     setS3CorsError(false);
-    setGitHubProjectError(null);
-    setGitHubProjectSuccess(null);
 
     try {
       const project = await getOpenProject();
@@ -869,24 +792,6 @@ export default function SettingsPage() {
         URL.revokeObjectURL(href);
       }
 
-      if (uploadArtifactsToGitHub) {
-        const result = await uploadProjectArtifactsToGitHub(
-          savedGitHubProjectConfig,
-          files,
-          {
-            message: `Export Pondview project: ${project.name}`,
-          },
-        );
-        const target = result.pathPrefix
-          ? `${savedGitHubProjectConfig.owner}/${savedGitHubProjectConfig.repo}:${result.branch}/${result.pathPrefix}`
-          : `${savedGitHubProjectConfig.owner}/${savedGitHubProjectConfig.repo}:${result.branch}`;
-        setGitHubProjectSuccess(
-          `Uploaded ${result.uploaded} project artifact file${
-            result.uploaded === 1 ? "" : "s"
-          } to ${target}.`,
-        );
-      }
-
       if (s3Key) {
         setS3BackupSuccess(`Snapshot uploaded as ${s3Key}.`);
         setS3SnapshotList(null);
@@ -906,8 +811,6 @@ export default function SettingsPage() {
       if (uploadSnapshotToS3Backup && !downloadArchive) {
         setS3CorsError(likelyS3CorsError);
         setS3BackupError(message);
-      } else if (uploadArtifactsToGitHub && !downloadArchive) {
-        setGitHubProjectError(message);
       } else {
         setS3CorsError(likelyS3CorsError);
         setOpenProjectError(message);
@@ -1392,21 +1295,8 @@ export default function SettingsPage() {
                       uploadSnapshotToS3Backup: true,
                     })
                   }
-                  onPushProjectArtifactsToGitHub={() =>
-                    void handleUnifiedExport({
-                      downloadArchive: false,
-                      uploadArtifactsToGitHub: true,
-                    })
-                  }
                   projectImportFileRef={projectImportFileRef}
                   onImportProject={(event) => void handleImportProject(event)}
-                  githubProjectError={githubProjectError}
-                  githubProjectSuccess={githubProjectSuccess}
-                  githubProjectForm={githubProjectForm}
-                  onUpdateGitHubProjectForm={updateGitHubProjectForm}
-                  onSaveGitHubProjectConfig={handleSaveGitHubProjectConfig}
-                  onClearGitHubProjectConfig={handleClearGitHubProjectConfig}
-                  savedGitHubProjectConfig={savedGitHubProjectConfig}
                   s3BackupError={s3BackupError}
                   s3CorsError={s3CorsError}
                   s3BackupSuccess={s3BackupSuccess}

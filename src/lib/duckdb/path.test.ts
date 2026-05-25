@@ -28,4 +28,15 @@ describe("resolveDbPath", () => {
       },
     });
   });
+
+  test("detects HTTPFS remote file identifiers", () => {
+    expect(
+      detectExternalConnection("https://data.example.com/events.parquet"),
+    ).toEqual({
+      type: "httpfs",
+      identifier: "https://data.example.com/events.parquet",
+      duckdbExtension: "httpfs",
+      readOnly: true,
+    });
+  });
 });

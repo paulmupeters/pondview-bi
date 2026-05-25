@@ -25,7 +25,7 @@ Examples include:
 - MySQL: `mysql://...`, `mysql:alias`
 - SQLite: `sqlite:/path/to/file.db`
 - Quack Remote DuckDB: `quack:host[:port]`
-- HTTPFS DuckDB files: `s3://...`, `r2://...`, `gcs://...`, `gs://...`
+- HTTPFS remote files: `s3://...`, `r2://...`, `gcs://...`, `gs://...`, `http://...`, `https://...`
 
 The returned config includes:
 

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildRemoteDuckdbSecretStatement,
   buildSchemaIntrospectionSql,
   buildTablePreviewSql,
+  isRemoteDuckdbUrl,
   isWasmCompatibleDatabase,
   normalizeQuackUriInput,
   resolveQuackDisableSsl,
@@ -9,8 +11,8 @@ import {
 } from "@/components/connect-data-dialog";
 
 describe("ConnectDataDialog runtime source support", () => {
-  test("keeps external sources off the WASM-only picker", () => {
-    expect(isWasmCompatibleDatabase("httpfs")).toBe(false);
+  test("allows HTTPFS in the WASM picker", () => {
+    expect(isWasmCompatibleDatabase("httpfs")).toBe(true);
     expect(isWasmCompatibleDatabase("quack")).toBe(false);
   });
 
@@ -42,6 +44,57 @@ describe("ConnectDataDialog runtime source support", () => {
   test("still loads the Quack extension before attaching in WASM", () => {
     expect(shouldSkipExtensionLoadForWasm("httpfs")).toBe(true);
     expect(shouldSkipExtensionLoadForWasm("quack")).toBe(false);
+  });
+
+  test("accepts HTTPS URLs for HTTPFS connections", () => {
+    expect(isRemoteDuckdbUrl("https://data.example.com/private.duckdb")).toBe(
+      true,
+    );
+    expect(isRemoteDuckdbUrl("http://localhost:8000/private.duckdb")).toBe(
+      true,
+    );
+    expect(isRemoteDuckdbUrl("ftp://data.example.com/private.duckdb")).toBe(
+      false,
+    );
+  });
+
+  test("builds HTTP bearer secrets for HTTPS URLs", () => {
+    expect(
+      buildRemoteDuckdbSecretStatement({
+        url: "https://data.example.com/private.duckdb",
+        httpAuthMode: "bearer",
+        httpBearerToken: "token-123",
+      }),
+    ).toBe(
+      `CREATE OR REPLACE SECRET (TYPE http, SCOPE 'https://data.example.com/private.duckdb', BEARER_TOKEN 'token-123');`,
+    );
+  });
+
+  test("builds custom HTTP header secrets for HTTPS URLs", () => {
+    expect(
+      buildRemoteDuckdbSecretStatement({
+        url: "https://data.example.com/private.duckdb",
+        httpAuthMode: "header",
+        httpHeaderName: "X-API-Key",
+        httpHeaderValue: "secret-key",
+      }),
+    ).toBe(
+      `CREATE OR REPLACE SECRET (TYPE http, SCOPE 'https://data.example.com/private.duckdb', EXTRA_HTTP_HEADERS MAP {'X-API-Key': 'secret-key'});`,
+    );
+  });
+
+  test("builds S3-compatible secrets for object-store URLs", () => {
+    expect(
+      buildRemoteDuckdbSecretStatement({
+        url: "r2://bucket/private.duckdb",
+        s3KeyId: "key-id",
+        s3Secret: "secret",
+        s3Region: "auto",
+        s3Endpoint: "account.r2.cloudflarestorage.com",
+      }),
+    ).toBe(
+      `CREATE OR REPLACE SECRET (TYPE r2, KEY_ID 'key-id', SECRET 'secret', REGION 'auto', ENDPOINT 'account.r2.cloudflarestorage.com');`,
+    );
   });
 
   test("introspects Quack catalogs through the remote query macro", () => {

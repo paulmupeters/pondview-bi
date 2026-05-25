@@ -34,10 +34,6 @@ import {
   isS3BackupConfigComplete,
   type S3BackupConfig,
 } from "@/lib/duckdb/s3-backup-storage";
-import {
-  type GitHubProjectConfig,
-  isGitHubProjectConfigComplete,
-} from "@/lib/project-store/github-project-sync";
 import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import { cn } from "@/lib/utils";
 import type { Theme } from "@/themes";
@@ -659,19 +655,8 @@ type ProjectsSettingsSectionsProps = {
   activeProjectId: string;
   showExternalProjectIntegrations: boolean;
   onUploadRuntimeSnapshotToS3: () => void;
-  onPushProjectArtifactsToGitHub: () => void;
   projectImportFileRef: RefObject<HTMLInputElement | null>;
   onImportProject: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  githubProjectError: string | null;
-  githubProjectSuccess: string | null;
-  githubProjectForm: GitHubProjectConfig;
-  onUpdateGitHubProjectForm: <K extends keyof GitHubProjectConfig>(
-    field: K,
-    value: GitHubProjectConfig[K],
-  ) => void;
-  onSaveGitHubProjectConfig: () => void;
-  onClearGitHubProjectConfig: () => void;
-  savedGitHubProjectConfig: GitHubProjectConfig;
   s3BackupError: string | null;
   s3CorsError: boolean;
   s3BackupSuccess: string | null;
@@ -715,16 +700,8 @@ export function ProjectsSettingsSections({
   activeProjectId,
   showExternalProjectIntegrations,
   onUploadRuntimeSnapshotToS3,
-  onPushProjectArtifactsToGitHub,
   projectImportFileRef,
   onImportProject,
-  githubProjectError,
-  githubProjectSuccess,
-  githubProjectForm,
-  onUpdateGitHubProjectForm,
-  onSaveGitHubProjectConfig,
-  onClearGitHubProjectConfig,
-  savedGitHubProjectConfig,
   s3BackupError,
   s3CorsError,
   s3BackupSuccess,
@@ -744,44 +721,8 @@ export function ProjectsSettingsSections({
   formatSnapshotSize,
 }: ProjectsSettingsSectionsProps) {
   const isProjectBusy = isSwitchingProject || isCreatingProject;
-  const isGitHubConnected = isGitHubProjectConfigComplete(
-    savedGitHubProjectConfig,
-  );
   const isS3Connected = isS3BackupConfigComplete(savedS3BackupConfig);
-  const [isEditingGitHubConfig, setIsEditingGitHubConfig] = useState(false);
   const [isEditingS3Config, setIsEditingS3Config] = useState(false);
-
-  const handleCancelGitHubEdit = () => {
-    onUpdateGitHubProjectForm("owner", savedGitHubProjectConfig.owner);
-    onUpdateGitHubProjectForm("repo", savedGitHubProjectConfig.repo);
-    onUpdateGitHubProjectForm("branch", savedGitHubProjectConfig.branch);
-    onUpdateGitHubProjectForm(
-      "pathPrefix",
-      savedGitHubProjectConfig.pathPrefix,
-    );
-    onUpdateGitHubProjectForm("token", savedGitHubProjectConfig.token);
-    setIsEditingGitHubConfig(false);
-  };
-
-  const handleSaveGitHubAndCollapse = () => {
-    onSaveGitHubProjectConfig();
-    if (isGitHubProjectConfigComplete(githubProjectForm)) {
-      setIsEditingGitHubConfig(false);
-    }
-  };
-
-  const handleClearGitHubAndCollapse = () => {
-    onClearGitHubProjectConfig();
-    setIsEditingGitHubConfig(false);
-  };
-
-  const githubTargetLabel = isGitHubConnected
-    ? `${savedGitHubProjectConfig.owner}/${savedGitHubProjectConfig.repo}@${savedGitHubProjectConfig.branch}${
-        savedGitHubProjectConfig.pathPrefix
-          ? `/${savedGitHubProjectConfig.pathPrefix}`
-          : ""
-      }`
-    : null;
 
   const handleCancelS3Edit = () => {
     onUpdateS3BackupForm("endpoint", savedS3BackupConfig.endpoint);
@@ -921,187 +862,6 @@ export function ProjectsSettingsSections({
           />
         </div>
       </SettingsContentSection>
-
-      {showExternalProjectIntegrations && (
-        <SettingsContentSection>
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold">GitHub project sync</h3>
-              <p className="text-sm text-muted-foreground">
-                Configure a GitHub repository destination for project artifacts.
-                The export flow uploads dashboards, queries, notebooks, and
-                source metadata only; runtime snapshots and credentials are not
-                committed. Tokens are kept only for the current browser session.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded border bg-muted/30 px-3 py-2 text-sm">
-              <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Status
-                </p>
-                {isGitHubConnected ? (
-                  <p className="truncate">
-                    Connected to{" "}
-                    <span className="font-mono text-xs">
-                      {githubTargetLabel}
-                    </span>
-                  </p>
-                ) : (
-                  <p className="text-muted-foreground">Not connected</p>
-                )}
-              </div>
-              {!isEditingGitHubConfig && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsEditingGitHubConfig(true)}
-                >
-                  {isGitHubConnected ? "Edit connection" : "Add connection"}
-                </Button>
-              )}
-            </div>
-
-            {isEditingGitHubConfig && (
-              <>
-                {githubProjectError && (
-                  <ErrorMessage>{githubProjectError}</ErrorMessage>
-                )}
-                {githubProjectSuccess && !githubProjectError && (
-                  <SuccessMessage>{githubProjectSuccess}</SuccessMessage>
-                )}
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <FormField label="Owner" htmlFor="github-owner">
-                    <Input
-                      id="github-owner"
-                      type="text"
-                      value={githubProjectForm.owner}
-                      onChange={(event) =>
-                        onUpdateGitHubProjectForm("owner", event.target.value)
-                      }
-                      placeholder="organization-or-user"
-                    />
-                  </FormField>
-
-                  <FormField label="Repository" htmlFor="github-repo">
-                    <Input
-                      id="github-repo"
-                      type="text"
-                      value={githubProjectForm.repo}
-                      onChange={(event) =>
-                        onUpdateGitHubProjectForm("repo", event.target.value)
-                      }
-                      placeholder="analytics-project"
-                    />
-                  </FormField>
-
-                  <FormField label="Branch" htmlFor="github-branch">
-                    <Input
-                      id="github-branch"
-                      type="text"
-                      value={githubProjectForm.branch}
-                      onChange={(event) =>
-                        onUpdateGitHubProjectForm("branch", event.target.value)
-                      }
-                      placeholder="main"
-                    />
-                  </FormField>
-
-                  <FormField
-                    label={
-                      <>
-                        Path prefix{" "}
-                        <span className="font-normal text-muted-foreground">
-                          (optional)
-                        </span>
-                      </>
-                    }
-                    htmlFor="github-path-prefix"
-                  >
-                    <Input
-                      id="github-path-prefix"
-                      type="text"
-                      value={githubProjectForm.pathPrefix}
-                      onChange={(event) =>
-                        onUpdateGitHubProjectForm(
-                          "pathPrefix",
-                          event.target.value,
-                        )
-                      }
-                      placeholder="examples/revenue"
-                    />
-                  </FormField>
-
-                  <FormField
-                    label="GitHub token"
-                    htmlFor="github-token"
-                    className="sm:col-span-2"
-                  >
-                    <Input
-                      id="github-token"
-                      type="password"
-                      autoComplete="off"
-                      data-1p-ignore="true"
-                      data-lpignore="true"
-                      data-form-type="other"
-                      value={githubProjectForm.token}
-                      onChange={(event) =>
-                        onUpdateGitHubProjectForm("token", event.target.value)
-                      }
-                      placeholder="Fine-grained token with contents write access"
-                    />
-                  </FormField>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button onClick={handleSaveGitHubAndCollapse}>
-                    Save Configuration
-                  </Button>
-                  <Button variant="outline" onClick={handleCancelGitHubEdit}>
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleClearGitHubAndCollapse}
-                    disabled={!isGitHubConnected}
-                  >
-                    Clear Configuration
-                  </Button>
-                </div>
-              </>
-            )}
-
-            {!isEditingGitHubConfig && (
-              <div className="space-y-3 border-t pt-4">
-                {githubProjectError && (
-                  <ErrorMessage>{githubProjectError}</ErrorMessage>
-                )}
-                {githubProjectSuccess && !githubProjectError && (
-                  <SuccessMessage>{githubProjectSuccess}</SuccessMessage>
-                )}
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={onPushProjectArtifactsToGitHub}
-                    disabled={
-                      isExportingProject ||
-                      isProjectBusy ||
-                      !activeProjectId ||
-                      !isGitHubConnected
-                    }
-                  >
-                    {isExportingProject
-                      ? "Pushing..."
-                      : "Push project artifacts to GitHub"}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </SettingsContentSection>
-      )}
 
       {showExternalProjectIntegrations && (
         <SettingsContentSection>

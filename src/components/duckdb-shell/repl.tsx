@@ -394,6 +394,7 @@ export function DuckdbRepl({
     if (
       connectedEntry?.databasePath &&
       connectedEntry.type !== "duckdb" &&
+      connectedEntry.type !== "httpfs" &&
       effectiveSqlBackend === "duckdb-wasm"
     ) {
       throw createQueryWarning(

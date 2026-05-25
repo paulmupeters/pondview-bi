@@ -10,7 +10,7 @@ Current Connect Data dialog options:
 - MotherDuck
 - MySQL
 - SQLite
-- HTTPFS DuckDB files (`s3://`, `r2://`, `gcs://`, `gs://`)
+- HTTPFS remote files (`s3://`, `r2://`, `gcs://`, `gs://`, `http://`, `https://`)
 - Quack remote DuckDB endpoints
 
 The CLI can also write typed custom DuckDB attachment bindings to
@@ -19,7 +19,9 @@ exposed in the primary UI picker.
 
 ## Runtime requirement
 
-Source connection flow is disabled when active runtime is `duckdb-wasm`.
+Most source connection flows are disabled when active runtime is
+`duckdb-wasm`. HTTPFS is available in DuckDB WASM for browser-accessible remote
+files, subject to browser CORS and credential exposure constraints.
 
 To connect sources:
 
