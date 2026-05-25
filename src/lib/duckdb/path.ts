@@ -229,7 +229,9 @@ export function detectHttpfsConnection(
     !normalized.startsWith("s3://") &&
     !normalized.startsWith("r2://") &&
     !normalized.startsWith("gcs://") &&
-    !normalized.startsWith("gs://")
+    !normalized.startsWith("gs://") &&
+    !normalized.startsWith("http://") &&
+    !normalized.startsWith("https://")
   ) {
     return null;
   }

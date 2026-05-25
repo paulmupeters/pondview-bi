@@ -44,7 +44,7 @@ type DatabaseType =
   | "sqlite"
   | null;
 
-const WASM_COMPATIBLE_DATABASES = new Set<DatabaseType>();
+const WASM_COMPATIBLE_DATABASES = new Set<DatabaseType>(["httpfs"]);
 
 const DATABASE_OPTIONS: Array<{
   label: string;
@@ -52,9 +52,9 @@ const DATABASE_OPTIONS: Array<{
   description?: string;
 }> = [
   {
-    label: "HTTPFS DuckDB File",
+    label: "HTTPFS",
     value: "httpfs",
-    description: "Attach an object-store DuckDB file",
+    description: "Query HTTP(S) and object-store files",
   },
   {
     label: "Quack",
@@ -187,7 +187,19 @@ async function runRuntimeSql(
   return runRemoteSql(effectiveSqlBackend, sql);
 }
 
-function isRemoteDuckdbUrl(value: string): boolean {
+export function isRemoteDuckdbUrl(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.startsWith("s3://") ||
+    normalized.startsWith("r2://") ||
+    normalized.startsWith("gcs://") ||
+    normalized.startsWith("gs://") ||
+    normalized.startsWith("http://") ||
+    normalized.startsWith("https://")
+  );
+}
+
+function isObjectStoreDuckdbUrl(value: string): boolean {
   const normalized = value.trim().toLowerCase();
   return (
     normalized.startsWith("s3://") ||
@@ -195,6 +207,95 @@ function isRemoteDuckdbUrl(value: string): boolean {
     normalized.startsWith("gcs://") ||
     normalized.startsWith("gs://")
   );
+}
+
+function isHttpDuckdbUrl(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.startsWith("http://") || normalized.startsWith("https://");
+}
+
+type RemoteDuckdbHttpAuthMode = "none" | "bearer" | "header";
+
+export function buildRemoteDuckdbSecretStatement(params: {
+  url: string;
+  s3KeyId?: string;
+  s3Secret?: string;
+  s3Region?: string;
+  s3Endpoint?: string;
+  s3SessionToken?: string;
+  httpAuthMode?: RemoteDuckdbHttpAuthMode;
+  httpBearerToken?: string;
+  httpHeaderName?: string;
+  httpHeaderValue?: string;
+}): string | null {
+  const trimmedUrl = params.url.trim();
+  const url = trimmedUrl.toLowerCase();
+  if (isHttpDuckdbUrl(url)) {
+    const authMode = params.httpAuthMode ?? "none";
+    if (authMode === "none") {
+      return null;
+    }
+
+    const parts = ["TYPE http", `SCOPE ${quoteSqlString(trimmedUrl)}`];
+    if (authMode === "bearer") {
+      const token = params.httpBearerToken?.trim() ?? "";
+      if (!token) {
+        throw new Error("Enter a bearer token, or set HTTP auth to None.");
+      }
+      parts.push(`BEARER_TOKEN ${quoteSqlString(token)}`);
+    } else {
+      const headerName = params.httpHeaderName?.trim() ?? "";
+      const headerValue = params.httpHeaderValue?.trim() ?? "";
+      if (!headerName || !headerValue) {
+        throw new Error(
+          "Enter both HTTP header name and value, or set HTTP auth to None.",
+        );
+      }
+      parts.push(
+        `EXTRA_HTTP_HEADERS MAP {${quoteSqlString(headerName)}: ${quoteSqlString(headerValue)}}`,
+      );
+    }
+
+    return `CREATE OR REPLACE SECRET (${parts.join(", ")});`;
+  }
+
+  if (!isObjectStoreDuckdbUrl(url)) {
+    return null;
+  }
+
+  const secretType = url.startsWith("r2://")
+    ? "r2"
+    : url.startsWith("gcs://") || url.startsWith("gs://")
+      ? "gcs"
+      : "s3";
+  const parts = [`TYPE ${secretType}`];
+  const keyId = params.s3KeyId?.trim() ?? "";
+  const secret = params.s3Secret?.trim() ?? "";
+  const region = params.s3Region?.trim() ?? "";
+  const endpoint = params.s3Endpoint?.trim() ?? "";
+  const sessionToken = params.s3SessionToken?.trim() ?? "";
+
+  if (keyId || secret) {
+    if (!keyId || !secret) {
+      throw new Error("Provide both S3 key ID and secret, or neither.");
+    }
+    parts.push(`KEY_ID ${quoteSqlString(keyId)}`);
+    parts.push(`SECRET ${quoteSqlString(secret)}`);
+  } else {
+    parts.push("PROVIDER credential_chain");
+  }
+
+  if (region) {
+    parts.push(`REGION ${quoteSqlString(region)}`);
+  }
+  if (endpoint) {
+    parts.push(`ENDPOINT ${quoteSqlString(endpoint)}`);
+  }
+  if (sessionToken) {
+    parts.push(`SESSION_TOKEN ${quoteSqlString(sessionToken)}`);
+  }
+
+  return `CREATE OR REPLACE SECRET (${parts.join(", ")});`;
 }
 
 export function normalizeQuackUriInput(value: string): string {
@@ -324,7 +425,7 @@ export function ConnectDataDialog({
   // SQLite-specific fields
   const [sqlitePath, setSqlitePath] = useState("");
   const [sqliteAlias, setSqliteAlias] = useState("");
-  // Remote DuckDB file fields
+  // HTTPFS remote file fields
   const [remoteDuckdbUrl, setRemoteDuckdbUrl] = useState("");
   const [remoteDuckdbAlias, setRemoteDuckdbAlias] = useState("");
   const [remoteDuckdbS3Region, setRemoteDuckdbS3Region] = useState("");
@@ -332,6 +433,14 @@ export function ConnectDataDialog({
   const [remoteDuckdbS3KeyId, setRemoteDuckdbS3KeyId] = useState("");
   const [remoteDuckdbS3Secret, setRemoteDuckdbS3Secret] = useState("");
   const [remoteDuckdbS3SessionToken, setRemoteDuckdbS3SessionToken] =
+    useState("");
+  const [remoteDuckdbHttpAuthMode, setRemoteDuckdbHttpAuthMode] =
+    useState<RemoteDuckdbHttpAuthMode>("none");
+  const [remoteDuckdbHttpBearerToken, setRemoteDuckdbHttpBearerToken] =
+    useState("");
+  const [remoteDuckdbHttpHeaderName, setRemoteDuckdbHttpHeaderName] =
+    useState("");
+  const [remoteDuckdbHttpHeaderValue, setRemoteDuckdbHttpHeaderValue] =
     useState("");
   // Quack remote DuckDB fields
   const [quackUri, setQuackUri] = useState("");
@@ -376,6 +485,10 @@ export function ConnectDataDialog({
     setRemoteDuckdbS3KeyId("");
     setRemoteDuckdbS3Secret("");
     setRemoteDuckdbS3SessionToken("");
+    setRemoteDuckdbHttpAuthMode("none");
+    setRemoteDuckdbHttpBearerToken("");
+    setRemoteDuckdbHttpHeaderName("");
+    setRemoteDuckdbHttpHeaderValue("");
     setQuackUri("");
     setQuackAlias("");
     setQuackToken("");
@@ -532,50 +645,21 @@ export function ConnectDataDialog({
     [buildSourceConnectionId, effectiveSqlBackend],
   );
 
-  const buildRemoteDuckdbSecretStatement = useCallback((): string | null => {
-    const url = remoteDuckdbUrl.trim().toLowerCase();
-    if (
-      !url.startsWith("s3://") &&
-      !url.startsWith("r2://") &&
-      !url.startsWith("gcs://") &&
-      !url.startsWith("gs://")
-    ) {
-      return null;
-    }
-
-    const secretType = url.startsWith("r2://")
-      ? "r2"
-      : url.startsWith("gcs://") || url.startsWith("gs://")
-        ? "gcs"
-        : "s3";
-    const parts = [`TYPE ${secretType}`];
-    const keyId = remoteDuckdbS3KeyId.trim();
-    const secret = remoteDuckdbS3Secret.trim();
-    const region = remoteDuckdbS3Region.trim();
-    const endpoint = remoteDuckdbS3Endpoint.trim();
-    const sessionToken = remoteDuckdbS3SessionToken.trim();
-
-    if (keyId || secret) {
-      if (!keyId || !secret) {
-        throw new Error("Provide both S3 key ID and secret, or neither.");
-      }
-      parts.push(`KEY_ID ${quoteSqlString(keyId)}`);
-      parts.push(`SECRET ${quoteSqlString(secret)}`);
-    } else {
-      parts.push("PROVIDER credential_chain");
-    }
-
-    if (region) {
-      parts.push(`REGION ${quoteSqlString(region)}`);
-    }
-    if (endpoint) {
-      parts.push(`ENDPOINT ${quoteSqlString(endpoint)}`);
-    }
-    if (sessionToken) {
-      parts.push(`SESSION_TOKEN ${quoteSqlString(sessionToken)}`);
-    }
-
-    return `CREATE OR REPLACE SECRET (${parts.join(", ")});`;
+  const buildRemoteDuckdbSecretStatementFromState = useCallback(():
+    | string
+    | null => {
+    return buildRemoteDuckdbSecretStatement({
+      url: remoteDuckdbUrl,
+      s3KeyId: remoteDuckdbS3KeyId,
+      s3Secret: remoteDuckdbS3Secret,
+      s3Region: remoteDuckdbS3Region,
+      s3Endpoint: remoteDuckdbS3Endpoint,
+      s3SessionToken: remoteDuckdbS3SessionToken,
+      httpAuthMode: remoteDuckdbHttpAuthMode,
+      httpBearerToken: remoteDuckdbHttpBearerToken,
+      httpHeaderName: remoteDuckdbHttpHeaderName,
+      httpHeaderValue: remoteDuckdbHttpHeaderValue,
+    });
   }, [
     remoteDuckdbUrl,
     remoteDuckdbS3KeyId,
@@ -583,6 +667,39 @@ export function ConnectDataDialog({
     remoteDuckdbS3Region,
     remoteDuckdbS3Endpoint,
     remoteDuckdbS3SessionToken,
+    remoteDuckdbHttpAuthMode,
+    remoteDuckdbHttpBearerToken,
+    remoteDuckdbHttpHeaderName,
+    remoteDuckdbHttpHeaderValue,
+  ]);
+
+  const shouldCreateRemoteDuckdbSecret = useCallback((): boolean => {
+    if (!isWasmActive) {
+      return true;
+    }
+
+    return Boolean(
+      remoteDuckdbS3KeyId.trim() ||
+        remoteDuckdbS3Secret.trim() ||
+        remoteDuckdbS3Region.trim() ||
+        remoteDuckdbS3Endpoint.trim() ||
+        remoteDuckdbS3SessionToken.trim() ||
+        remoteDuckdbHttpAuthMode !== "none" ||
+        remoteDuckdbHttpBearerToken.trim() ||
+        remoteDuckdbHttpHeaderName.trim() ||
+        remoteDuckdbHttpHeaderValue.trim(),
+    );
+  }, [
+    isWasmActive,
+    remoteDuckdbS3KeyId,
+    remoteDuckdbS3Secret,
+    remoteDuckdbS3Region,
+    remoteDuckdbS3Endpoint,
+    remoteDuckdbS3SessionToken,
+    remoteDuckdbHttpAuthMode,
+    remoteDuckdbHttpBearerToken,
+    remoteDuckdbHttpHeaderName,
+    remoteDuckdbHttpHeaderValue,
   ]);
 
   const buildCurrentSourceConnection =
@@ -699,11 +816,13 @@ export function ConnectDataDialog({
     // Field validation
     if (selectedDatabase === "httpfs") {
       if (!remoteDuckdbUrl.trim()) {
-        setErrorMessage("Enter an object-store DuckDB URL.");
+        setErrorMessage("Enter a remote file URL.");
         return;
       }
       if (!isRemoteDuckdbUrl(remoteDuckdbUrl)) {
-        setErrorMessage("Use an s3://, r2://, gcs://, or gs:// DuckDB URL.");
+        setErrorMessage(
+          "Use an s3://, r2://, gcs://, gs://, http://, or https:// URL.",
+        );
         return;
       }
     } else if (selectedDatabase === "quack") {
@@ -788,8 +907,8 @@ export function ConnectDataDialog({
 
       // Execute INSTALL/LOAD/ATTACH
       const secretStatement =
-        selectedDatabase === "httpfs" && !isWasmActive
-          ? buildRemoteDuckdbSecretStatement()
+        selectedDatabase === "httpfs" && shouldCreateRemoteDuckdbSecret()
+          ? buildRemoteDuckdbSecretStatementFromState()
           : null;
       if (secretStatement) {
         await runRuntimeSql(effectiveSqlBackend, secretStatement);
@@ -837,7 +956,8 @@ export function ConnectDataDialog({
     remoteDuckdbUrl,
     buildCurrentSourceConnection,
     buildSourceTypeForIntrospection,
-    buildRemoteDuckdbSecretStatement,
+    buildRemoteDuckdbSecretStatementFromState,
+    shouldCreateRemoteDuckdbSecret,
     quackUri,
     postgresHost,
     postgresUser,
@@ -867,8 +987,8 @@ export function ConnectDataDialog({
         });
 
         const secretStatement =
-          selectedDatabase === "httpfs" && !isWasmActive
-            ? buildRemoteDuckdbSecretStatement()
+          selectedDatabase === "httpfs" && shouldCreateRemoteDuckdbSecret()
+            ? buildRemoteDuckdbSecretStatementFromState()
             : null;
         if (secretStatement) {
           await runRuntimeSql(effectiveSqlBackend, secretStatement);
@@ -925,7 +1045,8 @@ export function ConnectDataDialog({
       selectedDatabase,
       buildCurrentSourceConnection,
       buildSourceTypeForIntrospection,
-      buildRemoteDuckdbSecretStatement,
+      buildRemoteDuckdbSecretStatementFromState,
+      shouldCreateRemoteDuckdbSecret,
       effectiveSqlBackend,
       prepareConnectionForRuntime,
     ],
@@ -957,8 +1078,8 @@ export function ConnectDataDialog({
         }
 
         const secretStatement =
-          selectedDatabase === "httpfs" && !isWasmActive
-            ? buildRemoteDuckdbSecretStatement()
+          selectedDatabase === "httpfs" && shouldCreateRemoteDuckdbSecret()
+            ? buildRemoteDuckdbSecretStatementFromState()
             : null;
         if (secretStatement) {
           await runRuntimeSql(effectiveSqlBackend, secretStatement);
@@ -1012,7 +1133,8 @@ export function ConnectDataDialog({
     databasePath,
     remoteDuckdbUrl,
     buildCurrentSourceConnection,
-    buildRemoteDuckdbSecretStatement,
+    buildRemoteDuckdbSecretStatementFromState,
+    shouldCreateRemoteDuckdbSecret,
     quackUri,
     onConnected,
     onOpenChange,
@@ -1155,7 +1277,7 @@ export function ConnectDataDialog({
       return (
         <div className="space-y-3">
           <Input
-            placeholder="s3://, r2://, gcs://, or gs:// URL"
+            placeholder="s3://, r2://, gcs://, gs://, or https:// URL"
             value={remoteDuckdbUrl}
             onChange={(e) => setRemoteDuckdbUrl(e.target.value)}
           />
@@ -1165,10 +1287,10 @@ export function ConnectDataDialog({
             onChange={(e) => setRemoteDuckdbAlias(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            HTTPFS sources attach object-store DuckDB files through DuckDB
-            secrets on the active Bridge runtime.
+            HTTPFS sources query remote files through DuckDB secrets on the
+            active Bridge runtime.
           </p>
-          {remoteDuckdbUrl.trim() ? (
+          {remoteDuckdbUrl.trim() && isObjectStoreDuckdbUrl(remoteDuckdbUrl) ? (
             <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
               <p className="text-xs font-medium text-foreground">
                 Object-store credentials
@@ -1206,6 +1328,58 @@ export function ConnectDataDialog({
               />
               <p className="text-xs text-muted-foreground">
                 Leave key and secret blank to use the runtime credential chain.
+              </p>
+            </div>
+          ) : null}
+          {remoteDuckdbUrl.trim() && isHttpDuckdbUrl(remoteDuckdbUrl) ? (
+            <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+              <p className="text-xs font-medium text-foreground">HTTP auth</p>
+              <select
+                value={remoteDuckdbHttpAuthMode}
+                onChange={(e) =>
+                  setRemoteDuckdbHttpAuthMode(
+                    e.target.value as RemoteDuckdbHttpAuthMode,
+                  )
+                }
+                className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              >
+                <option value="none">None</option>
+                <option value="bearer">Bearer token</option>
+                <option value="header">Custom header</option>
+              </select>
+              {remoteDuckdbHttpAuthMode === "bearer" ? (
+                <Input
+                  type="password"
+                  placeholder="Bearer token"
+                  value={remoteDuckdbHttpBearerToken}
+                  onChange={(e) =>
+                    setRemoteDuckdbHttpBearerToken(e.target.value)
+                  }
+                />
+              ) : null}
+              {remoteDuckdbHttpAuthMode === "header" ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder="Header name"
+                    value={remoteDuckdbHttpHeaderName}
+                    onChange={(e) =>
+                      setRemoteDuckdbHttpHeaderName(e.target.value)
+                    }
+                  />
+                  <Input
+                    type="password"
+                    placeholder="Header value"
+                    value={remoteDuckdbHttpHeaderValue}
+                    onChange={(e) =>
+                      setRemoteDuckdbHttpHeaderValue(e.target.value)
+                    }
+                  />
+                </div>
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                Use this for authenticated HTTPS object URLs, signed gateways,
+                or proxy headers. S3 access keys still require an s3://, r2://,
+                gcs://, or gs:// URL.
               </p>
             </div>
           ) : null}
