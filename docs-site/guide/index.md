@@ -12,11 +12,11 @@ Use this guide to learn Pondview from the product workflow first: connect data, 
 
 ## Common tasks
 
+- [Run Pondview locally with the CLI](/guide/cli)
 - [Configure AI providers](/guide/ai-provider-configuration)
 - [Connect data sources](/guide/connected-data-sources)
 - [Upload files and understand browser storage](/guide/uploads-and-browser-storage)
 - [Build dashboards](/guide/dashboards)
-- [Use the Pondview CLI](/guide/cli)
 - [Share dashboards](/guide/sharing-dashboards)
 
 ## Deeper references

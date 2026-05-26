@@ -12,20 +12,13 @@ Install the published CLI with npm:
 
 ```bash
 npm install -g @pondview/cli
-pondview
+pondview start
 ```
 
 Or run it without installing globally:
 
 ```bash
-npx @pondview/cli
-```
-
-From this repository during development:
-
-```bash
-bun run bridge:build-ui
-bun run bridge -- start
+npx @pondview/cli start
 ```
 
 `pondview start` starts one localhost server for both the UI and bridge API. By
@@ -35,7 +28,7 @@ Use `--no-open` when running from scripts or terminals where opening a browser
 would be noisy:
 
 ```bash
-bun run bridge -- start --no-open
+pondview start --no-open
 ```
 
 ## Commands
@@ -212,22 +205,6 @@ that port.
 | `--no-open` | `start`, `dashboard open` | Does not open the browser after starting the local app. |
 | `--no-ui` | `start` | Starts the bridge API only. |
 | `--force` | `stop` | Stops whatever is listening on the configured port without checking whether it is a Pondview bridge. |
-
-## Bundled UI assets
-
-`pondview start` serves the UI from `packages/bridge/dist`. Build those assets
-before using local start from a fresh checkout:
-
-```bash
-bun run bridge:build-ui
-```
-
-The CLI does not fetch UI assets from Cloudflare. Keeping assets bundled makes
-the local app work offline and keeps the UI version aligned with the bridge
-code in the same repository.
-
-Generated assets are excluded from Biome checks because they are minified build
-output.
 
 ## Bridge API compatibility
 

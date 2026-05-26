@@ -18,7 +18,33 @@ You will need:
 - An API key for the AI provider you want to use
 - Some data to work with
 
-If you are running Pondview locally, follow the repository setup instructions in the project README first, then return here for the product walkthrough.
+## Run Pondview locally
+
+For most local use, install the Pondview CLI and let it start both the local UI and Bridge runtime:
+
+```bash
+npm install -g @pondview/cli
+pondview start
+```
+
+Or run it without installing globally:
+
+```bash
+npx @pondview/cli start
+```
+
+The published CLI runs on Node.js 20 or newer. By default, `pondview start` serves the bundled app and bridge API at `http://127.0.0.1:17817`, then opens it in your browser.
+
+Use a DuckDB file or project directory when you want Pondview to work against local files:
+
+```bash
+pondview start --database ./analytics.duckdb
+pondview start --project-dir ./my-pondview-project
+pondview attach ./warehouse.duckdb --as warehouse
+pondview query "SELECT 42 AS answer"
+```
+
+See [Pondview CLI](/guide/cli) for commands, flags, and local project behavior.
 
 ## 1. Set up your AI key
 
