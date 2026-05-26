@@ -1,6 +1,6 @@
 # AI Provider Configuration
 
-BI Chat supports two AI configuration paths:
+Pondview supports two AI configuration paths:
 
 - With Bridge query-ready, provider credentials can be saved in the Bridge secret store and chat requests are sent to Bridge.
 - Without Bridge, the browser-first flow stores provider keys in session storage and uses the client-side agent directly.

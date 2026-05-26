@@ -6,7 +6,7 @@ DuckDB-powered BI for AI-assisted analysis, SQL, charts, and dashboards in one w
 - AI chat and manual SQL share the same workspace and connected sources
 - Charts and dashboard metadata persist in DuckDB
 
-Docs: [docs-site/user/index.md](./docs-site/user/index.md)
+Docs: [docs-site/guide/index.md](./docs-site/guide/index.md)
 
 ## CLI quick start
 

@@ -16,7 +16,7 @@ You can use Pondview to:
 - Explore business data without starting from scratch in SQL
 - Import files such as CSV, Parquet, XLSX, and XLS
 - Connect supported sources such as Postgres, MySQL, SQLite, and MotherDuck
-- Work locally with browser-based DuckDB or with a remote runtime
+- Work locally with browser-based DuckDB or with a Bridge-backed runtime
 - Build dashboards from the analyses that matter
 
 ## A simple mental model
@@ -35,8 +35,4 @@ Pondview is a good fit if you want to:
 - Work with local files or connected data sources
 - Move from exploration to reusable reporting in the same workspace
 
-## What you do not need first
-
-You do not need to understand the technical runtime, DuckDB internals, or the full architecture before getting value from the app.
-
-If that is what you need, use the [Technical Guide](/guide/). Otherwise, continue with [Getting Started](/user/getting-started).
+You do not need to understand DuckDB internals or the full runtime architecture before getting value from the app. Continue with [Getting Started](/guide/getting-started) when you are ready to try the product flow.

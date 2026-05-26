@@ -3,20 +3,22 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: "Pondview Docs",
   description:
-    "Documentation for Pondview — getting started, workflows, and technical reference.",
+    "Documentation for Pondview — getting started, workflows, data sources, dashboards, and app setup.",
 
   themeConfig: {
-    nav: [{ text: "Home", link: "/" }],
+    nav: [
+      { text: "Home", link: "/" },
+      { text: "Guide", link: "/guide/" },
+    ],
 
     sidebar: [
-      // User-facing topics first
-      { text: "What Pondview Is", link: "/user/what-is-pondview" },
-      { text: "Getting Started", link: "/user/getting-started" },
-      { text: "Main Workflows", link: "/user/workflows" },
+      { text: "Guide Home", link: "/guide/" },
+      { text: "What Pondview Is", link: "/guide/what-is-pondview" },
+      { text: "Getting Started", link: "/guide/getting-started" },
+      { text: "Main Workflows", link: "/guide/workflows" },
       { text: "Dashboards", link: "/guide/dashboards" },
-      { text: "FAQ", link: "/user/faq" },
-      { text: "Troubleshooting", link: "/user/troubleshooting" },
-      // Setup and runtime reference
+      { text: "FAQ", link: "/guide/faq" },
+      { text: "Troubleshooting", link: "/guide/troubleshooting" },
       {
         text: "AI Provider Configuration",
         link: "/guide/ai-provider-configuration",
@@ -29,11 +31,11 @@ export default defineConfig({
       },
       { text: "SQL Runtime Backends", link: "/guide/sql-runtime-backends" },
       { text: "Workspace Persistence", link: "/guide/workspace-persistence" },
+      { text: "Sharing Dashboards", link: "/guide/sharing-dashboards" },
       {
         text: "Git-Backed Project Artifacts",
         link: "/guide/git-backed-project-artifacts",
       },
-      // DuckDB internals
       {
         text: "DuckDB Extension Connections",
         link: "/guide/duckdb-extension-connections",

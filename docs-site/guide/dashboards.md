@@ -44,7 +44,7 @@ For example:
 - "Compare sales by region"
 - "What changed most this week?"
 
-Start broad, then refine. Once BI Chat gives you a result that is useful, you can decide whether to keep it as-is or adjust it before saving it.
+Start broad, then refine. Once Pondview gives you a result that is useful, you can decide whether to keep it as-is or adjust it before saving it.
 
 ## Switch to manual mode to refine the result
 

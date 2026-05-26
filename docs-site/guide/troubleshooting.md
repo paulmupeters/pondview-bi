@@ -18,7 +18,7 @@ Possible causes:
 
 - The source was added, but the active runtime cannot use it
 - You are using a remote source while the app is running in DuckDB/WASM mode
-- The remote runtime is unavailable
+- The Bridge runtime is unavailable
 
 If you are connecting Postgres, MySQL, SQLite, or MotherDuck, check the runtime in **Settings** and review [SQL Runtime Backends](/guide/sql-runtime-backends).
 
@@ -51,7 +51,7 @@ Check:
 - Whether the selected runtime is the one you expect
 - Whether you are looking at a saved dashboard result rather than an exploratory chat result
 
-If you need the technical execution model, see [Dashboards](/guide/dashboards) and [DuckDB Usage Overview](/guide/duckdb-usage-overview).
+For dashboard execution details, see [Dashboards](/guide/dashboards) and [DuckDB Usage Overview](/guide/duckdb-usage-overview).
 
 ## Still stuck?
 

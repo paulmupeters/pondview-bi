@@ -1,94 +1,113 @@
 # Getting Started
 
-This guide is for people who want to start using BI Chat quickly.
+This guide covers the fastest path to your first useful result in Pondview.
 
-You do not need to learn the technical architecture first. The fastest path is:
+## The shortest path
 
-1. Connect your data
-2. Set up your AI provider
+1. Add an AI key in **Settings**
+2. Import data or connect a source
 3. Ask a question in chat
 4. Refine the result in manual mode if needed
-5. Turn useful visuals into a dashboard
+5. Save the result to a dashboard
 
 ## Before you start
 
 You will need:
 
-- Access to the BI Chat app
-- A dataset to connect or upload
+- Access to the Pondview app
 - An API key for the AI provider you want to use
+- Some data to work with
 
-If you are running BI Chat locally, follow the repository setup instructions in the project README first, then return here for the product walkthrough.
+If you are running Pondview locally, follow the repository setup instructions in the project README first, then return here for the product walkthrough.
 
-## 1) Connect your data
+## 1. Set up your AI key
 
-Start by adding the data you want to analyze.
+Open **Settings** and configure:
 
-You can either:
+- Your AI provider
+- A model
+- Your API key
 
-- Connect a data source such as DuckDB, MotherDuck, Postgres, MySQL, or SQLite
-- Upload a file such as CSV, Parquet, XLSX, or XLS
+If AI is not configured, chat cannot generate analyses for you.
 
-Once your data is connected, you should be able to browse available tables in the app and use them in analysis.
+Read more in [AI Provider Configuration](/guide/ai-provider-configuration).
 
-Read more:
+## 2. Add data
 
-- [Connected Data Sources](/guide/connected-data-sources)
-- [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
+You can start with whatever is easiest.
 
-## 2) Set up your AI provider
+### Option A: Import a file
 
-Next, configure the AI model BI Chat should use.
+Good for quick starts and local analysis.
 
-In the app:
+Supported uploads include:
 
-1. Open **Settings**
-2. Choose your AI provider
-3. Enter the model you want to use
-4. Add your API key
-5. Save your settings
+- CSV
+- Parquet
+- XLSX
+- XLS
 
-After that, return to chat.
+Read more in [Uploads and Browser Storage](/guide/uploads-and-browser-storage).
 
-Read more:
+### Option B: Connect a source
 
-- [AI Provider Configuration](/guide/ai-provider-configuration)
+The current Connect Data flow supports:
 
-## 3) Create your first analysis in chat
+- Postgres
+- MySQL
+- SQLite
+- MotherDuck
+- HTTPFS remote files such as S3, R2, GCS, and HTTPS URLs
+- Quack remote DuckDB endpoints
 
-Now you are ready to ask a question.
+Read more in [Connected Data Sources](/guide/connected-data-sources).
 
-Try a prompt like:
+### Option C: Use data that already exists in DuckDB
 
-- "What were my top 10 products by revenue last month?"
-- "Show monthly sales trends by region"
-- "Which categories are growing fastest this quarter?"
+If your workflow already uses a DuckDB database, Pondview can work with DuckDB-backed runtimes as well.
 
-BI Chat can help generate the analysis for you and show the result as a table or visualization.
+In practice this usually means one of these setups:
+
+- You are using the local DuckDB/WASM runtime for browser-local work
+- You are using the Pondview Bridge runtime with access to your DuckDB data
+
+That makes it possible to work with data that already lives in DuckDB instead of re-importing everything as files.
+
+## 3. Ask your first question
+
+Once your AI settings and data are ready, open chat and try a simple question such as:
+
+- "Show revenue by month"
+- "What are my top 10 customers?"
+- "Which products are growing fastest?"
+
+Start simple. You can follow up and refine the result from there.
 
 A good first workflow is:
 
 1. Ask a business question in chat
-2. Review the returned result
+2. Review the returned table, chart, or card
 3. Check whether the result answers your question
 4. Keep iterating with follow-up questions until it does
 
-## 4) Switch from chat mode to manual mode when you want more control
+## 4. Switch to manual mode when you want more control
 
-You do not have to stay in chat mode the whole time.
+Chat is usually the fastest way to get a first result, but it does not have to be the final result.
 
-If you want to inspect or refine the result yourself, use the mode switch in the prompt area to move from **chat/AI mode** to **manual mode**. Manual mode is useful when you want to work more directly with the generated analysis, adjust the query, or fine-tune the output before saving it.
+Use **manual mode** when you want to:
 
-A simple pattern is:
+- Inspect the generated analysis more directly
+- Adjust the query or result
+- Choose a clearer visual before saving
 
-1. Start in chat mode to generate the first analysis
-2. Switch to manual mode to refine it
-3. Adjust the result until it looks right
-4. Continue from there with a chart, card, or table
+A reliable pattern is:
 
-If you are not getting the exact result you want from chat alone, this is usually the fastest way to take control.
+1. Start in AI/chat mode
+2. Review the first answer
+3. Switch to manual mode
+4. Refine the output until it looks right
 
-## 5) Tweak the visual
+## 5. Tweak the visual
 
 After you have a useful result, you can change how it is displayed.
 
@@ -100,9 +119,9 @@ Depending on the result, you can usually work with it as a:
 
 Use this step to make the output easier to read and share. For example, you might switch from a table to a chart, or simplify a single-value result into a card.
 
-## 6) Create a dashboard from chat
+## 6. Save useful results to a dashboard
 
-When you have a result worth keeping, you can turn it into a dashboard workflow.
+When you have something worth keeping, save it to a dashboard.
 
 A typical flow is:
 
@@ -112,22 +131,7 @@ A typical flow is:
 4. Add that visual to a dashboard
 5. Open the dashboard and continue organizing your views
 
-This makes it easy to go from exploration to something you can revisit and share inside your workspace.
-
-Read more:
-
-- [Dashboards](/guide/dashboards)
-
-## A quick first-run path
-
-If you want the shortest possible path, do this:
-
-1. Connect a data source or upload a file
-2. Configure your AI provider in **Settings**
-3. Open chat and ask a question about your data
-4. Switch to manual mode if you want to refine the result
-5. Tweak the visual
-6. Add it to a dashboard
+Read more in [Dashboards](/guide/dashboards).
 
 ## If something is not working
 
@@ -139,16 +143,15 @@ Common issues include:
 
 Helpful guides:
 
+- [FAQ](/guide/faq)
+- [Troubleshooting](/guide/troubleshooting)
 - [AI Provider Configuration](/guide/ai-provider-configuration)
 - [Connected Data Sources](/guide/connected-data-sources)
-- [SQL Runtime Backends](/guide/sql-runtime-backends)
 
 ## Next steps
 
 Once you have completed your first analysis, continue with:
 
-- [Connected Data Sources](/guide/connected-data-sources)
-- [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
+- [Main Workflows](/guide/workflows)
 - [Dashboards](/guide/dashboards)
 - [Workspace Persistence](/guide/workspace-persistence)
-- [Docs Map](/guide/)
