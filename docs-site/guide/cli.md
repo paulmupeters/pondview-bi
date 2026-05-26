@@ -11,14 +11,14 @@ local app that does not depend on the hosted Pondview deployment.
 Install the published CLI with npm:
 
 ```bash
-npm install -g pondview
+npm install -g @pondview/cli
 pondview
 ```
 
 Or run it without installing globally:
 
 ```bash
-npx pondview
+npx @pondview/cli
 ```
 
 From this repository during development:

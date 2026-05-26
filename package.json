@@ -23,7 +23,7 @@
     "bridge:typecheck": "bun run --cwd packages/bridge typecheck",
     "bridge-protocol:build": "node -e \"require('node:fs').rmSync('packages/bridge-protocol/dist',{recursive:true,force:true})\" && bun build packages/bridge-protocol/src/index.ts --target=node --format=esm --packages=external --outfile packages/bridge-protocol/dist/index.js && tsc -p packages/bridge-protocol/tsconfig.build.json",
     "bridge-protocol:typecheck": "bun run --cwd packages/bridge-protocol typecheck",
-    "cli:pack:dry-run": "bun run bridge-protocol:typecheck && bun run bridge:typecheck && npm pack --workspace @pondview/bridge-protocol --dry-run && npm pack --workspace pondview --dry-run",
+    "cli:pack:dry-run": "bun run bridge-protocol:typecheck && bun run bridge:typecheck && npm pack --workspace @pondview/bridge-protocol --dry-run && npm pack --workspace @pondview/cli --dry-run",
     "preview": "vite preview",
     "test": "bun test",
     "docs:dev": "vitepress dev docs-site",

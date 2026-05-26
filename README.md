@@ -14,14 +14,14 @@ For most local use, install the Pondview CLI and let it start both the local UI
 and Bridge runtime:
 
 ```bash
-npm install -g pondview
+npm install -g @pondview/cli
 pondview start
 ```
 
 Or run it without installing globally:
 
 ```bash
-npx pondview start
+npx @pondview/cli start
 ```
 
 The published CLI runs on Node.js 20 or newer. By default, `pondview start`

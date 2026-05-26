@@ -1,5 +1,5 @@
 {
-  "name": "pondview",
+  "name": "@pondview/cli",
   "version": "0.1.0",
   "private": false,
   "description": "Pondview CLI for running the local DuckDB bridge and bundled Pondview app.",
@@ -22,13 +22,14 @@
     "cli"
   ],
   "files": [
+    "bin/pondview.mjs",
     "dist",
     "lib",
     "package.json",
     "README.md"
   ],
   "bin": {
-    "pondview": "./lib/cli.js"
+    "pondview": "./bin/pondview.mjs"
   },
   "engines": {
     "node": ">=20.0.0"

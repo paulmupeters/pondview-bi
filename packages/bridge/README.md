@@ -7,14 +7,14 @@ Pondview CLI runs the local DuckDB bridge and serves the bundled Pondview app.
 Run it without installing globally:
 
 ```bash
-npm install -g pondview
+npm install -g @pondview/cli
 pondview
 ```
 
 Or run it without installing globally:
 
 ```bash
-npx pondview
+npx @pondview/cli
 ```
 
 The published package runs on Node.js 20 or newer.
@@ -53,7 +53,7 @@ bun run cli:pack:dry-run
    `packages/bridge/package.json`, and update the `@pondview/bridge-protocol`
    dependency range in `packages/bridge/package.json`.
 2. Commit the version bump and push a matching tag, for example `v0.1.1`.
-3. GitHub Actions publishes `@pondview/bridge-protocol` first, then `pondview`.
+3. GitHub Actions publishes `@pondview/bridge-protocol` first, then `@pondview/cli`.
 
 The workflow expects an `NPM_TOKEN` repository secret with permission to publish
 both packages.
