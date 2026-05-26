@@ -5,14 +5,14 @@
   "description": "Pondview CLI for running the local DuckDB bridge and bundled Pondview app.",
   "type": "module",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/paulmupeters/pondview-ui#readme",
+  "homepage": "https://github.com/paulmupeters/pondview-bi#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/paulmupeters/pondview-ui.git",
+    "url": "https://github.com/paulmupeters/pondview-bi",
     "directory": "packages/bridge"
   },
   "bugs": {
-    "url": "https://github.com/paulmupeters/pondview-ui/issues"
+    "url": "https://github.com/paulmupeters/pondview-bi/issues"
   },
   "keywords": [
     "pondview",

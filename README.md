@@ -1,73 +1,93 @@
 # Pondview
 
-Pondview is a DuckDB-powered BI app for chatting with data, writing SQL, and building dashboards.
+DuckDB-powered BI for AI-assisted analysis, SQL, charts, and dashboards in one workspace.
 
-It combines AI-assisted analysis, manual SQL workflows, charting, and dashboards in a single DuckDB-backed workspace.
+- Browser-first UI with DuckDB WASM as the local fallback; Bridge, MotherDuck, HTTPFS, and Quack-backed sources supported
+- AI chat and manual SQL share the same workspace and connected sources
+- Charts and dashboard metadata persist in DuckDB
 
-## overview
+Docs: [docs-site/user/index.md](./docs-site/user/index.md)
 
-- Connects to your local or remote DuckDB instance, a DuckDB WASM instance or Motherduck.
-- Browser-first UI with DuckDB WASM always available as a local fallback
-- AI-assisted analysis and direct SQL editing in the same workspace
-- Connected sources including Postgres, MySQL, and MotherDuck
-- Persistent charts and dashboards stored in DuckDB
-- Works great with all DuckDB features and extensions
+## CLI quick start
 
-This README is the short technical summary. For fuller documentation, use the published docs:
+For most local use, install the Pondview CLI and let it start both the local UI
+and Bridge runtime:
 
-- User docs: [docs-site/user/index.md](./docs-site/user/index.md)
+```bash
+npm install -g pondview
+pondview start
+```
 
-## why pondview
+Or run it without installing globally:
 
-Pondview is built for teams and individuals who want the speed of conversational analysis without giving up direct control over SQL, data modeling, and dashboards.
+```bash
+npx pondview start
+```
 
-- Keeps AI-assisted exploration and manual SQL in the same workspace
-- Uses DuckDB as the core engine, so you can stay close to the data and its ecosystem
-- Supports local-first usage with DuckDB WASM, while still allowing remote runtimes when needed
-- Lets charts and dashboards persist in DuckDB instead of being scattered across disconnected tools
+The published CLI runs on Node.js 20 or newer. By default, `pondview start`
+serves the bundled app and bridge API at `http://127.0.0.1:17817`, then opens it
+in your browser. Use a DuckDB file or project directory when you want Pondview to
+work against local files:
 
-## how it works
+```bash
+pondview start --database ./analytics.duckdb
+pondview start --project-dir ./my-pondview-project
+pondview attach ./warehouse.duckdb --as warehouse
+pondview query "SELECT 42 AS answer"
+```
 
-### The workspace
+See [docs-site/guide/cli.md](./docs-site/guide/cli.md) for commands, flags, and
+local project behavior.
 
-- The UI is a SPA that interacts with a selected DuckDB instance.
-- AI settings, runtime preferences, connected source metadata, and much of the workspace state live in browser storage.
-- Dashboard metadata is stored in the connected DuckDB instance.
-- DuckDB WASM is always available as the local fallback runtime.
+## How it works
 
 ### SQL runtime backends
 
-Queries can run on three backends:
+Queries can run on two backends:
 
-- `duckdb wasm`: browser-local execution
-- `duckdb-http`: remote DuckDB `httpserver` using the community extension
-- `bridge`: remote Pondview bridge runtime through a DuckDB extension
+- `duckdb-wasm`: browser-local execution
+- `bridge`: local Pondview Bridge execution through DuckDB's Node API
 
 Backend selection is user-configurable in Settings and resolved at query time.
+Remote and extension-backed databases are connected sources, not separate query
+runtimes.
 
-See [docs-site/introduction/sql-runtime-backends.md](./docs-site/introduction/sql-runtime-backends.md).
+See [docs-site/guide/sql-runtime-backends.md](./docs-site/guide/sql-runtime-backends.md).
 
 ### Connected data sources
 
-The connect flow trough ui currently supports:
+The Connect Data dialog currently supports:
 
 - `Postgres`
+- `MotherDuck`
 - `MySQL`
 - `SQLite`
-- `MotherDuck`
+- `HTTPFS` remote files (`s3://`, `r2://`, `gcs://`, `gs://`, `http://`, `https://`)
+- `Quack` remote DuckDB endpoints
 
-External source attachment and schema introspection require a remote runtime (`bridge` or `duckdb-http`). Because Pondview runs on top of DuckDB, you can make use of the ecosystem and install any (community) extension. This makes it possible to connect to a wide variety of sources. Alternatively its possible to use any ETL process that writes to a duckdb file, and use the data in this duckdb file as the source data of your pondview instance.
+Most external source attachment and schema introspection require Bridge, because
+Bridge provides the server-side DuckDB runtime and secret boundary. HTTPFS can
+also run in DuckDB WASM when the browser can fetch the target URL, but Bridge is
+recommended for private object stores, authenticated HTTPS files, and sources
+that do not allow browser CORS access.
+
+Quack attaches remote DuckDB servers through DuckDB's beta `quack` extension and
+uses URIs such as `quack:localhost:9494`. Because Pondview runs on top of
+DuckDB, CLI-defined custom sources can also use other attach-compatible DuckDB
+extensions when the active runtime can install and load them. Alternatively, any
+ETL process that writes to a DuckDB file can provide the source data for a
+Pondview project.
 
 Source metadata is stored locally in the browser and reused across chat and manual SQL workflows.
 
-See [docs-site/introduction/connected-data-sources.md](./docs-site/introduction/connected-data-sources.md).
+See [docs-site/guide/connected-data-sources.md](./docs-site/guide/connected-data-sources.md).
 
 ### AI providers
 
 - In most local setups, you configure an AI provider in the app’s Settings instead of through server environment variables.
-- Supported providers include OpenAI, Anthropic, xAI, Vercel AI Gateway and the Open Responses API.
+- Supported providers include Vercel AI Gateway, OpenAI, Anthropic, xAI, Ollama, and OpenAI-compatible endpoints.
 
-See [docs-site/introduction/ai-provider-configuration.md](./docs-site/introduction/ai-provider-configuration.md).
+See [docs-site/guide/ai-provider-configuration.md](./docs-site/guide/ai-provider-configuration.md).
 
 ### Dashboard persistence
 
@@ -76,17 +96,18 @@ Saved charts and measures store SQL plus source metadata. At execution time, the
 See:
 
 - [docs-site/guide/dashboards.md](./docs-site/guide/dashboards.md)
-- [docs-site/introduction/semantic-layer-materialization.md](./docs-site/introduction/semantic-layer-materialization.md)
-- [docs-site/introduction/duckdb-usage-overview.md](./docs-site/introduction/duckdb-usage-overview.md)
+- [docs-site/guide/semantic-layer-materialization.md](./docs-site/guide/semantic-layer-materialization.md)
+- [docs-site/guide/duckdb-usage-overview.md](./docs-site/guide/duckdb-usage-overview.md)
 
-## getting started
+## Getting started
 
 ### Prerequisites
 
-- Bun recommended, or Node.js 18+
+- Node.js 20+ for the published CLI
+- Bun recommended for repository development, or Node.js 18+
 - An API key for at least one supported AI provider
 
-### Install and run
+### Repository development
 
 ```bash
 git clone https://github.com/paulmupeters/pondview-ui.git
@@ -98,23 +119,25 @@ bun dev
 
 Open http://localhost:5173, then configure an AI provider in the app.
 
-DuckDB WASM works as the default local runtime. Remote runtime settings are only needed for remote DuckDB execution or external source attachment.
+DuckDB WASM works as the default local runtime. Start Bridge when you want the
+local CLI/runtime, filesystem project artifacts, server-side secrets, or
+extension-backed source attachment.
 
 ### Runtime configuration
 
-Use .env.local only for the integrations you need:
+Use `.env.local` only for the integrations you need:
 
 ```bash
 # Persist a local DuckDB runtime database
 DUCKDB_PERSIST_PATH=./data/materialized.duckdb
 
-# Remote DuckDB over HTTP
-DUCKDB_HTTP_HOST=0.0.0.0
-DUCKDB_HTTP_PORT=9999
-DUCKDB_HTTP_AUTH=secret
-
-# Legacy/server-side OpenAI flows
+# Optional server-side provider defaults
+AI_GATEWAY_API_KEY=
 OPENAI_API_KEY=
+MOTHERDUCK_TOKEN=
+
+# Override Bridge's local secret store path
+PONDVIEW_SECRETS_PATH=
 ```
 
 The template lives at `env.local.example`.
@@ -141,7 +164,7 @@ Or:
 localStorage.setItem("WORKSPACE_DB_DEBUG", "false");
 ```
 
-for rnotebook debugging run:
+For notebook controller debugging, run:
 
 ```js
 localStorage.setItem("pondview:debug:notebook-controller", "1");
@@ -149,15 +172,17 @@ localStorage.setItem("pondview:debug:notebook-controller", "1");
 
 ### MotherDuck
 
-MotherDuck authentication is completed by the remote DuckDB runtime. To persist auth across restarts, set motherduck_token in the environment used to launch DuckDB.
+MotherDuck authentication is completed by the active DuckDB runtime. To persist
+auth across Bridge restarts, set `MOTHERDUCK_TOKEN` in the environment used to
+launch Bridge.
 
 ### Commands
 
 ```bash
 # App
 bun dev
-bun build
-bun preview
+bun run build
+bun run preview
 
 # Docs
 bun run docs:dev
@@ -187,14 +212,14 @@ initialize local project files or keep using browser storage for that folder.
 See [Pondview CLI](./docs-site/guide/cli.md) for commands, flags, bundled UI
 assets built into `packages/bridge/dist`, autostart behavior, and future TODOs.
 
-## contributing
+## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow and local checks.
 
-## security
+## Security
 
 See [SECURITY.md](./SECURITY.md) for how to report vulnerabilities privately.
 
-## license
+## License
 
 This project is licensed under the Apache License 2.0. See [LICENSE](./LICENSE).
