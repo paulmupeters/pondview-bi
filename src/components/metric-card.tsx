@@ -7,26 +7,22 @@ interface MetricCardProps {
   value: string | number | boolean | Date | null | undefined;
   title: string;
   description?: string;
-  takeaway?: string;
   className?: string;
   editable?: boolean;
   showTitle?: boolean;
   onTitleChange?: (value: string) => void;
   onDescriptionChange?: (value: string) => void;
-  onTakeawayChange?: (value: string) => void;
 }
 
 export function MetricCard({
   value,
   title,
   description,
-  takeaway,
   className,
   editable = false,
   showTitle = true,
   onTitleChange,
   onDescriptionChange,
-  onTakeawayChange,
 }: MetricCardProps) {
   const formattedValue = (() => {
     if (typeof value === "number") {
@@ -40,37 +36,31 @@ export function MetricCard({
     }
     return String(value ?? "");
   })();
-  type EditableField = "title" | "description" | "takeaway";
+  type EditableField = "title" | "description";
 
   const canEditTitle = editable && typeof onTitleChange === "function";
   const canEditDescription =
     editable && typeof onDescriptionChange === "function";
-  const canEditTakeaway = editable && typeof onTakeawayChange === "function";
 
   const getFieldValue = useCallback(
     (field: EditableField) => {
       if (field === "title") {
         return title;
       }
-      if (field === "description") {
-        return description ?? "";
-      }
-      return takeaway ?? "";
+      return description ?? "";
     },
-    [description, takeaway, title],
+    [description, title],
   );
 
   const handleFieldCommit = useCallback(
     (field: EditableField, value: string) => {
       if (field === "title") {
         onTitleChange?.(value);
-      } else if (field === "description") {
-        onDescriptionChange?.(value);
       } else {
-        onTakeawayChange?.(value);
+        onDescriptionChange?.(value);
       }
     },
-    [onDescriptionChange, onTakeawayChange, onTitleChange],
+    [onDescriptionChange, onTitleChange],
   );
 
   const {
@@ -89,7 +79,6 @@ export function MetricCard({
   const handleStartEditing = (field: EditableField) => {
     if (field === "title" && !canEditTitle) return;
     if (field === "description" && !canEditDescription) return;
-    if (field === "takeaway" && !canEditTakeaway) return;
     startEditing(field);
   };
 
@@ -165,38 +154,6 @@ export function MetricCard({
                     aria-label="Edit card description"
                   >
                     <Pencil className="h-4 w-4" />
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
-        {(takeaway || canEditTakeaway) && (
-          <div className="group/takeaway mt-2 flex items-start gap-2">
-            {editingField === "takeaway" ? (
-              <input
-                ref={inputRef}
-                type="text"
-                className="w-full bg-background border border-input rounded px-2 py-1.5 text-xs text-muted-foreground italic focus:outline-none focus:border-primary"
-                value={draftValue}
-                onChange={(event) => setDraftValue(event.target.value)}
-                onBlur={handleBlur}
-                onKeyDown={handleInputKeyDown}
-                placeholder="Add a takeaway"
-              />
-            ) : (
-              <>
-                <div className="text-xs text-muted-foreground italic">
-                  {takeaway || "Add a takeaway"}
-                </div>
-                {canEditTakeaway && (
-                  <button
-                    type="button"
-                    className="mt-0.5 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/takeaway:opacity-100 focus-visible:opacity-100"
-                    onClick={() => handleStartEditing("takeaway")}
-                    aria-label="Edit card takeaway"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
                   </button>
                 )}
               </>

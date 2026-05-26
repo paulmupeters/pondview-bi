@@ -333,7 +333,6 @@ export function DashboardChartCard({
             value={rows[0]?.[Object.keys(rows[0] || {})[0]]}
             title={config.title}
             description={config.description}
-            takeaway={config.takeaway}
             className="w-full h-full flex flex-col border-0 shadow-none"
             showTitle={false}
           />

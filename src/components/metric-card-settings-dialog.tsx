@@ -279,7 +279,6 @@ export function MetricCardSettingsDialog({
               value={previewValue}
               title={previewCardTitle}
               description={previewCardDescription}
-              takeaway={takeaway.trim() ? takeaway.trim() : undefined}
               className="h-full border-0 bg-transparent shadow-none"
             />
           </div>

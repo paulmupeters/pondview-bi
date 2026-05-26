@@ -952,7 +952,6 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
                         value={previewMetricValue}
                         title={previewCardConfig.title}
                         description={previewCardConfig.description}
-                        takeaway={previewCardConfig.takeaway}
                         className="border-0 bg-transparent shadow-none"
                       />
                     </div>
