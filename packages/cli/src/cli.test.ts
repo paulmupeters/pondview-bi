@@ -122,6 +122,14 @@ describe("bridge CLI help", () => {
     expect(output).not.toContain("use-existing");
     expect(output).not.toContain("ui-port");
   });
+
+  test("prints MCP help", async () => {
+    const output = await captureStdout(() => runCli(["mcp", "--help"]));
+
+    expect(output).toContain("Usage:\n  pondview mcp [flags]");
+    expect(output).toContain("--allow-write-sql");
+    expect(output).toContain("codex mcp add pondview");
+  });
 });
 
 describe("bridge CLI source bindings", () => {
@@ -906,6 +914,12 @@ describe("bridge CLI stop", () => {
 });
 
 describe("bridge CLI validation", () => {
+  test("rejects unsupported MCP flags", async () => {
+    await expect(runCli(["mcp", "--port", "17817"])).rejects.toThrow(
+      "Unsupported flag for pondview mcp: --port",
+    );
+  });
+
   test("fails fast when --token-env is explicit but unset", async () => {
     const originalValue = process.env.PONDVIEW_MISSING_TEST_TOKEN;
     delete process.env.PONDVIEW_MISSING_TEST_TOKEN;

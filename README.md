@@ -38,6 +38,7 @@ pondview start --database ./analytics.duckdb
 pondview start --project-dir ./my-pondview-project
 pondview attach ./analytics.duckdb --as analytics
 pondview query "SELECT 42 AS answer"
+pondview mcp --project-dir ./my-pondview-project
 ```
 
 ### Documentation
@@ -52,7 +53,7 @@ bun dev
 
 bun run pondview start
 bun run pondview query "SELECT 42 AS answer"
-
+bun run cli -- mcp
 bun run typecheck
 bun run lint
 bun run test

@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BridgeClient } from "@pondview/bridge-protocol";
+import { runBridgeMcpServer } from "./mcp";
 import { type BrowserOpener, openBrowser } from "./open-browser";
 import { startBridgeServer } from "./server";
 
@@ -94,6 +95,9 @@ export async function runCli(
       break;
     case "dashboard":
       await runDashboard(args, resolvedDeps);
+      break;
+    case "mcp":
+      await runMcp(args);
       break;
     case "source":
       await runSource(args);
@@ -512,6 +516,16 @@ async function runDashboardOpen(
   }
   await deps.waitForShutdown();
   await server.stop();
+}
+
+async function runMcp(args: ParsedArgs): Promise<void> {
+  assertAllowedFlags(args, ["allow-write-sql", "database", "project-dir"]);
+
+  await runBridgeMcpServer({
+    allowWriteSql: args.flags.has("allow-write-sql"),
+    databasePath: readStringFlag(args, "database"),
+    projectDir: readStringFlag(args, "project-dir"),
+  });
 }
 
 async function runStop(
@@ -1563,6 +1577,9 @@ function printHelp(command?: string, subcommand?: string): void {
     case "dashboard":
       printDashboardHelp(subcommand);
       break;
+    case "mcp":
+      printMcpHelp();
+      break;
     case "source":
       printSourceHelp(subcommand);
       break;
@@ -1585,6 +1602,7 @@ Usage:
 
 Local Runtime
   start          Start the local Pondview app and bridge API
+  mcp            Run a stdio MCP server for local agents
 
 Data
   attach         Attach a DuckDB database source
@@ -1636,6 +1654,25 @@ Flags:
       --no-ui              Start the bridge API only
       --token <token>      Require a bearer token
       --token-env <name>   Read bearer token from an environment variable
+`);
+}
+
+function printMcpHelp(): void {
+  console.log(`Run a stdio MCP server backed by the Pondview Bridge runtime.
+
+Usage:
+  pondview mcp [flags]
+
+Examples:
+  codex mcp add pondview -- pondview mcp --project-dir /path/to/project
+  pondview mcp --database ./analytics.duckdb
+  pondview mcp --allow-write-sql
+
+Flags:
+      --database <file>       Open a DuckDB file as the primary database
+      --project-dir <dir>     Filesystem project root
+      --allow-write-sql       Allow execute_sql to run write statements
+  -h, --help                  Print usage
 `);
 }
 

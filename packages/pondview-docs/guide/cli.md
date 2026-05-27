@@ -119,6 +119,34 @@ scripts:
 pondview query --file ./dashboard-metadata.sql --database ./analytics.duckdb
 ```
 
+### MCP server
+
+`pondview mcp` runs a stdio Model Context Protocol server backed by the Bridge
+DuckDB runtime. It is intended for local agents such as Codex CLI to spawn on
+demand:
+
+```bash
+codex mcp add pondview -- pondview mcp --project-dir /path/to/project
+```
+
+You can point the MCP server at a specific DuckDB file:
+
+```bash
+pondview mcp --database ./data.duckdb
+```
+
+The MCP server exposes table listing, schema inspection, row previews, and SQL
+execution. SQL execution is read-only by default. For trusted local workflows,
+start it with explicit write access:
+
+```bash
+pondview mcp --allow-write-sql
+```
+
+This MCP mode uses the Bridge runtime and Bridge secret store. It does not read
+browser-only AI provider settings and does not expose provider API keys to MCP
+clients.
+
 ### Local source bindings
 
 New projects store their default DuckDB source in `pondview/project.json`, so a
