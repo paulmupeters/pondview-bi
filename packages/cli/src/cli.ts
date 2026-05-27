@@ -519,10 +519,16 @@ async function runDashboardOpen(
 }
 
 async function runMcp(args: ParsedArgs): Promise<void> {
-  assertAllowedFlags(args, ["allow-write-sql", "database", "project-dir"]);
+  assertAllowedFlags(args, [
+    "allow-write-sql",
+    "app-url",
+    "database",
+    "project-dir",
+  ]);
 
   await runBridgeMcpServer({
     allowWriteSql: args.flags.has("allow-write-sql"),
+    appUrl: readStringFlag(args, "app-url"),
     databasePath: readStringFlag(args, "database"),
     projectDir: readStringFlag(args, "project-dir"),
   });
@@ -1671,6 +1677,7 @@ Examples:
 Flags:
       --database <file>       Open a DuckDB file as the primary database
       --project-dir <dir>     Filesystem project root
+      --app-url <url>         Local Pondview app URL returned by dashboard tools
       --allow-write-sql       Allow execute_sql to run write statements
   -h, --help                  Print usage
 `);

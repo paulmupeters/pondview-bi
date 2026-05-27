@@ -136,8 +136,22 @@ pondview mcp --database ./data.duckdb
 ```
 
 The MCP server exposes table listing, schema inspection, row previews, and SQL
-execution. SQL execution is read-only by default. For trusted local workflows,
-start it with explicit write access:
+execution. It can also create Pondview dashboards and visuals from SQL. Visual
+creation returns a local dashboard URL that agents can open in a browser:
+
+```text
+Using Pondview, create a monthly revenue line chart and return the dashboard URL.
+```
+
+If your local app is not running on the default `http://127.0.0.1:17817`, pass
+the app URL used in returned dashboard links:
+
+```bash
+pondview mcp --project-dir /path/to/project --app-url http://127.0.0.1:17818
+```
+
+SQL execution is read-only by default. For trusted local workflows, start it
+with explicit write access:
 
 ```bash
 pondview mcp --allow-write-sql
