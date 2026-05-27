@@ -125,7 +125,7 @@ extension-backed source attachment.
 
 ### Runtime configuration
 
-Use `.env.local` only for the integrations you need:
+Use `.env.local` only for the integrations you need. The template lives at [`env.local.example`](./env.local.example).
 
 ```bash
 # Persist a local DuckDB runtime database
@@ -139,8 +139,6 @@ MOTHERDUCK_TOKEN=
 # Override Bridge's local secret store path
 PONDVIEW_SECRETS_PATH=
 ```
-
-The template lives at `env.local.example`.
 
 ### Workspace DB debug logging
 
@@ -188,6 +186,15 @@ bun run preview
 bun run docs:dev
 bun run docs:build
 bun run docs:preview
+
+# Bridge CLI/runtime (repository development)
+bun run bridge -- help
+bun run bridge -- start
+bun run bridge -- start --no-ui
+bun run bridge -- mcp
+bun run bridge:build-ui
+bun run bridge:typecheck
+bun run bridge-protocol:typecheck
 
 # Quality
 bun run lint
