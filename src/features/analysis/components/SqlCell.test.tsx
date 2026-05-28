@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server.node";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
@@ -10,7 +10,7 @@ type SqlCellComponent =
 
 let SqlCell: SqlCellComponent;
 
-beforeAll(async () => {
+beforeEach(async () => {
   mock.restore();
   ({ SqlCell } = await import("@/features/analysis/components/SqlCell"));
 });
