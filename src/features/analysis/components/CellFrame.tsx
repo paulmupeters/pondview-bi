@@ -132,7 +132,7 @@ export function CellFrame({
   return (
     <div
       className={cn(
-        "group/cell relative overflow-hidden rounded-lg border transition-all before:absolute before:left-4 before:top-9 before:bottom-0 before:w-px before:bg-border/35",
+        "group/cell relative overflow-hidden rounded-lg border transition-all",
         typeMeta.className,
         isSelected && "ring-1 ring-primary/15 shadow-sm",
       )}

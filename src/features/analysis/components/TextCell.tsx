@@ -53,61 +53,51 @@ export function TextCell({ cell, notebookSession }: TextCellProps) {
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-border/70 bg-background px-4 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary/35" />
-          <span className="font-mono text-[10px] font-medium uppercase tracking-[0.15em] text-muted-foreground/60">
-            Markdown annotation
-          </span>
+    <div className="space-y-2">
+      {hasContent ? (
+        <div className="flex items-center justify-end gap-1">
+          <AddToDashboardDialog
+            trigger={
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+              >
+                <Squares2X2Icon className="size-3" />
+                Add to dashboard
+              </Button>
+            }
+            sql="SELECT 1"
+            visualOptions={[
+              {
+                type: "text",
+                config: textConfig,
+              },
+            ]}
+            defaultVisualType="text"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+            onClick={() => setShowPreview((prev) => !prev)}
+          >
+            {showPreview ? (
+              <>
+                <Pencil className="size-3" />
+                Edit
+              </>
+            ) : (
+              <>
+                <Eye className="size-3" />
+                Preview
+              </>
+            )}
+          </Button>
         </div>
-        <div className="flex items-center gap-1">
-          {hasContent ? (
-            <AddToDashboardDialog
-              trigger={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-                >
-                  <Squares2X2Icon className="size-3" />
-                  Add to dashboard
-                </Button>
-              }
-              sql="SELECT 1"
-              visualOptions={[
-                {
-                  type: "text",
-                  config: textConfig,
-                },
-              ]}
-              defaultVisualType="text"
-            />
-          ) : null}
-          {hasContent && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-              onClick={() => setShowPreview((prev) => !prev)}
-            >
-              {showPreview ? (
-                <>
-                  <Pencil className="size-3" />
-                  Edit
-                </>
-              ) : (
-                <>
-                  <Eye className="size-3" />
-                  Preview
-                </>
-              )}
-            </Button>
-          )}
-        </div>
-      </div>
+      ) : null}
       {showPreview ? (
         <div className="min-h-[96px] max-w-3xl rounded-md border border-border/60 bg-card px-5 py-4 text-sm leading-relaxed">
           <MarkdownRenderer>{content}</MarkdownRenderer>
@@ -116,7 +106,7 @@ export function TextCell({ cell, notebookSession }: TextCellProps) {
         <textarea
           value={content}
           onChange={handleChange}
-          className="min-h-[104px] w-full rounded-md border border-border/60 bg-card px-4 py-3 text-sm leading-relaxed ring-offset-background placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="min-h-[104px] w-full resize-y rounded-md border border-border/60 bg-card px-4 py-3 text-sm leading-relaxed ring-offset-background placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           placeholder="Write markdown notes, interpretation, or assumptions..."
         />
       )}
