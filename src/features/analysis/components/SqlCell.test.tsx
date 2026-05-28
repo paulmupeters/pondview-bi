@@ -1,19 +1,10 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server.node";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
+import { SqlCell } from "@/features/analysis/components/SqlCell";
 import { createSqlCellPayload } from "@/features/analysis/sql-cell-payload";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
-
-type SqlCellComponent =
-  typeof import("@/features/analysis/components/SqlCell").SqlCell;
-
-let SqlCell: SqlCellComponent;
-
-beforeEach(async () => {
-  mock.restore();
-  ({ SqlCell } = await import("@/features/analysis/components/SqlCell"));
-});
 
 function createCell(
   overrides: Partial<AnalysisCellState> = {},
