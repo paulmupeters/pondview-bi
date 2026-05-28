@@ -157,10 +157,9 @@ export function SqlEditorAiAssist({
 
   const selectedTransport = useMemo<ChatTransport<UIMessage> | null>(() => {
     if (shouldUseBridgeRuntime) {
-      if (bridgeAiAvailability !== "available") {
-        return null;
+      if (bridgeAiAvailability === "available") {
+        return createBridgeChatTransport(connectedTables, "sql-editor");
       }
-      return createBridgeChatTransport(connectedTables, "sql-editor");
     }
 
     if (!agentResult.agent) {
