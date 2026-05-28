@@ -78,10 +78,9 @@ export function useAnalysisCellAi({
   }, [connectedTables]);
   const selectedTransport = useMemo<ChatTransport<UIMessage> | null>(() => {
     if (shouldUseBridgeRuntime) {
-      if (bridgeAiAvailability !== "available") {
-        return null;
+      if (bridgeAiAvailability === "available") {
+        return createBridgeChatTransport(connectedTables, "analysis");
       }
-      return createBridgeChatTransport(connectedTables, "analysis");
     }
 
     if (!agentResult.agent) {
@@ -276,7 +275,11 @@ export function useAnalysisCellAi({
     }
 
     if (!selectedTransport) {
-      setPromptError(MISSING_AI_CONFIGURATION_MESSAGE);
+      setPromptError(
+        agentResult.error
+          ? toPromptErrorMessage(agentResult.error)
+          : MISSING_AI_CONFIGURATION_MESSAGE,
+      );
       return;
     }
 
@@ -284,36 +287,11 @@ export function useAnalysisCellAi({
 
     const messageId = nanoid();
     const createdAt = Date.now();
-
-    await notebookSession.appendCellEntry({
-      cellId: cell.id,
-      role: "user",
-      partsJson: JSON.stringify([{ type: "text", text: rawPrompt }]),
-      createdAt,
+    const userMessage: UIMessage = {
       id: messageId,
-    });
-
-    setMessages((previous) => {
-      if (previous.some((message) => message.id === messageId)) {
-        return previous;
-      }
-
-      return [
-        ...previous,
-        {
-          id: messageId,
-          role: "user",
-          parts: [{ type: "text", text: rawPrompt }],
-        },
-      ];
-    });
-
-    await notebookSession.updateCell(cell.id, {
-      promptText: "",
-      status: "running",
-    });
-    await notebookSession.refreshUpdatedAt();
-    setPromptDraft("");
+      role: "user",
+      parts: [{ type: "text", text: rawPrompt }],
+    };
 
     const promptWithContext = buildAiCellPrompt({
       prompt: rawPrompt,
@@ -324,6 +302,27 @@ export function useAnalysisCellAi({
     });
 
     try {
+      setMessages((previous) => {
+        if (previous.some((message) => message.id === messageId)) {
+          return previous;
+        }
+
+        return [...previous, userMessage];
+      });
+      setPromptDraft("");
+
+      await notebookSession.appendCellEntry({
+        cellId: cell.id,
+        role: "user",
+        partsJson: JSON.stringify(userMessage.parts),
+        createdAt,
+        id: messageId,
+      });
+      await notebookSession.updateCell(cell.id, {
+        promptText: "",
+        status: "running",
+      });
+      await notebookSession.refreshUpdatedAt();
       await sendMessage({
         text: promptWithContext,
         messageId,
@@ -334,6 +333,10 @@ export function useAnalysisCellAi({
           ? toPromptErrorMessage(error)
           : "Failed to send the AI prompt.";
       setPromptError(promptMessage);
+      setMessages((previous) =>
+        previous.filter((message) => message.id !== messageId),
+      );
+      setPromptDraft(rawPrompt);
       await notebookSession.updateCell(cell.id, { status: "error" });
       await notebookSession.refreshUpdatedAt();
     }
