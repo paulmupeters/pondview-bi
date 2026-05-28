@@ -48,8 +48,8 @@ describe("CellFrame", () => {
   test("renders the compact shell chrome without a badge or inline preview", () => {
     const markup = renderCellFrame(createCell());
 
-    expect(markup).toContain("AI Insight");
-    expect(markup).toContain("Prompt to insight");
+    expect(markup).toContain("Analysis");
+    expect(markup).toContain("Prompt to analysis");
     expect(markup).toContain("Cell body");
     expect(markup).not.toContain("select 5;");
     expect(markup).not.toContain('data-slot="badge"');
@@ -108,7 +108,7 @@ describe("CellFrame", () => {
       }),
     );
 
-    expect(analysisMarkup).toContain("AI Insight");
+    expect(analysisMarkup).toContain("Analysis");
     expect(textMarkup).toContain("Markdown");
     expect(textMarkup).toContain("Notebook note");
   });
