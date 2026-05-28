@@ -1,13 +1,13 @@
 import {
   afterAll,
-  afterEach,
+  beforeAll,
   beforeEach,
   describe,
   expect,
   mock,
   test,
 } from "bun:test";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup } from "react-dom/server.node";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
@@ -27,29 +27,14 @@ type CellContentComponent =
 
 let CellContent: CellContentComponent;
 
-beforeEach(async () => {
-  mock.restore();
+beforeAll(async () => {
   mock.module("@/features/analysis/use-analysis-cell-ai", () => ({
     useAnalysisCellAi: () => aiState,
-  }));
-
-  mock.module("@/features/analysis/components/SqlCell", () => ({
-    SqlCell: ({ ai, aiEnabled }: { ai: AiCellState; aiEnabled: boolean }) => (
-      <div data-ai-enabled={String(aiEnabled)}>
-        <p>AI Response</p>
-        <p>{ai.latestAssistantText}</p>
-        <p>SQL cell</p>
-      </div>
-    ),
   }));
 
   ({ CellContent } = await import(
     "@/features/analysis/components/CellContent"
   ));
-});
-
-afterEach(() => {
-  mock.restore();
 });
 
 afterAll(() => {
@@ -103,8 +88,25 @@ function createNotebookSession(): NotebookSession {
   };
 }
 
+function installDomMocks() {
+  globalThis.document ??= {
+    body: {},
+    documentElement: {
+      classList: {
+        contains: () => false,
+      },
+    },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as never;
+  globalThis.window ??= {
+    document: globalThis.document,
+  } as never;
+}
+
 describe("CellContent", () => {
   beforeEach(() => {
+    installDomMocks();
     aiState.promptDraft = "";
     aiState.promptError = null;
     aiState.latestAssistantText = "AI says to keep this result visible.";
@@ -123,10 +125,10 @@ describe("CellContent", () => {
       />,
     );
 
-    expect(markup).toContain("AI Response");
     expect(markup).toContain("AI says to keep this result visible.");
-    expect(markup).toContain("SQL cell");
-    expect(markup).toContain('data-ai-enabled="false"');
+    expect(markup).toContain("AI generated");
+    expect(markup).toContain("Ask AI");
+    expect(markup).toContain(">SQL<");
   });
 
   test("hides prompt errors while the SQL mode is selected", () => {
@@ -145,6 +147,7 @@ describe("CellContent", () => {
     );
 
     expect(markup).not.toContain("Missing AI configuration");
-    expect(markup).toContain("SQL cell");
+    expect(markup).toContain("Ask AI");
+    expect(markup).toContain(">SQL<");
   });
 });
