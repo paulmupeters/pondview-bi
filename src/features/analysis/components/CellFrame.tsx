@@ -109,10 +109,10 @@ function getCellTypeMeta(cell: AnalysisCellState): {
   }
 
   return {
-    label: "AI Insight",
+    label: "Analysis",
     icon: Sparkles,
     className: "border-primary/20 bg-primary/[0.045]",
-    lineage: "Prompt to insight",
+    lineage: "Prompt to analysis",
   };
 }
 
