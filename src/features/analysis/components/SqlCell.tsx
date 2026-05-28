@@ -1,4 +1,10 @@
-import { Code, MessageCircle, Play, Square } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Play,
+  Sparkles,
+  Square,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SqlAnalysisDisplay } from "@/components/sql-analysis-display";
 import {
@@ -20,7 +26,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
-import type { AiCellState } from "@/features/analysis/components/AiCell";
+import {
+  type AiCellState,
+  AiResponseBanner,
+} from "@/features/analysis/components/AiCell";
 import {
   createSqlCellPayload,
   parseSqlCellPayload,
@@ -50,7 +59,6 @@ type SqlCellProps = {
   notebookSession: NotebookSession;
   onBootstrapConsumed?: () => void;
   aiEnabled: boolean;
-  onToggleAi: () => void;
   onSelectMode?: (mode: "ai" | "sql") => void;
   ai: AiCellState;
 };
@@ -61,7 +69,6 @@ export function SqlCell({
   notebookSession,
   onBootstrapConsumed,
   aiEnabled,
-  onToggleAi,
   onSelectMode,
   ai,
 }: SqlCellProps) {
@@ -74,6 +81,7 @@ export function SqlCell({
   const previousRunStateRef = useRef<boolean | null>(null);
   const appliedBootstrapKeyRef = useRef<string | null>(null);
   const [isSqlRunning, setIsSqlRunning] = useState(false);
+  const [isSqlPanelExpanded, setIsSqlPanelExpanded] = useState(true);
   const [dismissedSqlIntentDraft, setDismissedSqlIntentDraft] = useState<
     string | null
   >(null);
@@ -309,7 +317,6 @@ export function SqlCell({
     },
     [cell.id, notebookSession, storedPayload],
   );
-  const isChatMode = aiEnabled;
   const hasSqlDraft = Boolean(cell.sqlDraft?.trim());
   const sqlIntentDraftSignature = useMemo(
     () => getSqlIntentDraftSignature(ai.promptDraft),
@@ -319,16 +326,11 @@ export function SqlCell({
     () =>
       shouldShowSqlIntentPopover({
         promptDraft: ai.promptDraft,
-        isChatMode,
+        isChatMode: true,
         isAssistantThinking: ai.isAssistantThinking,
         dismissedDraftSignature: dismissedSqlIntentDraft,
       }),
-    [
-      ai.isAssistantThinking,
-      ai.promptDraft,
-      dismissedSqlIntentDraft,
-      isChatMode,
-    ],
+    [ai.isAssistantThinking, ai.promptDraft, dismissedSqlIntentDraft],
   );
 
   useEffect(() => {
@@ -341,14 +343,9 @@ export function SqlCell({
     (mode: "ai" | "sql") => {
       if (onSelectMode) {
         onSelectMode(mode);
-        return;
-      }
-
-      if ((mode === "ai") !== isChatMode) {
-        onToggleAi();
       }
     },
-    [isChatMode, onSelectMode, onToggleAi],
+    [onSelectMode],
   );
   const handleKeepInChat = useCallback(() => {
     if (!sqlIntentDraftSignature) {
@@ -372,7 +369,18 @@ export function SqlCell({
 
   const resultPanel =
     hasFreshStoredPayload || isSqlRunning ? (
-      <div className="overflow-hidden rounded-lg border border-border bg-card pb-4">
+      <div className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-background pb-3 shadow-sm">
+        <div className="flex items-center justify-between border-b border-border/50 px-4 py-2">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary/45" />
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Output
+            </span>
+          </div>
+          <span className="text-[11px] text-muted-foreground/60">
+            generated from SQL
+          </span>
+        </div>
         <SqlAnalysisDisplay
           data={storedPayload}
           stage={storedPayload?.stage ?? (isSqlRunning ? "loading" : undefined)}
@@ -391,51 +399,123 @@ export function SqlCell({
 
   return (
     <div className="space-y-4">
-      {resultPanel}
+      <div className="overflow-hidden rounded-lg border border-primary/15 bg-primary/[0.035] shadow-sm">
+        <form
+          className="p-0"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void ai.submitPrompt();
+          }}
+        >
+          <InputGroup className="items-end rounded-none border-0 bg-transparent shadow-none dark:bg-background">
+            <InputGroupTextarea
+              value={ai.promptDraft}
+              onChange={(event) => ai.setPromptDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  if (ai.promptDraft.trim() && !ai.isAssistantThinking) {
+                    void ai.submitPrompt();
+                  }
+                }
+              }}
+              placeholder={
+                hasSqlDraft
+                  ? "Ask AI to refine or explain this analysis..."
+                  : "Ask anything about your data..."
+              }
+              rows={2}
+              disabled={ai.isAssistantThinking}
+              autoFocus={aiEnabled}
+            />
+            <InputGroupAddon align="inline-end">
+              <Popover open={showSqlIntentPopover}>
+                <PopoverTrigger asChild>
+                  <span className="inline-flex">
+                    <InputGroupButton
+                      type="submit"
+                      size="sm"
+                      className="gap-1.5 dark:bg-background"
+                      disabled={
+                        ai.isAssistantThinking || !ai.promptDraft.trim()
+                      }
+                    >
+                      <Sparkles className="size-3.5" />
+                      {ai.isAssistantThinking ? "Running..." : "Ask AI"}
+                    </InputGroupButton>
+                  </span>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="top"
+                  className="w-80 space-y-3 px-3 py-3"
+                >
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">This looks like SQL</p>
+                    <p className="text-xs text-muted-foreground">
+                      Move this query into the SQL panel?
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleKeepInChat}
+                    >
+                      Keep as prompt
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void handleSwitchToSql()}
+                    >
+                      Move to SQL
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </InputGroupAddon>
+          </InputGroup>
+        </form>
+      </div>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
-        {/* Toolbar row */}
-        <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
-          <div className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 p-0.5">
+      <AiResponseBanner ai={ai} showPromptError={aiEnabled} />
+
+      <div
+        className={cn(
+          "grid gap-3",
+          isSqlPanelExpanded
+            ? "lg:grid-cols-[minmax(18rem,0.82fr)_minmax(0,1.38fr)]"
+            : "lg:grid-cols-[2.75rem_minmax(0,1fr)]",
+        )}
+      >
+        <div className="min-w-0 overflow-hidden rounded-lg border border-primary/15 bg-primary/[0.035] shadow-sm">
+          <div className="flex items-center gap-2 border-b border-primary/10 bg-background/55 px-2 py-1.5">
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              aria-pressed={isChatMode}
-              className={cn(
-                "h-7 gap-1.5 rounded-sm px-3 text-xs",
-                isChatMode
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => handleSelectMode("ai")}
+              aria-expanded={isSqlPanelExpanded}
+              className="h-7 gap-1.5 rounded-sm px-2 font-mono text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setIsSqlPanelExpanded((previous) => !previous)}
             >
-              <MessageCircle className="size-3.5" />
-              Chat
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-pressed={!isChatMode}
-              className={cn(
-                "h-7 gap-1.5 rounded-sm px-3 text-xs",
-                !isChatMode
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
+              {isSqlPanelExpanded ? (
+                <ChevronDown className="size-3.5" />
+              ) : (
+                <ChevronRight className="size-3.5" />
               )}
-              onClick={() => handleSelectMode("sql")}
-            >
-              <Code className="size-3.5" />
-              SQL
+              <span className={cn(!isSqlPanelExpanded && "sr-only")}>SQL</span>
             </Button>
-          </div>
 
-          <div className="ml-auto flex items-center gap-1.5">
-            {!isChatMode && (
-              <>
-                <span className="hidden text-[11px] text-muted-foreground/70 sm:inline">
-                  Shift+Enter to run
+            {isSqlPanelExpanded ? (
+              <div className="ml-auto flex items-center gap-1.5">
+                <span className="hidden font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/60 xl:inline">
+                  Shift+Enter
                 </span>
                 {!isSqlRunning ? (
                   <Button
@@ -453,114 +533,22 @@ export function SqlCell({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="h-7 gap-1 px-2.5 text-xs font-mono bg-primary text-primary-foreground hover:bg-primary/90"
+                    className="h-7 gap-1 bg-primary px-2.5 text-xs font-mono text-primary-foreground hover:bg-primary/90"
                     onClick={() => consoleApiRef.current?.cancelQuery()}
                   >
                     <Square className="size-3" />
                     Stop
                   </Button>
                 )}
-              </>
-            )}
+              </div>
+            ) : null}
           </div>
-        </div>
 
-        <div>
-          {isChatMode ? (
-            <form
-              className="p-0"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (ai) {
-                  void ai.submitPrompt();
-                }
-              }}
-            >
-              <InputGroup className="border-0 shadow-none bg-transparent dark:bg-background items-end rounded-none">
-                <InputGroupTextarea
-                  value={ai?.promptDraft ?? ""}
-                  onChange={(event) => ai?.setPromptDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === "Enter" &&
-                      !event.shiftKey &&
-                      !event.nativeEvent.isComposing
-                    ) {
-                      event.preventDefault();
-                      if (ai?.promptDraft?.trim() && !ai?.isAssistantThinking) {
-                        void ai.submitPrompt();
-                      }
-                    }
-                  }}
-                  placeholder={
-                    hasSqlDraft
-                      ? "Ask AI to refine this cell…"
-                      : "Ask anything about your data…"
-                  }
-                  rows={4}
-                  disabled={ai?.isAssistantThinking ?? false}
-                  tabIndex={isChatMode ? undefined : -1}
-                  autoFocus
-                />
-                <InputGroupAddon align="inline-end">
-                  <Popover open={showSqlIntentPopover}>
-                    <PopoverTrigger asChild>
-                      <span className="inline-flex">
-                        <InputGroupButton
-                          type="submit"
-                          size="sm"
-                          className="dark:bg-background"
-                          disabled={
-                            (ai?.isAssistantThinking ?? false) ||
-                            !ai?.promptDraft?.trim()
-                          }
-                          tabIndex={isChatMode ? undefined : -1}
-                        >
-                          {ai?.isAssistantThinking ? "Running…" : "Ask AI"}
-                        </InputGroupButton>
-                      </span>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      align="end"
-                      side="top"
-                      className="w-80 space-y-3 px-3 py-3"
-                    >
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">
-                          This looks like SQL
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Switch to SQL mode and move this query into the SQL
-                          editor?
-                        </p>
-                      </div>
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={handleKeepInChat}
-                        >
-                          Keep in Chat
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => void handleSwitchToSql()}
-                        >
-                          Switch to SQL
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </InputGroupAddon>
-              </InputGroup>
-            </form>
-          ) : (
+          {isSqlPanelExpanded ? (
             <SqlConsole
-              className="py-0"
+              className="py-0 font-mono"
               historyKey={`analysis-sql-history:${cell.id}`}
-              editorMinHeight="10rem"
+              editorMinHeight="11rem"
               executeQueryAction={executeQueryAction}
               autocompleteAction={autocompleteAction}
               showInlineResults={false}
@@ -572,8 +560,21 @@ export function SqlCell({
               onNoticeAction={handleNotice}
               onRunStateChangeAction={handleRunStateChange}
             />
+          ) : (
+            <button
+              type="button"
+              className="flex h-full min-h-28 w-full items-center justify-center px-2 py-3 text-muted-foreground transition-colors hover:text-foreground"
+              aria-label="Expand SQL panel"
+              onClick={() => setIsSqlPanelExpanded(true)}
+            >
+              <span className="rotate-90 font-mono text-[10px] font-semibold uppercase tracking-[0.16em]">
+                SQL
+              </span>
+            </button>
           )}
         </div>
+
+        {resultPanel}
       </div>
     </div>
   );

@@ -70,12 +70,14 @@ export function DynamicChart({
   chartData,
   chartConfig,
   className,
+  chartHeightClassName,
   showMetadata = true,
   fillAvailableHeight = false,
 }: {
   chartData: Result[];
   chartConfig: Config;
   className?: string;
+  chartHeightClassName?: string;
   showMetadata?: boolean;
   fillAvailableHeight?: boolean;
 }) {
@@ -372,7 +374,7 @@ export function DynamicChart({
             "w-full",
             fillAvailableHeight
               ? "min-h-0 flex-1 h-full"
-              : "h-[320px] sm:h-[380px] lg:h-[420px]",
+              : (chartHeightClassName ?? "h-[320px] sm:h-[380px] lg:h-[420px]"),
           )}
         >
           {renderChart()}
