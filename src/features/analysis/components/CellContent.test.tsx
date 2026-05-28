@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
@@ -14,23 +14,32 @@ const aiState: AiCellState = {
   submitPrompt: async () => {},
 };
 
-mock.module("@/features/analysis/use-analysis-cell-ai", () => ({
-  useAnalysisCellAi: () => aiState,
-}));
+type CellContentComponent =
+  typeof import("@/features/analysis/components/CellContent").CellContent;
 
-mock.module("@/features/analysis/components/SqlCell", () => ({
-  SqlCell: ({ ai, aiEnabled }: { ai: AiCellState; aiEnabled: boolean }) => (
-    <div data-ai-enabled={String(aiEnabled)}>
-      <p>AI Response</p>
-      <p>{ai.latestAssistantText}</p>
-      <p>SQL cell</p>
-    </div>
-  ),
-}));
+let CellContent: CellContentComponent;
 
-const { CellContent } = await import(
-  "@/features/analysis/components/CellContent"
-);
+beforeAll(async () => {
+  mock.module("@/features/analysis/use-analysis-cell-ai", () => ({
+    useAnalysisCellAi: () => aiState,
+  }));
+
+  mock.module("@/features/analysis/components/SqlCell", () => ({
+    SqlCell: ({ ai, aiEnabled }: { ai: AiCellState; aiEnabled: boolean }) => (
+      <div data-ai-enabled={String(aiEnabled)}>
+        <p>AI Response</p>
+        <p>{ai.latestAssistantText}</p>
+        <p>SQL cell</p>
+      </div>
+    ),
+  }));
+
+  ({ CellContent } = await import("@/features/analysis/components/CellContent"));
+});
+
+afterAll(() => {
+  mock.restore();
+});
 
 function createCell(
   overrides: Partial<AnalysisCellState> = {},
@@ -79,15 +88,15 @@ function createNotebookSession(): NotebookSession {
   };
 }
 
-afterEach(() => {
-  aiState.promptDraft = "";
-  aiState.promptError = null;
-  aiState.latestAssistantText = "AI says to keep this result visible.";
-  aiState.transcriptMessages = [];
-  aiState.isAssistantThinking = false;
-});
-
 describe("CellContent", () => {
+  beforeEach(() => {
+    aiState.promptDraft = "";
+    aiState.promptError = null;
+    aiState.latestAssistantText = "AI says to keep this result visible.";
+    aiState.transcriptMessages = [];
+    aiState.isAssistantThinking = false;
+  });
+
   test("keeps the AI response visible while the SQL mode is selected", () => {
     const markup = renderToStaticMarkup(
       <CellContent
