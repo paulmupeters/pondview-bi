@@ -132,6 +132,7 @@ export function SqlChart({
         <DynamicChart
           chartData={rows}
           chartConfig={effectiveChartConfig as Config}
+          chartHeightClassName="h-[260px] sm:h-[300px] lg:h-[340px]"
           showMetadata={false}
         />
       </div>

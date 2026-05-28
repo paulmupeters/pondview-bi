@@ -83,7 +83,7 @@ function installDomMocks() {
 }
 
 describe("SqlCell", () => {
-  test("renders explicit Chat and SQL tabs for analysis cells", () => {
+  test("renders an inline AI composer above the SQL panel", () => {
     installDomMocks();
 
     const markup = renderToStaticMarkup(
@@ -91,17 +91,16 @@ describe("SqlCell", () => {
         cell={createCell()}
         notebookSession={createNotebookSession()}
         aiEnabled
-        onToggleAi={() => {}}
         ai={createAiState()}
       />,
     );
 
-    expect(markup).toContain(">Chat<");
+    expect(markup).toContain("Ask AI");
     expect(markup).toContain(">SQL<");
-    expect(markup).not.toContain(">AI<");
+    expect(markup).not.toContain(">Chat<");
   });
 
-  test("renders the result panel before the chat or SQL editor", () => {
+  test("renders SQL beside the persisted output", () => {
     installDomMocks();
 
     const payload = createSqlCellPayload({
@@ -125,11 +124,12 @@ describe("SqlCell", () => {
         })}
         notebookSession={createNotebookSession()}
         aiEnabled
-        onToggleAi={() => {}}
         ai={createAiState()}
       />,
     );
 
-    expect(markup.indexOf(">Data<")).toBeLessThan(markup.indexOf(">Chat<"));
+    expect(markup).toContain(">SQL<");
+    expect(markup).toContain(">Output<");
+    expect(markup.indexOf(">SQL<")).toBeLessThan(markup.indexOf(">Output<"));
   });
 });

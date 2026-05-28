@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Response } from "@/components/ai-elements/response";
 import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
@@ -42,7 +42,6 @@ export function AiResponseBanner({
   ai,
   showPromptError = true,
 }: AiResponseBannerProps) {
-  const [isResponseExpanded, setIsResponseExpanded] = useState(true);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
   const [streamingAnimationFrame, setStreamingAnimationFrame] = useState(() =>
     getAnimationFrame(STREAMING_ANIMATION, 0),
@@ -75,13 +74,6 @@ export function AiResponseBanner({
   const hasResponse = !!(ai.latestAssistantText || ai.isAssistantThinking);
   const shouldShowPromptError = showPromptError && Boolean(ai.promptError);
 
-  // Auto-expand when a new response arrives
-  useEffect(() => {
-    if (hasResponse) {
-      setIsResponseExpanded(true);
-    }
-  }, [hasResponse]);
-
   useEffect(() => {
     if (!ai.isAssistantThinking || ai.latestAssistantText) {
       setStreamingAnimationFrame(getAnimationFrame(STREAMING_ANIMATION, 0));
@@ -111,71 +103,54 @@ export function AiResponseBanner({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card/40 border-l-[3px] border-l-primary/40">
-      {latestUserText ? (
-        <div className="border-b border-border/60 px-3 py-2">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
-            User prompt
-          </p>
-          <Response className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+    <div className="overflow-hidden rounded-lg border border-primary/15 bg-primary/[0.035] shadow-sm shadow-primary/5">
+      <div className="flex flex-wrap items-center gap-2 border-b border-primary/10 px-3 py-2">
+        <span className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-background/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary/70">
+          <Sparkles className="size-3" />
+          AI generated
+        </span>
+        {latestUserText ? (
+          <Response className="min-w-0 flex-1 truncate text-sm leading-snug text-muted-foreground">
             {latestUserText}
           </Response>
-        </div>
-      ) : null}
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+            Contextual analysis activity
+          </span>
+        )}
+      </div>
 
       {hasResponse && (
-        <>
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => setIsResponseExpanded((prev) => !prev)}
-          >
-            {isResponseExpanded ? (
-              <ChevronUp className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
-            )}
-            <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">
-              AI Response
-            </span>
-            {!isResponseExpanded && ai.latestAssistantText && (
-              <span className="ml-1 min-w-0 truncate text-muted-foreground/50">
-                — {ai.latestAssistantText.slice(0, 80)}…
+        <div className="border-t border-primary/10 bg-background/55 px-3 py-2.5">
+          <p className="sr-only">AI Response</p>
+          {ai.latestAssistantText ? (
+            <Response className="text-sm leading-relaxed text-foreground/85">
+              {ai.latestAssistantText}
+            </Response>
+          ) : (
+            <output
+              aria-label="Assistant is working"
+              className="flex items-center gap-2 text-sm text-muted-foreground"
+            >
+              <span className="font-mono text-xs text-foreground">
+                {streamingAnimationFrame}
               </span>
-            )}
-          </button>
-          {isResponseExpanded && (
-            <div className="border-t border-border/60 px-3 py-2.5">
-              {ai.latestAssistantText ? (
-                <Response className="text-sm leading-relaxed">
-                  {ai.latestAssistantText}
-                </Response>
-              ) : (
-                <output
-                  aria-label="Assistant is working"
-                  className="flex items-center gap-2 text-sm text-muted-foreground"
-                >
-                  <span className="font-mono text-xs text-foreground">
-                    {streamingAnimationFrame}
-                  </span>
-                  <span>Streaming response</span>
-                </output>
-              )}
-            </div>
+              <span>Streaming response</span>
+            </output>
           )}
-        </>
+        </div>
       )}
 
       {shouldShowPromptError ? (
-        <div className="border-t border-border/60">
+        <div className="border-t border-primary/10">
           <PromptErrorBanner message={ai.promptError} />
         </div>
       ) : null}
 
-      {hasTranscript && (!hasResponse || isResponseExpanded) ? (
-        <div className="border-t border-border/60 px-3 py-1.5">
+      {hasTranscript ? (
+        <div className="border-t border-primary/10 px-3 py-1.5">
           {isTranscriptExpanded && (
-            <div className="mb-2 space-y-2 rounded-lg border border-border/60 bg-background/60 p-2">
+            <div className="mb-2 space-y-2 rounded-lg border border-border/60 bg-background/70 p-2">
               {transcriptEntries.map((entry) => (
                 <div
                   key={entry.id}

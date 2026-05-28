@@ -1,4 +1,13 @@
-import { ChartNetwork, FileText, Plus, Type } from "lucide-react";
+import {
+  BarChart3,
+  ChartNetwork,
+  FileText,
+  Lightbulb,
+  Plus,
+  Table2,
+  TerminalSquare,
+  Type,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { hasRequiredAiConfigurationForBackend } from "@/ai/configuration-status";
 import {
@@ -74,24 +83,37 @@ function InsertCellDivider({
   disabled: boolean;
 }) {
   return (
-    <div className="group/insert relative flex items-center justify-center py-1.5">
-      <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-border/40 transition-colors group-hover/insert:border-border" />
+    <div className="group/insert relative flex items-center justify-center py-2">
+      <div className="absolute left-4 top-0 bottom-0 w-px bg-border/25" />
+      <div className="absolute inset-x-8 top-1/2 border-t border-dashed border-border/30 transition-colors group-hover/insert:border-primary/25" />
       <DropdownMenu>
         <DropdownMenuTrigger
           disabled={disabled}
-          className="relative z-10 flex items-center gap-1.5 rounded-full border border-border/60 bg-background px-3 py-1 text-[11px] font-medium text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/insert:opacity-100 disabled:pointer-events-none disabled:opacity-0"
+          className="relative z-10 flex h-7 items-center gap-1.5 rounded-full border border-border/60 bg-background/95 px-2.5 text-[11px] font-medium text-muted-foreground opacity-0 shadow-sm transition-all hover:border-primary/25 hover:text-foreground focus-visible:opacity-100 group-hover/insert:opacity-100 disabled:pointer-events-none disabled:opacity-0"
         >
           <Plus className="size-3" />
-          Add cell
+          Insert
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="center">
+        <DropdownMenuContent align="center" className="w-44">
           <DropdownMenuItem onClick={() => onAddCell("ai")}>
-            <ChartNetwork className="size-4" />
-            Analysis cell
+            <TerminalSquare className="size-4" />
+            SQL
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onAddCell("ai")}>
+            <BarChart3 className="size-4" />
+            Chart
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => onAddCell("text")}>
             <Type className="size-4" />
-            Text cell
+            Markdown
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onAddCell("ai")}>
+            <Lightbulb className="size-4" />
+            AI Insight
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onAddCell("ai")}>
+            <Table2 className="size-4" />
+            Table
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -271,7 +293,7 @@ export function CellList({
           Empty workbook
         </h3>
         <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
-          Add an analysis or text cell to get started.
+          Add SQL, charts, markdown, insights, or tables to get started.
         </p>
         <div className="mt-6">
           <AddCellMenu onAddCell={onAddCell} disabled={isBusy} />
@@ -294,7 +316,7 @@ export function CellList({
         });
 
         return (
-          <div key={cell.id}>
+          <div key={cell.id} className="relative">
             {index > 0 && (
               <InsertCellDivider onAddCell={onAddCell} disabled={isBusy} />
             )}
