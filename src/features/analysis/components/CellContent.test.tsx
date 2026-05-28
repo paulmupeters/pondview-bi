@@ -1,6 +1,6 @@
 import {
   afterAll,
-  beforeAll,
+  afterEach,
   beforeEach,
   describe,
   expect,
@@ -27,7 +27,8 @@ type CellContentComponent =
 
 let CellContent: CellContentComponent;
 
-beforeAll(async () => {
+beforeEach(async () => {
+  mock.restore();
   mock.module("@/features/analysis/use-analysis-cell-ai", () => ({
     useAnalysisCellAi: () => aiState,
   }));
@@ -45,6 +46,10 @@ beforeAll(async () => {
   ({ CellContent } = await import(
     "@/features/analysis/components/CellContent"
   ));
+});
+
+afterEach(() => {
+  mock.restore();
 });
 
 afterAll(() => {
