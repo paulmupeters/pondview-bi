@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  test,
+} from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
@@ -34,7 +42,9 @@ beforeAll(async () => {
     ),
   }));
 
-  ({ CellContent } = await import("@/features/analysis/components/CellContent"));
+  ({ CellContent } = await import(
+    "@/features/analysis/components/CellContent"
+  ));
 });
 
 afterAll(() => {
