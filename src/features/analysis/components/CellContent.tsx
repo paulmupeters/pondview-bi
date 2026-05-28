@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
-import { AiResponseBanner } from "@/features/analysis/components/AiCell";
 import { SqlCell } from "@/features/analysis/components/SqlCell";
 import { TextCell } from "@/features/analysis/components/TextCell";
 import { useAnalysisCellAi } from "@/features/analysis/use-analysis-cell-ai";
@@ -121,20 +120,14 @@ function CellContentAiSql({
   }, [bootstrapSql, cell.activeMode, cell.id, onSelectCellMode]);
 
   return (
-    <div className="space-y-4">
-      <AiResponseBanner ai={ai} showPromptError={cell.activeMode === "ai"} />
-      <SqlCell
-        cell={cell}
-        bootstrapSql={bootstrapSql}
-        notebookSession={notebookSession}
-        onBootstrapConsumed={() => onBootstrapConsumed(cell.id)}
-        aiEnabled={cell.activeMode === "ai"}
-        onToggleAi={() =>
-          onSelectCellMode(cell.id, cell.activeMode === "ai" ? "sql" : "ai")
-        }
-        onSelectMode={(mode) => onSelectCellMode(cell.id, mode)}
-        ai={ai}
-      />
-    </div>
+    <SqlCell
+      cell={cell}
+      bootstrapSql={bootstrapSql}
+      notebookSession={notebookSession}
+      onBootstrapConsumed={() => onBootstrapConsumed(cell.id)}
+      aiEnabled={cell.activeMode === "ai"}
+      onSelectMode={(mode) => onSelectCellMode(cell.id, mode)}
+      ai={ai}
+    />
   );
 }

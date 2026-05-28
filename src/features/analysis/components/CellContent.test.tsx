@@ -19,8 +19,12 @@ mock.module("@/features/analysis/use-analysis-cell-ai", () => ({
 }));
 
 mock.module("@/features/analysis/components/SqlCell", () => ({
-  SqlCell: ({ aiEnabled }: { aiEnabled: boolean }) => (
-    <div data-ai-enabled={String(aiEnabled)}>SQL cell</div>
+  SqlCell: ({ ai, aiEnabled }: { ai: AiCellState; aiEnabled: boolean }) => (
+    <div data-ai-enabled={String(aiEnabled)}>
+      <p>AI Response</p>
+      <p>{ai.latestAssistantText}</p>
+      <p>SQL cell</p>
+    </div>
   ),
 }));
 

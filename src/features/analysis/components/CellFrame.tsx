@@ -1,10 +1,15 @@
 import {
+  BarChart3,
   ChevronDown,
   ChevronRight,
   Circle,
   CircleAlert,
   CircleCheck,
+  FileText,
   Loader2,
+  Sparkles,
+  Table2,
+  TerminalSquare,
   Trash2,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -60,6 +65,57 @@ function getStatusMeta(status: AnalysisCellState["status"]): {
   }
 }
 
+function getCellTypeMeta(cell: AnalysisCellState): {
+  label: string;
+  icon: typeof Circle;
+  className: string;
+  lineage: string;
+} {
+  if (cell.kind === "text" || cell.activeMode === "text") {
+    return {
+      label: "Markdown",
+      icon: FileText,
+      className: "border-border/70 bg-background",
+      lineage: "Notebook note",
+    };
+  }
+
+  const payload = cell.resultPayloadJson;
+  if (payload?.includes('"visualType":"chart"')) {
+    return {
+      label: "Chart",
+      icon: BarChart3,
+      className: "border-primary/15 bg-card",
+      lineage: "Generated from SQL",
+    };
+  }
+
+  if (payload?.includes('"visualType":"table"')) {
+    return {
+      label: "Table",
+      icon: Table2,
+      className: "border-border/70 bg-card",
+      lineage: "Generated from SQL",
+    };
+  }
+
+  if (cell.activeMode === "sql") {
+    return {
+      label: "SQL",
+      icon: TerminalSquare,
+      className: "border-primary/20 bg-primary/[0.035]",
+      lineage: "Prompt to query",
+    };
+  }
+
+  return {
+    label: "AI Insight",
+    icon: Sparkles,
+    className: "border-primary/20 bg-primary/[0.045]",
+    lineage: "Prompt to insight",
+  };
+}
+
 export function CellFrame({
   cell,
   isSelected,
@@ -69,17 +125,20 @@ export function CellFrame({
   children,
 }: CellFrameProps) {
   const statusMeta = getStatusMeta(cell.status);
+  const typeMeta = getCellTypeMeta(cell);
+  const TypeIcon = typeMeta.icon;
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <div
       className={cn(
-        "group/cell relative overflow-hidden rounded-lg border border-border bg-card transition-all",
+        "group/cell relative overflow-hidden rounded-lg border transition-all before:absolute before:left-4 before:top-9 before:bottom-0 before:w-px before:bg-border/35",
+        typeMeta.className,
         isSelected && "ring-1 ring-primary/15 shadow-sm",
       )}
     >
       {/* Collapse, select, and delete row */}
-      <div className="flex items-center gap-1.5 px-2 py-1.5">
+      <div className="relative z-10 flex items-center gap-1.5 px-2 py-1.5">
         <button
           type="button"
           className="shrink-0 rounded p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground"
@@ -110,8 +169,12 @@ export function CellFrame({
             aria-pressed={isSelected}
             onClick={onSelect}
           >
-            <span className="text-xs font-medium text-muted-foreground">
-              {cell.kind === "text" ? "Text" : "Cell"} {cell.position + 1}
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <TypeIcon className="size-3" />
+              {typeMeta.label}
+            </span>
+            <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground/55 sm:inline">
+              {typeMeta.lineage}
             </span>
           </button>
         </div>
@@ -130,7 +193,9 @@ export function CellFrame({
         </div>
       </div>
 
-      {!isCollapsed && <div className="px-3 pb-4 pt-0.5">{children}</div>}
+      {!isCollapsed && (
+        <div className="relative z-10 px-3 pb-4 pt-0.5">{children}</div>
+      )}
     </div>
   );
 }
