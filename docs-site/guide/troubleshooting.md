@@ -38,7 +38,7 @@ Try this workflow:
 
 1. Ask a simpler question
 2. Review the first result
-3. Switch to manual mode
+3. Edit the SQL directly
 4. Refine the result before saving it
 
 This is usually the fastest way to separate "bad question" from "bad output formatting."

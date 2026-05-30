@@ -145,7 +145,7 @@ localStorage.setItem("pondview:debug:notebook-controller", "1");
 
 ## Documentation
 
-User instructions and product reference live in [`docs-site/guide`](./docs-site/guide/index.md).
+User documentation and product reference live in [`docs-site/guide`](./docs-site/guide/index.md).
 
 When changing setup, user-visible behavior, supported runtimes, connected sources, dashboards, or AI configuration, update the docs and run:
 

@@ -7,7 +7,7 @@ This guide covers the fastest path to your first useful result in Pondview.
 1. Add an AI key in **Settings**
 2. Import data or connect a source
 3. Ask a question in chat
-4. Refine the result in manual mode if needed
+4. Refine the result manually if needed
 5. Save the result to a dashboard
 
 ## Before you start
@@ -35,7 +35,7 @@ npx @pondview/cli start
 
 The published CLI runs on Node.js 20 or newer. By default, `pondview start` serves the bundled app and bridge API at `http://127.0.0.1:17817`, then opens it in your browser.
 
-Use a DuckDB file or project directory when you want Pondview to work against local files:
+Use a DuckDB file or project directory when you want Pondview to work against local files. When you run `pondview` from inside a folder, it automatically detects a DuckDB file, but you can also specify one explicitly:
 
 ```bash
 pondview start --database ./analytics.duckdb
@@ -116,11 +116,11 @@ A good first workflow is:
 3. Check whether the result answers your question
 4. Keep iterating with follow-up questions until it does
 
-## 4. Switch to manual mode when you want more control
+## 4. Edit the SQL when you want more control
 
-Chat is usually the fastest way to get a first result, but it does not have to be the final result.
+Chat is usually the fastest way to get a first result, but it does not have to be the final version.
 
-Use **manual mode** when you want to:
+Every analysis cell includes a **SQL panel** where you can view and edit the query. You can also edit the **chart config** when you want to:
 
 - Inspect the generated analysis more directly
 - Adjust the query or result
@@ -128,9 +128,9 @@ Use **manual mode** when you want to:
 
 A reliable pattern is:
 
-1. Start in AI/chat mode
+1. Start in chat
 2. Review the first answer
-3. Switch to manual mode
+3. Edit the SQL in the SQL panel
 4. Refine the output until it looks right
 
 ## 5. Tweak the visual
@@ -152,7 +152,7 @@ When you have something worth keeping, save it to a dashboard.
 A typical flow is:
 
 1. Create an analysis in chat
-2. Refine it in manual mode if needed
+2. Edit the SQL or tweak the visual if needed
 3. Choose the visual you want
 4. Add that visual to a dashboard
 5. Open the dashboard and continue organizing your views

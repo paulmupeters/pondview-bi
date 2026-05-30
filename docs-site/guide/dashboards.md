@@ -16,7 +16,7 @@ Use dashboards when you want to:
 A good rule of thumb is:
 
 - Use **chat** for exploration
-- Use **manual mode** for refinement
+- Use the **SQL panel** for refinement
 - Use **dashboards** for the results you want to keep
 
 ## The fastest way to create a dashboard
@@ -27,7 +27,7 @@ The most common flow looks like this:
 2. Set up your AI provider
 3. Ask a question in chat
 4. Review the result
-5. Switch to manual mode if you want more control
+5. Edit the SQL if you want more control
 6. Tweak the visual so it looks the way you want
 7. Add it to a dashboard
 
@@ -46,13 +46,13 @@ For example:
 
 Start broad, then refine. Once Pondview gives you a result that is useful, you can decide whether to keep it as-is or adjust it before saving it.
 
-## Switch to manual mode to refine the result
+## Edit the SQL to refine the result
 
 Chat is usually the quickest way to get to a first answer, but it does not need to be the final one.
 
-If you want more control, use the mode switch in the prompt area to move from **chat/AI mode** to **manual mode**.
+Every analysis cell includes a SQL panel next to the result. Expand it to view, edit, and rerun the query whenever you want more control.
 
-Manual mode is helpful when you want to:
+Editing the SQL is helpful when you want to:
 
 - Refine the generated analysis
 - Adjust the result before saving it
@@ -63,7 +63,7 @@ A practical workflow is:
 
 1. Ask the question in chat
 2. Review the response
-3. Switch to manual mode
+3. Open the SQL panel and edit the query
 4. Make the result clearer or more focused
 5. Save the final visual to a dashboard
 
@@ -189,7 +189,7 @@ Here is a realistic end-to-end flow:
 2. Configure your AI provider
 3. Ask: "Show monthly revenue and top 10 products"
 4. Review the response in chat
-5. Switch to manual mode to refine the result
+5. Edit the SQL to refine the result
 6. Turn the monthly revenue result into a chart
 7. Save that chart to a dashboard
 8. Add a KPI card for total revenue

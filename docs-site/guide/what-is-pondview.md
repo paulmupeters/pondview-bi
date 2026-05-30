@@ -1,12 +1,12 @@
 # What Pondview Is
 
-Pondview is an AI-assisted analytics workspace for exploring data, creating visuals, and saving the results you want to keep.
+Pondview is an AI-assisted analytics workspace for exploring data and creating visuals.
 
-It is designed to help you go from a business question to something useful quickly:
+It is designed to help you go from a business question to something useful quickly. So you can easily:
 
 - Ask a question in natural language
 - Review the result as a table, chart, or card
-- Refine it yourself when you want more control
+- Refine the data/visual
 - Save the result to a dashboard
 
 ## What Pondview helps you do
@@ -16,16 +16,28 @@ You can use Pondview to:
 - Explore business data without starting from scratch in SQL
 - Import files such as CSV, Parquet, XLSX, and XLS
 - Connect supported sources such as Postgres, MySQL, SQLite, and MotherDuck
-- Work locally with browser-based DuckDB or with a Bridge-backed runtime
+- Work locally with browser-based DuckDB or with the standard DuckDB runtime
 - Build dashboards from the analyses that matter
+
+## Built on DuckDB
+
+Pondview is built on top of [DuckDB](https://duckdb.org/), the fast in-process analytical database. That means you do not need a data warehouse or a running server to get going, Pondview can query your data directly.
+
+It also means you can point Pondview at an existing DuckDB file and start creating visuals from it right away. If you have a `.duckdb` file, you can spin up the local runtime and explore it:
+
+```bash
+pondview start --database path/to/your.duckdb
+```
+
+From there you can ask questions, build charts, and save dashboards against the tables already in your file.
 
 ## A simple mental model
 
 The easiest way to think about Pondview is:
 
-- **Chat** helps you get to a first answer quickly
-- **Manual mode** helps you inspect and refine that answer
-- **Dashboards** help you keep and organize the results you want to revisit
+- **Chat** use natural language to get to a first answer quickly
+- **SQL** view and edit the underlying query at any time
+- **Dashboards** save visuals and keep the results you want to revisit
 
 ## Who this is for
 
@@ -35,4 +47,4 @@ Pondview is a good fit if you want to:
 - Work with local files or connected data sources
 - Move from exploration to reusable reporting in the same workspace
 
-You do not need to understand DuckDB internals or the full runtime architecture before getting value from the app. Continue with [Getting Started](/guide/getting-started) when you are ready to try the product flow.
+You do not need to understand DuckDB internals or the full runtime architecture before getting value from the app. Continue with the [First steps](/guide/getting-started) when you are ready to try the product flow.

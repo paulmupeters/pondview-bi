@@ -37,7 +37,7 @@ describe("runHomepageExampleCommand", () => {
     const calls: string[] = [];
 
     await runHomepageExampleCommand({
-      command: "Show me trends of unicorns over the year in China",
+      command: "Show me trends of unicorns founded over the years in China",
       backendPreference: "duckdb-wasm",
       ensureSampleData: async () => {
         calls.push("seed");
@@ -55,7 +55,7 @@ describe("runHomepageExampleCommand", () => {
 
     expect(calls).toEqual([
       "seed",
-      "submit:Show me trends of unicorns over the year in China",
+      "submit:Show me trends of unicorns founded over the years in China",
     ]);
   });
 
@@ -63,7 +63,7 @@ describe("runHomepageExampleCommand", () => {
     const calls: string[] = [];
 
     await runHomepageExampleCommand({
-      command: "Compare revenue across different industries",
+      command: "Compare total unicorn valuation across countries",
       backendPreference: "bridge",
       ensureSampleData: async () => {
         calls.push("seed");
@@ -81,7 +81,7 @@ describe("runHomepageExampleCommand", () => {
 
     expect(calls).toEqual([
       "seed",
-      "submit:Compare revenue across different industries",
+      "submit:Compare total unicorn valuation across countries",
     ]);
   });
 
@@ -92,7 +92,7 @@ describe("runHomepageExampleCommand", () => {
 
     await expect(
       runHomepageExampleCommand({
-        command: "Create a dashboard for financial metrics",
+        command: "Create a bar chart of unicorn valuations by country",
         backendPreference: "bridge",
         ensureSampleData: async () => {
           throw new Error("network down");

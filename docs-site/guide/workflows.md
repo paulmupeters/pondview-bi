@@ -2,10 +2,10 @@
 
 Most people use Pondview in two connected workflows:
 
-- Chat and manual mode for analysis
+- Chat and SQL editing for analysis
 - Dashboards for the results worth keeping
 
-## Workflow 1: Chat and manual mode
+## Workflow 1: Chat and SQL refinement
 
 Use this when you are exploring a question or trying to get to a first answer quickly.
 
@@ -25,21 +25,21 @@ Good examples:
 - "What changed most this week?"
 - "Which customers drove the increase?"
 
-### Move to manual mode when needed
+### Edit the SQL when you need more control
 
-Manual mode is useful once you know roughly what you want and need more control.
+Every analysis cell includes a SQL panel alongside chat. You can expand it at any time to view, edit, and rerun the query.
 
 Use it when you want to:
 
 - Refine the analysis
-- Inspect the output more directly
+- Inspect the generated SQL more directly
 - Adjust how the result is shown
 
 The practical pattern is:
 
 1. Start in chat
 2. Get to a promising first answer
-3. Switch to manual mode
+3. Open the SQL panel and edit the query
 4. Refine the final result
 
 ## Workflow 2: Dashboards
@@ -55,22 +55,10 @@ Dashboards are best for:
 Typical flow:
 
 1. Create an analysis in chat
-2. Refine it in manual mode if needed
+2. Edit the SQL if needed
 3. Choose the clearest visual
 4. Add it to a dashboard
 5. Repeat as new questions come up
-
-## A good beginner workflow
-
-If you are not sure how to use the product yet, start here:
-
-1. Import one file
-2. Configure your AI provider
-3. Ask one simple question
-4. Refine the answer in manual mode
-5. Save one useful chart or KPI card to a dashboard
-
-That is enough to learn the main product loop.
 
 ## When to stay in chat
 

@@ -12,9 +12,9 @@ Yes. You can upload files such as CSV, Parquet, XLSX, and XLS, or connect suppor
 
 Yes, depending on your runtime setup. Pondview can work with DuckDB-backed runtimes, including the local browser runtime and the Pondview Bridge runtime.
 
-## What is the difference between chat and manual mode?
+## How does chat relate to SQL?
 
-Chat helps you get to a first answer quickly with AI assistance. Manual mode gives you more direct control when you want to refine or inspect the result yourself.
+Chat helps you get to a first answer quickly with AI assistance. Every analysis cell also includes a SQL panel where you can view, edit, and rerun the underlying query at any time.
 
 ## When should I use dashboards?
 
@@ -22,7 +22,7 @@ Use dashboards for results you want to keep, revisit, or organize into a reusabl
 
 ## Do I need to understand SQL first?
 
-No. You can start with natural-language questions. Manual mode and the deeper guide pages are there if you want more control later.
+No. You can start with natural-language questions. The SQL panel and the deeper guide pages are there if you want more control later.
 
 ## Where are my settings stored?
 
