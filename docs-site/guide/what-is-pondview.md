@@ -23,7 +23,7 @@ You can use Pondview to:
 
 Pondview is built on top of [DuckDB](https://duckdb.org/), the fast in-process analytical database. That means you do not need a data warehouse or a running server to get going, Pondview can query your data directly.
 
-It also means you can point Pondview at an existing DuckDB file and start creating visuals from it right away. If you have a `.duckdb` file, you can spin up the local runtime and explore it:
+It also means you can point Pondview at an existing DuckDB file and start creating visuals from it right away. Put your `.duckdb` file in a folder, run `pondview start` from that folder, and Pondview detects it automatically when there is a single file at the folder root. You can also open a specific file explicitly:
 
 ```bash
 pondview start --database path/to/your.duckdb

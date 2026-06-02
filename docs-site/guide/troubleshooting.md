@@ -22,6 +22,29 @@ Possible causes:
 
 If you are connecting Postgres, MySQL, SQLite, or MotherDuck, check the runtime in **Settings** and review [SQL Runtime Backends](/guide/sql-runtime-backends).
 
+## The local CLI is not opening or connecting
+
+The local app normally runs at `http://127.0.0.1:17817`.
+
+Try these checks:
+
+```bash
+pondview doctor
+pondview start --no-open
+pondview stop
+pondview start
+```
+
+Use `pondview doctor` to check whether the Bridge API is reachable. Use `pondview stop` when an old local Bridge process may still be running, then start it again.
+
+If you are using a different port, pass the same port to each command:
+
+```bash
+pondview doctor --url http://127.0.0.1:17818
+pondview stop --port 17818
+pondview start --port 17818
+```
+
 ## My uploaded file is missing or not showing up
 
 Try:

@@ -44,12 +44,12 @@ MotherDuck uses `dbIdentifier`-based querying (`md:...`) through `runQuery(...)`
 Quack Remote DuckDB attaches a remote DuckDB server over the Quack protocol:
 
 ```sql
-INSTALL quack FROM core_nightly;
+INSTALL quack;
 LOAD quack;
 ATTACH 'quack:host:9494' AS remote (TYPE quack, TOKEN '...');
 ```
 
-Quack is a DuckDB beta feature that currently requires DuckDB v1.5.2 or newer in the active remote runtime. Use Bridge for Quack connections when possible so the Quack token is stored in the Bridge secret store instead of browser-visible state.
+Quack currently requires DuckDB v1.5.2 or newer in the active remote runtime. Use Bridge for Quack connections when possible so the Quack token is stored in the Bridge secret store instead of browser-visible state.
 
 ## Custom CLI sources
 
@@ -116,6 +116,6 @@ DuckDB WASM does not have this server-side boundary. Do not use WASM for credent
 ## Known limitations
 
 - Source connection discovery requires a remote runtime; it cannot run in pure WASM mode.
-- Quack support depends on DuckDB's beta `quack` extension from `core_nightly`; protocol details may change before DuckDB v2.0.
+- Quack support depends on the DuckDB `quack` extension being available in the active runtime.
 - Schema table preview is intentionally limited in the dialog, but the persisted schema stores the full table list.
 - Removing a source only does best-effort remote detach; persisted connection metadata is always removed locally.

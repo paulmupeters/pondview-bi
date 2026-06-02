@@ -2,7 +2,7 @@
 
 DuckDB-powered BI for AI-assisted analysis, SQL, charts, and dashboards in one workspace.
 
-This README is for repository development. For product setup and usage, see the [Pondview Guide](./docs-site/guide/index.md).
+This README is for repository development. For product setup and usage, see the [Pondview Guide](./docs-site/index.md).
 
 ## Repository development
 
@@ -145,7 +145,7 @@ localStorage.setItem("pondview:debug:notebook-controller", "1");
 
 ## Documentation
 
-User documentation and product reference live in [`docs-site/guide`](./docs-site/guide/index.md).
+User documentation and product reference live in [`docs-site`](./docs-site/index.md).
 
 When changing setup, user-visible behavior, supported runtimes, connected sources, dashboards, or AI configuration, update the docs and run:
 

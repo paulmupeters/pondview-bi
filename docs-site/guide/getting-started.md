@@ -1,26 +1,10 @@
 # Getting Started
 
-This guide covers the fastest path to your first useful result in Pondview.
+This guide gets you from a fresh install to your first useful result.
 
 ## The shortest path
 
-1. Add an AI key in **Settings**
-2. Import data or connect a source
-3. Ask a question in chat
-4. Refine the result manually if needed
-5. Save the result to a dashboard
-
-## Before you start
-
-You will need:
-
-- Access to the Pondview app
-- An API key for the AI provider you want to use
-- Some data to work with
-
-## Run Pondview locally
-
-For most local use, install the Pondview CLI and let it start both the local UI and Bridge runtime:
+For most local use, start here:
 
 ```bash
 npm install -g @pondview/cli
@@ -33,9 +17,68 @@ Or run it without installing globally:
 npx @pondview/cli start
 ```
 
-The published CLI runs on Node.js 20 or newer. By default, `pondview start` serves the bundled app and bridge API at `http://127.0.0.1:17817`, then opens it in your browser.
+The published CLI runs on Node.js 20 or newer. `pondview start` serves the local app and Bridge API at `http://127.0.0.1:17817`, then opens Pondview in your browser.
 
-Use a DuckDB file or project directory when you want Pondview to work against local files. When you run `pondview` from inside a folder, it automatically detects a DuckDB file, but you can also specify one explicitly:
+Once the app opens:
+
+1. Add an AI key in **Settings** if you want to use chat
+2. Import data, connect a source, or open an existing DuckDB file
+3. Ask a question in chat, or write SQL manually
+4. Refine the result
+5. Save useful results to a dashboard
+
+### Already have a DuckDB file?
+
+If your tables already live in a `.duckdb` file, that is usually the fastest way in:
+
+```bash
+cd path/to/folder-with-your-duckdb-file
+pondview start
+```
+
+On first launch, Pondview detects `.duckdb` files in that folder and offers to open yours. When there is exactly one `.duckdb` file in the folder, Pondview selects it automatically. If you have several, pick the one you want on the startup screen.
+
+You can also point at a specific file:
+
+```bash
+pondview start --database ./analytics.duckdb
+```
+
+Only files in the project folder root are detected (not nested subfolders). After the database is open, you can query existing tables immediately without importing CSVs or connecting another source.
+
+### Starting without a DuckDB file
+
+1. Run `pondview start`
+2. Add an AI key in **Settings** if you want chat-assisted analysis
+3. Import data or connect a source
+4. Ask a question in chat, or start from SQL
+5. Refine the result manually if needed
+6. Save the result to a dashboard
+
+## Before you start
+
+You will need:
+
+- Access to the Pondview app
+- Some data to work with
+- An API key for the AI provider you want to use, if you want chat-assisted analysis
+
+## What works without AI?
+
+AI is only required for the chat workflow. Without an AI key, you can still:
+
+- Start Pondview locally
+- Import CSV or Parquet files into DuckDB WASM
+- Open an existing DuckDB file through the CLI
+- Run and edit SQL manually
+- Review tables, charts, and cards created from SQL workflows
+- Save useful results to dashboards
+
+Add an AI key when you want Pondview to generate analyses from natural-language prompts.
+
+## Run Pondview locally
+
+When you run `pondview start` from a folder, Pondview scans that folder for `.duckdb` files and uses them as your data source on first launch. You can also pass flags explicitly:
 
 ```bash
 pondview start --database ./analytics.duckdb
@@ -88,16 +131,13 @@ The current Connect Data flow supports:
 
 Read more in [Connected Data Sources](/guide/connected-data-sources).
 
-### Option C: Use data that already exists in DuckDB
+### Option C: Use an existing DuckDB file (fastest with the CLI)
 
-If your workflow already uses a DuckDB database, Pondview can work with DuckDB-backed runtimes as well.
+If you already have a `.duckdb` file with your tables, use the [DuckDB file quick start](#already-have-a-duckdb-file) above: run `pondview start` from that folder and open the detected database.
 
-In practice this usually means one of these setups:
+This uses the Pondview Bridge runtime, so queries run against your file directly. You do not need to re-import the same data as CSV or Parquet.
 
-- You are using the local DuckDB/WASM runtime for browser-local work
-- You are using the Pondview Bridge runtime with access to your DuckDB data
-
-That makes it possible to work with data that already lives in DuckDB instead of re-importing everything as files.
+For browser-only work without the CLI, you can still use the DuckDB/WASM runtime, but opening an existing file on disk is simplest through `pondview start`.
 
 ## 3. Ask your first question
 

@@ -47,9 +47,22 @@ export default defineConfig({
             link: "/guide/uploads-and-browser-storage",
           },
           { text: "SQL Runtime Backends", link: "/guide/sql-runtime-backends" },
+        ],
+      },
+      {
+        text: "CLI & Projects",
+        items: [{ text: "Pondview CLI", link: "/guide/cli" }],
+      },
+      {
+        text: "Architecture & Reference",
+        items: [
           {
             text: "Workspace Persistence",
             link: "/guide/workspace-persistence",
+          },
+          {
+            text: "Git-Backed Project Artifacts",
+            link: "/guide/git-backed-project-artifacts",
           },
           {
             text: "DuckDB Extension Connections",
@@ -63,16 +76,6 @@ export default defineConfig({
           {
             text: "Semantic Layer Materialization",
             link: "/guide/semantic-layer-materialization",
-          },
-        ],
-      },
-      {
-        text: "CLI & Projects",
-        items: [
-          { text: "Pondview CLI", link: "/guide/cli" },
-          {
-            text: "Git-Backed Project Artifacts",
-            link: "/guide/git-backed-project-artifacts",
           },
         ],
       },

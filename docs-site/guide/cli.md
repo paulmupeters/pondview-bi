@@ -68,11 +68,15 @@ project root is the directory where the bridge was launched; pass
 published notebooks, and source metadata are written as raw project artifact
 files such as `pondview/...`; bridge metadata lives in `.pondview/project.json`.
 
-When `pondview start` opens an empty folder, the local app asks whether to
-initialize local project files or keep working from browser storage. Initializing
-creates `pondview/project.json`, `pondview.sources.local.json`, bridge metadata,
-and the local DuckDB runtime file. Browser mode leaves the folder untouched and
-uses the existing browser IndexedDB workflow for that project folder.
+When `pondview start` opens a folder for the first time, the local app checks
+for `.duckdb` files in that folder's root. If exactly one is found, you get a
+quick-start screen to open it as your primary database. If you pass
+`--database <file.duckdb>`, that file is used instead. With no DuckDB file
+present, the app asks whether to initialize local project files or keep working
+from browser storage. Initializing creates `pondview/project.json`,
+`pondview.sources.local.json`, bridge metadata, and the local DuckDB runtime
+file. Browser mode leaves the folder untouched and uses the existing browser
+IndexedDB workflow for that project folder.
 
 ### Client commands
 
@@ -234,13 +238,3 @@ and `X-API-Key: <token>` so CLI clients and the browser app can use the same
 runtime.
 
 Bridge-managed secrets are stored in `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json` with restrictive filesystem permissions. Use `PONDVIEW_SECRETS_PATH` to override the file path.
-
-## TODO: future improvements
-
-- TODO: Add `pondview ui update` or a similar opt-in command if hosted asset
-  syncing becomes useful later.
-- TODO: Add project commands such as `pondview project inspect`,
-  `pondview project run`, and `pondview project start`.
-- TODO: Add file import commands for CSV and Parquet staging, for example
-  `pondview import ./customers.csv --table uploads.customers`.
-- TODO: Add persistent local source binding files for project handoff.
