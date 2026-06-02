@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, extname, join, resolve } from "node:path";
 import {
   type DuckDBConnection,
   DuckDBInstance,
@@ -9,6 +11,7 @@ import {
 import type {
   BridgeCatalogResponse,
   BridgeColumn,
+  BridgeImportFileResponse,
   BridgeQueryResponse,
   BridgeSecretSource,
   BridgeSource,
@@ -179,6 +182,56 @@ export class DuckDbRuntime {
     return [...this.sources.values()];
   }
 
+  async importFile(input: {
+    fileName: string;
+    bytes: Uint8Array;
+    schemaName: string;
+    tableName: string;
+    xlsxSheet?: string;
+  }): Promise<BridgeImportFileResponse> {
+    const format = getImportFormat(input.fileName);
+    const schemaName = normalizeSqlIdentifier(input.schemaName, "schema");
+    const tableName = normalizeSqlIdentifier(input.tableName, "table");
+    if (format === "xlsx" && !input.xlsxSheet?.trim()) {
+      throw new Error("Select a worksheet before importing an XLSX file.");
+    }
+
+    const tempDir = await mkdtemp(join(tmpdir(), "pondview-import-"));
+    const tempPath = join(tempDir, `input${extname(input.fileName)}`);
+    try {
+      await writeFile(tempPath, input.bytes);
+      const connection = await this.connection();
+      if (format === "xlsx") {
+        await connection.runAndReadAll("INSTALL excel;");
+        await connection.runAndReadAll("LOAD excel;");
+      }
+
+      await connection.runAndReadAll(
+        `CREATE SCHEMA IF NOT EXISTS ${quoteIdentifier(schemaName)};`,
+      );
+      const sourceSql = buildImportSourceSql({
+        format,
+        path: tempPath,
+        xlsxSheet: input.xlsxSheet,
+      });
+      await connection.runAndReadAll(
+        `CREATE OR REPLACE TABLE ${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)} AS SELECT * FROM ${sourceSql};`,
+      );
+      const countResult = await this.query(
+        `SELECT COUNT(*) AS row_count FROM ${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)};`,
+      );
+      const rowCount = Number(countResult.rows.at(0)?.row_count ?? 0);
+      return {
+        schemaName,
+        tableName,
+        rowCount: Number.isFinite(rowCount) ? rowCount : 0,
+        format,
+      };
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }
+
   private findSource(idOrAlias: string): BridgeSource | undefined {
     return [...this.sources.values()].find(
       (source) => source.id === idOrAlias || source.alias === idOrAlias,
@@ -227,6 +280,51 @@ export class DuckDbRuntime {
       },
     );
   }
+}
+
+type ImportFormat = BridgeImportFileResponse["format"];
+
+function getImportFormat(fileName: string): ImportFormat {
+  const extension = extname(fileName).toLowerCase();
+  if (extension === ".csv") {
+    return "csv";
+  }
+  if (extension === ".parquet") {
+    return "parquet";
+  }
+  if (extension === ".xlsx") {
+    return "xlsx";
+  }
+  if (extension === ".xls") {
+    throw new Error("Legacy .xls files are not supported. Use .xlsx instead.");
+  }
+  throw new Error("Only CSV, Parquet, and XLSX files can be imported.");
+}
+
+function buildImportSourceSql(options: {
+  format: ImportFormat;
+  path: string;
+  xlsxSheet?: string;
+}): string {
+  if (options.format === "csv") {
+    return `read_csv_auto(${quoteString(options.path)})`;
+  }
+  if (options.format === "parquet") {
+    return `read_parquet(${quoteString(options.path)})`;
+  }
+  return `read_xlsx(${quoteString(options.path)}, sheet = ${quoteString(
+    options.xlsxSheet ?? "",
+  )})`;
+}
+
+function normalizeSqlIdentifier(value: string, label: string): string {
+  const trimmed = value.trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
+    throw new Error(
+      `Import ${label} name must start with a letter or underscore and contain only letters, numbers, and underscores.`,
+    );
+  }
+  return trimmed;
 }
 
 function mergeAttachOptions(

@@ -12,6 +12,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   bridgeAttachSourceRequestSchema,
+  bridgeImportFileRequestSchema,
   bridgeProjectDeleteFilesRequestSchema,
   bridgeProjectInitRequestSchema,
   bridgeProjectReplaceFilesRequestSchema,
@@ -236,7 +237,7 @@ export async function handleBridgeRequest(
         query: true,
         catalog: true,
         attachDuckDb: true,
-        importFiles: false,
+        importFiles: true,
         projects: true,
         secrets: true,
         ai: Boolean(secrets.getAi()),
@@ -329,6 +330,19 @@ export async function handleBridgeRequest(
       const input = bridgeAttachSourceRequestSchema.parse(await request.json());
       await runtime.attachDuckDb(input);
       return json({ sources: runtime.listSources() });
+    }
+
+    if (request.method === "POST" && url.pathname === "/imports/file") {
+      const input = bridgeImportFileRequestSchema.parse(await request.json());
+      return json(
+        await runtime.importFile({
+          fileName: input.fileName,
+          bytes: Uint8Array.from(Buffer.from(input.bytesBase64, "base64")),
+          schemaName: input.schemaName,
+          tableName: input.tableName,
+          xlsxSheet: input.xlsxSheet,
+        }),
+      );
     }
 
     if (request.method === "GET" && url.pathname === "/secrets/status") {
@@ -515,6 +529,7 @@ function shouldProxyToBridge(request: Request): boolean {
     url.pathname === "/ai/chat" ||
     url.pathname === "/cancel" ||
     url.pathname === "/sources" ||
+    url.pathname === "/imports/file" ||
     url.pathname === "/secrets/status" ||
     url.pathname === "/secrets/ai" ||
     url.pathname === "/secrets/s3-backup" ||

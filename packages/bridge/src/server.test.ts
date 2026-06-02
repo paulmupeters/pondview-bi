@@ -3,12 +3,14 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { strToU8, zipSync } from "fflate";
 import {
   type BridgeServerHandle,
   type BridgeServerOptions,
@@ -282,6 +284,137 @@ describe("bridge server modes", () => {
     );
   });
 
+  test("imports CSV files into the bridge runtime and cleans up temp files", async () => {
+    const beforeTempDirs = listImportTempDirs();
+    const server = await startTrackedServer();
+
+    const imported = await fetch(`${server.url}/imports/file`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fileName: "customers.csv",
+        bytesBase64: Buffer.from("id,name\n1,Ada\n2,Grace\n").toString(
+          "base64",
+        ),
+        schemaName: "uploads",
+        tableName: "customers",
+      }),
+    });
+
+    expect(imported.status).toBe(200);
+    expect(await imported.json()).toMatchObject({
+      schemaName: "uploads",
+      tableName: "customers",
+      rowCount: 2,
+      format: "csv",
+    });
+
+    const query = await fetch(`${server.url}/query`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        sql: "SELECT name FROM uploads.customers ORDER BY id;",
+      }),
+    });
+    expect(await query.json()).toMatchObject({
+      rows: [{ name: "Ada" }, { name: "Grace" }],
+      rowCount: 2,
+    });
+    expect(listImportTempDirs()).toEqual(beforeTempDirs);
+  });
+
+  test("imports Parquet files into the bridge runtime", async () => {
+    const tempDir = createTempDir();
+    const parquetPath = join(tempDir, "orders.parquet");
+    const server = await startTrackedServer();
+
+    const copy = await fetch(`${server.url}/query`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        sql: `COPY (SELECT 3 AS id, 'Lin' AS name) TO '${parquetPath.replaceAll("'", "''")}' (FORMAT PARQUET);`,
+      }),
+    });
+    expect(copy.status).toBe(200);
+
+    const imported = await fetch(`${server.url}/imports/file`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fileName: "orders.parquet",
+        bytesBase64: readFileSync(parquetPath).toString("base64"),
+        schemaName: "uploads",
+        tableName: "orders",
+      }),
+    });
+
+    expect(imported.status).toBe(200);
+    expect(await imported.json()).toMatchObject({
+      schemaName: "uploads",
+      tableName: "orders",
+      rowCount: 1,
+      format: "parquet",
+    });
+  });
+
+  test("imports a selected XLSX worksheet into the bridge runtime", async () => {
+    const server = await startTrackedServer();
+
+    const imported = await fetch(`${server.url}/imports/file`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fileName: "workbook.xlsx",
+        bytesBase64: Buffer.from(createXlsxFixture()).toString("base64"),
+        schemaName: "uploads",
+        tableName: "workbook",
+        xlsxSheet: "Orders",
+      }),
+    });
+
+    expect(imported.status).toBe(200);
+    expect(await imported.json()).toMatchObject({
+      schemaName: "uploads",
+      tableName: "workbook",
+      rowCount: 1,
+      format: "xlsx",
+    });
+
+    const query = await fetch(`${server.url}/query`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        sql: "SELECT name FROM uploads.workbook ORDER BY id;",
+      }),
+    });
+    expect(await query.json()).toMatchObject({
+      rows: [{ name: "Ada" }],
+      rowCount: 1,
+    });
+  });
+
+  test("rejects legacy XLS imports with a clear message", async () => {
+    const server = await startTrackedServer();
+
+    const imported = await fetch(`${server.url}/imports/file`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fileName: "customers.xls",
+        bytesBase64: Buffer.from("legacy").toString("base64"),
+        schemaName: "uploads",
+        tableName: "customers",
+      }),
+    });
+
+    expect(imported.status).toBe(400);
+    expect(await imported.json()).toMatchObject({
+      error: {
+        message: "Legacy .xls files are not supported. Use .xlsx instead.",
+      },
+    });
+  });
+
   test("detects root-level DuckDB files for startup choices", async () => {
     const projectDir = createTempDir();
     mkdirSync(join(projectDir, "nested"));
@@ -419,6 +552,18 @@ describe("bridge server modes", () => {
       body: JSON.stringify({ sql: "SELECT 2 AS ok;" }),
     });
     expect(apiKey.status).toBe(200);
+
+    const importResponse = await fetch(`${server.url}/imports/file`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fileName: "blocked.csv",
+        bytesBase64: Buffer.from("id\n1\n").toString("base64"),
+        schemaName: "uploads",
+        tableName: "blocked",
+      }),
+    });
+    expect(importResponse.status).toBe(401);
   });
 
   test("CORS preflight allows documented auth headers and secret mutations", async () => {
@@ -674,6 +819,61 @@ function createTempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "pondview-runtime-"));
   tempDirs.push(dir);
   return dir;
+}
+
+function listImportTempDirs(): string[] {
+  return readdirSync(tmpdir())
+    .filter((entry) => entry.startsWith("pondview-import-"))
+    .sort();
+}
+
+function createXlsxFixture(): Uint8Array {
+  return zipSync({
+    "[Content_Types].xml": strToU8(
+      [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+        '<Default Extension="xml" ContentType="application/xml"/>',
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+        '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>',
+        "</Types>",
+      ].join(""),
+    ),
+    "_rels/.rels": strToU8(
+      [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
+        "</Relationships>",
+      ].join(""),
+    ),
+    "xl/workbook.xml": strToU8(
+      [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
+        '<sheets><sheet name="Orders" sheetId="1" r:id="rId1"/></sheets>',
+        "</workbook>",
+      ].join(""),
+    ),
+    "xl/_rels/workbook.xml.rels": strToU8(
+      [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>',
+        "</Relationships>",
+      ].join(""),
+    ),
+    "xl/worksheets/sheet1.xml": strToU8(
+      [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>',
+        '<row r="1"><c r="A1" t="inlineStr"><is><t>id</t></is></c><c r="B1" t="inlineStr"><is><t>name</t></is></c></row>',
+        '<row r="2"><c r="A2"><v>1</v></c><c r="B2" t="inlineStr"><is><t>Ada</t></is></c></row>',
+        "</sheetData></worksheet>",
+      ].join(""),
+    ),
+  });
 }
 
 function createStaticDir(): string {

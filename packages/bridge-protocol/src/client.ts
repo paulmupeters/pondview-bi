@@ -3,6 +3,8 @@ import {
   type BridgeCapabilitiesResponse,
   type BridgeCatalogResponse,
   type BridgeHealthResponse,
+  type BridgeImportFileRequest,
+  type BridgeImportFileResponse,
   type BridgeProjectDatabasePathPickResponse,
   type BridgeProjectDatabasePathsResponse,
   type BridgeProjectDeleteFilesRequest,
@@ -30,6 +32,7 @@ import {
   bridgeCatalogResponseSchema,
   bridgeErrorResponseSchema,
   bridgeHealthResponseSchema,
+  bridgeImportFileResponseSchema,
   bridgeProjectDatabasePathPickResponseSchema,
   bridgeProjectDatabasePathsResponseSchema,
   bridgeProjectFilesResponseSchema,
@@ -174,6 +177,15 @@ export class BridgeClient {
       bridgeSourcesResponseSchema,
       { method: "DELETE" },
     );
+  }
+
+  importFile(
+    input: BridgeImportFileRequest,
+  ): Promise<BridgeImportFileResponse> {
+    return this.request("/imports/file", bridgeImportFileResponseSchema, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   }
 
   secretsStatus(): Promise<BridgeSecretsStatusResponse> {

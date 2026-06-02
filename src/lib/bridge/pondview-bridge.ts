@@ -1,5 +1,7 @@
 import {
   type BridgeCapabilitiesResponse,
+  type BridgeImportFileRequest,
+  type BridgeImportFileResponse,
   type BridgeProjectDatabasePathPickResponse,
   type BridgeProjectDatabasePathsResponse,
   type BridgeProjectDeleteFilesRequest,
@@ -16,6 +18,7 @@ import {
   type BridgeSourcesResponse,
   bridgeCapabilitiesResponseSchema,
   bridgeConfigResponseSchema,
+  bridgeImportFileResponseSchema,
   bridgeProjectDatabasePathPickResponseSchema,
   bridgeProjectDatabasePathsResponseSchema,
   bridgeProjectFilesResponseSchema,
@@ -686,6 +689,14 @@ export async function listBridgeSources(
     throw new Error(await parseError(response));
   }
   return bridgeSourcesResponseSchema.parse(await response.json());
+}
+
+export async function importBridgeFile(
+  input: BridgeImportFileRequest,
+  signal?: AbortSignal,
+): Promise<BridgeImportFileResponse> {
+  const response = await postBridgeJson("/imports/file", input, signal);
+  return bridgeImportFileResponseSchema.parse(response);
 }
 
 export async function saveBridgeSourceSecret(
