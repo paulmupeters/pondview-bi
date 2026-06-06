@@ -7,13 +7,25 @@ import {
   isWasmCompatibleDatabase,
   normalizeQuackUriInput,
   resolveQuackDisableSsl,
+  shouldSelectWorksheetBeforeImport,
   shouldSkipExtensionLoadForWasm,
 } from "@/components/connect-data-dialog";
 
 describe("ConnectDataDialog runtime source support", () => {
   test("allows HTTPFS in the WASM picker", () => {
+    expect(isWasmCompatibleDatabase("local-file")).toBe(true);
     expect(isWasmCompatibleDatabase("httpfs")).toBe(true);
     expect(isWasmCompatibleDatabase("quack")).toBe(false);
+  });
+
+  test("requires worksheet selection only for Bridge XLSX imports", () => {
+    expect(shouldSelectWorksheetBeforeImport("workbook.xlsx", "bridge")).toBe(
+      true,
+    );
+    expect(
+      shouldSelectWorksheetBeforeImport("workbook.xlsx", "duckdb-wasm"),
+    ).toBe(false);
+    expect(shouldSelectWorksheetBeforeImport("data.csv", "bridge")).toBe(false);
   });
 
   test("keeps extension-backed SQL databases off the WASM-only picker", () => {
