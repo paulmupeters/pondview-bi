@@ -124,21 +124,19 @@ pondview query --file ./dashboard-metadata.sql --database ./analytics.duckdb
 checkout and should not be committed.
 
 ```bash
-pondview source add ga4 \
-  --type custom \
-  --identifier ga4:property-id \
-  --as ga4 \
-  --extension ga4 \
-  --attach-type ga4 \
-  --readonly
+pondview source add google-sheet \
+  --sql "INSTALL gsheets FROM community; LOAD gsheets; CREATE OR REPLACE VIEW sheet_sales AS SELECT * FROM read_gsheet('https://docs.google.com/spreadsheets/d/.../edit', sheet = 'Sheet1', range = 'A:Z');"
+
+pondview source add snowflake \
+  --sql "INSTALL snowflake FROM community; LOAD snowflake; ATTACH '' AS sf (TYPE snowflake, SECRET my_snowflake, READ_ONLY);"
 
 pondview source list
-pondview source remove ga4
+pondview source remove google-sheet
 ```
 
-Custom sources must still be DuckDB attach-compatible. The CLI stores typed
-attachment metadata; Pondview builds the `INSTALL`, `LOAD`, and `ATTACH`
-statements from that metadata instead of running arbitrary setup SQL.
+Custom sources are SQL-backed. The CLI stores raw setup SQL, and Pondview runs it
+before using the source. The setup SQL can prepare views, tables, secrets, table
+functions, or attached catalogs.
 
 ### Dashboard maintenance
 
@@ -198,7 +196,7 @@ that port.
 | `--port <port>` | `start`, `stop`, client commands | Port for the local bridge. Defaults to `17817`. |
 | `--database <file>` | `start`, client autostart | Opens a DuckDB file as the bridge's primary database instead of using an in-memory database. |
 | `--project-dir <dir>` | `start`, client autostart | Filesystem project root for raw Pondview artifacts. Defaults to the launch directory. |
-| `--readonly` | `attach`, `source add` | Attaches a source with DuckDB `READ_ONLY`. |
+| `--readonly` | `attach` | Attaches a source with DuckDB `READ_ONLY`. |
 | `--token <token>` | all bridge/client commands | Requires or sends a bridge auth token. |
 | `--token-env <name>` | all bridge/client commands | Reads the bridge auth token from an environment variable. |
 | `--url <url>` | client commands | Uses an explicit bridge URL and disables autostart. |

@@ -70,8 +70,8 @@ That means external caching is an execution concern, not a persistence concern.
 ## Adding New Connectors
 
 Built-in UI connectors are added in code. Project-local custom sources can be
-added with `pondview source add` when the source is already DuckDB
-attach-compatible.
+added with `pondview source add` by storing setup SQL that prepares a queryable
+view, table, table function, secret, or attached catalog.
 
 To support another external backend in the UI:
 

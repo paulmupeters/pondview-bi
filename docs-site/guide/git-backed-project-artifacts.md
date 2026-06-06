@@ -309,18 +309,12 @@ Example:
       "dbIdentifier": "postgres://analytics@warehouse/app",
       "catalogContext": "public"
     },
-    "ga4": {
+    "google-sheet": {
       "runtimeBackend": "bridge",
       "catalogContext": "main",
       "connection": {
         "type": "custom",
-        "identifier": "ga4:property-id",
-        "alias": "ga4",
-        "readOnly": true,
-        "duckdbExtension": "ga4",
-        "attachOptions": {
-          "type": "ga4"
-        }
+        "setupSql": "INSTALL gsheets FROM community; LOAD gsheets; CREATE OR REPLACE VIEW sheet_sales AS SELECT * FROM read_gsheet('https://docs.google.com/spreadsheets/d/.../edit', sheet = 'Sheet1', range = 'A:Z');"
       }
     }
   }

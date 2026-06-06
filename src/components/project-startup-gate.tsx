@@ -944,6 +944,7 @@ export function ProjectStartupGate() {
       runtimeBackend: selection.backend,
       dbIdentifier: selection.dbIdentifier,
       catalogContext: selection.catalogContext,
+      setupSql: null,
     });
     setSqlBackendPreferenceInStorage(selection.backend);
   };

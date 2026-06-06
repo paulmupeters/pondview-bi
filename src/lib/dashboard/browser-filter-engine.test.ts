@@ -653,6 +653,64 @@ describe("browser-filter-engine", () => {
     );
   });
 
+  test("materializes SQL-backed custom sources after running setup SQL", async () => {
+    const setupSql = "CREATE OR REPLACE VIEW sheet_sales AS SELECT 1 AS value;";
+    const runtimeSqlCalls: Array<{
+      sql: string;
+      catalogContext?: string | null;
+    }> = [];
+    const chart = createChart({
+      id: "chart-sheet",
+      sql: "SELECT * FROM sheet_sales",
+      sqlBackend: "bridge",
+      dbIdentifier: "sheet_sales",
+      sourceDescriptor: {
+        kind: "external",
+        runtimeBackend: "bridge",
+        dbIdentifier: "sheet_sales",
+        catalogContext: null,
+        externalType: "custom",
+        connection: {
+          type: "custom",
+          setupSql,
+        },
+      },
+    });
+
+    await executeDashboardChartsWithFilters(
+      {
+        dashboardId: "dashboard-sheet",
+        charts: [chart],
+        dashboardFilters: [],
+        chartFiltersById: {},
+      },
+      {
+        resolveBackend: () => "bridge",
+        resolveRuntimeFingerprint: async () => "bridge:test",
+        readJoinDefs: async () => [],
+        listCharts: async () => [chart],
+        getMaterializationCache: () => new Map(),
+        runRuntimeSql: async (
+          sql: string,
+          _backend: SqlBackend,
+          catalogContext?: string | null,
+        ) => {
+          runtimeSqlCalls.push({ sql, catalogContext });
+          return [];
+        },
+      },
+    );
+
+    expect(runtimeSqlCalls[1]?.sql).toBe(setupSql);
+    expect(
+      runtimeSqlCalls.some((call) =>
+        call.sql.includes(
+          'CREATE OR REPLACE TABLE "pondview_exec"."sheet_sales" AS SELECT * FROM sheet_sales;',
+        ),
+      ),
+    ).toBe(true);
+  });
+
   test("materializes MotherDuck tables through a temporary attachment", async () => {
     const runtimeSqlCalls: Array<{
       sql: string;

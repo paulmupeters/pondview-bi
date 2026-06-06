@@ -21,6 +21,7 @@ export type ProjectRuntimeSelection = {
   runtimeBackend: SqlBackend;
   dbIdentifier: string | null;
   catalogContext: string | null;
+  setupSql: string | null;
 };
 
 type ProjectRuntimeHydrationDeps = {
@@ -71,8 +72,15 @@ export function resolveProjectRuntimeSelection(input: {
     projectId: input.projectId,
     sourceRef,
     runtimeBackend: binding.runtimeBackend,
-    dbIdentifier: normalizeOptionalString(binding.dbIdentifier),
+    dbIdentifier:
+      binding.connection?.type === "custom"
+        ? null
+        : normalizeOptionalString(binding.dbIdentifier),
     catalogContext: normalizeOptionalString(binding.catalogContext),
+    setupSql:
+      binding.connection?.type === "custom"
+        ? normalizeOptionalString(binding.connection.setupSql)
+        : null,
   };
 }
 
@@ -103,6 +111,9 @@ export function getProjectRuntimeSelection(): ProjectRuntimeSelection | null {
       runtimeBackend: parsed.runtimeBackend,
       dbIdentifier: normalizeOptionalString(parsed.dbIdentifier),
       catalogContext: normalizeOptionalString(parsed.catalogContext),
+      setupSql: normalizeOptionalString(
+        typeof parsed.setupSql === "string" ? parsed.setupSql : null,
+      ),
     };
   } catch {
     return null;
@@ -153,6 +164,10 @@ export function getProjectRuntimeDefaultDbIdentifier(): string | undefined {
 
 export function getProjectRuntimeDefaultCatalogContext(): string | null {
   return getProjectRuntimeSelection()?.catalogContext ?? null;
+}
+
+export function getProjectRuntimeDefaultSetupSql(): string | null {
+  return getProjectRuntimeSelection()?.setupSql ?? null;
 }
 
 export async function hydrateProjectRuntimeFromParsedArtifacts(

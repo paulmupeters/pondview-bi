@@ -54,24 +54,27 @@ Quack currently requires DuckDB v1.5.2 or newer in the active remote runtime. Us
 ## Custom CLI sources
 
 Custom sources are configured locally with `pondview source add` or by editing
-`pondview.sources.local.json`. They must still map to a DuckDB-compatible
-attachment: Pondview can install/load an extension and build `ATTACH`, but it
-does not run arbitrary source setup SQL.
+`pondview.sources.local.json`. They are SQL-backed: Pondview runs the configured
+setup SQL before using the source. That SQL can create views, tables, secrets, or
+attached catalogs.
 
-Example:
+Google Sheets example:
 
 ```bash
-pondview source add ga4 \
-  --type custom \
-  --identifier ga4:property-id \
-  --as ga4 \
-  --extension ga4 \
-  --attach-type ga4 \
-  --readonly
+pondview source add google-sheet \
+  --sql "INSTALL gsheets FROM community; LOAD gsheets; CREATE OR REPLACE VIEW sheet_sales AS SELECT * FROM read_gsheet('https://docs.google.com/spreadsheets/d/.../edit', sheet = 'Sheet1', range = 'A:Z');"
 ```
 
-This only works if the active DuckDB runtime can actually install/load the
-configured extension and attach the identifier.
+Attach-compatible extensions can use the same SQL-backed shape. Snowflake
+example:
+
+```bash
+pondview source add snowflake \
+  --sql "INSTALL snowflake FROM community; LOAD snowflake; ATTACH '' AS sf (TYPE snowflake, SECRET my_snowflake, READ_ONLY);"
+```
+
+The active DuckDB runtime must support any extension, secret, table function, or
+attachment used by the setup SQL.
 
 ## What gets stored locally
 

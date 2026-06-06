@@ -179,26 +179,24 @@ describe("project artifact hydration", () => {
     ).toContain('"tableConfig"');
   });
 
-  test("hydrates typed local source connections", () => {
+  test("hydrates SQL-backed local source connections", () => {
+    const setupSql =
+      "INSTALL gsheets FROM community; LOAD gsheets; CREATE OR REPLACE VIEW sessions AS SELECT * FROM read_gsheet('https://docs.google.com/spreadsheets/d/.../edit');";
     const parsed = parseProjectArtifactFileSet([
       jsonFile("pondview/project.json", {
         schemaVersion: 1,
         name: "Custom Source",
-        defaultSourceRef: "ga4",
+        defaultSourceRef: "google-sheet",
       }),
       jsonFile("pondview.sources.local.json", {
         schemaVersion: 1,
         bindings: {
-          ga4: {
+          "google-sheet": {
             runtimeBackend: "bridge",
             catalogContext: "main",
             connection: {
               type: "custom",
-              identifier: "ga4:property",
-              alias: "ga4",
-              readOnly: true,
-              duckdbExtension: "ga4",
-              attachOptions: { type: "ga4" },
+              setupSql,
             },
           },
         },
@@ -207,7 +205,7 @@ describe("project artifact hydration", () => {
         schemaVersion: 1,
         id: "traffic",
         title: "Traffic",
-        sourceRef: "ga4",
+        sourceRef: "google-sheet",
         measures: [],
         visuals: [
           {
@@ -237,17 +235,43 @@ describe("project artifact hydration", () => {
     expect(hydrated.dashboards[0]?.charts[0]?.sourceDescriptor).toMatchObject({
       kind: "external",
       runtimeBackend: "bridge",
-      dbIdentifier: "ga4:property",
+      dbIdentifier: null,
       catalogContext: "main",
       externalType: "custom",
       connection: {
         type: "custom",
-        identifier: "ga4:property",
-        alias: "ga4",
-        readOnly: true,
-        duckdbExtension: "ga4",
-        attachOptions: { type: "ga4" },
+        setupSql,
       },
     });
+  });
+
+  test("rejects old attach-style custom source bindings", () => {
+    expect(() =>
+      parseProjectArtifactFileSet([
+        jsonFile("pondview/project.json", {
+          schemaVersion: 1,
+          name: "Custom Source",
+          defaultSourceRef: "snowflake",
+        }),
+        jsonFile("pondview.sources.local.json", {
+          schemaVersion: 1,
+          bindings: {
+            snowflake: {
+              runtimeBackend: "bridge",
+              catalogContext: "main",
+              connection: {
+                type: "custom",
+                identifier: "snowflake:legacy",
+                alias: "sf",
+                readOnly: true,
+                duckdbExtension: "snowflake",
+                duckdbExtensionRepository: "community",
+                attachOptions: { type: "snowflake" },
+              },
+            },
+          },
+        }),
+      ]),
+    ).toThrow("Custom source connections require setupSql");
   });
 });

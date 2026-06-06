@@ -61,6 +61,7 @@ export const localProjectSourceConnectionSchema = z
     identifier: z.string().trim().min(1).optional(),
     connectionId: z.string().trim().min(1).optional(),
     alias: z.string().trim().min(1).optional(),
+    setupSql: z.string().trim().min(1).optional(),
     readOnly: z.boolean().optional(),
     duckdbExtension: z.string().trim().min(1).optional(),
     duckdbExtensionRepository: z.string().trim().min(1).optional(),
@@ -72,9 +73,36 @@ export const localProjectSourceConnectionSchema = z
       })
       .optional(),
   })
-  .refine((connection) => connection.identifier || connection.connectionId, {
-    message: "Source connection requires identifier or connectionId",
-  });
+  .refine(
+    (connection) =>
+      connection.type === "custom"
+        ? Boolean(connection.setupSql)
+        : Boolean(connection.identifier || connection.connectionId),
+    {
+      message:
+        "Custom source connections require setupSql; non-custom source connections require identifier or connectionId",
+    },
+  )
+  .refine(
+    (connection) => {
+      if (connection.type !== "custom") {
+        return true;
+      }
+      return (
+        connection.identifier === undefined &&
+        connection.connectionId === undefined &&
+        connection.alias === undefined &&
+        connection.readOnly === undefined &&
+        connection.duckdbExtension === undefined &&
+        connection.duckdbExtensionRepository === undefined &&
+        connection.attachOptions === undefined
+      );
+    },
+    {
+      message:
+        "Custom source connections are SQL-backed and cannot include identifier, connectionId, alias, readOnly, duckdbExtension, duckdbExtensionRepository, or attachOptions",
+    },
+  );
 
 export const localProjectSourceBindingSchema = z.object({
   runtimeBackend: z.enum(["duckdb-wasm", "bridge"]),

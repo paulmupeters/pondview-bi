@@ -5,6 +5,7 @@ export interface SourceConnectionConfig {
   /** Opaque key that maps to a credential stored in `.env.local`. */
   connectionId?: string;
   alias?: string;
+  setupSql?: string;
   readOnly?: boolean;
   duckdbExtension?: string;
   duckdbExtensionRepository?: string;
