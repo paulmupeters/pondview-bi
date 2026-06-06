@@ -1,7 +1,6 @@
 # Uploads and Browser Storage
 
-Uploads are stored in your browser workspace. CSV and Parquet files are also
-made available to the local DuckDB runtime so you can query them in Pondview.
+Uploads are browser-first. File metadata is tracked in local storage, binary blobs are persisted in workspace IndexedDB, and supported files are imported into the active runtime when possible.
 
 ## Supported file types and limits
 
@@ -21,8 +20,9 @@ Maximum file size:
 CSV and Parquet files are imported as local DuckDB tables. After import, you can
 query them in the SQL editor and ask the AI to use them in analysis.
 
-Excel files are stored as uploaded files but are not automatically converted into
-DuckDB tables. They remain available as chat attachments.
+Excel files are stored as uploaded files. In DuckDB WASM they remain available
+as chat attachments; in Bridge-backed projects, `.xlsx` files can be imported
+after worksheet selection.
 
 1. Validate extension and size.
 2. Generate `fileId` and metadata entry.
@@ -44,7 +44,7 @@ DuckDB tables. They remain available as chat attachments.
 You can use uploaded files from:
 
 - **Data page**: upload files, review upload status, and see imported table names.
-- **SQL editor**: query imported CSV and Parquet tables.
+- **SQL editor**: query imported CSV, Parquet, and Bridge-imported XLSX tables.
 - **Prompt input**: attach uploaded files to an AI message.
 
 ## Browser storage
@@ -64,5 +64,12 @@ project workflow instead of relying on one browser's uploaded files.
 
 ## Deletion and cleanup
 
-Deleting an uploaded file removes it from the uploaded files list. If the file
-was imported as a local DuckDB table, Pondview also removes that local table.
+`removeUploadedFile(fileId)`:
+
+1. Removes metadata from local storage.
+2. Deletes blob from IndexedDB.
+3. If imported into DuckDB WASM, drops the WASM table and unregisters browser file mapping.
+
+## Server upload routes
+
+Bridge imports use `POST /imports/file`. The bridge writes the uploaded bytes to a temporary file, imports them into DuckDB, and deletes the temporary file after import.

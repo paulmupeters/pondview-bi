@@ -484,7 +484,7 @@ export function SqlCell({
         </form>
       </div>
 
-      <AiResponseBanner ai={ai} showPromptError={aiEnabled} />
+      <AiResponseBanner ai={ai} />
 
       <div
         className={cn(
