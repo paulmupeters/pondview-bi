@@ -1,6 +1,6 @@
 # Uploads and Browser Storage
 
-Uploads are browser-first. File metadata is tracked in local storage, binary blobs are persisted in workspace IndexedDB, and CSV/Parquet files are auto-imported into DuckDB WASM.
+Uploads are browser-first. File metadata is tracked in local storage, binary blobs are persisted in workspace IndexedDB, and supported files are imported into the active runtime when possible.
 
 ## Supported file types and limits
 
@@ -24,16 +24,17 @@ Validation happens in `validateUploadableFile(...)`.
 1. Validate extension and size.
 2. Generate `fileId` and metadata entry.
 3. Store blob in workspace DB (`STORE_UPLOADED_FILE_BLOBS`).
-4. If file is CSV or Parquet, import into DuckDB WASM (`uploads.<table>`).
+4. If the active runtime can import the file, create a table in DuckDB (`uploads.<table>`).
 5. Save metadata entry to local storage (`uploadedFiles`).
 
 ## Import behavior by file type
 
-| Type | Auto-import to DuckDB WASM | Result |
-| --- | --- | --- |
-| CSV | Yes | Stored + imported (`importStatus: imported`) |
-| Parquet | Yes | Stored + imported (`importStatus: imported`) |
-| XLSX/XLS | No | Stored as browser file only (`importStatus: stored`) |
+| Type | DuckDB WASM | Bridge | Result |
+| --- | --- | --- | --- |
+| CSV | Imported | Imported | Stored + imported (`importStatus: imported`) |
+| Parquet | Imported | Imported | Stored + imported (`importStatus: imported`) |
+| XLSX | Stored only | Imported after worksheet selection | Stored, and imported in Bridge |
+| XLS | Stored only | Unsupported | Use `.xlsx` instead for Bridge imports |
 
 Non-imported files remain available as chat attachments.
 
@@ -67,8 +68,8 @@ Non-imported files remain available as chat attachments.
 
 1. Removes metadata from local storage.
 2. Deletes blob from IndexedDB.
-3. If imported, drops the DuckDB WASM table and unregisters browser file mapping.
+3. If imported into DuckDB WASM, drops the WASM table and unregisters browser file mapping.
 
 ## Server upload routes
 
-Server routes (`/api/upload`, `/api/upload/[fileId]`) still exist for app-side API workflows and write files to disk under `uploads/`, but the primary in-app UX is browser-local.
+Bridge imports use `POST /imports/file`. The bridge writes the uploaded bytes to a temporary file, imports them into DuckDB, and deletes the temporary file after import.

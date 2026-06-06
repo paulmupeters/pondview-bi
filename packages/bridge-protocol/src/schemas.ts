@@ -170,6 +170,21 @@ export const bridgeSourcesResponseSchema = z.object({
   sources: z.array(bridgeSourceSchema),
 });
 
+export const bridgeImportFileRequestSchema = z.object({
+  fileName: z.string().min(1),
+  bytesBase64: z.string().min(1),
+  schemaName: z.string().min(1),
+  tableName: z.string().min(1),
+  xlsxSheet: z.string().min(1).optional(),
+});
+
+export const bridgeImportFileResponseSchema = z.object({
+  schemaName: z.string(),
+  tableName: z.string(),
+  rowCount: z.number().int().nonnegative(),
+  format: z.enum(["csv", "parquet", "xlsx"]),
+});
+
 export const bridgeErrorResponseSchema = z.object({
   error: z.object({
     message: z.string(),
@@ -334,6 +349,12 @@ export type BridgeAttachSourceRequest = z.infer<
   typeof bridgeAttachSourceRequestSchema
 >;
 export type BridgeSourcesResponse = z.infer<typeof bridgeSourcesResponseSchema>;
+export type BridgeImportFileRequest = z.infer<
+  typeof bridgeImportFileRequestSchema
+>;
+export type BridgeImportFileResponse = z.infer<
+  typeof bridgeImportFileResponseSchema
+>;
 export type BridgeSecretSource = z.infer<typeof bridgeSecretSourceSchema>;
 export type BridgeSecretAi = z.infer<typeof bridgeSecretAiSchema>;
 export type BridgeSecretS3Backup = z.infer<typeof bridgeSecretS3BackupSchema>;
