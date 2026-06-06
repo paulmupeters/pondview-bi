@@ -220,4 +220,3 @@ Once you have completed your first analysis, continue with:
 
 - [Main Workflows](/guide/workflows)
 - [Dashboards](/guide/dashboards)
-- [Workspace Persistence](/guide/workspace-persistence)

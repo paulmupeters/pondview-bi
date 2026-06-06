@@ -28,4 +28,4 @@ No. You can start with natural-language questions. The SQL panel and the deeper 
 
 Most day-to-day app settings, including AI configuration, are browser-first. Some data source and runtime setups also depend on the runtime you are using.
 
-For details, see [Workspace Persistence](/guide/workspace-persistence) and [AI Provider Configuration](/guide/ai-provider-configuration).
+For AI setup details, see [AI Provider Configuration](/guide/ai-provider-configuration).

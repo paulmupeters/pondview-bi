@@ -76,43 +76,32 @@ pondview source add snowflake \
 The active DuckDB runtime must support any extension, secret, table function, or
 attachment used by the setup SQL.
 
-## What gets stored locally
+After you add a custom source, Pondview can use it like any other connected
+source. The AI can inspect the available tables and views when answering
+questions, and you can query the source directly from the SQL editor.
 
-Connected-source entries are stored under local storage key:
+For the Google Sheets example above, the setup SQL creates a DuckDB view named
+`sheet_sales`:
 
-- `connectedTables`
+```sql
+SELECT *
+FROM sheet_sales
+LIMIT 100;
+```
 
-Each entry can include:
+For the Snowflake example above, the setup SQL attaches Snowflake as the `sf`
+catalog. Query its tables with the attached catalog, schema, and table name:
 
-- `type`
-- `connectionId` (preferred new identifier for server-stored credentials)
-- `databasePath` (legacy/raw identifier)
-- `databaseName`
-- `schema`
-- `tables`
-- `description`
-- `attachAs`
-- `readOnly`
-- `duckdbExtension`
-- `duckdbExtensionRepository`
+```sql
+SELECT *
+FROM sf.analytics.orders
+LIMIT 100;
+```
 
-Writes dispatch `connectedTablesUpdated` so UI consumers refresh.
 
-## Identifier precedence in the UI
+## Credentials
 
-When selecting a source, the app resolves DB identifier in this order:
-
-1. `connectionId`
-2. `databasePath`
-3. `attachAs`
-
-This allows migration from legacy `databasePath` entries to opaque `connectionId` references.
-
-## Credentials and `connectionId`
-
-`connectionId` maps to credentials stored server-side by the Pondview Bridge. By default Bridge writes those credentials to `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json`; set `PONDVIEW_SECRETS_PATH` to override the location for tests or local experiments.
-
-When the active runtime is Bridge, the Connect Data flow saves the raw source identifier in the Bridge secret store and persists only the opaque `connectionId`, schema/table selections, attach alias, and other non-secret metadata in browser storage. Later `ATTACH` statements use the same `connectionId`; Bridge resolves it to the real identifier before DuckDB sees the statement.
+Credentials are stored server-side by the Pondview Bridge. By default Bridge writes those credentials to `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json`; set `PONDVIEW_SECRETS_PATH` to override the location for tests or local experiments.
 
 DuckDB WASM does not have this server-side boundary. Do not use WASM for credential-backed external sources.
 

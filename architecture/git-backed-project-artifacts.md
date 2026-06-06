@@ -47,7 +47,7 @@ representation that the runtime model can hydrate from or rebuild.
 
 See also:
 
-- [Git-Backed Project Artifacts Checklist](/guide/git-backed-project-artifacts-checklist)
+- [Git-Backed Project Artifacts Checklist](./git-backed-project-artifacts-checklist.md)
 
 ## Goals
 

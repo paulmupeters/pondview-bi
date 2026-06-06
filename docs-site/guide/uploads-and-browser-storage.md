@@ -1,74 +1,61 @@
 # Uploads and Browser Storage
 
-Uploads are browser-first. File metadata is tracked in local storage, binary blobs are persisted in workspace IndexedDB, and CSV/Parquet files are auto-imported into DuckDB WASM.
+Uploads are stored in your browser workspace. CSV and Parquet files are also
+made available to the local DuckDB runtime so you can query them in Pondview.
 
 ## Supported file types and limits
 
-Allowed extensions:
+Supported extensions:
 
 - `.csv`
 - `.xlsx`
 - `.xls`
 - `.parquet`
 
-Max file size:
+Maximum file size:
 
 - `50MB` per file
 
-Validation happens in `validateUploadableFile(...)`.
+## What happens after upload
 
-## Upload pipeline
+CSV and Parquet files are imported as local DuckDB tables. After import, you can
+query them in the SQL editor and ask the AI to use them in analysis.
 
-`persistUploadedFile(file)` performs:
+Excel files are stored as uploaded files but are not automatically converted into
+DuckDB tables. They remain available as chat attachments.
 
-1. Validate extension and size.
-2. Generate `fileId` and metadata entry.
-3. Store blob in workspace DB (`STORE_UPLOADED_FILE_BLOBS`).
-4. If file is CSV or Parquet, import into DuckDB WASM (`uploads.<table>`).
-5. Save metadata entry to local storage (`uploadedFiles`).
-
-## Import behavior by file type
+## Behavior by file type
 
 | Type | Auto-import to DuckDB WASM | Result |
-| --- | --- | --- |
-| CSV | Yes | Stored + imported (`importStatus: imported`) |
-| Parquet | Yes | Stored + imported (`importStatus: imported`) |
-| XLSX/XLS | No | Stored as browser file only (`importStatus: stored`) |
+| ---- | -------------------------- | ------ |
+| CSV | Yes | Stored and queryable as a local table |
+| Parquet | Yes | Stored and queryable as a local table |
+| XLSX/XLS | No | Stored as a browser file and available for chat attachment |
 
-Non-imported files remain available as chat attachments.
+## Where uploads are used
 
-## Storage model
+You can use uploaded files from:
 
-### Local storage
+- **Data page**: upload files, review upload status, and see imported table names.
+- **SQL editor**: query imported CSV and Parquet tables.
+- **Prompt input**: attach uploaded files to an AI message.
 
-- Key: `uploadedFiles`
-- Stores metadata (`fileId`, original name, size, status, schema/table if imported)
+## Browser storage
 
-### IndexedDB (workspace DB)
+Uploaded files live in the browser profile where you added them. They are not
+automatically shared with other browsers, devices, or people.
 
-- Store: `uploadedFileBlobs`
-- Stores raw blob + name/type metadata for reattachment
+This matters when:
 
-## UI touchpoints
+- You clear browser data.
+- You switch browser profiles.
+- You open Pondview on another device.
+- You expect someone else to see the same uploaded files.
 
-- **Data page**
-  - Upload button
-  - Upload status message
-  - Uploaded files list
-  - Imported table names for DuckDB WASM entries
-- **Prompt input**
-  - Attachment picker reads uploaded files
-  - Selecting a file reads blob from IndexedDB and attaches it to the prompt
-  - Inline upload from the attachment hover card uses the same persistence flow
+For shared or repeatable work, prefer connected data sources or a Bridge-backed
+project workflow instead of relying on one browser's uploaded files.
 
 ## Deletion and cleanup
 
-`removeUploadedFile(fileId)`:
-
-1. Removes metadata from local storage.
-2. Deletes blob from IndexedDB.
-3. If imported, drops the DuckDB WASM table and unregisters browser file mapping.
-
-## Server upload routes
-
-Server routes (`/api/upload`, `/api/upload/[fileId]`) still exist for app-side API workflows and write files to disk under `uploads/`, but the primary in-app UX is browser-local.
+Deleting an uploaded file removes it from the uploaded files list. If the file
+was imported as a local DuckDB table, Pondview also removes that local table.

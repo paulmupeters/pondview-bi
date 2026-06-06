@@ -28,7 +28,6 @@ export default defineConfig({
         text: "Features",
         items: [
           { text: "Dashboards", link: "/guide/dashboards" },
-          { text: "Sharing Dashboards", link: "/guide/sharing-dashboards" },
           {
             text: "AI Provider Configuration",
             link: "/guide/ai-provider-configuration",
@@ -52,32 +51,6 @@ export default defineConfig({
       {
         text: "CLI & Projects",
         items: [{ text: "Pondview CLI", link: "/guide/cli" }],
-      },
-      {
-        text: "Architecture & Reference",
-        items: [
-          {
-            text: "Workspace Persistence",
-            link: "/guide/workspace-persistence",
-          },
-          {
-            text: "Git-Backed Project Artifacts",
-            link: "/guide/git-backed-project-artifacts",
-          },
-          {
-            text: "DuckDB Extension Connections",
-            link: "/guide/duckdb-extension-connections",
-          },
-          {
-            text: "DuckDB Usage Overview",
-            link: "/guide/duckdb-usage-overview",
-          },
-          { text: "DuckDB WASM Usage", link: "/guide/duckdb-wasm-usage" },
-          {
-            text: "Semantic Layer Materialization",
-            link: "/guide/semantic-layer-materialization",
-          },
-        ],
       },
       {
         text: "Help",

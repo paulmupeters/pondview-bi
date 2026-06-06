@@ -1,4 +1,4 @@
-# What Pondview Is
+# What Is Pondview
 
 Pondview is an AI-assisted analytics workspace for exploring data and creating visuals.
 

@@ -5,7 +5,7 @@ Pondview runs SQL on two backends:
 - `duckdb-wasm` for browser-local DuckDB execution
 - `bridge` for Pondview Bridge execution
 
-Backend selection is controlled by Settings and resolved by `resolveSqlBackend(...)`.
+Choose the runtime in **Settings -> Query Runtime**.
 
 ## Backend overview
 
@@ -27,7 +27,7 @@ browser CORS access.
 
 ## Selection rules
 
-Runtime resolution combines the saved user preference and runtime availability:
+Pondview combines your saved preference with runtime availability:
 
 1. Settings lets you save `duckdb-wasm` or `bridge`.
 2. If preference is `bridge` but Bridge is not query-ready, query execution falls
@@ -42,34 +42,41 @@ same saved preference resolves to Bridge automatically.
 
 ## Bridge
 
-- Availability for query execution: bridge health is `online`, bridge config is
-  discoverable, and either auth is not required or a session secret exists.
-- Health probe: `pingBridge()` against `/ping`
-- Config probe: `refreshBridgeConfig()` against `/api/duckdb/config`
-- Endpoint: defaults to the current app origin. When running only the
-  Vite/frontend app against a separately started bridge, set the Bridge endpoint
-  in Settings to the bridge URL, for example `http://127.0.0.1:17817`.
-- Secret: session-only via Settings (`setSessionSecret(...)`)
+Use Bridge when you need Pondview to run SQL outside the browser. Bridge is the
+right choice for local database files, attached external sources, server-side
+credentials, and DuckDB extensions that are not practical in browser-only mode.
+
+Bridge is query-ready when Pondview can reach it, read its DuckDB configuration,
+and satisfy any required authentication.
+
+- Endpoint: defaults to the current app origin. When running only the frontend
+  app against a separately started bridge, set the Bridge endpoint in Settings
+  to the bridge URL, for example `http://127.0.0.1:17817`.
+- Secret: if Bridge requires authentication, enter the session secret in
+  Settings.
 - Server-side secrets: Bridge stores data-source, AI provider, and S3 backup
   credentials in `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json`, or
   `PONDVIEW_SECRETS_PATH` when set.
 
 ## DuckDB WASM
 
-- Always available as local fallback
-- Rejects remote identifiers via `assertWasmCompatibleDbIdentifier(...)`
-- Does not provide a server-side secret boundary
+Use DuckDB WASM for browser-local analysis. It is always available as the local
+fallback and works well for uploaded CSV and Parquet files.
 
-## Runtime fingerprints
+DuckDB WASM runs in the browser, so it does not provide a server-side secret
+boundary. Use Bridge for credential-backed external sources or database files
+that should stay outside browser storage.
 
-`resolveSqlRuntimeFingerprint(...)` gives a backend-specific fingerprint used by
-runtime-sensitive cache logic:
+## Choosing a runtime
 
-- WASM: `duckdb-wasm:local`
-- Bridge: `bridge:<host>:<port>` (or `bridge:unknown`)
-
-When runtime changes, cache keys tied to this fingerprint should be treated as
-different execution contexts.
+| Need | Recommended runtime |
+| ---- | ------------------- |
+| Query uploaded CSV or Parquet files | DuckDB WASM |
+| Explore data without starting Bridge | DuckDB WASM |
+| Use local `.duckdb` files through the CLI/runtime | Bridge |
+| Attach Postgres, MySQL, SQLite, Snowflake, Quack, or other external sources | Bridge |
+| Keep credentials out of browser storage | Bridge |
+| Use browser-accessible HTTP(S) or object-store files without private credentials | DuckDB WASM or Bridge |
 
 ## Troubleshooting checklist
 
@@ -77,8 +84,7 @@ different execution contexts.
   fallback conditions. A saved Bridge preference can still execute on WASM while
   Bridge is not query-ready.
 - Bridge selected but unavailable in a frontend-only dev server: set the Bridge
-  endpoint in Settings to the separately running bridge origin, then verify
-  `/ping` and `/api/duckdb/config` are reachable from the browser.
-- Bridge selected but offline: verify the endpoint, session secret, and bridge
-  `/ping`.
+  endpoint in Settings to the separately running bridge origin.
+- Bridge selected but offline: verify the endpoint, session secret, and Bridge
+  process.
 - Remote identifier error in WASM: switch runtime to Bridge.

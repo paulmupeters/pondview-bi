@@ -79,6 +79,21 @@ Common choices:
 
 If the first visual is not clear enough, tweak it before saving. This is usually worth doing so your dashboard is easier to understand later.
 
+## Refine visuals
+
+After chat returns a result, switch to the **Visual** tab on the analysis cell to see the chart Pondview picked for your data. If you want more control over how it looks, click **Visual options** in the header.
+
+That opens a side panel where you can adjust the chart without rewriting the SQL. Common changes include:
+
+- **Chart type** — line, bar, area, or pie
+- **Axes** — which columns map to the X and Y axes
+- **Color** — pick a series color from the theme palette
+- **Display toggles** — legend, grid, dots, tooltip, and related chart details
+
+Changes apply live as you edit, so you can compare options before saving the visual to a dashboard. Use **Visual options** when the underlying query is right but the presentation needs work — for example, turning a bar chart into a line chart for a time series, or swapping which column drives the Y axis.
+
+**Visual options** is available for charts on the **Visual** tab. For tables, use the **Data** tab to review the raw result. For KPI cards, edit the title and description directly on the card.
+
 ## Add a visual to a dashboard
 
 Once you have a result you want to keep, add it to a dashboard.
@@ -95,107 +110,7 @@ Over time, you can combine these into a dashboard that answers a broader busines
 - Where are we seeing growth?
 - Which segments need attention?
 
-## Create a new dashboard
 
-You can create a dashboard when you are ready to organize saved visuals.
-
-A dashboard should usually have a clear purpose. For example:
-
-- Executive overview
-- Sales performance
-- Product usage
-- Marketing funnel
-- Customer support health
-
-Choose names that make sense when you come back later.
-
-## Build dashboards gradually
-
-You do not need to create a perfect dashboard in one sitting.
-
-A good approach is:
-
-1. Save one useful visual
-2. Add a second visual that gives context
-3. Add a KPI card for a headline metric
-4. Keep improving the dashboard as new questions come up
-
-This makes dashboards feel like a natural extension of analysis instead of a separate project.
-
-## Good first dashboards
-
-If you are not sure what to build first, start with one of these patterns:
-
-### KPI overview
-
-A simple dashboard with:
-
-- Total revenue
-- Orders or transactions
-- Average order value
-- Active customers
-- A trend chart for the last 30 or 90 days
-
-### Sales dashboard
-
-Useful visuals might include:
-
-- Revenue by month
-- Revenue by region
-- Top products
-- Top customers
-- Category performance
-
-### Product or usage dashboard
-
-Useful visuals might include:
-
-- Active users over time
-- Feature usage by week
-- Retention trend
-- Most used workflows
-- Drop-off points
-
-## When to keep exploring in chat instead
-
-Not every result belongs on a dashboard.
-
-Stay in chat when you are:
-
-- Still figuring out what question really matters
-- Comparing several directions quickly
-- Checking one-off numbers
-- Testing different cuts of the data
-
-Move to dashboards when the result is stable, useful, and likely to matter again.
-
-## Tips for better dashboards
-
-A few habits make dashboards much easier to use:
-
-- Keep each dashboard focused on one theme
-- Prefer clear titles over clever ones
-- Do not save every experiment
-- Use cards for headline numbers and charts for trends
-- Remove visuals that no longer help answer the main question
-
-The goal is clarity, not quantity.
-
-## A simple example workflow
-
-Here is a realistic end-to-end flow:
-
-1. Connect your sales data
-2. Configure your AI provider
-3. Ask: "Show monthly revenue and top 10 products"
-4. Review the response in chat
-5. Edit the SQL to refine the result
-6. Turn the monthly revenue result into a chart
-7. Save that chart to a dashboard
-8. Add a KPI card for total revenue
-9. Add a table for top products
-
-Now you have the beginning of a reusable dashboard instead of a single conversation.
 
 ## Related guides
 
@@ -203,4 +118,3 @@ Now you have the beginning of a reusable dashboard instead of a single conversat
 - [Connected Data Sources](/guide/connected-data-sources)
 - [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
 - [AI Provider Configuration](/guide/ai-provider-configuration)
-- [Workspace Persistence](/guide/workspace-persistence)

@@ -74,7 +74,7 @@ Check:
 - Whether the selected runtime is the one you expect
 - Whether you are looking at a saved dashboard result rather than an exploratory chat result
 
-For dashboard execution details, see [Dashboards](/guide/dashboards) and [DuckDB Usage Overview](/guide/duckdb-usage-overview).
+For dashboard usage details, see [Dashboards](/guide/dashboards).
 
 ## Still stuck?
 
@@ -83,4 +83,3 @@ Use these deeper references:
 - [AI Provider Configuration](/guide/ai-provider-configuration)
 - [Connected Data Sources](/guide/connected-data-sources)
 - [SQL Runtime Backends](/guide/sql-runtime-backends)
-- [Workspace Persistence](/guide/workspace-persistence)
