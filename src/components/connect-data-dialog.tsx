@@ -1,4 +1,5 @@
 import {
+  ArrowUpTrayIcon,
   CheckCircleIcon,
   LinkIcon,
   XMarkIcon,
@@ -33,9 +34,16 @@ import {
   DEFAULT_WASM_DB_IDENTIFIER,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
+import {
+  persistUploadedFile,
+  UPLOADED_FILES_SCHEMA,
+  validateUploadableFile,
+} from "@/lib/uploaded-files";
 import { cn } from "@/lib/utils";
+import { readXlsxSheetNames } from "@/lib/xlsx-sheets";
 
 type DatabaseType =
+  | "local-file"
   | "httpfs"
   | "quack"
   | "motherduck"
@@ -44,13 +52,21 @@ type DatabaseType =
   | "sqlite"
   | null;
 
-const WASM_COMPATIBLE_DATABASES = new Set<DatabaseType>(["httpfs"]);
+const WASM_COMPATIBLE_DATABASES = new Set<DatabaseType>([
+  "local-file",
+  "httpfs",
+]);
 
 const DATABASE_OPTIONS: Array<{
   label: string;
   value: Exclude<DatabaseType, null>;
   description?: string;
 }> = [
+  {
+    label: "Local file",
+    value: "local-file",
+    description: "Import CSV, Parquet, or XLSX files",
+  },
   {
     label: "HTTPFS",
     value: "httpfs",
@@ -130,7 +146,7 @@ type PendingSourceConnection = {
 const MOTHERDUCK_ALIAS = "motherduck";
 
 function requiresSchemaSelection(dbType: DatabaseType): boolean {
-  return dbType !== "motherduck" && !!dbType;
+  return dbType !== "motherduck" && dbType !== "local-file" && !!dbType;
 }
 
 export function isWasmCompatibleDatabase(dbType: DatabaseType): boolean {
@@ -185,6 +201,21 @@ async function runRuntimeSql(
   }
 
   return runRemoteSql(effectiveSqlBackend, sql);
+}
+
+function getLocalFileExtension(name: string): string {
+  const lastDot = name.lastIndexOf(".");
+  return lastDot < 0 ? "" : name.slice(lastDot).toLowerCase();
+}
+
+export function shouldSelectWorksheetBeforeImport(
+  fileName: string,
+  effectiveSqlBackend: SqlBackend,
+): boolean {
+  return (
+    effectiveSqlBackend === "bridge" &&
+    getLocalFileExtension(fileName) === ".xlsx"
+  );
 }
 
 export function isRemoteDuckdbUrl(value: string): boolean {
@@ -446,6 +477,15 @@ export function ConnectDataDialog({
   const [quackUri, setQuackUri] = useState("");
   const [quackAlias, setQuackAlias] = useState("");
   const [quackToken, setQuackToken] = useState("");
+  // Local file import fields
+  const [localFile, setLocalFile] = useState<File | null>(null);
+  const [localXlsxSheets, setLocalXlsxSheets] = useState<string[]>([]);
+  const [localXlsxSheet, setLocalXlsxSheet] = useState("");
+  const [isReadingLocalFile, setIsReadingLocalFile] = useState(false);
+  const [isImportingLocalFile, setIsImportingLocalFile] = useState(false);
+  const [localImportMessage, setLocalImportMessage] = useState<string | null>(
+    null,
+  );
   const [schemas, setSchemas] = useState<string[]>([]);
   const [schemaTablesForPersistence, setSchemaTablesForPersistence] = useState<
     string[]
@@ -492,6 +532,12 @@ export function ConnectDataDialog({
     setQuackUri("");
     setQuackAlias("");
     setQuackToken("");
+    setLocalFile(null);
+    setLocalXlsxSheets([]);
+    setLocalXlsxSheet("");
+    setIsReadingLocalFile(false);
+    setIsImportingLocalFile(false);
+    setLocalImportMessage(null);
     setSchemas([]);
     setSelectedSchema("");
     setSchemaTablesPreview([]);
@@ -810,7 +856,107 @@ export function ConnectDataDialog({
     }
   }, [isWasmActive, effectiveSqlBackend, runMotherDuckAttachSequence]);
 
+  const handleLocalFileChange = useCallback(
+    async (file: File | null) => {
+      setLocalFile(file);
+      setLocalXlsxSheets([]);
+      setLocalXlsxSheet("");
+      setLocalImportMessage(null);
+      setHasConnected(false);
+      setErrorMessage(null);
+
+      if (!file) {
+        return;
+      }
+
+      const validationError = validateUploadableFile(file);
+      if (validationError) {
+        setErrorMessage(validationError);
+        return;
+      }
+
+      if (!shouldSelectWorksheetBeforeImport(file.name, effectiveSqlBackend)) {
+        return;
+      }
+
+      try {
+        setIsReadingLocalFile(true);
+        const sheetNames = await readXlsxSheetNames(file);
+        if (sheetNames.length === 0) {
+          setErrorMessage("No worksheets were found in this XLSX file.");
+          return;
+        }
+        setLocalXlsxSheets(sheetNames);
+        setLocalXlsxSheet(sheetNames[0] ?? "");
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to read worksheets from this XLSX file.",
+        );
+      } finally {
+        setIsReadingLocalFile(false);
+      }
+    },
+    [effectiveSqlBackend],
+  );
+
+  const handleImportLocalFile = useCallback(async () => {
+    if (!localFile || isImportingLocalFile || isReadingLocalFile) {
+      return;
+    }
+
+    const needsSheet = shouldSelectWorksheetBeforeImport(
+      localFile.name,
+      effectiveSqlBackend,
+    );
+    if (needsSheet && !localXlsxSheet) {
+      setErrorMessage("Select a worksheet before importing this XLSX file.");
+      return;
+    }
+
+    try {
+      setIsImportingLocalFile(true);
+      setErrorMessage(null);
+      setLocalImportMessage(null);
+      const uploadedFile = await persistUploadedFile(localFile, {
+        backend: effectiveSqlBackend,
+        xlsxSheet: needsSheet ? localXlsxSheet : undefined,
+      });
+      const tableRef =
+        uploadedFile.schemaName && uploadedFile.tableName
+          ? `${uploadedFile.schemaName}.${uploadedFile.tableName}`
+          : UPLOADED_FILES_SCHEMA;
+      setHasConnected(true);
+      setLocalImportMessage(
+        uploadedFile.importStatus === "imported"
+          ? `Imported ${uploadedFile.originalName} as ${tableRef}.`
+          : `Stored ${uploadedFile.originalName}. ${uploadedFile.importError ?? ""}`.trim(),
+      );
+      onConnected?.();
+    } catch (error) {
+      setErrorMessage(
+        sanitizeSqlErrorMessage(
+          error instanceof Error ? error.message : String(error ?? ""),
+        ) || "Failed to import file.",
+      );
+    } finally {
+      setIsImportingLocalFile(false);
+    }
+  }, [
+    effectiveSqlBackend,
+    isImportingLocalFile,
+    isReadingLocalFile,
+    localFile,
+    localXlsxSheet,
+    onConnected,
+  ]);
+
   const handleConnectClick = useCallback(async () => {
+    if (selectedDatabase === "local-file") {
+      await handleImportLocalFile();
+      return;
+    }
     if (isWasmActive && !isWasmCompatibleDatabase(selectedDatabase)) return;
 
     // Field validation
@@ -969,6 +1115,7 @@ export function ConnectDataDialog({
     effectiveSqlBackend,
     prepareConnectionForRuntime,
     runMotherDuckAttachSequence,
+    handleImportLocalFile,
   ]);
 
   const handleSchemaSelect = useCallback(
@@ -1151,12 +1298,24 @@ export function ConnectDataDialog({
   const isAddDisabled = useMemo(() => {
     return (
       !hasConnected ||
+      selectedDatabase === "local-file" ||
       (requiresSchemaSelection(selectedDatabase) && !selectedSchema)
     );
   }, [hasConnected, selectedDatabase, selectedSchema]);
 
   const isConnectDisabled = useMemo(() => {
     if (!selectedDatabase) return true;
+    if (selectedDatabase === "local-file") {
+      const needsSheet =
+        localFile &&
+        shouldSelectWorksheetBeforeImport(localFile.name, effectiveSqlBackend);
+      return (
+        !localFile ||
+        isReadingLocalFile ||
+        isImportingLocalFile ||
+        Boolean(needsSheet && !localXlsxSheet)
+      );
+    }
     if (isWasmActive && !isWasmCompatibleDatabase(selectedDatabase)) {
       return true;
     }
@@ -1194,6 +1353,11 @@ export function ConnectDataDialog({
     mysqlDatabase,
     sqlitePath,
     databasePath,
+    localFile,
+    localXlsxSheet,
+    isReadingLocalFile,
+    isImportingLocalFile,
+    effectiveSqlBackend,
   ]);
 
   const availableDatabaseOptions = useMemo(
@@ -1222,6 +1386,10 @@ export function ConnectDataDialog({
               setSelectedSchema("");
               setSchemaTablesPreview([]);
               setSchemaTablesForPersistence([]);
+              setLocalFile(null);
+              setLocalXlsxSheets([]);
+              setLocalXlsxSheet("");
+              setLocalImportMessage(null);
               setErrorMessage(null);
               motherDuckAttachPromiseRef.current = null;
             }}
@@ -1249,6 +1417,80 @@ export function ConnectDataDialog({
 
   const renderConnectionForm = () => {
     if (!selectedDatabase) return null;
+
+    if (selectedDatabase === "local-file") {
+      const needsSheet =
+        localFile &&
+        shouldSelectWorksheetBeforeImport(localFile.name, effectiveSqlBackend);
+      return (
+        <div className="space-y-3">
+          <label
+            htmlFor="connect-local-file"
+            className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground transition hover:border-primary/40 hover:bg-accent/30 hover:text-foreground"
+          >
+            <ArrowUpTrayIcon className="h-4 w-4" />
+            <span>{localFile ? localFile.name : "Choose a local file"}</span>
+          </label>
+          <input
+            id="connect-local-file"
+            type="file"
+            accept=".csv,.parquet,.xlsx,.xls"
+            className="sr-only"
+            onChange={(event) => {
+              void handleLocalFileChange(event.target.files?.[0] ?? null);
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            CSV and Parquet import as DuckDB tables in WASM and Bridge. XLSX
+            imports as a selected worksheet in Bridge, and is stored only in
+            WASM.
+          </p>
+          {isReadingLocalFile ? (
+            <p className="text-xs text-muted-foreground">
+              Reading workbook sheets…
+            </p>
+          ) : null}
+          {needsSheet && localXlsxSheets.length > 0 ? (
+            <div className="space-y-2">
+              <label
+                htmlFor="connect-local-file-sheet"
+                className="text-xs font-medium text-foreground"
+              >
+                Worksheet
+              </label>
+              <select
+                id="connect-local-file-sheet"
+                value={localXlsxSheet}
+                onChange={(event) => setLocalXlsxSheet(event.target.value)}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+              >
+                {localXlsxSheets.map((sheet) => (
+                  <option key={sheet} value={sheet}>
+                    {sheet}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          {localImportMessage ? (
+            <div className="flex items-start gap-2 text-xs text-green-600 dark:text-green-400">
+              <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{localImportMessage}</span>
+            </div>
+          ) : null}
+          {localImportMessage ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="w-full"
+            >
+              Done
+            </Button>
+          ) : null}
+        </div>
+      );
+    }
 
     if (selectedDatabase === "quack") {
       return (
@@ -1709,6 +1951,10 @@ export function ConnectDataDialog({
                       setSelectedSchema("");
                       setSchemaTablesPreview([]);
                       setSchemaTablesForPersistence([]);
+                      setLocalFile(null);
+                      setLocalXlsxSheets([]);
+                      setLocalXlsxSheet("");
+                      setLocalImportMessage(null);
                       setErrorMessage(null);
                       motherDuckAttachPromiseRef.current = null;
                     }}
@@ -1737,25 +1983,33 @@ export function ConnectDataDialog({
                       onClick={handleConnectClick}
                       className="w-full"
                     >
-                      {isLoadingSchemas ? "Connecting…" : "Connect"}
+                      {selectedDatabase === "local-file"
+                        ? isImportingLocalFile
+                          ? "Importing…"
+                          : "Import"
+                        : isLoadingSchemas
+                          ? "Connecting…"
+                          : "Connect"}
                     </Button>
                   )}
 
-                {hasConnected && selectedDatabase !== "motherduck" && (
-                  <>
-                    <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-                      <CheckCircleIcon className="h-4 w-4" />
-                      Connected
-                    </div>
-                    {renderSchemaAndTableSelection()}
-                  </>
-                )}
+                {hasConnected &&
+                  selectedDatabase !== "motherduck" &&
+                  selectedDatabase !== "local-file" && (
+                    <>
+                      <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+                        <CheckCircleIcon className="h-4 w-4" />
+                        Connected
+                      </div>
+                      {renderSchemaAndTableSelection()}
+                    </>
+                  )}
               </div>
             )}
           </div>
 
           {/* Footer (only shown in enabled state and when something is selected) */}
-          {hasConnected && (
+          {hasConnected && selectedDatabase !== "local-file" && (
             <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
               <Button
                 type="button"
