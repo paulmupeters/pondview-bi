@@ -4,22 +4,25 @@ Uploads are browser-first. File metadata is tracked in local storage, binary blo
 
 ## Supported file types and limits
 
-Allowed extensions:
+Supported extensions:
 
 - `.csv`
 - `.xlsx`
 - `.xls`
 - `.parquet`
 
-Max file size:
+Maximum file size:
 
 - `50MB` per file
 
-Validation happens in `validateUploadableFile(...)`.
+## What happens after upload
 
-## Upload pipeline
+CSV and Parquet files are imported as local DuckDB tables. After import, you can
+query them in the SQL editor and ask the AI to use them in analysis.
 
-`persistUploadedFile(file)` performs:
+Excel files are stored as uploaded files. In DuckDB WASM they remain available
+as chat attachments; in Bridge-backed projects, `.xlsx` files can be imported
+after worksheet selection.
 
 1. Validate extension and size.
 2. Generate `fileId` and metadata entry.
@@ -36,31 +39,28 @@ Validation happens in `validateUploadableFile(...)`.
 | XLSX | Stored only | Imported after worksheet selection | Stored, and imported in Bridge |
 | XLS | Stored only | Unsupported | Use `.xlsx` instead for Bridge imports |
 
-Non-imported files remain available as chat attachments.
+## Where uploads are used
 
-## Storage model
+You can use uploaded files from:
 
-### Local storage
+- **Data page**: upload files, review upload status, and see imported table names.
+- **SQL editor**: query imported CSV, Parquet, and Bridge-imported XLSX tables.
+- **Prompt input**: attach uploaded files to an AI message.
 
-- Key: `uploadedFiles`
-- Stores metadata (`fileId`, original name, size, status, schema/table if imported)
+## Browser storage
 
-### IndexedDB (workspace DB)
+Uploaded files live in the browser profile where you added them. They are not
+automatically shared with other browsers, devices, or people.
 
-- Store: `uploadedFileBlobs`
-- Stores raw blob + name/type metadata for reattachment
+This matters when:
 
-## UI touchpoints
+- You clear browser data.
+- You switch browser profiles.
+- You open Pondview on another device.
+- You expect someone else to see the same uploaded files.
 
-- **Data page**
-  - Upload button
-  - Upload status message
-  - Uploaded files list
-  - Imported table names for DuckDB WASM entries
-- **Prompt input**
-  - Attachment picker reads uploaded files
-  - Selecting a file reads blob from IndexedDB and attaches it to the prompt
-  - Inline upload from the attachment hover card uses the same persistence flow
+For shared or repeatable work, prefer connected data sources or a Bridge-backed
+project workflow instead of relying on one browser's uploaded files.
 
 ## Deletion and cleanup
 

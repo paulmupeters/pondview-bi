@@ -137,50 +137,33 @@ type LocalSourceBinding = {
   catalogContext?: string | null;
   connection?: {
     type: string;
-    identifier?: string;
-    connectionId?: string;
-    alias?: string;
-    readOnly?: boolean;
-    duckdbExtension?: string;
-    duckdbExtensionRepository?: string;
-    attachOptions?: {
-      type?: string;
-      disableSsl?: boolean;
-    };
+    setupSql?: string;
   };
 };
 
 async function runSourceAdd(args: ParsedArgs): Promise<void> {
   assertAllowedFlags(args, [
-    "as",
-    "attach-type",
     "catalog-context",
-    "connection-id",
-    "disable-ssl",
-    "extension",
-    "extension-repository",
-    "identifier",
     "project-dir",
-    "readonly",
     "runtime",
-    "type",
+    "sql",
+    "sql-file",
   ]);
 
   const sourceRef = args.positionals[1];
   if (!sourceRef || !isProjectSourceRef(sourceRef)) {
-    throw new Error(
-      "Usage: pondview source add <source-ref> --type <type> --identifier <identifier> --as <alias>",
-    );
+    throw new Error("Usage: pondview source add <source-ref> --sql <sql>");
   }
 
-  const type = readRequiredStringFlag(args, "type");
-  const alias = readRequiredStringFlag(args, "as");
-  const identifier = readStringFlag(args, "identifier");
-  const connectionId = readStringFlag(args, "connection-id");
-  if (!identifier && !connectionId) {
-    throw new Error(
-      "Provide --identifier <identifier> or --connection-id <id>.",
-    );
+  const inlineSql = readStringFlag(args, "sql");
+  const sqlFile = readStringFlag(args, "sql-file");
+  if (inlineSql && sqlFile) {
+    throw new Error("Provide --sql or --sql-file, not both.");
+  }
+  const setupSql =
+    inlineSql ?? (sqlFile ? await readFile(sqlFile, "utf8") : "");
+  if (!setupSql.trim()) {
+    throw new Error("Provide setup SQL with --sql <sql> or --sql-file <path>.");
   }
 
   const runtime = readStringFlag(args, "runtime") ?? "bridge";
@@ -188,26 +171,13 @@ async function runSourceAdd(args: ParsedArgs): Promise<void> {
     throw new Error("--runtime must be bridge or duckdb-wasm.");
   }
 
-  const attachType = readStringFlag(args, "attach-type");
   const binding: LocalSourceBinding = {
     runtimeBackend: runtime,
-    dbIdentifier: connectionId ?? identifier ?? null,
+    dbIdentifier: null,
     catalogContext: readStringFlag(args, "catalog-context") ?? null,
     connection: {
-      type,
-      identifier,
-      connectionId,
-      alias,
-      readOnly: args.flags.has("readonly") ? true : undefined,
-      duckdbExtension: readStringFlag(args, "extension"),
-      duckdbExtensionRepository: readStringFlag(args, "extension-repository"),
-      attachOptions:
-        attachType || args.flags.has("disable-ssl")
-          ? {
-              type: attachType,
-              disableSsl: args.flags.has("disable-ssl") ? true : undefined,
-            }
-          : undefined,
+      type: "custom",
+      setupSql,
     },
   };
 
@@ -1386,14 +1356,6 @@ function readStringFlag(args: ParsedArgs, name: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function readRequiredStringFlag(args: ParsedArgs, name: string): string {
-  const value = readStringFlag(args, name)?.trim();
-  if (!value) {
-    throw new Error(`Missing required --${name} <value> flag.`);
-  }
-  return value;
-}
-
 function readNumberFlag(args: ParsedArgs, name: string): number | undefined {
   const value = readStringFlag(args, name);
   if (!value) {
@@ -1617,18 +1579,11 @@ function printSourceHelp(subcommand?: string): void {
     console.log(`Add a project-local source binding.
 
 Usage:
-  pondview source add <source-ref> --type <type> --identifier <identifier> --as <alias> [flags]
+  pondview source add <source-ref> --sql <sql> [flags]
 
 Flags:
-      --type <type>                       Source type stored in the binding
-      --identifier <identifier>           DuckDB attachment identifier
-      --connection-id <id>                Opaque Bridge secret id instead of an identifier
-      --as <alias>                        Runtime attachment alias
-      --extension <name>                  DuckDB extension to install/load
-      --extension-repository <repo>       DuckDB extension repository
-      --attach-type <type>                ATTACH TYPE option
-      --disable-ssl                       Add DISABLE_SSL true to attach options
-      --readonly                          Attach with READ_ONLY
+      --sql <sql>                         Raw DuckDB setup SQL to prepare the source
+      --sql-file <path>                   Read raw DuckDB setup SQL from a file
       --catalog-context <schema>          Default catalog/schema context
       --runtime <bridge|duckdb-wasm>      Runtime backend (default: bridge)
       --project-dir <dir>                 Filesystem project root
@@ -1639,7 +1594,7 @@ Flags:
   console.log(`Manage project-local source bindings.
 
 Usage:
-  pondview source add <source-ref> --type <type> --identifier <identifier> --as <alias>
+  pondview source add <source-ref> --sql <sql>
   pondview source list
   pondview source remove <source-ref>
 

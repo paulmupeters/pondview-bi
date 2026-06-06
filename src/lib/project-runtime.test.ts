@@ -49,6 +49,44 @@ describe("project runtime hydration", () => {
       runtimeBackend: "bridge",
       dbIdentifier: "postgres://warehouse/app",
       catalogContext: "public",
+      setupSql: null,
+    });
+  });
+
+  test("resolves SQL-backed custom default sources without a db identifier", () => {
+    const setupSql = "CREATE OR REPLACE VIEW sheet_sales AS SELECT 1 AS value;";
+    const selection = resolveProjectRuntimeSelection({
+      projectId: "browser-project-revenue",
+      parsed: createParsedArtifacts({
+        projectManifest: {
+          schemaVersion: 1,
+          name: "Revenue",
+          defaultSourceRef: "google-sheet",
+        },
+        localSourceBindings: {
+          schemaVersion: 1,
+          bindings: {
+            "google-sheet": {
+              runtimeBackend: "bridge",
+              dbIdentifier: "ignored",
+              catalogContext: null,
+              connection: {
+                type: "custom",
+                setupSql,
+              },
+            },
+          },
+        },
+      }),
+    });
+
+    expect(selection).toEqual({
+      projectId: "browser-project-revenue",
+      sourceRef: "google-sheet",
+      runtimeBackend: "bridge",
+      dbIdentifier: null,
+      catalogContext: null,
+      setupSql,
     });
   });
 
@@ -121,6 +159,7 @@ describe("project runtime hydration", () => {
       runtimeBackend: "bridge",
       dbIdentifier: null,
       catalogContext: "main",
+      setupSql: null,
     });
     expect(setProjectCalls).toHaveLength(1);
     expect(setProjectCalls[0]?.defaultSourceRef).toBe("analytics");
@@ -136,6 +175,7 @@ describe("project runtime hydration", () => {
         runtimeBackend: "duckdb-wasm",
         dbIdentifier: null,
         catalogContext: null,
+        setupSql: null,
       }),
     ).toBe("wasm:local");
   });

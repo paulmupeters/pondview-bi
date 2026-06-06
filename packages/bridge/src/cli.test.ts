@@ -125,27 +125,20 @@ describe("bridge CLI help", () => {
 });
 
 describe("bridge CLI source bindings", () => {
-  test("source add writes project-local typed connection config", async () => {
+  test("source add writes project-local SQL-backed connection config", async () => {
     const projectDir = createTempDir();
+    const setupSql =
+      "INSTALL gsheets FROM community; LOAD gsheets; CREATE OR REPLACE VIEW sheet_sales AS SELECT * FROM read_gsheet('https://docs.google.com/spreadsheets/d/.../edit');";
 
     await captureStdout(() =>
       runCli([
         "source",
         "add",
-        "ga4",
+        "google-sheet",
         "--project-dir",
         projectDir,
-        "--type",
-        "custom",
-        "--identifier",
-        "ga4:property",
-        "--as",
-        "ga4",
-        "--extension",
-        "ga4",
-        "--attach-type",
-        "ga4",
-        "--readonly",
+        "--sql",
+        setupSql,
       ]),
     );
 
@@ -154,19 +147,88 @@ describe("bridge CLI source bindings", () => {
     ) as {
       bindings: Record<string, unknown>;
     };
-    expect(parsed.bindings.ga4).toEqual({
+    expect(parsed.bindings["google-sheet"]).toEqual({
       runtimeBackend: "bridge",
-      dbIdentifier: "ga4:property",
+      dbIdentifier: null,
       catalogContext: null,
       connection: {
         type: "custom",
-        identifier: "ga4:property",
-        alias: "ga4",
-        readOnly: true,
-        duckdbExtension: "ga4",
-        attachOptions: { type: "ga4" },
+        setupSql,
       },
     });
+
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  test("source add reads setup SQL from a file", async () => {
+    const projectDir = createTempDir();
+    const sqlPath = join(projectDir, "snowflake.sql");
+    const setupSql =
+      "INSTALL snowflake FROM community;\nLOAD snowflake;\nATTACH '' AS sf (TYPE snowflake, SECRET my_snowflake, READ_ONLY);\n";
+    writeFileSync(sqlPath, setupSql);
+
+    await captureStdout(() =>
+      runCli([
+        "source",
+        "add",
+        "snowflake",
+        "--project-dir",
+        projectDir,
+        "--sql-file",
+        sqlPath,
+      ]),
+    );
+
+    const parsed = JSON.parse(
+      readFileSync(join(projectDir, "pondview.sources.local.json"), "utf8"),
+    ) as {
+      bindings: Record<string, { connection?: { setupSql?: string } }>;
+    };
+
+    expect(parsed.bindings.snowflake?.connection?.setupSql).toBe(setupSql);
+
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  test("source add rejects removed attach flags", async () => {
+    const projectDir = createTempDir();
+    const identifierAttempt = await captureStdoutAndError(() =>
+      runCli([
+        "source",
+        "add",
+        "snowflake",
+        "--project-dir",
+        projectDir,
+        "--identifier",
+        "",
+        "--sql",
+        "SELECT 1;",
+      ]),
+    );
+
+    expect(identifierAttempt.error).toBeInstanceOf(Error);
+    expect((identifierAttempt.error as Error).message).toContain(
+      "Unsupported flag for pondview source: --identifier",
+    );
+
+    const aliasAttempt = await captureStdoutAndError(() =>
+      runCli([
+        "source",
+        "add",
+        "google-sheet",
+        "--project-dir",
+        projectDir,
+        "--as",
+        "sheet_sales",
+        "--sql",
+        "SELECT 1;",
+      ]),
+    );
+
+    expect(aliasAttempt.error).toBeInstanceOf(Error);
+    expect((aliasAttempt.error as Error).message).toContain(
+      "Unsupported flag for pondview source: --as",
+    );
 
     rmSync(projectDir, { recursive: true, force: true });
   });

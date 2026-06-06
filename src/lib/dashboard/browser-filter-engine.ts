@@ -18,6 +18,7 @@ import {
   buildDetachStatement,
 } from "@/lib/duckdb/duckdb-attachments";
 import { detectExternalConnection } from "@/lib/duckdb/path";
+import { isSqlBackedSourceConnection } from "@/lib/duckdb/source-setup";
 import { applyFiltersToSql } from "@/lib/filters/apply-filters";
 import { extractTableReferencesFromSql } from "@/lib/filters/parse-tables";
 import { canonicalTable, type JoinDefinition } from "@/lib/joins/graph";
@@ -946,6 +947,19 @@ async function ensureDashboardMaterialization(
             throw new Error(
               `External cache source ${tableRef.tableName} is missing a resolvable connection.`,
             );
+          }
+
+          if (isSqlBackedSourceConnection(externalConnection)) {
+            await deps.runRuntimeSql(externalConnection.setupSql, backend);
+            await deps.runRuntimeSql(
+              `CREATE OR REPLACE TABLE ${aliasRef} AS SELECT * FROM ${tableRef.sourceReference};`,
+              backend,
+              tableRef.catalogContext ?? null,
+            );
+            materializedTables.add(tableRef.tableName);
+            resolvedRefByTable.set(tableRef.tableName, aliasRef);
+            realizedAliasKindByTable.set(tableRef.tableName, "table");
+            continue;
           }
 
           const attachmentPlan = buildAttachmentPlan({

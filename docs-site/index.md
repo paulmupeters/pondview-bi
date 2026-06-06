@@ -1,10 +1,20 @@
-# Pondview Docs
+# Pondview Guide
 
-Pondview is an AI-assisted analytics workspace for exploring data, asking questions, and building dashboards.
+Use this guide to learn Pondview from the product workflow first: connect data, configure AI, ask questions, refine results, and save useful visuals to dashboards.
 
-Use the sidebar to navigate, or start with one of these:
+## Getting Started
 
-- [What Pondview Is](/user/what-is-pondview) — a quick overview of how it works
-- [Getting Started](/user/getting-started) — connect data, set up AI, run your first analysis
-- [Main Workflows](/user/workflows) — the everyday chat and dashboard flow
-- [Troubleshooting](/user/troubleshooting) — if something is not working
+1. [What is Pondview](/guide/what-is-pondview)
+2. [Getting Started](/guide/getting-started)
+3. [Main Workflows](/guide/workflows)
+4. [FAQ](/guide/faq)
+5. [Troubleshooting](/guide/troubleshooting)
+
+## Common tasks
+
+- [Run Pondview locally with the CLI](/guide/cli)
+- [Configure AI providers](/guide/ai-provider-configuration)
+- [Connect data sources](/guide/connected-data-sources)
+- [Upload files and understand browser storage](/guide/uploads-and-browser-storage)
+- [Build dashboards](/guide/dashboards)
+- [Choose a SQL runtime](/guide/sql-runtime-backends)

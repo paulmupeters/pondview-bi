@@ -30,10 +30,10 @@ import { ensureChat } from "@/lib/workspace/chat-repo";
 import { useRouter } from "@/vite/next-navigation";
 
 const EXAMPLE_COMMANDS = [
-  "Show me trends of unicorns over the year in China",
-  "Compare revenue across different industries",
-  "Create a dashboard for financial metrics",
-  "Analyze customer demographics by region",
+  "Show me trends of unicorns founded over the years in China",
+  "Compare total unicorn valuation across countries",
+  "Create a bar chart of unicorn valuations by country",
+  "Which companies have the highest valuation?",
 ];
 
 const MISSING_AI_CONFIGURATION_MESSAGE =

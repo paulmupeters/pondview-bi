@@ -1,94 +1,179 @@
 # Getting Started
 
-This guide is for people who want to start using BI Chat quickly.
+This guide gets you from a fresh install to your first useful result.
 
-You do not need to learn the technical architecture first. The fastest path is:
+## The shortest path
 
-1. Connect your data
-2. Set up your AI provider
-3. Ask a question in chat
-4. Refine the result in manual mode if needed
-5. Turn useful visuals into a dashboard
+For most local use, start here:
+
+```bash
+npm install -g @pondview/cli
+pondview start
+```
+
+Or run it without installing globally:
+
+```bash
+npx @pondview/cli start
+```
+
+The published CLI runs on Node.js 20 or newer. `pondview start` serves the local app and Bridge API at `http://127.0.0.1:17817`, then opens Pondview in your browser.
+
+Once the app opens:
+
+1. Add an AI key in **Settings** if you want to use chat
+2. Import data, connect a source, or open an existing DuckDB file
+3. Ask a question in chat, or write SQL manually
+4. Refine the result
+5. Save useful results to a dashboard
+
+### Already have a DuckDB file?
+
+If your tables already live in a `.duckdb` file, that is usually the fastest way in:
+
+```bash
+cd path/to/folder-with-your-duckdb-file
+pondview start
+```
+
+On first launch, Pondview detects `.duckdb` files in that folder and offers to open yours. When there is exactly one `.duckdb` file in the folder, Pondview selects it automatically. If you have several, pick the one you want on the startup screen.
+
+You can also point at a specific file:
+
+```bash
+pondview start --database ./analytics.duckdb
+```
+
+Only files in the project folder root are detected (not nested subfolders). After the database is open, you can query existing tables immediately without importing CSVs or connecting another source.
+
+### Starting without a DuckDB file
+
+1. Run `pondview start`
+2. Add an AI key in **Settings** if you want chat-assisted analysis
+3. Import data or connect a source
+4. Ask a question in chat, or start from SQL
+5. Refine the result manually if needed
+6. Save the result to a dashboard
 
 ## Before you start
 
 You will need:
 
-- Access to the BI Chat app
-- A dataset to connect or upload
-- An API key for the AI provider you want to use
+- Access to the Pondview app
+- Some data to work with
+- An API key for the AI provider you want to use, if you want chat-assisted analysis
 
-If you are running BI Chat locally, follow the repository setup instructions in the project README first, then return here for the product walkthrough.
+## What works without AI?
 
-## 1) Connect your data
+AI is only required for the chat workflow. Without an AI key, you can still:
 
-Start by adding the data you want to analyze.
+- Start Pondview locally
+- Import CSV or Parquet files into DuckDB WASM
+- Open an existing DuckDB file through the CLI
+- Run and edit SQL manually
+- Review tables, charts, and cards created from SQL workflows
+- Save useful results to dashboards
 
-You can either:
+Add an AI key when you want Pondview to generate analyses from natural-language prompts.
 
-- Connect a data source such as DuckDB, MotherDuck, Postgres, MySQL, or SQLite
-- Upload a file such as CSV, Parquet, XLSX, or XLS
+## Run Pondview locally
 
-Once your data is connected, you should be able to browse available tables in the app and use them in analysis.
+When you run `pondview start` from a folder, Pondview scans that folder for `.duckdb` files and uses them as your data source on first launch. You can also pass flags explicitly:
 
-Read more:
+```bash
+pondview start --database ./analytics.duckdb
+pondview start --project-dir ./my-pondview-project
+pondview attach ./warehouse.duckdb --as warehouse
+pondview query "SELECT 42 AS answer"
+```
 
-- [Connected Data Sources](/guide/connected-data-sources)
-- [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
+See [Pondview CLI](/guide/cli) for commands, flags, and local project behavior.
 
-## 2) Set up your AI provider
+## 1. Set up your AI key
 
-Next, configure the AI model BI Chat should use.
+Open **Settings** and configure:
 
-In the app:
+- Your AI provider
+- A model
+- Your API key
 
-1. Open **Settings**
-2. Choose your AI provider
-3. Enter the model you want to use
-4. Add your API key
-5. Save your settings
+If AI is not configured, chat cannot generate analyses for you.
 
-After that, return to chat.
+Read more in [AI Provider Configuration](/guide/ai-provider-configuration).
 
-Read more:
+## 2. Add data
 
-- [AI Provider Configuration](/guide/ai-provider-configuration)
+You can start with whatever is easiest.
 
-## 3) Create your first analysis in chat
+### Option A: Import a file
 
-Now you are ready to ask a question.
+Good for quick starts and local analysis.
 
-Try a prompt like:
+Supported uploads include:
 
-- "What were my top 10 products by revenue last month?"
-- "Show monthly sales trends by region"
-- "Which categories are growing fastest this quarter?"
+- CSV
+- Parquet
+- XLSX
+- XLS
 
-BI Chat can help generate the analysis for you and show the result as a table or visualization.
+Read more in [Uploads and Browser Storage](/guide/uploads-and-browser-storage).
+
+### Option B: Connect a source
+
+The current Connect Data flow supports:
+
+- Postgres
+- MySQL
+- SQLite
+- MotherDuck
+- HTTPFS remote files such as S3, R2, GCS, and HTTPS URLs
+- Quack remote DuckDB endpoints
+
+Read more in [Connected Data Sources](/guide/connected-data-sources).
+
+### Option C: Use an existing DuckDB file (fastest with the CLI)
+
+If you already have a `.duckdb` file with your tables, use the [DuckDB file quick start](#already-have-a-duckdb-file) above: run `pondview start` from that folder and open the detected database.
+
+This uses the Pondview Bridge runtime, so queries run against your file directly. You do not need to re-import the same data as CSV or Parquet.
+
+For browser-only work without the CLI, you can still use the DuckDB/WASM runtime, but opening an existing file on disk is simplest through `pondview start`.
+
+## 3. Ask your first question
+
+Once your AI settings and data are ready, open chat and try a simple question such as:
+
+- "Show revenue by month"
+- "What are my top 10 customers?"
+- "Which products are growing fastest?"
+
+Start simple. You can follow up and refine the result from there.
 
 A good first workflow is:
 
 1. Ask a business question in chat
-2. Review the returned result
+2. Review the returned table, chart, or card
 3. Check whether the result answers your question
 4. Keep iterating with follow-up questions until it does
 
-## 4) Switch from chat mode to manual mode when you want more control
+## 4. Edit the SQL when you want more control
 
-You do not have to stay in chat mode the whole time.
+Chat is usually the fastest way to get a first result, but it does not have to be the final version.
 
-If you want to inspect or refine the result yourself, use the mode switch in the prompt area to move from **chat/AI mode** to **manual mode**. Manual mode is useful when you want to work more directly with the generated analysis, adjust the query, or fine-tune the output before saving it.
+Every analysis cell includes a **SQL panel** where you can view and edit the query. You can also edit the **chart config** when you want to:
 
-A simple pattern is:
+- Inspect the generated analysis more directly
+- Adjust the query or result
+- Choose a clearer visual before saving
 
-1. Start in chat mode to generate the first analysis
-2. Switch to manual mode to refine it
-3. Adjust the result until it looks right
-4. Continue from there with a chart, card, or table
+A reliable pattern is:
 
-If you are not getting the exact result you want from chat alone, this is usually the fastest way to take control.
+1. Start in chat
+2. Review the first answer
+3. Edit the SQL in the SQL panel
+4. Refine the output until it looks right
 
-## 5) Tweak the visual
+## 5. Tweak the visual
 
 After you have a useful result, you can change how it is displayed.
 
@@ -100,34 +185,19 @@ Depending on the result, you can usually work with it as a:
 
 Use this step to make the output easier to read and share. For example, you might switch from a table to a chart, or simplify a single-value result into a card.
 
-## 6) Create a dashboard from chat
+## 6. Save useful results to a dashboard
 
-When you have a result worth keeping, you can turn it into a dashboard workflow.
+When you have something worth keeping, save it to a dashboard.
 
 A typical flow is:
 
 1. Create an analysis in chat
-2. Refine it in manual mode if needed
+2. Edit the SQL or tweak the visual if needed
 3. Choose the visual you want
 4. Add that visual to a dashboard
 5. Open the dashboard and continue organizing your views
 
-This makes it easy to go from exploration to something you can revisit and share inside your workspace.
-
-Read more:
-
-- [Dashboards](/guide/dashboards)
-
-## A quick first-run path
-
-If you want the shortest possible path, do this:
-
-1. Connect a data source or upload a file
-2. Configure your AI provider in **Settings**
-3. Open chat and ask a question about your data
-4. Switch to manual mode if you want to refine the result
-5. Tweak the visual
-6. Add it to a dashboard
+Read more in [Dashboards](/guide/dashboards).
 
 ## If something is not working
 
@@ -139,16 +209,14 @@ Common issues include:
 
 Helpful guides:
 
+- [FAQ](/guide/faq)
+- [Troubleshooting](/guide/troubleshooting)
 - [AI Provider Configuration](/guide/ai-provider-configuration)
 - [Connected Data Sources](/guide/connected-data-sources)
-- [SQL Runtime Backends](/guide/sql-runtime-backends)
 
 ## Next steps
 
 Once you have completed your first analysis, continue with:
 
-- [Connected Data Sources](/guide/connected-data-sources)
-- [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
+- [Main Workflows](/guide/workflows)
 - [Dashboards](/guide/dashboards)
-- [Workspace Persistence](/guide/workspace-persistence)
-- [Docs Map](/guide/)

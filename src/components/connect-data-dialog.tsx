@@ -645,7 +645,6 @@ export function ConnectDataDialog({
       alias: quackAlias.trim() || buildQuackAlias(identifier),
       readOnly: false,
       duckdbExtension: "quack",
-      duckdbExtensionRepository: "core_nightly",
       attachOptions: {
         type: "quack",
         token: quackToken.trim() || undefined,

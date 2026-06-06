@@ -98,15 +98,18 @@ function resolveHydratedSource(
     : null;
   const runtimeBackend =
     binding?.runtimeBackend ?? getFallbackSqlBackend(options);
+  const connectionDbIdentifier =
+    binding?.connection?.type === "custom"
+      ? null
+      : (binding?.connection?.connectionId ??
+        binding?.connection?.identifier ??
+        binding?.dbIdentifier ??
+        null);
   const sourceDescriptor = binding?.connection
     ? normalizeDashboardSourceDescriptor({
         kind: "external",
         runtimeBackend,
-        dbIdentifier:
-          binding.connection.connectionId ??
-          binding.connection.identifier ??
-          binding.dbIdentifier ??
-          null,
+        dbIdentifier: connectionDbIdentifier,
         catalogContext: binding.catalogContext ?? null,
         externalType: toDashboardExternalType(binding.connection.type),
         connection: binding.connection,

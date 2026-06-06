@@ -120,11 +120,9 @@ export function ChartView({
             selectedForCard.columnName
           }
           description={cardConfig?.description ?? data.cardConfig?.description}
-          takeaway={cardConfig?.takeaway ?? data.cardConfig?.takeaway}
           editable={true}
           onTitleChange={(value) => updateCardMeta("title", value)}
           onDescriptionChange={(value) => updateCardMeta("description", value)}
-          onTakeawayChange={(value) => updateCardMeta("takeaway", value)}
           className="mx-auto my-2 w-fit border-0 shadow-none py-6"
         />
       ) : selectedForChart && selectedForChart.rows.length > 0 ? (
@@ -142,7 +140,6 @@ export function ChartView({
               onDescriptionChange={(value) =>
                 updateChartMeta("description", value)
               }
-              onTakeawayChange={(value) => updateChartMeta("takeaway", value)}
             />
           </div>
 

@@ -193,7 +193,9 @@ export function AiSettingsSections({
                   <SelectItem value="openai-compatible">
                     OpenAI Compatible
                   </SelectItem>
-                  <SelectItem value="gateway">AI Gateway</SelectItem>
+                  <SelectItem value="gateway">
+                    {getAiProviderDisplayName("gateway")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </FormField>

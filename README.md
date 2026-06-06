@@ -2,112 +2,17 @@
 
 DuckDB-powered BI for AI-assisted analysis, SQL, charts, and dashboards in one workspace.
 
-- Browser-first UI with DuckDB WASM as the local fallback; Bridge, MotherDuck, HTTPFS, and Quack-backed sources supported
-- AI chat and manual SQL share the same workspace and connected sources
-- Charts and dashboard metadata persist in DuckDB
+This README is for repository development. For product setup and usage, see the [Pondview Guide](./docs-site/index.md).
 
-Docs: [docs-site/user/index.md](./docs-site/user/index.md)
-
-## CLI quick start
-
-For most local use, install the Pondview CLI and let it start both the local UI
-and Bridge runtime:
-
-```bash
-npm install -g @pondview/cli
-pondview start
-```
-
-Or run it without installing globally:
-
-```bash
-npx @pondview/cli start
-```
-
-The published CLI runs on Node.js 20 or newer. By default, `pondview start`
-serves the bundled app and bridge API at `http://127.0.0.1:17817`, then opens it
-in your browser. Use a DuckDB file or project directory when you want Pondview to
-work against local files:
-
-```bash
-pondview start --database ./analytics.duckdb
-pondview start --project-dir ./my-pondview-project
-pondview attach ./warehouse.duckdb --as warehouse
-pondview query "SELECT 42 AS answer"
-```
-
-See [docs-site/guide/cli.md](./docs-site/guide/cli.md) for commands, flags, and
-local project behavior.
-
-## How it works
-
-### SQL runtime backends
-
-Queries can run on two backends:
-
-- `duckdb-wasm`: browser-local execution
-- `bridge`: local Pondview Bridge execution through DuckDB's Node API
-
-Backend selection is user-configurable in Settings and resolved at query time.
-Remote and extension-backed databases are connected sources, not separate query
-runtimes.
-
-See [docs-site/guide/sql-runtime-backends.md](./docs-site/guide/sql-runtime-backends.md).
-
-### Connected data sources
-
-The Connect Data dialog currently supports:
-
-- `Postgres`
-- `MotherDuck`
-- `MySQL`
-- `SQLite`
-- `HTTPFS` remote files (`s3://`, `r2://`, `gcs://`, `gs://`, `http://`, `https://`)
-- `Quack` remote DuckDB endpoints
-
-Most external source attachment and schema introspection require Bridge, because
-Bridge provides the server-side DuckDB runtime and secret boundary. HTTPFS can
-also run in DuckDB WASM when the browser can fetch the target URL, but Bridge is
-recommended for private object stores, authenticated HTTPS files, and sources
-that do not allow browser CORS access.
-
-Quack attaches remote DuckDB servers through DuckDB's beta `quack` extension and
-uses URIs such as `quack:localhost:9494`. Because Pondview runs on top of
-DuckDB, CLI-defined custom sources can also use other attach-compatible DuckDB
-extensions when the active runtime can install and load them. Alternatively, any
-ETL process that writes to a DuckDB file can provide the source data for a
-Pondview project.
-
-Source metadata is stored locally in the browser and reused across chat and manual SQL workflows.
-
-See [docs-site/guide/connected-data-sources.md](./docs-site/guide/connected-data-sources.md).
-
-### AI providers
-
-- In most local setups, you configure an AI provider in the app’s Settings instead of through server environment variables.
-- Supported providers include Vercel AI Gateway, OpenAI, Anthropic, xAI, Ollama, and OpenAI-compatible endpoints.
-
-See [docs-site/guide/ai-provider-configuration.md](./docs-site/guide/ai-provider-configuration.md).
-
-### Dashboard persistence
-
-Saved charts and measures store SQL plus source metadata. At execution time, the dashboard runtime adapts queries for the active backend and can materialize external data when needed for joins, filters, and dashboard execution.
-
-See:
-
-- [docs-site/guide/dashboards.md](./docs-site/guide/dashboards.md)
-- [docs-site/guide/semantic-layer-materialization.md](./docs-site/guide/semantic-layer-materialization.md)
-- [docs-site/guide/duckdb-usage-overview.md](./docs-site/guide/duckdb-usage-overview.md)
-
-## Getting started
+## Repository development
 
 ### Prerequisites
 
-- Node.js 20+ for the published CLI
-- Bun recommended for repository development, or Node.js 18+
-- An API key for at least one supported AI provider
+- Bun for local development
+- Node.js 20+ for published CLI compatibility and packaging checks
+- Optional API keys for the AI providers or data sources you want to test
 
-### Repository development
+### Setup
 
 ```bash
 git clone https://github.com/paulmupeters/pondview-ui.git
@@ -117,15 +22,49 @@ cp env.local.example .env.local
 bun dev
 ```
 
-Open http://localhost:5173, then configure an AI provider in the app.
+Open http://localhost:5173 for the development app.
 
-DuckDB WASM works as the default local runtime. Start Bridge when you want the
-local CLI/runtime, filesystem project artifacts, server-side secrets, or
-extension-backed source attachment.
+DuckDB WASM works as the default browser-local runtime. Start Bridge when you need the local CLI/runtime, filesystem project artifacts, server-side secrets, or extension-backed source attachment.
 
-### Runtime configuration
+## Development commands
 
-Use `.env.local` only for the integrations you need:
+```bash
+# App
+bun dev
+bun run build
+bun run preview
+
+# Docs
+bun run docs:dev
+bun run docs:build
+bun run docs:preview
+
+# Bridge CLI/runtime
+bun run bridge -- help
+bun run bridge -- start
+bun run bridge -- start --no-ui
+bun run bridge:build-ui
+bun run bridge:typecheck
+bun run bridge-protocol:typecheck
+
+# Quality
+bun run typecheck
+bun run lint
+bun run test
+bun run format
+```
+
+For broad checks, prefer:
+
+```bash
+bun run typecheck
+bun run lint
+bun run test
+```
+
+## Local runtime configuration
+
+Use `.env.local` only for the integrations you need. The template lives at [`env.local.example`](./env.local.example).
 
 ```bash
 # Persist a local DuckDB runtime database
@@ -140,9 +79,27 @@ MOTHERDUCK_TOKEN=
 PONDVIEW_SECRETS_PATH=
 ```
 
-The template lives at `env.local.example`.
+MotherDuck authentication is completed by the active DuckDB runtime. To persist auth across Bridge restarts, set `MOTHERDUCK_TOKEN` in the environment used to launch Bridge.
 
-### Workspace DB debug logging
+## Bridge development
+
+Run the development bridge CLI with:
+
+```bash
+bun run bridge -- start
+bun run bridge -- start --no-ui
+bun run bridge -- query "SELECT 42 AS answer"
+```
+
+Build the app into the bridge package when testing UI-serving behavior:
+
+```bash
+bun run bridge:build-ui
+```
+
+See the user-facing [Pondview CLI guide](./docs-site/guide/cli.md) for command behavior, flags, project directories, bundled UI assets, and autostart behavior.
+
+## Workspace debug logging
 
 Workspace IndexedDB debug logs are off by default.
 
@@ -170,47 +127,31 @@ For notebook controller debugging, run:
 localStorage.setItem("pondview:debug:notebook-controller", "1");
 ```
 
-### MotherDuck
+## Repository structure
 
-MotherDuck authentication is completed by the active DuckDB runtime. To persist
-auth across Bridge restarts, set `MOTHERDUCK_TOKEN` in the environment used to
-launch Bridge.
+- `src/app/` — route/page-level React code
+- `src/components/` — reusable UI and feature components
+- `src/components/ui/` — shared low-level UI primitives
+- `src/ai/` — AI settings, models, prompts, tools, and AI clients
+- `src/hooks/` — shared React hooks
+- `src/lib/` — application logic, DuckDB/runtime code, project/workspace stores, SQL helpers
+- `src/features/` — feature-specific modules
+- `src/themes/` — theme definitions
+- `packages/bridge/` — Bun CLI and local Pondview bridge server backed by DuckDB Node API
+- `packages/bridge-protocol/` — shared bridge client, schemas, and protocol types
+- `docs-site/` — VitePress documentation
+- `scripts/` — repository maintenance scripts
+- `public/` — static assets
 
-### Commands
+## Documentation
+
+User documentation and product reference live in [`docs-site`](./docs-site/index.md).
+
+When changing setup, user-visible behavior, supported runtimes, connected sources, dashboards, or AI configuration, update the docs and run:
 
 ```bash
-# App
-bun dev
-bun run build
-bun run preview
-
-# Docs
-bun run docs:dev
 bun run docs:build
-bun run docs:preview
-
-# Quality
-bun run lint
-bun run format
-bun run typecheck
-bun run test
 ```
-
-### Pondview bridge CLI
-
-`pondview start` runs the local Pondview UI and bridge API together.
-`pondview start --no-ui` runs the API-only bridge for hosted UI connections or
-background CLI use.
-
-Bridge-backed commands such as `pondview attach`, `pondview list-sources`,
-`pondview detach`, and `pondview query` use the same local bridge runtime.
-If a client command auto-starts the bridge in the background, stop it with
-`pondview stop`. Bridge mode writes project artifacts directly to a filesystem
-project rooted at the launch directory, or `--project-dir <dir>` when provided.
-When starting the local app in an empty folder, Pondview asks whether to
-initialize local project files or keep using browser storage for that folder.
-See [Pondview CLI](./docs-site/guide/cli.md) for commands, flags, bundled UI
-assets built into `packages/bridge/dist`, autostart behavior, and future TODOs.
 
 ## Contributing
 

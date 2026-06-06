@@ -212,7 +212,6 @@ export function detectQuackConnection(
     type: "quack",
     identifier: id,
     duckdbExtension: "quack",
-    duckdbExtensionRepository: "core_nightly",
     readOnly: false,
     attachOptions: {
       type: "quack",

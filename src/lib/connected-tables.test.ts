@@ -50,7 +50,6 @@ describe("sanitizeConnectedTableForStorage", () => {
         tables: ["stations"],
         readOnly: false,
         duckdbExtension: "quack",
-        duckdbExtensionRepository: "core_nightly",
       }),
     ).toEqual({
       type: "quack",
@@ -61,7 +60,6 @@ describe("sanitizeConnectedTableForStorage", () => {
       tables: ["stations"],
       readOnly: false,
       duckdbExtension: "quack",
-      duckdbExtensionRepository: "core_nightly",
     });
   });
 });

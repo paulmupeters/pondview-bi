@@ -83,14 +83,13 @@ describe("buildAttachmentPlan", () => {
     ]);
   });
 
-  test("builds Quack attachment statements from nightly extension", () => {
+  test("builds Quack attachment statements from the stable extension", () => {
     const plan = buildAttachmentPlan({
       type: "quack",
       identifier: "quack:localhost:9494",
       alias: "analytics",
       readOnly: false,
       duckdbExtension: "quack",
-      duckdbExtensionRepository: "core_nightly",
       attachOptions: {
         type: "quack",
         token: "secret-token",
@@ -100,7 +99,7 @@ describe("buildAttachmentPlan", () => {
 
     expect(plan.alias).toBe("analytics");
     expect(plan.statements).toEqual([
-      "INSTALL quack FROM core_nightly;",
+      "INSTALL quack;",
       "LOAD quack;",
       `ATTACH 'quack:localhost:9494' AS "analytics" (TYPE quack, TOKEN 'secret-token', DISABLE_SSL true);`,
     ]);

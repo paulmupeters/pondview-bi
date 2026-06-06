@@ -6,6 +6,7 @@ import {
 } from "@/lib/duckdb/duckdb-attachments";
 import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import { rewriteSqlForAttachedDatabase } from "@/lib/duckdb/rewrite-sql";
+import { getProjectRuntimeSelection } from "@/lib/project-runtime";
 import { runQueryWasm } from "@/lib/sql/run-query-wasm";
 import {
   assertWasmCompatibleDbIdentifier,
@@ -18,6 +19,7 @@ export type RunQueryOptions = {
   sql: string;
   dbIdentifier?: string;
   catalogContext?: string | null;
+  setupSql?: string | null;
   signal?: AbortSignal;
   backendPreference?: SqlBackendPreference;
 };
@@ -34,6 +36,11 @@ type RunQueryDeps = {
   assertWasmCompatibleIdentifier: typeof assertWasmCompatibleDbIdentifier;
   runBridge: typeof runBridgeQuery;
   runWasm: typeof runQueryWasm;
+  resolveProjectSetupSql: (input: {
+    backend: SqlBackend;
+    dbIdentifier?: string;
+    catalogContext?: string | null;
+  }) => string | null;
 };
 
 const defaultDeps: RunQueryDeps = {
@@ -41,6 +48,21 @@ const defaultDeps: RunQueryDeps = {
   assertWasmCompatibleIdentifier: assertWasmCompatibleDbIdentifier,
   runBridge: runBridgeQuery,
   runWasm: runQueryWasm,
+  resolveProjectSetupSql: ({ backend, dbIdentifier, catalogContext }) => {
+    const selection = getProjectRuntimeSelection();
+    if (!selection?.setupSql || selection.runtimeBackend !== backend) {
+      return null;
+    }
+    const normalizedDbIdentifier = dbIdentifier?.trim() || null;
+    const normalizedCatalogContext = catalogContext?.trim() || null;
+    if (
+      normalizedDbIdentifier !== (selection.dbIdentifier ?? null) ||
+      normalizedCatalogContext !== (selection.catalogContext ?? null)
+    ) {
+      return null;
+    }
+    return selection.setupSql;
+  },
 };
 
 export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
@@ -53,6 +75,7 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
     sql,
     dbIdentifier,
     catalogContext,
+    setupSql,
     signal,
     backendPreference = "auto",
   }: RunQueryOptions): Promise<RunQueryResult> {
@@ -63,6 +86,13 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
 
     const normalizedIdentifier = dbIdentifier?.trim();
     const backend = deps.resolveBackend({ backendPreference, dbIdentifier });
+    const resolvedSetupSql =
+      setupSql ??
+      deps.resolveProjectSetupSql({
+        backend,
+        dbIdentifier: normalizedIdentifier,
+        catalogContext,
+      });
 
     if (isMotherDuckIdentifier(normalizedIdentifier) && normalizedIdentifier) {
       if (backend === "duckdb-wasm") {
@@ -119,6 +149,9 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
       }
     }
     if (backend === "bridge") {
+      if (resolvedSetupSql?.trim()) {
+        await deps.runBridge(resolvedSetupSql, signal);
+      }
       const result = await runWithCatalogContext({
         sql: trimmedSql,
         selectedCatalog: catalogContext,
@@ -131,6 +164,13 @@ export function createRunQuery(partialDeps: Partial<RunQueryDeps> = {}) {
     }
 
     deps.assertWasmCompatibleIdentifier(dbIdentifier);
+    if (resolvedSetupSql?.trim()) {
+      await deps.runWasm({
+        sql: resolvedSetupSql,
+        signal,
+        dbIdentifier,
+      });
+    }
     const result = await runWithCatalogContext({
       sql: trimmedSql,
       selectedCatalog: catalogContext,

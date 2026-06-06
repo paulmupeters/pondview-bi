@@ -112,6 +112,63 @@ describe("runQuery routing", () => {
     expect(result.backend).toBe("bridge");
   });
 
+  test("runs setup SQL before bridge queries", async () => {
+    const receivedSql: string[] = [];
+    const runQuery = createRunQuery({
+      resolveBackend: () => "bridge",
+      runBridge: async (sql) => {
+        receivedSql.push(sql);
+        return {
+          rows: sql.startsWith("SELECT") ? [{ value: 1 }] : [],
+          columns: sql.startsWith("SELECT") ? [{ name: "value" }] : [],
+          durationMs: 1,
+        };
+      },
+      runWasm: async () => {
+        throw new Error("should not reach wasm");
+      },
+      assertWasmCompatibleIdentifier: () => {},
+      resolveProjectSetupSql: () => null,
+    });
+
+    const result = await runQuery({
+      sql: "SELECT * FROM sheet_sales",
+      setupSql: "CREATE OR REPLACE VIEW sheet_sales AS SELECT 1 AS value;",
+      backendPreference: "bridge",
+    });
+
+    expect(receivedSql).toEqual([
+      "CREATE OR REPLACE VIEW sheet_sales AS SELECT 1 AS value;",
+      "SELECT * FROM sheet_sales",
+    ]);
+    expect(result.rows).toEqual([{ value: 1 }]);
+  });
+
+  test("surfaces setup SQL failures before bridge queries", async () => {
+    const receivedSql: string[] = [];
+    const runQuery = createRunQuery({
+      resolveBackend: () => "bridge",
+      runBridge: async (sql) => {
+        receivedSql.push(sql);
+        throw new Error("setup failed");
+      },
+      runWasm: async () => {
+        throw new Error("should not reach wasm");
+      },
+      assertWasmCompatibleIdentifier: () => {},
+      resolveProjectSetupSql: () => null,
+    });
+
+    await expect(
+      runQuery({
+        sql: "SELECT * FROM sheet_sales",
+        setupSql: "CREATE VIEW broken AS SELECT",
+        backendPreference: "bridge",
+      }),
+    ).rejects.toThrow("setup failed");
+    expect(receivedSql).toEqual(["CREATE VIEW broken AS SELECT"]);
+  });
+
   test("runs MotherDuck queries through bridge attach lifecycle", async () => {
     const receivedSql: string[] = [];
     let receivedSignal: AbortSignal | undefined;

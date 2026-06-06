@@ -43,7 +43,7 @@ const AI_PROVIDER_API_KEY_STORAGE_KEYS: Record<AiProvider, string> = {
 };
 
 const AI_PROVIDER_DISPLAY_NAMES: Record<AiProvider, string> = {
-  gateway: "Gateway",
+  gateway: "Vercel Gateway",
   openai: "OpenAI",
   anthropic: "Anthropic",
   ollama: "Ollama",

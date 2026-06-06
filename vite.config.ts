@@ -28,6 +28,9 @@ export default defineConfig(({ command, mode }) => {
       ],
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
+        "@pondview/bridge-protocol": fileURLToPath(
+          new URL("./packages/bridge-protocol/src/index.ts", import.meta.url),
+        ),
       },
     },
     build: {

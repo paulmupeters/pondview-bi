@@ -12,20 +12,13 @@ Install the published CLI with npm:
 
 ```bash
 npm install -g @pondview/cli
-pondview
+pondview start
 ```
 
 Or run it without installing globally:
 
 ```bash
-npx @pondview/cli
-```
-
-From this repository during development:
-
-```bash
-bun run bridge:build-ui
-bun run bridge -- start
+npx @pondview/cli start
 ```
 
 `pondview start` starts one localhost server for both the UI and bridge API. By
@@ -35,7 +28,7 @@ Use `--no-open` when running from scripts or terminals where opening a browser
 would be noisy:
 
 ```bash
-bun run bridge -- start --no-open
+pondview start --no-open
 ```
 
 ## Commands
@@ -75,11 +68,15 @@ project root is the directory where the bridge was launched; pass
 published notebooks, and source metadata are written as raw project artifact
 files such as `pondview/...`; bridge metadata lives in `.pondview/project.json`.
 
-When `pondview start` opens an empty folder, the local app asks whether to
-initialize local project files or keep working from browser storage. Initializing
-creates `pondview/project.json`, `pondview.sources.local.json`, bridge metadata,
-and the local DuckDB runtime file. Browser mode leaves the folder untouched and
-uses the existing browser IndexedDB workflow for that project folder.
+When `pondview start` opens a folder for the first time, the local app checks
+for `.duckdb` files in that folder's root. If exactly one is found, you get a
+quick-start screen to open it as your primary database. If you pass
+`--database <file.duckdb>`, that file is used instead. With no DuckDB file
+present, the app asks whether to initialize local project files or keep working
+from browser storage. Initializing creates `pondview/project.json`,
+`pondview.sources.local.json`, bridge metadata, and the local DuckDB runtime
+file. Browser mode leaves the folder untouched and uses the existing browser
+IndexedDB workflow for that project folder.
 
 ### Client commands
 
@@ -127,21 +124,19 @@ pondview query --file ./dashboard-metadata.sql --database ./analytics.duckdb
 checkout and should not be committed.
 
 ```bash
-pondview source add ga4 \
-  --type custom \
-  --identifier ga4:property-id \
-  --as ga4 \
-  --extension ga4 \
-  --attach-type ga4 \
-  --readonly
+pondview source add google-sheet \
+  --sql "INSTALL gsheets FROM community; LOAD gsheets; CREATE OR REPLACE VIEW sheet_sales AS SELECT * FROM read_gsheet('https://docs.google.com/spreadsheets/d/.../edit', sheet = 'Sheet1', range = 'A:Z');"
+
+pondview source add snowflake \
+  --sql "INSTALL snowflake FROM community; LOAD snowflake; ATTACH '' AS sf (TYPE snowflake, SECRET my_snowflake, READ_ONLY);"
 
 pondview source list
-pondview source remove ga4
+pondview source remove google-sheet
 ```
 
-Custom sources must still be DuckDB attach-compatible. The CLI stores typed
-attachment metadata; Pondview builds the `INSTALL`, `LOAD`, and `ATTACH`
-statements from that metadata instead of running arbitrary setup SQL.
+Custom sources are SQL-backed. The CLI stores raw setup SQL, and Pondview runs it
+before using the source. The setup SQL can prepare views, tables, secrets, table
+functions, or attached catalogs.
 
 ### Dashboard maintenance
 
@@ -201,7 +196,7 @@ that port.
 | `--port <port>` | `start`, `stop`, client commands | Port for the local bridge. Defaults to `17817`. |
 | `--database <file>` | `start`, client autostart | Opens a DuckDB file as the bridge's primary database instead of using an in-memory database. |
 | `--project-dir <dir>` | `start`, client autostart | Filesystem project root for raw Pondview artifacts. Defaults to the launch directory. |
-| `--readonly` | `attach`, `source add` | Attaches a source with DuckDB `READ_ONLY`. |
+| `--readonly` | `attach` | Attaches a source with DuckDB `READ_ONLY`. |
 | `--token <token>` | all bridge/client commands | Requires or sends a bridge auth token. |
 | `--token-env <name>` | all bridge/client commands | Reads the bridge auth token from an environment variable. |
 | `--url <url>` | client commands | Uses an explicit bridge URL and disables autostart. |
@@ -212,22 +207,6 @@ that port.
 | `--no-open` | `start`, `dashboard open` | Does not open the browser after starting the local app. |
 | `--no-ui` | `start` | Starts the bridge API only. |
 | `--force` | `stop` | Stops whatever is listening on the configured port without checking whether it is a Pondview bridge. |
-
-## Bundled UI assets
-
-`pondview start` serves the UI from `packages/bridge/dist`. Build those assets
-before using local start from a fresh checkout:
-
-```bash
-bun run bridge:build-ui
-```
-
-The CLI does not fetch UI assets from Cloudflare. Keeping assets bundled makes
-the local app work offline and keeps the UI version aligned with the bridge
-code in the same repository.
-
-Generated assets are excluded from Biome checks because they are minified build
-output.
 
 ## Bridge API compatibility
 
@@ -257,13 +236,3 @@ and `X-API-Key: <token>` so CLI clients and the browser app can use the same
 runtime.
 
 Bridge-managed secrets are stored in `${XDG_CONFIG_HOME:-~/.config}/pondview/secrets.json` with restrictive filesystem permissions. Use `PONDVIEW_SECRETS_PATH` to override the file path.
-
-## TODO: future improvements
-
-- TODO: Add `pondview ui update` or a similar opt-in command if hosted asset
-  syncing becomes useful later.
-- TODO: Add project commands such as `pondview project inspect`,
-  `pondview project run`, and `pondview project start`.
-- TODO: Add file import commands for CSV and Parquet staging, for example
-  `pondview import ./customers.csv --table uploads.customers`.
-- TODO: Add persistent local source binding files for project handoff.

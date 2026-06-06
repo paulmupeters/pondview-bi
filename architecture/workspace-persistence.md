@@ -1,6 +1,6 @@
 # Workspace Persistence
 
-BI Chat stores user state in a few different places depending on what kind of data is being persisted.
+Pondview stores user state in a few different places depending on what kind of data is being persisted.
 
 ## Storage Architecture
 

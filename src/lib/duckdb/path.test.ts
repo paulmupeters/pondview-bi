@@ -21,7 +21,6 @@ describe("resolveDbPath", () => {
       type: "quack",
       identifier: "quack:localhost:9494",
       duckdbExtension: "quack",
-      duckdbExtensionRepository: "core_nightly",
       readOnly: false,
       attachOptions: {
         type: "quack",

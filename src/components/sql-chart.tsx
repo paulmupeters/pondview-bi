@@ -9,7 +9,6 @@ export function SqlChart({
   dataOverride,
   onTitleChange,
   onDescriptionChange,
-  onTakeawayChange,
 }: {
   customChartConfig?: Config;
   dataOverride?: {
@@ -25,7 +24,6 @@ export function SqlChart({
   };
   onTitleChange?: (value: string) => void;
   onDescriptionChange?: (value: string) => void;
-  onTakeawayChange?: (value: string) => void;
 }) {
   const payload = dataOverride; // parent supplies data; avoid extra subscription
   const isComplete = payload?.stage === "complete";
@@ -35,18 +33,11 @@ export function SqlChart({
   const effectiveChartConfig = customChartConfig || chartConfig;
   const title = effectiveChartConfig?.title ?? "";
   const description = effectiveChartConfig?.description ?? "";
-  const takeaway = effectiveChartConfig?.takeaway?.trim() ?? "";
   const insights = (summary?.insights ?? []).filter(Boolean);
-  const additionalInsights = takeaway
-    ? insights.filter(
-        (insight) => insight.trim().toLowerCase() !== takeaway.toLowerCase(),
-      )
-    : insights;
-  type EditableField = "title" | "description" | "takeaway";
+  type EditableField = "title" | "description";
 
   const canEditTitle = typeof onTitleChange === "function";
   const canEditDescription = typeof onDescriptionChange === "function";
-  const canEditTakeaway = typeof onTakeawayChange === "function";
 
   const getFieldValue = useCallback(
     (field: EditableField) => {
@@ -55,24 +46,20 @@ export function SqlChart({
           return title;
         case "description":
           return description;
-        case "takeaway":
-          return takeaway;
       }
     },
-    [description, takeaway, title],
+    [description, title],
   );
 
   const handleFieldCommit = useCallback(
     (field: EditableField, value: string) => {
       if (field === "title") {
         onTitleChange?.(value);
-      } else if (field === "description") {
-        onDescriptionChange?.(value);
       } else {
-        onTakeawayChange?.(value);
+        onDescriptionChange?.(value);
       }
     },
-    [onDescriptionChange, onTakeawayChange, onTitleChange],
+    [onDescriptionChange, onTitleChange],
   );
 
   const {
@@ -91,8 +78,7 @@ export function SqlChart({
   const handleStartEditing = (field: EditableField) => {
     const canEditField =
       (field === "title" && canEditTitle) ||
-      (field === "description" && canEditDescription) ||
-      (field === "takeaway" && canEditTakeaway);
+      (field === "description" && canEditDescription);
     if (!canEditField) {
       return;
     }
@@ -151,12 +137,8 @@ export function SqlChart({
         />
       </div>
 
-      {/* Description + takeaway + insights */}
-      {(description ||
-        takeaway ||
-        additionalInsights.length > 0 ||
-        canEditDescription ||
-        canEditTakeaway) && (
+      {/* Description + insights */}
+      {(description || insights.length > 0 || canEditDescription) && (
         <div className="space-y-3">
           {(description || canEditDescription) && (
             <div className="group/description rounded-md border bg-muted/10 p-3">
@@ -193,45 +175,11 @@ export function SqlChart({
             </div>
           )}
 
-          {(takeaway || canEditTakeaway) && (
-            <div className="group/takeaway rounded-md border bg-muted/20 p-3">
-              <div className="flex items-center gap-2">
-                <h4 className="font-medium">Takeaway</h4>
-                {canEditTakeaway && editingField !== "takeaway" && (
-                  <button
-                    type="button"
-                    className="text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/takeaway:opacity-100 focus-visible:opacity-100"
-                    onClick={() => handleStartEditing("takeaway")}
-                    aria-label="Edit chart takeaway"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-              {editingField === "takeaway" ? (
-                <input
-                  ref={inputRef}
-                  type="text"
-                  className="mt-2 w-full bg-background border border-input rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary"
-                  value={draftValue}
-                  onChange={(event) => setDraftValue(event.target.value)}
-                  onBlur={handleInputBlur}
-                  onKeyDown={handleInputKeyDown}
-                  placeholder="Add a takeaway"
-                />
-              ) : (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {takeaway || "Add a takeaway"}
-                </p>
-              )}
-            </div>
-          )}
-
-          {additionalInsights.length > 0 && (
+          {insights.length > 0 && (
             <div className="space-y-2">
-              {!takeaway && <h4 className="font-medium">Insights</h4>}
+              <h4 className="font-medium">Insights</h4>
               <ul className="space-y-1 text-sm text-muted-foreground">
-                {additionalInsights.map((insight, index) => (
+                {insights.map((insight, index) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: we need to use the index as a key
                   <li key={index} className="flex items-start gap-2">
                     <span className="w-1 h-1 rounded-full bg-primary mt-2 shrink-0" />

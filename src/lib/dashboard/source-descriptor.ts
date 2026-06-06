@@ -235,6 +235,12 @@ function isSourceConnectionConfig(
     return false;
   }
   if (
+    candidate.setupSql !== undefined &&
+    typeof candidate.setupSql !== "string"
+  ) {
+    return false;
+  }
+  if (
     candidate.readOnly !== undefined &&
     typeof candidate.readOnly !== "boolean"
   ) {
@@ -251,6 +257,19 @@ function isSourceConnectionConfig(
     typeof candidate.duckdbExtensionRepository !== "string"
   ) {
     return false;
+  }
+  if (candidate.type === "custom") {
+    return (
+      typeof candidate.setupSql === "string" &&
+      candidate.setupSql.trim().length > 0 &&
+      candidate.identifier === undefined &&
+      candidate.connectionId === undefined &&
+      candidate.alias === undefined &&
+      candidate.readOnly === undefined &&
+      candidate.duckdbExtension === undefined &&
+      candidate.duckdbExtensionRepository === undefined &&
+      candidate.attachOptions === undefined
+    );
   }
   return true;
 }

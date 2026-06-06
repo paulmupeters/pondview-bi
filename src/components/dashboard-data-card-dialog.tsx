@@ -676,11 +676,6 @@ export function DashboardDataCardDialog({
                             measureCardMeta.description.trim() ||
                             "Measure preview"
                           }
-                          takeaway={
-                            measureCardMeta.takeaway?.trim()
-                              ? measureCardMeta.takeaway.trim()
-                              : undefined
-                          }
                           className="border-0 bg-transparent shadow-none"
                         />
                       </div>
@@ -828,11 +823,6 @@ export function DashboardDataCardDialog({
                             title={sqlCardMeta.title.trim() || "Metric"}
                             description={
                               sqlCardMeta.description.trim() || "Metric preview"
-                            }
-                            takeaway={
-                              sqlCardMeta.takeaway?.trim()
-                                ? sqlCardMeta.takeaway.trim()
-                                : undefined
                             }
                             className="border-0 bg-transparent shadow-none"
                           />
