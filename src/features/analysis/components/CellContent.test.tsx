@@ -8,6 +8,7 @@ import {
   test,
 } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server.node";
+import { MemoryRouter } from "react-router-dom";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import type { AiCellState } from "@/features/analysis/components/AiCell";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
@@ -116,13 +117,15 @@ describe("CellContent", () => {
 
   test("keeps the AI response visible while the SQL mode is selected", () => {
     const markup = renderToStaticMarkup(
-      <CellContent
-        cell={createCell({ activeMode: "sql" })}
-        pendingBootstrap={null}
-        notebookSession={createNotebookSession()}
-        onBootstrapConsumed={() => {}}
-        onSelectCellMode={() => {}}
-      />,
+      <MemoryRouter>
+        <CellContent
+          cell={createCell({ activeMode: "sql" })}
+          pendingBootstrap={null}
+          notebookSession={createNotebookSession()}
+          onBootstrapConsumed={() => {}}
+          onSelectCellMode={() => {}}
+        />
+      </MemoryRouter>,
     );
 
     expect(markup).toContain("AI says to keep this result visible.");
@@ -131,22 +134,24 @@ describe("CellContent", () => {
     expect(markup).toContain(">SQL<");
   });
 
-  test("hides prompt errors while the SQL mode is selected", () => {
+  test("shows prompt errors from the inline composer while SQL mode is selected", () => {
     aiState.promptError =
       "Missing AI configuration. Open Settings and configure provider, API key, and model.";
     aiState.latestAssistantText = null;
 
     const markup = renderToStaticMarkup(
-      <CellContent
-        cell={createCell({ activeMode: "sql" })}
-        pendingBootstrap={null}
-        notebookSession={createNotebookSession()}
-        onBootstrapConsumed={() => {}}
-        onSelectCellMode={() => {}}
-      />,
+      <MemoryRouter>
+        <CellContent
+          cell={createCell({ activeMode: "sql" })}
+          pendingBootstrap={null}
+          notebookSession={createNotebookSession()}
+          onBootstrapConsumed={() => {}}
+          onSelectCellMode={() => {}}
+        />
+      </MemoryRouter>,
     );
 
-    expect(markup).not.toContain("Missing AI configuration");
+    expect(markup).toContain("Missing AI configuration");
     expect(markup).toContain("Ask AI");
     expect(markup).toContain(">SQL<");
   });

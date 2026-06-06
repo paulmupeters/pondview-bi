@@ -24,13 +24,20 @@ query them in the SQL editor and ask the AI to use them in analysis.
 Excel files are stored as uploaded files but are not automatically converted into
 DuckDB tables. They remain available as chat attachments.
 
-## Behavior by file type
+1. Validate extension and size.
+2. Generate `fileId` and metadata entry.
+3. Store blob in workspace DB (`STORE_UPLOADED_FILE_BLOBS`).
+4. If the active runtime can import the file, create a table in DuckDB (`uploads.<table>`).
+5. Save metadata entry to local storage (`uploadedFiles`).
 
-| Type | Auto-import to DuckDB WASM | Result |
-| ---- | -------------------------- | ------ |
-| CSV | Yes | Stored and queryable as a local table |
-| Parquet | Yes | Stored and queryable as a local table |
-| XLSX/XLS | No | Stored as a browser file and available for chat attachment |
+## Import behavior by file type
+
+| Type | DuckDB WASM | Bridge | Result |
+| --- | --- | --- | --- |
+| CSV | Imported | Imported | Stored + imported (`importStatus: imported`) |
+| Parquet | Imported | Imported | Stored + imported (`importStatus: imported`) |
+| XLSX | Stored only | Imported after worksheet selection | Stored, and imported in Bridge |
+| XLS | Stored only | Unsupported | Use `.xlsx` instead for Bridge imports |
 
 ## Where uploads are used
 

@@ -1,5 +1,7 @@
 import { nanoid } from "nanoid";
+import { importBridgeFile } from "@/lib/bridge/pondview-bridge";
 import { DuckdbWasmClient } from "@/lib/duckdb/duckdb-wasm-client";
+import type { SqlBackend } from "@/lib/sql/sql-runtime";
 import {
   deleteUploadedFileBlob,
   readUploadedFileBlob,
@@ -84,7 +86,10 @@ function toDuckDbIdentifier(input: string): string {
   return /^[0-9]/.test(normalized) ? `_${normalized}` : normalized;
 }
 
-function buildUploadedTableName(originalName: string, fileId: string): string {
+export function buildUploadedTableName(
+  originalName: string,
+  fileId: string,
+): string {
   const baseName = toDuckDbIdentifier(getBaseName(originalName));
   return `${baseName}_${fileId.slice(0, 8)}`;
 }
@@ -147,6 +152,12 @@ function validateUploadEntry(entry: UploadedFileLegacy): UploadedFile | null {
 
 function isImportableByWasm(extension: string): boolean {
   return extension === ".csv" || extension === ".parquet";
+}
+
+function isImportableByBridge(extension: string): boolean {
+  return (
+    extension === ".csv" || extension === ".parquet" || extension === ".xlsx"
+  );
 }
 
 export function readUploadedFilesFromStorage(): UploadedFile[] {
@@ -257,16 +268,30 @@ export async function getUploadedFileBlob(
   return readUploadedFileBlob(fileId);
 }
 
-export async function persistUploadedFile(file: File): Promise<UploadedFile> {
+export async function persistUploadedFile(
+  file: File,
+  options: {
+    backend?: SqlBackend;
+    xlsxSheet?: string;
+  } = {},
+): Promise<UploadedFile> {
   const validationError = validateUploadableFile(file);
   if (validationError) {
     throw new Error(validationError);
   }
 
+  const backend = options.backend ?? "duckdb-wasm";
   const fileId = nanoid();
   const sanitizedOriginalName = sanitizeFileName(file.name);
   const extension = getFileExtension(file.name);
   const uploadedAt = new Date().toISOString();
+
+  if (backend === "bridge" && extension === ".xls") {
+    throw new Error("Legacy .xls files are not supported. Use .xlsx instead.");
+  }
+  if (backend === "bridge" && extension === ".xlsx" && !options.xlsxSheet) {
+    throw new Error("Select a worksheet before importing an XLSX file.");
+  }
 
   const baseEntry: UploadedFile = {
     fileId,
@@ -283,7 +308,32 @@ export async function persistUploadedFile(file: File): Promise<UploadedFile> {
   await storeUploadedFileBlob(fileId, file);
 
   let finalEntry = baseEntry;
-  if (isImportableByWasm(extension)) {
+  if (backend === "bridge" && isImportableByBridge(extension)) {
+    try {
+      const tableName = buildUploadedTableName(file.name, fileId);
+      const result = await importBridgeFile({
+        fileName: file.name,
+        bytesBase64: arrayBufferToBase64(await file.arrayBuffer()),
+        schemaName: UPLOADED_FILES_SCHEMA,
+        tableName,
+        xlsxSheet: options.xlsxSheet,
+      });
+
+      finalEntry = {
+        ...baseEntry,
+        importStatus: "imported",
+        schemaName: result.schemaName,
+        tableName: result.tableName,
+      };
+    } catch (error) {
+      finalEntry = {
+        ...baseEntry,
+        importStatus: "error",
+        importError:
+          error instanceof Error ? error.message : String(error ?? ""),
+      };
+    }
+  } else if (backend === "duckdb-wasm" && isImportableByWasm(extension)) {
     try {
       const client = new DuckdbWasmClient();
       const tableName = buildUploadedTableName(file.name, fileId);
@@ -320,6 +370,16 @@ export async function persistUploadedFile(file: File): Promise<UploadedFile> {
 
   appendUploadedFile(finalEntry);
   return finalEntry;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(index, index + chunkSize));
+  }
+  return btoa(binary);
 }
 
 export function formatFileSize(bytes: number): string {

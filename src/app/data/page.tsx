@@ -28,6 +28,7 @@ import {
   saveJoinDefsRawToStorage,
 } from "@/lib/joins/browser-storage";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
+import { UPLOADED_FILES_UPDATED_EVENT } from "@/lib/uploaded-files";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -272,6 +273,27 @@ export default function ViewDataPage() {
   /* ── Effects ── */
   useEffect(() => {
     setJoinDefsRaw(readJoinDefsRawFromStorage());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleUploadedFilesUpdated = () => {
+      setRuntimeRefreshToken((token) => token + 1);
+    };
+
+    window.addEventListener(
+      UPLOADED_FILES_UPDATED_EVENT,
+      handleUploadedFilesUpdated,
+    );
+    return () => {
+      window.removeEventListener(
+        UPLOADED_FILES_UPDATED_EVENT,
+        handleUploadedFilesUpdated,
+      );
+    };
   }, []);
 
   useEffect(() => {

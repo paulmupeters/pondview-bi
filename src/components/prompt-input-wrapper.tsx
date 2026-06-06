@@ -31,6 +31,13 @@ import type { SqlAnalysisData } from "@/components/sql-analysis-display.types";
 import type { QueryNotice, SqlConsoleApi } from "@/components/sql-console";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -40,6 +47,7 @@ import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import type { CardConfig, Config } from "@/lib/types";
 import { getUploadedFileBlob, persistUploadedFile } from "@/lib/uploaded-files";
 import { cn } from "@/lib/utils";
+import { readXlsxSheetNames } from "@/lib/xlsx-sheets";
 
 export type PromptMode = "ai" | "manual";
 export type ManualShellVariant = "default" | "minimal";
@@ -111,7 +119,8 @@ interface PromptInputWrapperProps {
 // Inner component that uses the attachments hook within PromptInput context
 function FileAttachmentHoverCard() {
   const effectiveSqlBackend = useResolvedSqlBackend();
-  const isFileUploadSupported = effectiveSqlBackend === "duckdb-wasm";
+  const isFileUploadSupported =
+    effectiveSqlBackend === "duckdb-wasm" || effectiveSqlBackend === "bridge";
   const uploadedFiles = useUploadedFiles();
   const attachments = usePromptInputAttachments();
   const [searchQuery, setSearchQuery] = useState("");
@@ -121,6 +130,9 @@ function FileAttachmentHoverCard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingXlsxFile, setPendingXlsxFile] = useState<File | null>(null);
+  const [xlsxSheets, setXlsxSheets] = useState<string[]>([]);
+  const [selectedXlsxSheet, setSelectedXlsxSheet] = useState("");
   // Filter uploaded files based on search query
   const filteredFiles = uploadedFiles.filter((file) =>
     file.originalName.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -156,7 +168,20 @@ function FileAttachmentHoverCard() {
     setIsUploading(true);
 
     try {
-      const uploadedFile = await persistUploadedFile(nextFile);
+      if (
+        effectiveSqlBackend === "bridge" &&
+        nextFile.name.toLowerCase().endsWith(".xlsx")
+      ) {
+        const sheets = await readXlsxSheetNames(nextFile);
+        setPendingXlsxFile(nextFile);
+        setXlsxSheets(sheets);
+        setSelectedXlsxSheet(sheets[0] ?? "");
+        return;
+      }
+
+      const uploadedFile = await persistUploadedFile(nextFile, {
+        backend: effectiveSqlBackend,
+      });
       const browserFile = await getUploadedFileBlob(uploadedFile.fileId);
       if (browserFile) {
         attachments.add([browserFile]);
@@ -171,6 +196,35 @@ function FileAttachmentHoverCard() {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+    }
+  };
+
+  const handleImportSelectedXlsxSheet = async () => {
+    if (!pendingXlsxFile || !selectedXlsxSheet) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsUploading(true);
+    try {
+      const uploadedFile = await persistUploadedFile(pendingXlsxFile, {
+        backend: "bridge",
+        xlsxSheet: selectedXlsxSheet,
+      });
+      const browserFile = await getUploadedFileBlob(uploadedFile.fileId);
+      if (browserFile) {
+        attachments.add([browserFile]);
+        setSelectedFileIds((prev) => new Set(prev).add(uploadedFile.fileId));
+      }
+      setPendingXlsxFile(null);
+      setXlsxSheets([]);
+      setSelectedXlsxSheet("");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to import worksheet.",
+      );
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -248,8 +302,50 @@ function FileAttachmentHoverCard() {
               ) : null}
               {!isFileUploadSupported ? (
                 <div className="text-xs text-muted-foreground">
-                  File upload is currently only supported in DuckDB WASM. Use
-                  the DuckDB shell to load files for HTTP or Bridge connections.
+                  File upload is currently only supported in DuckDB WASM and
+                  Bridge.
+                </div>
+              ) : pendingXlsxFile ? (
+                <div className="space-y-2">
+                  <Select
+                    value={selectedXlsxSheet}
+                    onValueChange={setSelectedXlsxSheet}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select worksheet" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {xlsxSheets.map((sheet) => (
+                        <SelectItem key={sheet} value={sheet}>
+                          {sheet}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="flex-1"
+                      disabled={isUploading || !selectedXlsxSheet}
+                      onClick={handleImportSelectedXlsxSheet}
+                    >
+                      {isUploading ? "Importing..." : "Import Sheet"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isUploading}
+                      onClick={() => {
+                        setPendingXlsxFile(null);
+                        setXlsxSheets([]);
+                        setSelectedXlsxSheet("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <>

@@ -27,6 +27,14 @@ describe("BridgeClient project endpoints", () => {
             paths: ["analytics.duckdb"],
           });
         }
+        if (String(url).endsWith("/imports/file")) {
+          return jsonResponse({
+            schemaName: "uploads",
+            tableName: "customers",
+            rowCount: 1,
+            format: "csv",
+          });
+        }
         return jsonResponse({
           files: [
             {
@@ -52,6 +60,12 @@ describe("BridgeClient project endpoints", () => {
     await client.deleteProjectFiles({
       paths: ["pondview/queries/shared/revenue.sql"],
     });
+    await client.importFile({
+      fileName: "customers.csv",
+      bytesBase64: "aWQKMQo=",
+      schemaName: "uploads",
+      tableName: "customers",
+    });
 
     expect(requests.map((request) => request.url)).toEqual([
       "http://bridge.test/project",
@@ -61,6 +75,7 @@ describe("BridgeClient project endpoints", () => {
       "http://bridge.test/project/files",
       "http://bridge.test/project/files/replace",
       "http://bridge.test/project/files",
+      "http://bridge.test/imports/file",
     ]);
     expect(requests.map((request) => request.init.method ?? "GET")).toEqual([
       "GET",
@@ -70,6 +85,7 @@ describe("BridgeClient project endpoints", () => {
       "PUT",
       "POST",
       "DELETE",
+      "POST",
     ]);
     expect(
       requests.every(
