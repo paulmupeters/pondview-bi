@@ -340,16 +340,13 @@ function buildRuntimeTableReference(
   >,
 ): string {
   const catalog = table.table_catalog.trim();
-  const schema = table.table_schema.trim();
+  const schema = table.table_schema.trim() || "main";
   const name = table.table_name.trim();
-  const parts =
-    catalog && isDefaultTableSchema(schema)
-      ? [catalog, name]
-      : catalog
-        ? [catalog, schema, name]
-        : isDefaultTableSchema(schema)
-          ? [name]
-          : [schema, name];
+  const parts = catalog
+    ? [catalog, schema, name]
+    : isDefaultTableSchema(schema)
+      ? [name]
+      : [schema, name];
 
   return parts.map(quoteIdentifier).join(".");
 }
@@ -363,7 +360,15 @@ function resolveRuntimeTableReferenceFromMetadata(
     return tableReference;
   }
 
-  const normalizedParts = parts.map(normalizeIdentifierPart);
+  let normalizedParts = parts.map(normalizeIdentifierPart);
+  if (normalizedParts.length === 1 && normalizedParts[0]?.includes(".")) {
+    normalizedParts = splitTableReference(normalizedParts[0]).map(
+      normalizeIdentifierPart,
+    );
+  }
+  if (normalizedParts.length === 0 || normalizedParts.length > 3) {
+    return tableReference;
+  }
   const matches = tables.filter((table) => {
     const catalog = table.table_catalog.trim().toLowerCase();
     const schema = table.table_schema.trim().toLowerCase();

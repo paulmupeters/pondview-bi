@@ -28,13 +28,13 @@ const postgresPublicTable: RuntimeTableMetadata = {
   table_schema: "public",
   table_name: "saved_keywords",
   table_type: "BASE TABLE",
-  table_reference: '"main_db"."saved_keywords"',
+  table_reference: '"main_db"."public"."saved_keywords"',
 };
 
 describe("buildRuntimeTableReference", () => {
-  test("uses catalog.table for attached default-schema tables", () => {
+  test("uses catalog.schema.table for attached default-schema tables", () => {
     expect(buildRuntimeTableReference(postgresPublicTable)).toBe(
-      '"main_db"."saved_keywords"',
+      '"main_db"."public"."saved_keywords"',
     );
   });
 
@@ -55,7 +55,7 @@ describe("resolveRuntimeTableReferenceFromMetadata", () => {
       resolveRuntimeTableReferenceFromMetadata("saved_keywords", [
         postgresPublicTable,
       ]),
-    ).toBe('"main_db"."saved_keywords"');
+    ).toBe('"main_db"."public"."saved_keywords"');
   });
 
   test("resolves public.schema references to the attached catalog reference", () => {
@@ -63,7 +63,7 @@ describe("resolveRuntimeTableReferenceFromMetadata", () => {
       resolveRuntimeTableReferenceFromMetadata("public.saved_keywords", [
         postgresPublicTable,
       ]),
-    ).toBe('"main_db"."saved_keywords"');
+    ).toBe('"main_db"."public"."saved_keywords"');
   });
 
   test("maps public references to DuckDB default schema tables", () => {
@@ -72,10 +72,10 @@ describe("resolveRuntimeTableReferenceFromMetadata", () => {
         {
           ...postgresPublicTable,
           table_schema: "main",
-          table_reference: '"main_db"."saved_keywords"',
+          table_reference: '"main_db"."main"."saved_keywords"',
         },
       ]),
-    ).toBe('"main_db"."saved_keywords"');
+    ).toBe('"main_db"."main"."saved_keywords"');
   });
 
   test("preserves the attached catalog reference when already supplied", () => {
@@ -83,7 +83,25 @@ describe("resolveRuntimeTableReferenceFromMetadata", () => {
       resolveRuntimeTableReferenceFromMetadata("main_db.saved_keywords", [
         postgresPublicTable,
       ]),
-    ).toBe('"main_db"."saved_keywords"');
+    ).toBe('"main_db"."public"."saved_keywords"');
+  });
+
+  test("resolves quoted dotted references passed as a single identifier", () => {
+    expect(
+      resolveRuntimeTableReferenceFromMetadata('"main_db.saved_keywords"', [
+        postgresPublicTable,
+      ]),
+    ).toBe('"main_db"."public"."saved_keywords"');
+  });
+
+  test("uses three-part references for a catalog named pondview", () => {
+    expect(
+      buildRuntimeTableReference({
+        table_catalog: "pondview",
+        table_schema: "main",
+        table_name: "raw_carts",
+      }),
+    ).toBe('"pondview"."main"."raw_carts"');
   });
 
   test("throws a helpful error for ambiguous bare table names", () => {
@@ -95,7 +113,7 @@ describe("resolveRuntimeTableReferenceFromMetadata", () => {
           table_schema: "public",
           table_name: "saved_keywords",
           table_type: "BASE TABLE",
-          table_reference: '"other_db"."saved_keywords"',
+          table_reference: '"other_db"."public"."saved_keywords"',
         },
       ]),
     ).toThrow(/ambiguous/i);

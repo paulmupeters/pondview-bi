@@ -48,6 +48,27 @@ function tableKey(entry: {
   return `${entry.catalog ?? ""}.${entry.schema}.${entry.name}`;
 }
 
+export function mergeRuntimeTables(
+  primary: DuckdbTableEntry[],
+  fallback: DuckdbTableEntry[],
+): DuckdbTableEntry[] {
+  const merged = new Map<string, DuckdbTableEntry>();
+
+  for (const table of fallback) {
+    merged.set(tableKey(table), table);
+  }
+  for (const table of primary) {
+    merged.set(tableKey(table), table);
+  }
+
+  return [...merged.values()].sort(
+    (a, b) =>
+      (a.catalog ?? "").localeCompare(b.catalog ?? "") ||
+      a.schema.localeCompare(b.schema) ||
+      a.name.localeCompare(b.name),
+  );
+}
+
 export function attachColumnMetadata(
   tables: DuckdbTableEntry[],
   rows: Record<string, unknown>[],
@@ -184,6 +205,18 @@ export function useRemoteRuntimeTables(
           resolveCurrentCatalog(runBridgeSql),
         ]);
         let tables = mapInformationSchemaRows(result.rows);
+        try {
+          const fallback = await runBridgeSql("SHOW ALL TABLES;");
+          tables = mergeRuntimeTables(
+            tables,
+            mapShowAllTablesRows(fallback.rows),
+          );
+        } catch (error) {
+          console.warn(
+            "[useRemoteRuntimeTables] Failed to load SHOW ALL TABLES:",
+            error,
+          );
+        }
         try {
           const columns = await runBridgeSql(LIST_COLUMNS_SQL);
           tables = attachColumnMetadata(tables, columns.rows);

@@ -444,6 +444,48 @@ describe("bridge server modes", () => {
     });
   });
 
+  test("starts on the project default DuckDB source", async () => {
+    const projectDir = createTempDir();
+    mkdirSync(join(projectDir, ".pondview"));
+    writeFileSync(
+      join(projectDir, ".pondview", "project.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        project: {
+          id: "bridge-project-example",
+          name: "Example",
+          backingKind: "bridge-filesystem",
+          openedAt: Date.now(),
+          updatedAt: Date.now(),
+          defaultSourceRef: "local",
+        },
+      }),
+    );
+    writeFileSync(
+      join(projectDir, "pondview.sources.local.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        bindings: {
+          local: {
+            runtimeBackend: "bridge",
+            dbIdentifier: "pondview.duckdb",
+            catalogContext: "main",
+          },
+        },
+      }),
+    );
+    const server = await startTrackedServer({ projectDir });
+
+    const response = await fetch(`${server.url}/api/duckdb/config`);
+
+    expect(await response.json()).toMatchObject({
+      database: {
+        mode: "file",
+        name: "pondview.duckdb",
+      },
+    });
+  });
+
   test("database-backed bridge runs queries against the primary DuckDB file", async () => {
     const databasePath = join(createTempDir(), "analytics.duckdb");
     const setup = await startBridgeServer({ databasePath, port: 0 });

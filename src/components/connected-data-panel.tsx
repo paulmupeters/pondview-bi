@@ -270,6 +270,12 @@ export function resolveActiveRuntimeExplorer(params: {
   };
 }
 
+export function shouldShowExplorerTableGroup(
+  group: ExplorerTableGroup,
+): boolean {
+  return !isHiddenRuntimeSchema(group.schema);
+}
+
 export function getExplorerTableDisplayLabel({
   catalog,
   schema,
@@ -284,6 +290,7 @@ export function getExplorerTableDisplayLabel({
     schema,
     table,
     includeCatalog: Boolean(catalog?.trim()),
+    includeDefaultSchema: Boolean(catalog?.trim()),
   });
 }
 
@@ -472,11 +479,10 @@ export function ConnectedDataPanel({
           const catalog = table.catalog?.trim() || "";
           const schema = table.schema?.trim() || "main";
           const key = `${catalog}::${schema}`;
-          const existing =
-            grouped.get(key) ?? {
-              tables: [],
-              columnsByTable: new Map<string, ExplorerColumn[]>(),
-            };
+          const existing = grouped.get(key) ?? {
+            tables: [],
+            columnsByTable: new Map<string, ExplorerColumn[]>(),
+          };
           existing.tables.push(table.name);
           if (table.columns && table.columns.length > 0) {
             existing.columnsByTable.set(table.name, table.columns);
@@ -575,112 +581,106 @@ export function ConnectedDataPanel({
       onColumnClick?: (columnName: string) => void;
     },
   ) =>
-    groups
-      .filter(
-        (group) =>
-          !isHiddenRuntimeSchema(group.schema) &&
-          !isHiddenRuntimeSchema(group.catalog),
-      )
-      .map((group, groupIdx) => (
-        <div
-          key={`${group.catalog || "default"}.${group.schema}`}
-          className="space-y-0.5"
-        >
-          {!isDefaultExplorerSchema(group.schema) && (
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              {group.schema}
-            </p>
-          )}
-          {group.tables.map((tableName, tableIdx) => {
-            const color =
-              options.palette[(groupIdx + tableIdx) % options.palette.length];
-            const payload = buildExplorerInsertPayload({
-              catalog: group.catalog,
-              currentCatalog: options.currentCatalog,
-              schema: group.schema,
-              table: tableName,
-              source: "runtime",
-            });
-            const displayReference = getExplorerTableDisplayLabel({
-              catalog: group.catalog,
-              schema: group.schema,
-              table: tableName,
-            });
-            const tableId = `${group.catalog}.${group.schema}.${tableName}`;
-            const columns = group.columnsByTable?.[tableName] ?? [];
-            const hasColumns = columns.length > 0;
-            const isExpanded = expandedTables.has(tableId);
+    groups.filter(shouldShowExplorerTableGroup).map((group, groupIdx) => (
+      <div
+        key={`${group.catalog || "default"}.${group.schema}`}
+        className="space-y-0.5"
+      >
+        {!isDefaultExplorerSchema(group.schema) && (
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {group.schema}
+          </p>
+        )}
+        {group.tables.map((tableName, tableIdx) => {
+          const color =
+            options.palette[(groupIdx + tableIdx) % options.palette.length];
+          const payload = buildExplorerInsertPayload({
+            catalog: group.catalog,
+            currentCatalog: options.currentCatalog,
+            schema: group.schema,
+            table: tableName,
+            source: "runtime",
+          });
+          const displayReference = getExplorerTableDisplayLabel({
+            catalog: group.catalog,
+            schema: group.schema,
+            table: tableName,
+          });
+          const tableId = `${group.catalog}.${group.schema}.${tableName}`;
+          const columns = group.columnsByTable?.[tableName] ?? [];
+          const hasColumns = columns.length > 0;
+          const isExpanded = expandedTables.has(tableId);
 
-            return (
-              <div key={tableId} className="space-y-0.5">
-                <div className="flex items-center gap-1">
-                  {hasColumns ? (
-                    <button
-                      type="button"
-                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-sidebar-foreground"
-                      onClick={() => toggleTableExpanded(tableId)}
-                      aria-expanded={isExpanded}
-                      aria-label={
-                        isExpanded
-                          ? `Hide columns for ${displayReference}`
-                          : `Show columns for ${displayReference}`
-                      }
-                      title={isExpanded ? "Hide columns" : "Show columns"}
-                    >
-                      <ChevronRight
-                        className={cn(
-                          "h-3 w-3 transition-transform",
-                          isExpanded && "rotate-90",
-                        )}
-                      />
-                    </button>
-                  ) : (
-                    <span className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  )}
+          return (
+            <div key={tableId} className="space-y-0.5">
+              <div className="flex items-center gap-1">
+                {hasColumns ? (
                   <button
                     type="button"
-                    className="hover:text-sidebar-foreground cursor-pointer transition-colors flex min-w-0 flex-1 items-center gap-2 text-left"
-                    onClick={() => options.onTableClick(group, payload)}
-                    title={`Insert ${displayReference}`}
+                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-sidebar-foreground"
+                    onClick={() => toggleTableExpanded(tableId)}
+                    aria-expanded={isExpanded}
+                    aria-label={
+                      isExpanded
+                        ? `Hide columns for ${displayReference}`
+                        : `Show columns for ${displayReference}`
+                    }
+                    title={isExpanded ? "Hide columns" : "Show columns"}
                   >
-                    <span
-                      className={cn("w-1.5 h-1.5 rounded-full shrink-0", color)}
+                    <ChevronRight
+                      className={cn(
+                        "h-3 w-3 transition-transform",
+                        isExpanded && "rotate-90",
+                      )}
                     />
-                    <span className="truncate">{displayReference}</span>
                   </button>
-                </div>
-                {isExpanded && hasColumns ? (
-                  <ul className="ml-[9px] border-l border-sidebar-border/60 pl-3">
-                    {columns.map((column) => (
-                      <li key={column.name}>
-                        <button
-                          type="button"
-                          className="group/col flex w-full items-center gap-2 rounded-sm py-0.5 text-left transition-colors hover:text-sidebar-foreground"
-                          onClick={() => options.onColumnClick?.(column.name)}
-                          title={
-                            column.type
-                              ? `Insert ${column.name} · ${column.type}`
-                              : `Insert ${column.name}`
-                          }
-                        >
-                          <span className="truncate text-[12px] text-sidebar-foreground/75 group-hover/col:text-sidebar-foreground">
-                            {column.name}
-                          </span>
-                          {column.type ? (
-                            <span className="ml-auto shrink-0 truncate text-[10px] uppercase tracking-wide text-muted-foreground">
-                              {column.type}
-                            </span>
-                          ) : null}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
+                ) : (
+                  <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+                )}
+                <button
+                  type="button"
+                  className="hover:text-sidebar-foreground cursor-pointer transition-colors flex min-w-0 flex-1 items-center gap-2 text-left"
+                  onClick={() => options.onTableClick(group, payload)}
+                  title={`Insert ${displayReference}`}
+                >
+                  <span
+                    className={cn("w-1.5 h-1.5 rounded-full shrink-0", color)}
+                  />
+                  <span className="truncate">{displayReference}</span>
+                </button>
               </div>
-            );
-          })}
-        </div>
-      ));
+              {isExpanded && hasColumns ? (
+                <ul className="ml-[9px] border-l border-sidebar-border/60 pl-3">
+                  {columns.map((column) => (
+                    <li key={column.name}>
+                      <button
+                        type="button"
+                        className="group/col flex w-full items-center gap-2 rounded-sm py-0.5 text-left transition-colors hover:text-sidebar-foreground"
+                        onClick={() => options.onColumnClick?.(column.name)}
+                        title={
+                          column.type
+                            ? `Insert ${column.name} · ${column.type}`
+                            : `Insert ${column.name}`
+                        }
+                      >
+                        <span className="truncate text-[12px] text-sidebar-foreground/75 group-hover/col:text-sidebar-foreground">
+                          {column.name}
+                        </span>
+                        {column.type ? (
+                          <span className="ml-auto shrink-0 truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+                            {column.type}
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    ));
 
   const renderQuerySection = (params: {
     title: string;

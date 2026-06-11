@@ -40,9 +40,7 @@ export class BridgeProjectStore {
   readonly rootPath: string;
 
   constructor(options: BridgeProjectStoreOptions = {}) {
-    this.rootPath = resolve(
-      options.rootPath?.trim() || process.env.INIT_CWD || process.cwd(),
-    );
+    this.rootPath = resolveProjectRootPath(options.rootPath);
     if (!existsSync(this.rootPath)) {
       mkdirSync(this.rootPath, { recursive: true });
     }
@@ -388,6 +386,18 @@ function isPathInsideRoot(rootPath: string, targetPath: string): boolean {
     relativePath === "" ||
     (!relativePath.startsWith("..") && !relativePath.startsWith(`..${sep}`))
   );
+}
+
+function resolveProjectRootPath(explicitRootPath?: string): string {
+  const candidates = [
+    explicitRootPath,
+    process.env.INIT_CWD,
+    process.env.PWD,
+    process.cwd(),
+  ];
+  const rootPath =
+    candidates.find((candidate) => candidate?.trim()) ?? process.cwd();
+  return resolve(rootPath);
 }
 
 function createProjectRootId(rootPath: string): string {

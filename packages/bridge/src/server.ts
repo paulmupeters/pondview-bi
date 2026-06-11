@@ -80,7 +80,9 @@ export async function startBridgeServer(
       databasePath,
       resolveSource: (id) => secrets.getSource(id),
     });
-  let runtime = createRuntime(options.databasePath);
+  let runtime = createRuntime(
+    options.databasePath ?? resolveProjectDefaultDatabasePath(projects),
+  );
   const initializeProjectRuntime = async (databasePath?: string) => {
     if (options.databasePath) {
       return runtime.databaseInfo();
@@ -676,6 +678,46 @@ async function serveStaticUi(
 
 function getBridgeWorkspaceDbName(projects: BridgeProjectStore): string {
   return `${WORKSPACE_DB_NAME}-${projects.getProject().id}`;
+}
+
+function resolveProjectDefaultDatabasePath(
+  projects: BridgeProjectStore,
+): string | undefined {
+  const defaultSourceRef = projects.getProject().defaultSourceRef?.trim();
+  if (!defaultSourceRef) {
+    return undefined;
+  }
+
+  const bindingsFile = projects
+    .listFiles()
+    .find((file) => file.path === "pondview.sources.local.json");
+  if (!bindingsFile) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(bindingsFile.content) as {
+      bindings?: Record<
+        string,
+        {
+          runtimeBackend?: unknown;
+          dbIdentifier?: unknown;
+          connection?: unknown;
+        }
+      >;
+    };
+    const binding = parsed.bindings?.[defaultSourceRef];
+    if (
+      binding?.runtimeBackend !== "bridge" ||
+      typeof binding.dbIdentifier !== "string" ||
+      binding.connection
+    ) {
+      return undefined;
+    }
+    return createProjectDatabasePath(projects.rootPath, binding.dbIdentifier);
+  } catch {
+    return undefined;
+  }
 }
 
 function htmlResponse(html: string): Response {

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   mapInformationSchemaRows,
   mapShowAllTablesRows,
+  mergeRuntimeTables,
 } from "@/hooks/use-remote-runtime-tables";
 
 describe("Bridge table metadata mapping", () => {
@@ -39,6 +40,48 @@ describe("Bridge table metadata mapping", () => {
         catalog: "motherduck",
         schema: "main",
         name: "unicorns",
+        type: "BASE TABLE",
+      },
+    ]);
+  });
+
+  test("merges SHOW ALL TABLES fallback rows without duplicating metadata rows", () => {
+    expect(
+      mergeRuntimeTables(
+        [
+          {
+            catalog: "pondview",
+            schema: "main",
+            name: "raw_carts",
+            type: "BASE TABLE",
+          },
+        ],
+        [
+          {
+            catalog: "pondview",
+            schema: "main",
+            name: "raw_carts",
+            type: "BASE TABLE",
+          },
+          {
+            catalog: "pondview",
+            schema: "main",
+            name: "raw_products",
+            type: "BASE TABLE",
+          },
+        ],
+      ),
+    ).toEqual([
+      {
+        catalog: "pondview",
+        schema: "main",
+        name: "raw_carts",
+        type: "BASE TABLE",
+      },
+      {
+        catalog: "pondview",
+        schema: "main",
+        name: "raw_products",
         type: "BASE TABLE",
       },
     ]);
