@@ -1,10 +1,10 @@
 import {
+  ChartNetwork,
   ClockIcon,
   Database,
   LayoutGrid,
   Plus,
   Settings,
-  Sparkles,
   SquareTerminal,
 } from "lucide-react";
 import type { MouseEvent } from "react";
@@ -176,7 +176,7 @@ export function AppSidebar({ initialChats = EMPTY_CHAT_HISTORY }: AppSidebarProp
 
         <RailItem
           href="/analysis/all"
-          icon={Sparkles}
+          icon={ChartNetwork}
           label="Analyses"
           isActive={isAnalysisRoute}
         />

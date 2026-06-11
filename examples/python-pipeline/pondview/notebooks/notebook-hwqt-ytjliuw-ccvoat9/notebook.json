@@ -6,12 +6,22 @@
       "kind": "ai"
     },
     {
+      "file": "cells/note-to-self-lorem-dolor-irure-in-dolore-laborum-veniam-deserunt-excepteur-ullam.md",
+      "id": "note-to-self-lorem-dolor-irure-in-dolore-laborum-veniam-deserunt-excepteur-ullam",
+      "kind": "text"
+    },
+    {
       "file": "cells/ai-2.md",
       "id": "ai-2",
+      "kind": "ai"
+    },
+    {
+      "file": "cells/ai-3.md",
+      "id": "ai-3",
       "kind": "ai"
     }
   ],
   "id": "notebook-hwqt-ytjliuw-ccvoat9",
   "schemaVersion": 1,
-  "title": "Untitled Analysis"
+  "title": "Cart analysis"
 }

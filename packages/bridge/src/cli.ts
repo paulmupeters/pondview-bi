@@ -1029,10 +1029,97 @@ async function queryRows(
   deps: Required<CliDeps>,
   sql: string,
 ): Promise<QueryRow[]> {
+  const executableSql = await qualifyCliMetadataSql(args, deps, sql);
   const response = await runClientCommand(args, deps, (client) =>
-    client.query({ sql }),
+    client.query({ sql: executableSql }),
   );
   return response.rows as QueryRow[];
+}
+
+async function qualifyCliMetadataSql(
+  args: ParsedArgs,
+  deps: Required<CliDeps>,
+  sql: string,
+): Promise<string> {
+  const catalog = await resolveCliMetadataCatalog(args, deps);
+  return qualifyMetadataSqlForCatalog(sql, catalog);
+}
+
+async function resolveCliMetadataCatalog(
+  args: ParsedArgs,
+  deps: Required<CliDeps>,
+): Promise<string | null> {
+  try {
+    const response = await runClientCommand(args, deps, (client) =>
+      client.query({ sql: "SELECT current_catalog() AS current_catalog;" }),
+    );
+    const catalog = readOptionalString(
+      (response.rows as QueryRow[])[0] ?? null,
+      "current_catalog",
+    );
+    return catalog?.toLowerCase() === METADATA_SCHEMA.toLowerCase()
+      ? catalog
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function qualifyMetadataSqlForCatalog(
+  sql: string,
+  catalog: string | null,
+): string {
+  if (!catalog) {
+    return sql;
+  }
+
+  const schemaRef = quoteIdentifier(METADATA_SCHEMA);
+  const qualifiedSchemaRef = `${quoteIdentifier(catalog)}.${schemaRef}`;
+  if (sql.includes(`${qualifiedSchemaRef}.`)) {
+    return sql;
+  }
+
+  return replaceOutsideSqlStringLiterals(sql, (segment) =>
+    segment.replaceAll(`${schemaRef}.`, `${qualifiedSchemaRef}.`),
+  );
+}
+
+function replaceOutsideSqlStringLiterals(
+  sql: string,
+  replaceSegment: (segment: string) => string,
+): string {
+  let output = "";
+  let segmentStart = 0;
+  let index = 0;
+
+  while (index < sql.length) {
+    if (sql[index] !== "'") {
+      index += 1;
+      continue;
+    }
+
+    output += replaceSegment(sql.slice(segmentStart, index));
+    const literalStart = index;
+    index += 1;
+
+    while (index < sql.length) {
+      if (sql[index] === "'") {
+        if (sql[index + 1] === "'") {
+          index += 2;
+          continue;
+        }
+        index += 1;
+        break;
+      }
+      index += 1;
+    }
+
+    output += sql.slice(literalStart, index);
+    segmentStart = index;
+  }
+
+  output += replaceSegment(sql.slice(segmentStart));
+  return output;
 }
 
 function filterRowsByDashboards(rows: QueryRow[], dashboardIds: Set<string>) {

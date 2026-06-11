@@ -1,0 +1,10 @@
+{
+  "config": {
+    "configType": "card",
+    "description": "",
+    "takeaway": "",
+    "title": "total_carts"
+  },
+  "id": "total-carts",
+  "schemaVersion": 1
+}

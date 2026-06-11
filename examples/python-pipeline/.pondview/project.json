@@ -5,7 +5,7 @@
     "name": "python-pipeline",
     "backingKind": "bridge-filesystem",
     "openedAt": 1781158649601,
-    "updatedAt": 1781206386797,
+    "updatedAt": 1781213038693,
     "defaultSourceRef": "local",
     "rootPath": "/Users/paulpeters/Developer/pondview/pondview-ui/examples/python-pipeline"
   }
