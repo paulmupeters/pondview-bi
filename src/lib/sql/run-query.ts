@@ -6,7 +6,7 @@ import {
 } from "@/lib/duckdb/duckdb-attachments";
 import { isMotherDuckIdentifier } from "@/lib/duckdb/motherduck";
 import { rewriteSqlForAttachedDatabase } from "@/lib/duckdb/rewrite-sql";
-import { getProjectRuntimeSelection } from "@/lib/project-runtime";
+import { getProjectRuntimeSelection } from "@/lib/project-runtime-selection";
 import { runQueryWasm } from "@/lib/sql/run-query-wasm";
 import {
   assertWasmCompatibleDbIdentifier,

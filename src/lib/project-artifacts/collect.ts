@@ -92,18 +92,19 @@ export type ExportPublishedNotebookProjectArtifactInput =
   };
 
 const defaultDashboardDeps: DashboardProjectArtifactCollectorDeps = {
-  getDashboardWithCharts,
-  listMeasuresByDashboard,
-  listSlicersByDashboard,
-  listJoinDefsByDashboard,
+  getDashboardWithCharts: (dashboardId) => getDashboardWithCharts(dashboardId),
+  listMeasuresByDashboard: (dashboardId) => listMeasuresByDashboard(dashboardId),
+  listSlicersByDashboard: (dashboardId) => listSlicersByDashboard(dashboardId),
+  listJoinDefsByDashboard: (dashboardId) => listJoinDefsByDashboard(dashboardId),
 };
 
 const defaultSavedQueryDeps: SavedQueryProjectArtifactCollectorDeps = {
-  listSavedSqlQueries,
+  listSavedSqlQueries: () => listSavedSqlQueries(),
 };
 
 const defaultNotebookDeps: NotebookProjectArtifactCollectorDeps = {
-  getAnalysisNotebookSnapshot,
+  getAnalysisNotebookSnapshot: (notebookId) =>
+    getAnalysisNotebookSnapshot(notebookId),
 };
 
 function composeSourceRefResolver(

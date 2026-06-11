@@ -97,7 +97,6 @@ import {
   useSelectedSqlBackend,
 } from "@/lib/sql/use-sql-backend";
 import { getAllThemes } from "@/themes";
-import { getActiveRuntimeLabel } from "./runtime-label";
 import {
   SectionHeader,
   type SectionNavItem,
@@ -140,7 +139,7 @@ const SECTION_NAV: readonly SectionNavItem[] = [
   },
   {
     id: "runtime",
-    label: "Query Runtime",
+    label: "DuckDB Runtime",
     icon: Database,
   },
   {
@@ -196,7 +195,7 @@ function createBrowserProjectState(name: string): OpenProjectState {
   };
 }
 
-function getDefaultBridgeEndpoint(
+export function getDefaultBridgeEndpoint(
   config?: PondviewBridgeConfig | null,
 ): string {
   if (config) {
@@ -210,10 +209,10 @@ function getDefaultBridgeEndpoint(
   }
 
   if (typeof window === "undefined") {
-    return "";
+    return "http://127.0.0.1:17817";
   }
 
-  return window.location.origin;
+  return `${window.location.protocol}//127.0.0.1:17817`;
 }
 
 function formatSnapshotSize(bytes: number): string {
@@ -518,12 +517,6 @@ export default function SettingsPage() {
   const handleSqlBackendChange = (backend: SqlBackend) => {
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(null);
-    if (backend === "bridge" && !isBridgeDiscoverable) {
-      setRuntimeSettingsError(
-        "Bridge is unavailable. Start Pondview Bridge or save a reachable endpoint before selecting it.",
-      );
-      return;
-    }
     setSqlBackendPreferenceInStorage(backend);
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
@@ -1081,17 +1074,7 @@ export default function SettingsPage() {
     }
   };
 
-  const effectiveRuntimeLabel = getActiveRuntimeLabel({
-    selectedSqlBackend,
-    effectiveSqlBackend,
-    isBridgeDiscoverable,
-    isBridgeQueryReady,
-  });
-  const bridgeOptionLabel = !isBridgeDiscoverable
-    ? "Bridge (Unavailable)"
-    : !isBridgeQueryReady
-      ? "Bridge (Auth required)"
-      : "Bridge (Available)";
+  const bridgeOptionLabel = "Bridge";
   const bridgeAuthStatusLabel = bridgeConfig
     ? bridgeConfig.requiresAuth
       ? hasBridgeSessionSecret
@@ -1243,8 +1226,6 @@ export default function SettingsPage() {
 
               {activeSection === "runtime" && (
                 <RuntimeSettingsSection
-                  effectiveSqlBackend={effectiveSqlBackend}
-                  effectiveRuntimeLabel={effectiveRuntimeLabel}
                   selectedSqlBackend={selectedSqlBackend}
                   onSqlBackendChange={handleSqlBackendChange}
                   bridgeOptionLabel={bridgeOptionLabel}

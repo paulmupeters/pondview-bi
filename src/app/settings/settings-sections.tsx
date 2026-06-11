@@ -460,8 +460,6 @@ export function AiSettingsSections({
 // ---------------------------------------------------------------------------
 
 type RuntimeSettingsSectionProps = {
-  effectiveSqlBackend: SqlBackend;
-  effectiveRuntimeLabel: string;
   selectedSqlBackend: SqlBackend;
   onSqlBackendChange: (backend: SqlBackend) => void;
   bridgeOptionLabel: string;
@@ -481,8 +479,6 @@ type RuntimeSettingsSectionProps = {
 };
 
 export function RuntimeSettingsSection({
-  effectiveSqlBackend,
-  effectiveRuntimeLabel,
   selectedSqlBackend,
   onSqlBackendChange,
   bridgeOptionLabel,
@@ -504,24 +500,11 @@ export function RuntimeSettingsSection({
     <SettingsContentSection>
       <div className="space-y-6">
         <div>
-          <h3 className="text-lg font-semibold">SQL runtime</h3>
+          <h3 className="text-lg font-semibold">DuckDB runtime</h3>
           <p className="text-sm text-muted-foreground">
-            Choose where SQL runs. Bridge uses Pondview endpoints for local or
-            remote DuckDB execution.
+            DuckDB WASM runs in your browser. Bridge runs DuckDB locally through
+            the Pondview CLI.
           </p>
-        </div>
-
-        <div className="flex items-center justify-between border-b pb-3 text-sm">
-          <span className="text-muted-foreground">Active runtime</span>
-          <span
-            className={
-              effectiveSqlBackend === "duckdb-wasm"
-                ? "font-medium text-muted-foreground"
-                : "font-medium text-green-600 dark:text-green-400"
-            }
-          >
-            {effectiveRuntimeLabel}
-          </span>
         </div>
 
         <FormField
@@ -530,7 +513,7 @@ export function RuntimeSettingsSection({
           description={
             isBridgeSelectable
               ? undefined
-              : "Start Pondview Bridge or save a reachable endpoint before selecting Bridge."
+              : "Select Bridge to configure its endpoint."
           }
         >
           <Select
@@ -542,9 +525,7 @@ export function RuntimeSettingsSection({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="duckdb-wasm">DuckDB WASM</SelectItem>
-              <SelectItem value="bridge" disabled={!isBridgeSelectable}>
-                {bridgeOptionLabel}
-              </SelectItem>
+              <SelectItem value="bridge">{bridgeOptionLabel}</SelectItem>
             </SelectContent>
           </Select>
         </FormField>

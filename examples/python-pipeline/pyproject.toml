@@ -1,0 +1,9 @@
+[project]
+name = "api-duckdb-pipeline"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+dependencies = [
+    "duckdb>=1.4.0",
+    "requests>=2.32.0",
+]
