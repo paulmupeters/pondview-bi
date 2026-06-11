@@ -710,7 +710,7 @@ async function pickProjectDatabasePath(
   }
 
   const script = [
-    `set selectedFile to choose file name with prompt ${toAppleScriptString("Choose a DuckDB file for this Pondview project")} default name ${toAppleScriptString("pondview-runtime.duckdb")} default location POSIX file ${toAppleScriptString(projectRootPath)}`,
+    `set selectedFile to choose file with prompt ${toAppleScriptString("Choose an existing DuckDB file for this Pondview project")} default location POSIX file ${toAppleScriptString(projectRootPath)} of type {"duckdb"}`,
     "POSIX path of selectedFile",
   ].join("\n");
   const process = spawn("osascript", ["-e", script], {

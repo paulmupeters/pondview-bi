@@ -24,6 +24,7 @@ import type {
 
 const PROJECT_METADATA_PATH = ".pondview/project.json";
 const PROJECT_ARTIFACT_ROOT = "pondview";
+const PROJECT_GITIGNORE_PATH = ".gitignore";
 const LOCAL_SOURCE_BINDINGS_PATH = "pondview.sources.local.json";
 
 type BridgeProjectMetadataFile = {
@@ -75,6 +76,9 @@ export class BridgeProjectStore {
 
     const artifactRootPath = this.resolveProjectPath(PROJECT_ARTIFACT_ROOT);
     const files = [
+      ...(existsSync(this.resolveProjectPath(PROJECT_GITIGNORE_PATH))
+        ? [PROJECT_GITIGNORE_PATH]
+        : []),
       ...(existsSync(artifactRootPath)
         ? this.listFilesInDirectory(artifactRootPath)
         : []),
@@ -356,6 +360,7 @@ function normalizeProjectPath(path: string): string {
 
 function isProjectArtifactFilePath(path: string): boolean {
   return (
+    path === PROJECT_GITIGNORE_PATH ||
     path === LOCAL_SOURCE_BINDINGS_PATH ||
     path.startsWith(`${PROJECT_ARTIFACT_ROOT}/`)
   );
@@ -363,6 +368,7 @@ function isProjectArtifactFilePath(path: string): boolean {
 
 function isProjectArtifactScopePath(path: string): boolean {
   return (
+    path === PROJECT_GITIGNORE_PATH ||
     path === LOCAL_SOURCE_BINDINGS_PATH ||
     path === PROJECT_ARTIFACT_ROOT ||
     path.startsWith(`${PROJECT_ARTIFACT_ROOT}/`)

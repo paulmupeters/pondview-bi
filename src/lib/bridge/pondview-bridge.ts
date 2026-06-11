@@ -178,6 +178,11 @@ function bridgeUrl(pathname: string): string {
   return endpoint ? `${endpoint}${pathname}` : pathname;
 }
 
+function bridgeUrlForEndpoint(endpoint: string, pathname: string): string {
+  const normalizedEndpoint = normalizeBridgeEndpoint(endpoint);
+  return normalizedEndpoint ? `${normalizedEndpoint}${pathname}` : pathname;
+}
+
 function toRowObjects(payload: PondviewJsonCompactResponse): {
   rows: Record<string, unknown>[];
   columns: { name: string; type?: string }[];
@@ -396,6 +401,50 @@ export async function refreshBridgeConfig(
   }
 
   return nextConfig;
+}
+
+export async function testBridgeConnection(
+  endpoint: string,
+  signal?: AbortSignal,
+): Promise<PondviewBridgeConfig> {
+  const pingResponse = await fetch(bridgeUrlForEndpoint(endpoint, "/ping"), {
+    method: "GET",
+    cache: "no-store",
+    signal,
+  });
+
+  if (!pingResponse.ok) {
+    throw new Error(await parseError(pingResponse));
+  }
+
+  const pingPayload = (await pingResponse.json().catch(() => ({}))) as {
+    status?: string;
+  };
+  if (pingPayload.status !== "ok") {
+    throw new Error("Bridge ping response is invalid.");
+  }
+
+  const configResponse = await fetch(
+    bridgeUrlForEndpoint(endpoint, "/api/duckdb/config"),
+    {
+      method: "GET",
+      cache: "no-store",
+      signal,
+    },
+  );
+
+  if (!configResponse.ok) {
+    throw new Error(await parseError(configResponse));
+  }
+
+  const config = parseBridgeConfig(
+    (await configResponse.json().catch(() => null)) as unknown,
+  );
+  if (!config) {
+    throw new Error("Bridge config response is invalid.");
+  }
+
+  return config;
 }
 
 export function subscribeBridgeConfig(listener: () => void): () => void {

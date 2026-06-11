@@ -1,5 +1,5 @@
 import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { Database, PanelLeft } from "lucide-react";
+import { ChevronRight, Database, PanelLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   PromptInputHoverCard,
@@ -42,10 +42,16 @@ import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 import type { DraftSqlQuery } from "@/lib/workspace/sql-editor-drafts-repo";
 import { Separator } from "./ui/separator";
 
+type ExplorerColumn = {
+  name: string;
+  type?: string;
+};
+
 type ExplorerTableGroup = {
   catalog: string;
   schema: string;
   tables: string[];
+  columnsByTable?: Record<string, ExplorerColumn[]>;
 };
 
 function getExplorerToggleLabel(isCollapsed: boolean): string {
@@ -390,6 +396,21 @@ export function ConnectedDataPanel({
     wasm: null,
   });
   const canToggleCollapse = showCollapseToggle && Boolean(onToggleCollapse);
+  const [expandedTables, setExpandedTables] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const toggleTableExpanded = useCallback((tableId: string) => {
+    setExpandedTables((previous) => {
+      const next = new Set(previous);
+      if (next.has(tableId)) {
+        next.delete(tableId);
+      } else {
+        next.add(tableId);
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (refreshToken === undefined) {
@@ -439,31 +460,44 @@ export function ConnectedDataPanel({
           catalog?: string;
           schema: string;
           name: string;
+          columns?: ExplorerColumn[];
         }>,
       ): ExplorerTableGroup[] => {
-        const grouped = new Map<string, string[]>();
+        const grouped = new Map<
+          string,
+          { tables: string[]; columnsByTable: Map<string, ExplorerColumn[]> }
+        >();
 
         for (const table of tables) {
           const catalog = table.catalog?.trim() || "";
           const schema = table.schema?.trim() || "main";
           const key = `${catalog}::${schema}`;
-          const existing = grouped.get(key);
-          if (existing) {
-            existing.push(table.name);
-          } else {
-            grouped.set(key, [table.name]);
+          const existing =
+            grouped.get(key) ?? {
+              tables: [],
+              columnsByTable: new Map<string, ExplorerColumn[]>(),
+            };
+          existing.tables.push(table.name);
+          if (table.columns && table.columns.length > 0) {
+            existing.columnsByTable.set(table.name, table.columns);
           }
+          grouped.set(key, existing);
         }
 
         return Array.from(grouped.entries())
-          .map(([key, tablesForGroup]) => {
+          .map(([key, value]) => {
             const [catalog, schema] = key.split("::");
+            const columnsByTable: Record<string, ExplorerColumn[]> = {};
+            for (const [name, columns] of value.columnsByTable) {
+              columnsByTable[name] = columns;
+            }
             return {
               catalog,
               schema,
-              tables: Array.from(new Set(tablesForGroup)).sort((a, b) =>
+              tables: Array.from(new Set(value.tables)).sort((a, b) =>
                 a.localeCompare(b),
               ),
+              columnsByTable,
             };
           })
           .sort(
@@ -522,6 +556,13 @@ export function ConnectedDataPanel({
     }
   };
 
+  const handleInsertColumn = (columnName: string) => {
+    onInsertTable?.({ reference: columnName, source: "runtime" });
+    if (mode === "popover") {
+      setIsOpen(false);
+    }
+  };
+
   const renderExplorerTableGroups = (
     groups: ExplorerTableGroup[],
     options: {
@@ -531,6 +572,7 @@ export function ConnectedDataPanel({
         group: ExplorerTableGroup,
         payload: ExplorerInsertPayload,
       ) => void;
+      onColumnClick?: (columnName: string) => void;
     },
   ) =>
     groups
@@ -542,7 +584,7 @@ export function ConnectedDataPanel({
       .map((group, groupIdx) => (
         <div
           key={`${group.catalog || "default"}.${group.schema}`}
-          className="space-y-0"
+          className="space-y-0.5"
         >
           {!isDefaultExplorerSchema(group.schema) && (
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -564,18 +606,77 @@ export function ConnectedDataPanel({
               schema: group.schema,
               table: tableName,
             });
+            const tableId = `${group.catalog}.${group.schema}.${tableName}`;
+            const columns = group.columnsByTable?.[tableName] ?? [];
+            const hasColumns = columns.length > 0;
+            const isExpanded = expandedTables.has(tableId);
 
             return (
-              <button
-                key={`${group.catalog}.${group.schema}.${tableName}`}
-                type="button"
-                className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-                onClick={() => options.onTableClick(group, payload)}
-                title={displayReference}
-              >
-                <span className={cn("w-1.5 h-1.5 rounded-full", color)} />
-                <span className="truncate">{displayReference}</span>
-              </button>
+              <div key={tableId} className="space-y-0.5">
+                <div className="flex items-center gap-1">
+                  {hasColumns ? (
+                    <button
+                      type="button"
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-sidebar-foreground"
+                      onClick={() => toggleTableExpanded(tableId)}
+                      aria-expanded={isExpanded}
+                      aria-label={
+                        isExpanded
+                          ? `Hide columns for ${displayReference}`
+                          : `Show columns for ${displayReference}`
+                      }
+                      title={isExpanded ? "Hide columns" : "Show columns"}
+                    >
+                      <ChevronRight
+                        className={cn(
+                          "h-3 w-3 transition-transform",
+                          isExpanded && "rotate-90",
+                        )}
+                      />
+                    </button>
+                  ) : (
+                    <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  )}
+                  <button
+                    type="button"
+                    className="hover:text-sidebar-foreground cursor-pointer transition-colors flex min-w-0 flex-1 items-center gap-2 text-left"
+                    onClick={() => options.onTableClick(group, payload)}
+                    title={`Insert ${displayReference}`}
+                  >
+                    <span
+                      className={cn("w-1.5 h-1.5 rounded-full shrink-0", color)}
+                    />
+                    <span className="truncate">{displayReference}</span>
+                  </button>
+                </div>
+                {isExpanded && hasColumns ? (
+                  <ul className="ml-[9px] border-l border-sidebar-border/60 pl-3">
+                    {columns.map((column) => (
+                      <li key={column.name}>
+                        <button
+                          type="button"
+                          className="group/col flex w-full items-center gap-2 rounded-sm py-0.5 text-left transition-colors hover:text-sidebar-foreground"
+                          onClick={() => options.onColumnClick?.(column.name)}
+                          title={
+                            column.type
+                              ? `Insert ${column.name} · ${column.type}`
+                              : `Insert ${column.name}`
+                          }
+                        >
+                          <span className="truncate text-[12px] text-sidebar-foreground/75 group-hover/col:text-sidebar-foreground">
+                            {column.name}
+                          </span>
+                          {column.type ? (
+                            <span className="ml-auto shrink-0 truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+                              {column.type}
+                            </span>
+                          ) : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -744,6 +845,7 @@ export function ConnectedDataPanel({
                       setIsOpen(false);
                     }
                   },
+                  onColumnClick: handleInsertColumn,
                 })
               ) : (
                 renderSampleDataAction("remote", "No tables found.")
@@ -756,7 +858,7 @@ export function ConnectedDataPanel({
               className={cn(
                 databaseRowClass,
                 isWasmSelected &&
-                  "border-sidebar-ring ring-1 ring-sidebar-ring/40",
+                  "border-l-2 border-l-primary bg-sidebar-accent/40",
                 databaseRowInteractiveClass,
               )}
             >
@@ -788,6 +890,7 @@ export function ConnectedDataPanel({
                       setIsOpen(false);
                     }
                   },
+                  onColumnClick: handleInsertColumn,
                 })
               ) : (
                 renderSampleDataAction("wasm", "No local tables yet.")

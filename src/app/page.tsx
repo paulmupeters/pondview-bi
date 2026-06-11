@@ -10,6 +10,7 @@ import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { PondviewLogo } from "@/components/pondview-logo";
+import { RecentAnalysesSection } from "@/components/recent-analyses-section";
 import {
   type ManualShellVariant,
   PromptInputWrapper,
@@ -281,9 +282,9 @@ export default function Home() {
   );
 
   return (
-    <div className="h-full w-full flex items-center justify-center bg-background p-4 overflow-hidden">
-      <div className="w-full max-w-7xl h-full flex flex-col font-mono justify-between py-4">
-        <div className="flex py-2 justify-center">
+    <div className="h-full w-full overflow-y-auto bg-background p-4">
+      <div className="mx-auto flex w-full max-w-7xl min-h-full flex-col gap-6 py-4 font-mono">
+        <div className="flex shrink-0 justify-center py-2">
           <div className="flex items-center justify-center">
             <div className="relative flex items-center justify-center">
               <PondviewLogo className="h-44 w-44" />
@@ -297,9 +298,9 @@ export default function Home() {
         </div>
 
         {/* Content Area */}
-        <div className="overflow-hidden px-4 py-4 h-full z-30">
-          <div className="overflow-hidden flex flex-col items-center justify-start h-full">
-            <div className="flex w-full max-w-7xl items-stretch gap-4 overflow-hidden transition-all duration-300 ease-out">
+        <div className="z-30 px-4">
+          <div className="flex flex-col items-center justify-start">
+            <div className="flex w-full max-w-7xl items-stretch gap-4 transition-all duration-300 ease-out">
               <div
                 className={cn(
                   "hidden md:flex min-h-0 overflow-hidden transition-all duration-300 ease-out",
@@ -360,12 +361,13 @@ export default function Home() {
                   selectedCatalogContext={selectedCatalogContext}
                 />
                 <PromptErrorBanner message={homePageAiWarningMessage} />
+                <RecentAnalysesSection visible={areSuggestionsVisible} />
                 <div
                   className={cn(
                     "grid transition-[grid-template-rows,opacity,transform,margin] duration-300 ease-out",
                     isManualMode
                       ? "pointer-events-none mt-0 grid-rows-[0fr] opacity-0 -translate-y-2"
-                      : "mt-8 grid-rows-[1fr] opacity-100 translate-y-0",
+                      : "mt-6 grid-rows-[1fr] opacity-100 translate-y-0",
                   )}
                 >
                   <div className="min-h-0 overflow-hidden">

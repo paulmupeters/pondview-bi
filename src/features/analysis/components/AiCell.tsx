@@ -1,5 +1,4 @@
 import type { UIMessage } from "ai";
-import { Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Response } from "@/components/ai-elements/response";
 import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
@@ -75,8 +74,12 @@ export function AiResponseBanner({
   const shouldShowPromptError = showPromptError && Boolean(ai.promptError);
 
   useEffect(() => {
-    if (!ai.isAssistantThinking || ai.latestAssistantText) {
+    if (!ai.isAssistantThinking) {
       setStreamingAnimationFrame(getAnimationFrame(STREAMING_ANIMATION, 0));
+      return;
+    }
+
+    if (ai.latestAssistantText) {
       return;
     }
 
@@ -104,17 +107,13 @@ export function AiResponseBanner({
 
   return (
     <div className="overflow-hidden rounded-lg border border-primary/15 bg-primary/[0.035] shadow-sm shadow-primary/5">
-      <div className="flex flex-wrap items-center gap-2 border-b border-primary/10 px-3 py-2">
-        <span className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-background/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary/70">
-          <Sparkles className="size-3" />
-          AI generated
-        </span>
+      <div className="space-y-1.5 border-b border-primary/10 px-3 py-2.5">
         {latestUserText ? (
-          <Response className="min-w-0 flex-1 truncate text-sm leading-snug text-muted-foreground">
+          <Response className="text-[15px] font-medium leading-snug text-foreground">
             {latestUserText}
           </Response>
         ) : (
-          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+          <span className="block text-sm text-muted-foreground">
             Contextual analysis activity
           </span>
         )}

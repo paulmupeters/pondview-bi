@@ -1,7 +1,7 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import { type ChatTransport, DirectChatTransport } from "ai";
 import { nanoid } from "nanoid";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { canUseBridgeAi, createBridgeChatTransport } from "@/ai/bridge-chat";
 import { createPondviewAgent } from "@/ai/client/agent";
 import { createDelegatingChatTransport } from "@/ai/delegating-chat-transport";
@@ -157,6 +157,7 @@ export function useAnalysisCellAi({
     id: `analysis-cell:${cell.id}`,
     messages: persistedMessages,
     transport: chatTransport,
+    experimental_throttle: 50,
     onError: (error) => {
       setPromptError(toPromptErrorMessage(error));
       void notebookSession
@@ -173,10 +174,6 @@ export function useAnalysisCellAi({
       if (isAbort || isError || message.role !== "assistant") {
         return;
       }
-      if (persistedAssistantMessageIdsRef.current.has(message.id)) {
-        return;
-      }
-      persistedAssistantMessageIdsRef.current.add(message.id);
 
       const createdAt = Date.now();
       const partsJson = JSON.stringify(message.parts ?? []);
@@ -186,15 +183,25 @@ export function useAnalysisCellAi({
         selectedDbIdentifier: cell.selectedDbIdentifier,
         selectedCatalogContext: cell.selectedCatalogContext,
       });
+      const shouldPersistEntry = !persistedAssistantMessageIdsRef.current.has(
+        message.id,
+      );
 
-      void notebookSession
-        .appendCellEntry({
-          cellId: cell.id,
-          role: "assistant",
-          partsJson,
-          createdAt,
-          id: message.id,
-        })
+      if (shouldPersistEntry) {
+        persistedAssistantMessageIdsRef.current.add(message.id);
+      }
+
+      const persistEntryPromise = shouldPersistEntry
+        ? notebookSession.appendCellEntry({
+            cellId: cell.id,
+            role: "assistant",
+            partsJson,
+            createdAt,
+            id: message.id,
+          })
+        : Promise.resolve();
+
+      void persistEntryPromise
         .then(() => notebookSession.updateCell(cell.id, nextPatch))
         .then(() => notebookSession.refreshUpdatedAt())
         .catch((error) => {
@@ -205,6 +212,22 @@ export function useAnalysisCellAi({
         });
     },
   });
+  const submitPromptStateRef = useRef({
+    agentError: agentResult.error,
+    cell,
+    notebookSession,
+    promptDraft,
+    sendMessage,
+    setMessages,
+  });
+  submitPromptStateRef.current = {
+    agentError: agentResult.error,
+    cell,
+    notebookSession,
+    promptDraft,
+    sendMessage,
+    setMessages,
+  };
 
   useEffect(() => {
     setPromptDraft(cell.promptText);
@@ -268,16 +291,24 @@ export function useAnalysisCellAi({
     return [...persistedTranscriptMessages, ...liveAssistantMessages];
   }, [messages, persistedMessages]);
 
-  async function submitPrompt(promptOverride?: string) {
+  const submitPrompt = useCallback(async (promptOverride?: string) => {
+    const {
+      agentError,
+      cell,
+      notebookSession,
+      promptDraft,
+      sendMessage,
+      setMessages,
+    } = submitPromptStateRef.current;
     const rawPrompt = (promptOverride ?? promptDraft).trim();
     if (!rawPrompt) {
       return;
     }
 
-    if (!selectedTransport) {
+    if (!selectedTransportRef.current) {
       setPromptError(
-        agentResult.error
-          ? toPromptErrorMessage(agentResult.error)
+        agentError
+          ? toPromptErrorMessage(agentError)
           : MISSING_AI_CONFIGURATION_MESSAGE,
       );
       return;
@@ -340,15 +371,27 @@ export function useAnalysisCellAi({
       await notebookSession.updateCell(cell.id, { status: "error" });
       await notebookSession.refreshUpdatedAt();
     }
-  }
+  }, []);
 
-  return {
-    promptDraft,
-    setPromptDraft,
-    promptError,
-    latestAssistantText,
-    transcriptMessages,
-    isAssistantThinking: status === "submitted" || status === "streaming",
-    submitPrompt,
-  };
+  const isAssistantThinking = status === "submitted" || status === "streaming";
+
+  return useMemo(
+    () => ({
+      promptDraft,
+      setPromptDraft,
+      promptError,
+      latestAssistantText,
+      transcriptMessages,
+      isAssistantThinking,
+      submitPrompt,
+    }),
+    [
+      isAssistantThinking,
+      latestAssistantText,
+      promptDraft,
+      promptError,
+      submitPrompt,
+      transcriptMessages,
+    ],
+  );
 }

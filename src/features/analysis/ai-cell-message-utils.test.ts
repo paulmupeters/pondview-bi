@@ -32,6 +32,41 @@ describe("ai cell message utils", () => {
     ).toContain("Current cell SQL");
   });
 
+  test("marks the cell as complete when artifact payload is complete even if wrapper status is streaming", () => {
+    const patch = buildAiCellUpdatePatch({
+      message: {
+        id: "assistant-streaming",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-execute_final_sql",
+            output: {
+              parts: [
+                {
+                  type: "data-execute-sql",
+                  data: {
+                    status: "streaming",
+                    payload: {
+                      stage: "complete",
+                      query: "select revenue by week",
+                      visualType: "chart",
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      } as unknown as UIMessage,
+      createdAt: 42,
+    });
+
+    expect(patch).toMatchObject({
+      status: "complete",
+      sqlDraft: "select revenue by week",
+    });
+  });
+
   test("updates the shared cell payload from a final sql artifact", () => {
     const patch = buildAiCellUpdatePatch({
       message: {

@@ -666,6 +666,7 @@ describe("bridge server modes", () => {
       join(projectDir, "pondview", "project.json"),
       '{ "schemaVersion": 1, "name": "Revenue", "defaultSourceRef": "analytics" }\n',
     );
+    writeFileSync(join(projectDir, ".gitignore"), ".pondview/\n");
     writeFileSync(
       join(projectDir, "pondview", "queries", "shared", "orders.sql"),
       "select 1;\n",
@@ -688,6 +689,10 @@ describe("bridge server modes", () => {
     const files = await fetch(`${server.url}/project/files`);
     expect(await files.json()).toMatchObject({
       files: [
+        {
+          path: ".gitignore",
+          content: ".pondview/\n",
+        },
         {
           path: "pondview/project.json",
           content:
@@ -794,6 +799,15 @@ describe("bridge server modes", () => {
       }),
     });
     expect(escaped.status).toBe(400);
+
+    const rootFile = await fetch(`${server.url}/project/files`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: [{ path: "package.json", content: "{}\n" }],
+      }),
+    });
+    expect(rootFile.status).toBe(400);
   });
 });
 

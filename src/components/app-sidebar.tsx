@@ -4,6 +4,7 @@ import {
   LayoutGrid,
   Plus,
   Settings,
+  Sparkles,
   SquareTerminal,
 } from "lucide-react";
 import type { MouseEvent } from "react";
@@ -16,7 +17,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useChatHistory } from "@/hooks/use-chat-history";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { EMPTY_CHAT_HISTORY, useChatHistory } from "@/hooks/use-chat-history";
 import {
   type ChatHistoryEntry,
   getChatHistoryDisplayTitle,
@@ -36,7 +42,15 @@ interface AppSidebarProps {
   initialChats?: ChatHistoryEntry[];
 }
 
-export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
+const TOOLTIP_DELAY = 300;
+
+const RAIL_ITEM_BASE =
+  "group relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors";
+const RAIL_ITEM_ACTIVE = "bg-primary/10 text-primary";
+const RAIL_ITEM_INACTIVE =
+  "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground";
+
+export function AppSidebar({ initialChats = EMPTY_CHAT_HISTORY }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -55,6 +69,8 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
   const isSqlEditorRoute = pathname === "/sql-editor";
   const isDataRoute = pathname === "/data";
   const isSettingsRoute = pathname === "/settings";
+  const isAnalysisRoute =
+    pathname?.startsWith("/analysis") || pathname === "/chat";
 
   useEffect(() => {
     void loadChats({ showLoading: initialChats.length === 0 });
@@ -144,8 +160,13 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
     <div className="relative hidden md:flex h-full w-14 flex-col border-r border-border bg-sidebar py-3">
       {/* Logo */}
       <div className="mb-5 flex justify-center">
-        <Link href="/" aria-label="Pondview" title="Pondview">
-          <PondviewLogo className="h-14 w-14" />
+        <Link
+          href="/"
+          aria-label="Pondview"
+          title="Pondview"
+          className="flex items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <PondviewLogo className="h-10 w-10" />
         </Link>
       </div>
 
@@ -153,32 +174,43 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
       <div className="flex flex-col items-center gap-1 px-1.5">
         <RailAction href="/" icon={Plus} label="New" />
 
+        <RailItem
+          href="/analysis/all"
+          icon={Sparkles}
+          label="Analyses"
+          isActive={isAnalysisRoute}
+        />
+
         <Popover
           open={isChatHistoryPopoverOpen}
           onOpenChange={handleChatHistoryPopoverChange}
         >
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className={cn(
-                "group relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
-                isChatHistoryPopoverOpen
-                  ? "bg-primary/5 text-primary"
-                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground",
-              )}
-              aria-label="History"
-              title="History"
-            >
-              <ClockIcon
-                className={cn(
-                  "size-[18px]",
-                  isChatHistoryPopoverOpen
-                    ? "text-primary"
-                    : "text-sidebar-foreground/60 group-hover:text-sidebar-foreground",
-                )}
-              />
-            </button>
-          </PopoverTrigger>
+          <Tooltip delayDuration={TOOLTIP_DELAY}>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    RAIL_ITEM_BASE,
+                    isChatHistoryPopoverOpen
+                      ? RAIL_ITEM_ACTIVE
+                      : RAIL_ITEM_INACTIVE,
+                  )}
+                  aria-label="History"
+                >
+                  <ClockIcon
+                    className={cn(
+                      "size-[18px]",
+                      isChatHistoryPopoverOpen
+                        ? "text-primary"
+                        : "text-sidebar-foreground/60 group-hover:text-sidebar-foreground",
+                    )}
+                  />
+                </button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="right">History</TooltipContent>
+          </Tooltip>
           <PopoverContent align="start" className="w-80 p-4">
             <div className="flex flex-col gap-3">
               <div className="flex max-h-72 flex-col gap-1 overflow-y-auto">
@@ -273,7 +305,7 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
 
       {/* Spacer between Workspace and Tools */}
       <div className="my-2 flex justify-center">
-        <div className="h-px w-6 bg-sidebar-border/60" />
+        <div className="h-px w-6 bg-sidebar-border" />
       </div>
 
       {/* Tools */}
@@ -308,9 +340,12 @@ export function AppSidebar({ initialChats = [] }: AppSidebarProps) {
           label="Settings"
           isActive={isSettingsRoute}
         />
-        <div className="flex h-9 w-9 items-center justify-center">
-          <ThemeToggle />
-        </div>
+        <Tooltip delayDuration={TOOLTIP_DELAY}>
+          <TooltipTrigger asChild>
+            <ThemeToggle />
+          </TooltipTrigger>
+          <TooltipContent side="right">Toggle theme</TooltipContent>
+        </Tooltip>
       </div>
     </div>
   );
@@ -332,29 +367,31 @@ function RailItem({
   isActive?: boolean;
 }) {
   return (
-    <Link
-      href={href}
-      className={cn(
-        "group relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
-        isActive
-          ? "bg-primary/5 text-primary"
-          : "text-sidebar-foreground/60 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground",
-      )}
-      aria-label={label}
-      title={label}
-    >
-      {isActive && (
-        <div className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-primary" />
-      )}
-      <Icon
-        className={cn(
-          "size-[18px]",
-          isActive
-            ? "text-primary"
-            : "text-sidebar-foreground/60 group-hover:text-sidebar-foreground",
-        )}
-      />
-    </Link>
+    <Tooltip delayDuration={TOOLTIP_DELAY}>
+      <TooltipTrigger asChild>
+        <Link
+          href={href}
+          className={cn(
+            RAIL_ITEM_BASE,
+            isActive ? RAIL_ITEM_ACTIVE : RAIL_ITEM_INACTIVE,
+          )}
+          aria-label={label}
+        >
+          {isActive && (
+            <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-primary" />
+          )}
+          <Icon
+            className={cn(
+              "size-[18px]",
+              isActive
+                ? "text-primary"
+                : "text-sidebar-foreground/60 group-hover:text-sidebar-foreground",
+            )}
+          />
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -368,16 +405,20 @@ function RailAction({
   label: string;
 }) {
   return (
-    <Link
-      href={href}
-      className={cn(
-        "group relative flex h-9 w-9 items-center justify-center rounded-lg border border-primary/15 bg-primary/5 transition-colors",
-        "hover:bg-primary/10 hover:border-primary/25",
-      )}
-      aria-label={label}
-      title={label}
-    >
-      <Icon className="size-[18px] text-primary" />
-    </Link>
+    <Tooltip delayDuration={TOOLTIP_DELAY}>
+      <TooltipTrigger asChild>
+        <Link
+          href={href}
+          className={cn(
+            "group relative flex h-9 w-9 items-center justify-center rounded-lg border border-primary/15 bg-primary/5 transition-colors",
+            "hover:bg-primary/10 hover:border-primary/25",
+          )}
+          aria-label={label}
+        >
+          <Icon className="size-[18px] text-primary" />
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
   );
 }

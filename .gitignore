@@ -55,6 +55,8 @@ next-env.d.ts
 *db.wal
 
 # pondview project local bindings
+.pondview/
+**/.pondview/
 pondview.sources.local.json
 
 # semantic-layer

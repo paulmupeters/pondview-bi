@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { getDefaultBridgeEndpoint } from "@/app/settings/page";
+import {
+  getDefaultBridgeEndpoint,
+  validateBridgeEndpoint,
+} from "@/app/settings/page";
 
 describe("getDefaultBridgeEndpoint", () => {
   test("defaults to the local bridge port when no bridge config is known", () => {
@@ -14,5 +17,21 @@ describe("getDefaultBridgeEndpoint", () => {
         requiresAuth: false,
       }),
     ).toBe("http://127.0.0.1:18000");
+  });
+});
+
+describe("validateBridgeEndpoint", () => {
+  test("accepts empty endpoint for same-origin bridge requests", () => {
+    expect(validateBridgeEndpoint("")).toBeNull();
+  });
+
+  test("accepts the default local bridge endpoint", () => {
+    expect(validateBridgeEndpoint("http://127.0.0.1:17817")).toBeNull();
+  });
+
+  test("rejects non-http bridge endpoints", () => {
+    expect(validateBridgeEndpoint("ftp://127.0.0.1:17817")).toBe(
+      "Bridge endpoint must use http or https.",
+    );
   });
 });

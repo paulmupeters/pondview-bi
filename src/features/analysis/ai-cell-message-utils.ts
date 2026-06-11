@@ -66,6 +66,17 @@ function mapArtifactStatusToCellStatus(
   return "idle";
 }
 
+function resolveSqlArtifactCellStatus(artifact: {
+  status?: string;
+  payload?: SqlAnalysisData;
+}): "idle" | "running" | "complete" | "error" {
+  if (artifact.payload?.stage === "complete") {
+    return "complete";
+  }
+
+  return mapArtifactStatusToCellStatus(artifact.status);
+}
+
 function extractToolOutput(part: UIMessage["parts"][number]): unknown {
   if (!("output" in part) && !("result" in part)) {
     return undefined;
@@ -443,7 +454,9 @@ export function buildAiCellUpdatePatch(params: {
   } = {
     status: hasToolError(message)
       ? "error"
-      : mapArtifactStatusToCellStatus(latestArtifact?.status),
+      : latestArtifact
+        ? resolveSqlArtifactCellStatus(latestArtifact)
+        : "idle",
   };
 
   if (latestArtifact?.payload) {

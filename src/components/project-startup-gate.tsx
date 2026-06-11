@@ -30,6 +30,7 @@ import {
   setProjectRuntimeSelection,
 } from "@/lib/project-runtime";
 import {
+  getProjectStoreMode,
   type OpenProjectState,
   setOpenProject,
   setProjectStoreMode,
@@ -51,7 +52,7 @@ type StartupStep = 1 | 2;
 export type StartupRuntimeChoice = "new-duckdb" | "existing-duckdb" | "wasm";
 export type StartupStorageChoice = "local" | "browser";
 
-const DEFAULT_PROJECT_DATABASE_PATH = "runtime/pondview-runtime.duckdb";
+export const DEFAULT_PROJECT_DATABASE_PATH = "runtime/pondview-runtime.duckdb";
 
 const PREVIEW_PROJECT: OpenProjectState = {
   id: "preview-project",
@@ -204,6 +205,19 @@ function formatDatabaseFileName(path: string): string {
   return segments.at(-1) || path;
 }
 
+export function resolveStartupProjectDisplayPath(
+  project: Pick<OpenProjectState, "name" | "rootPath">,
+): string | null {
+  const projectPath = project.rootPath?.trim() || project.name.trim();
+  const normalizedPath = projectPath.replace(/\\/g, "/").replace(/\/+$/, "");
+
+  if (normalizedPath.endsWith("/packages/bridge")) {
+    return null;
+  }
+
+  return projectPath || null;
+}
+
 function StartupIntroPanel({
   project,
   step,
@@ -213,7 +227,7 @@ function StartupIntroPanel({
   step: StartupStep;
   showAllOptions: boolean;
 }) {
-  const projectPath = project.rootPath ?? project.name;
+  const projectPath = resolveStartupProjectDisplayPath(project);
 
   return (
     <div className="relative order-2 border-border border-b bg-gradient-to-br from-primary/10 via-muted/20 to-background p-6 sm:p-8 md:order-1 md:border-r md:border-b-0">
@@ -222,17 +236,19 @@ function StartupIntroPanel({
         aria-hidden="true"
       />
 
-      <div
-        className="startup-gate-intro-item mb-5 flex min-w-0 items-start gap-2 font-mono text-[11px] text-muted-foreground"
-        style={{ animationDelay: "80ms" }}
-        title={projectPath}
-      >
-        <FolderOpen
-          className="mt-0.5 h-3.5 w-3.5 shrink-0"
-          aria-hidden="true"
-        />
-        <span className="truncate">{projectPath}</span>
-      </div>
+      {projectPath ? (
+        <div
+          className="startup-gate-intro-item mb-5 flex min-w-0 items-start gap-2 font-mono text-[11px] text-muted-foreground"
+          style={{ animationDelay: "80ms" }}
+          title={projectPath}
+        >
+          <FolderOpen
+            className="mt-0.5 h-3.5 w-3.5 shrink-0"
+            aria-hidden="true"
+          />
+          <span className="truncate">{projectPath}</span>
+        </div>
+      ) : null}
 
       <h1
         id="startup-gate-title"
@@ -834,7 +850,7 @@ function createBrowserProject(projectName: string): OpenProjectState {
   };
 }
 
-function createProjectManifest(projectName: string): string {
+export function createProjectManifest(projectName: string): string {
   return `${JSON.stringify(
     {
       schemaVersion: 1,
@@ -844,6 +860,10 @@ function createProjectManifest(projectName: string): string {
     null,
     2,
   )}\n`;
+}
+
+export function createProjectGitignore(): string {
+  return ".pondview/\n";
 }
 
 export function createLocalSourceBindings(input: {
@@ -905,6 +925,13 @@ export function ProjectStartupGate() {
         setProject(project);
         setDetectedDuckDbPaths(databasePaths.paths);
         setConfiguredDatabasePath(databasePaths.configuredDatabasePath);
+        if (
+          project &&
+          getProjectStoreMode(project.id) === "browser-indexeddb"
+        ) {
+          setState("hidden");
+          return;
+        }
         const initialRuntime = resolveInitialStartupRuntime({
           configuredDatabasePath: databasePaths.configuredDatabasePath,
           detectedDuckDbPaths: databasePaths.paths,
@@ -987,6 +1014,10 @@ export function ProjectStartupGate() {
       setProjectStoreMode(project.id, "bridge-filesystem");
       await initializeBridgeProject({
         files: [
+          {
+            path: ".gitignore",
+            content: createProjectGitignore(),
+          },
           {
             path: "pondview/project.json",
             content: createProjectManifest(project.name),
@@ -1081,6 +1112,10 @@ export function ProjectStartupGate() {
       setProjectStoreMode(project.id, "bridge-filesystem");
       await initializeBridgeProject({
         files: [
+          {
+            path: ".gitignore",
+            content: createProjectGitignore(),
+          },
           {
             path: "pondview/project.json",
             content: createProjectManifest(project.name),

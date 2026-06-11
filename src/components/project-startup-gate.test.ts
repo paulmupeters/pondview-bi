@@ -3,6 +3,7 @@ import {
   createLocalSourceBindings,
   resolveInitialStartupRuntime,
   resolveQuickStartDatabasePath,
+  resolveStartupProjectDisplayPath,
   resolveStartupRuntimeSelection,
   shouldShowQuickStart,
   validateStartupRuntime,
@@ -131,5 +132,26 @@ describe("ProjectStartupGate quick start", () => {
         detectedDuckDbPaths: ["analytics.duckdb", "report.duckdb"],
       }),
     ).toBeNull();
+  });
+});
+
+describe("ProjectStartupGate project path display", () => {
+  test("hides the bridge package path from the startup intro", () => {
+    expect(
+      resolveStartupProjectDisplayPath({
+        name: "bridge",
+        rootPath:
+          "/Users/paulpeters/Developer/pondview/pondview-ui/packages/bridge",
+      }),
+    ).toBeNull();
+  });
+
+  test("keeps real project paths visible", () => {
+    expect(
+      resolveStartupProjectDisplayPath({
+        name: "revenue",
+        rootPath: "/Users/paulpeters/Projects/revenue",
+      }),
+    ).toBe("/Users/paulpeters/Projects/revenue");
   });
 });

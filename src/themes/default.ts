@@ -17,7 +17,7 @@ export const themeCss = `:root {
   --secondary-foreground: oklch(0.9877 0.0057 264.5329);
 
   --muted: oklch(0.9492 0.0107 96.54);
-  --muted-foreground: oklch(0.5218 0.0047 286.2375);
+  --muted-foreground: oklch(0.5218 0.0123 135.0835);
 
   --accent: oklch(0.6671 0.0434 137.2699);
   --accent-foreground: oklch(0.2031 0.0245 273.2274);

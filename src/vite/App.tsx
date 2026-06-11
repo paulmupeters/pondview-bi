@@ -106,13 +106,16 @@ export function App() {
     [location.search],
   );
   const isStartPreview = location.pathname === "/start";
+  const isSettingsRoute = location.pathname === "/settings";
 
   return (
     <ThemeProvider defaultTheme="system" storageKey="pondview-theme">
       <TooltipProvider>
         <CustomCssLoader />
         <SqlRuntimeBootstrap />
-        {!isDashboardMode && !isStartPreview ? <ProjectStartupGate /> : null}
+        {!isDashboardMode && !isStartPreview && !isSettingsRoute ? (
+          <ProjectStartupGate />
+        ) : null}
         {isStartPreview ? (
           <Suspense fallback={null}>
             <StartPreviewPage />

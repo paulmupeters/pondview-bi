@@ -319,7 +319,10 @@ function applyAssistantMessageToCell(
 
     cell.resultPayloadJson = JSON.stringify(payload);
     cell.kind = "sql";
-    cell.status = mapArtifactStatus(latestArtifact.status);
+    cell.status =
+      payload.stage === "complete"
+        ? "complete"
+        : mapArtifactStatus(latestArtifact.status);
     cell.lastRunAt = artifactTimestamp;
     cell.updatedAt = Math.max(cell.updatedAt, artifactTimestamp);
     return;
