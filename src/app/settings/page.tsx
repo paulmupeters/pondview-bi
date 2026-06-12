@@ -113,6 +113,7 @@ import {
   useSelectedSqlBackend,
 } from "@/lib/sql/use-sql-backend";
 import { getAllThemes } from "@/themes";
+import { resolveBridgeProjectDatabaseSetup } from "./runtime-setup";
 import {
   SectionHeader,
   type SectionNavItem,
@@ -477,12 +478,14 @@ export default function SettingsPage() {
           return;
         }
         setDetectedBridgeDuckDbPaths(result.paths);
-        if (result.configuredDatabasePath) {
-          setBridgeProjectDuckDbPath(result.configuredDatabasePath);
-        } else if (result.paths.length === 1) {
-          setBridgeProjectDuckDbPath(
-            result.paths[0] ?? DEFAULT_PROJECT_DATABASE_PATH,
-          );
+        const databaseSetup = resolveBridgeProjectDatabaseSetup({
+          configuredDatabasePath: result.configuredDatabasePath,
+          detectedDuckDbPaths: result.paths,
+          bridgeConfig,
+        });
+        setBridgeProjectDatabaseChoice(databaseSetup.choice);
+        if (databaseSetup.duckDbPath) {
+          setBridgeProjectDuckDbPath(databaseSetup.duckDbPath);
         }
       })
       .catch(() => {
@@ -494,7 +497,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [isBridgeQueryReady]);
+  }, [bridgeConfig, isBridgeQueryReady]);
 
   useEffect(() => {
     const hash = window.location.hash.replace(/^#/, "");
