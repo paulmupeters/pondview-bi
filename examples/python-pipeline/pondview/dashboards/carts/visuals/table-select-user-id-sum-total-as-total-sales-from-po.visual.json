@@ -1,9 +1,0 @@
-{
-  "config": {
-    "configType": "table",
-    "description": "Top 5 users based on sales",
-    "title": "Top 5 users"
-  },
-  "id": "table-select-user-id-sum-total-as-total-sales-from-po",
-  "schemaVersion": 1
-}

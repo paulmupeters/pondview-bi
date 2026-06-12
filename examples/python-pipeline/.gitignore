@@ -1,4 +1,5 @@
 .venv/
+.pondview/
 uv.lock
 *.duckdb
 *.duckdb.wal

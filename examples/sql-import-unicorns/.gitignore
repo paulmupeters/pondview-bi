@@ -1,0 +1,5 @@
+*.duckdb
+*.duckdb.wal
+.pondview/
+pondview/
+pondview.sources.local.json

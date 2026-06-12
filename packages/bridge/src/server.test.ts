@@ -8,6 +8,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { type AddressInfo, createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
@@ -29,6 +30,26 @@ afterEach(async () => {
 });
 
 describe("bridge server modes", () => {
+  test("falls back to the next port when the requested port is in use", async () => {
+    const occupiedServer = createServer();
+    await listenOnFreePort(occupiedServer);
+    const occupiedPort = readServerPort(occupiedServer);
+
+    try {
+      const server = await startBridgeServer({ port: occupiedPort });
+      handles.push(server);
+
+      const boundPort = Number(new URL(server.url).port);
+      expect(boundPort).toBeGreaterThan(occupiedPort);
+      const config = await fetch(`${server.url}/api/duckdb/config`);
+      expect(await config.json()).toMatchObject({
+        port: boundPort,
+      });
+    } finally {
+      await closeNetServer(occupiedServer);
+    }
+  });
+
   test("API-only bridge exposes JSON routes without serving the UI", async () => {
     const server = await startTrackedServer();
 
@@ -869,6 +890,30 @@ async function startTrackedUiServer(options: {
   const server = await startBridgeUiServer({ ...options, port: 0 });
   handles.push(server);
   return server;
+}
+
+async function listenOnFreePort(server: Server): Promise<void> {
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.once("listening", resolveListen);
+    server.listen(0, "127.0.0.1");
+  });
+}
+
+function readServerPort(server: Server): number {
+  return (server.address() as AddressInfo).port;
+}
+
+async function closeNetServer(server: Server): Promise<void> {
+  await new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => {
+      if (error) {
+        rejectClose(error);
+        return;
+      }
+      resolveClose();
+    });
+  });
 }
 
 function createTempDir(): string {

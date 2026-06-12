@@ -111,12 +111,12 @@ export async function startBridgeServer(
       ),
     );
   });
-  await listen(server, host, port);
-  boundOptions = { ...boundOptions, port: readBoundPort(server, port) };
+  const boundPort = await listen(server, host, port);
+  boundOptions = { ...boundOptions, port: boundPort };
   let stopped = false;
 
   return {
-    url: `http://${formatHostForUrl(host)}:${readBoundPort(server, port)}`,
+    url: `http://${formatHostForUrl(host)}:${boundPort}`,
     stop: async () => {
       if (stopped) {
         return;
@@ -170,12 +170,12 @@ export async function startBridgeUiServer(
       ),
     );
   });
-  await listen(server, host, port);
-  boundOptions = { ...boundOptions, port: readBoundPort(server, port) };
+  const boundPort = await listen(server, host, port);
+  boundOptions = { ...boundOptions, port: boundPort };
   let stopped = false;
 
   return {
-    url: `http://${formatHostForUrl(host)}:${readBoundPort(server, port)}`,
+    url: `http://${formatHostForUrl(host)}:${boundPort}`,
     stop: async () => {
       if (stopped) {
         return;
@@ -832,6 +832,37 @@ function contentTypeForPath(path: string): string {
 }
 
 async function listen(
+  server: Server,
+  host: string,
+  port: number,
+): Promise<number> {
+  let candidatePort = port;
+  while (true) {
+    try {
+      await listenOnce(server, host, candidatePort);
+      return readBoundPort(server, candidatePort);
+    } catch (error) {
+      if (!canRetryOnNextPort(error, port, candidatePort)) {
+        throw error;
+      }
+      candidatePort += 1;
+    }
+  }
+}
+
+function canRetryOnNextPort(
+  error: unknown,
+  requestedPort: number,
+  candidatePort: number,
+): boolean {
+  return (
+    requestedPort !== 0 &&
+    candidatePort < 65535 &&
+    (error as NodeJS.ErrnoException).code === "EADDRINUSE"
+  );
+}
+
+async function listenOnce(
   server: Server,
   host: string,
   port: number,

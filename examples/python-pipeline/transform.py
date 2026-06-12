@@ -1,9 +1,10 @@
+import os
 from pathlib import Path
 
 import duckdb
 
 ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT / "pondview.duckdb"
+DB_PATH = Path(os.environ.get("DB_PATH", ROOT / "carts_dwh.duckdb"))
 SQL_FILES = [ROOT / "sql/01_staging.sql", ROOT / "sql/02_marts.sql"]
 
 

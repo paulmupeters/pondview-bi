@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -7,7 +8,7 @@ import duckdb
 import requests
 
 ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT / "pondview.duckdb"
+DB_PATH = Path(os.environ.get("DB_PATH", ROOT / "carts_dwh.duckdb"))
 BASE_URL = "https://dummyjson.com"
 
 
