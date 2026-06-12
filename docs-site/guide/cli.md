@@ -54,12 +54,13 @@ Pass `--no-ui` to run only the bridge API without serving or opening the local
 UI. Use this when the hosted Pondview app should connect to a local bridge, or
 when CLI client commands need a background API runtime.
 
-By default, the local app creates and uses
-`runtime/pondview-runtime.duckdb` in the project folder as the primary catalog.
-Pass `--database <file.duckdb>` to open a different DuckDB file as the primary
-database, so unqualified queries such as `SELECT * FROM my_table` run against
-that file. This is different from `pondview attach`, which exposes a file as an
-attached catalog that you query with its alias, for example
+By default, the local app uses the project default DuckDB source when the folder
+already has Pondview project metadata. For a new folder, initialization creates
+and uses `runtime/pondview-runtime.duckdb` in the project folder as the primary
+catalog. Pass `--database <file.duckdb>` to open a specific DuckDB file as the
+primary database, so unqualified queries such as `SELECT * FROM my_table` run
+against that file. This is different from `pondview attach`, which exposes a
+file as an attached catalog that you query with its alias, for example
 `analytics.main.my_table`.
 
 Bridge mode also exposes a filesystem-backed Pondview project. By default the
@@ -194,7 +195,7 @@ that port.
 | --- | --- | --- |
 | `--host <host>` | `start`, client commands | Host for the local bridge. Defaults to `127.0.0.1`. |
 | `--port <port>` | `start`, `stop`, client commands | Port for the local bridge. Defaults to `17817`. |
-| `--database <file>` | `start`, client autostart | Opens a DuckDB file as the bridge's primary database instead of using an in-memory database. |
+| `--database <file>` | `start`, client autostart | Opens a DuckDB file as the bridge's primary database instead of the project default or in-memory database. |
 | `--project-dir <dir>` | `start`, client autostart | Filesystem project root for raw Pondview artifacts. Defaults to the launch directory. |
 | `--readonly` | `attach` | Attaches a source with DuckDB `READ_ONLY`. |
 | `--token <token>` | all bridge/client commands | Requires or sends a bridge auth token. |

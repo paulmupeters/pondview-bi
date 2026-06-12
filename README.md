@@ -40,9 +40,8 @@ bun run docs:build
 bun run docs:preview
 
 # Bridge CLI/runtime
-bun run bridge -- help
-bun run bridge -- start
-bun run bridge -- start --no-ui
+bun run pondview start
+bun run pondview start --no-ui
 bun run bridge:build-ui
 bun run bridge:typecheck
 bun run bridge-protocol:typecheck
@@ -83,12 +82,12 @@ MotherDuck authentication is completed by the active DuckDB runtime. To persist 
 
 ## Bridge development
 
-Run the development bridge CLI with:
+Run the local package CLI with:
 
 ```bash
-bun run bridge -- start
-bun run bridge -- start --no-ui
-bun run bridge -- query "SELECT 42 AS answer"
+bun run pondview start
+bun run pondview start --no-ui
+bun run pondview query "SELECT 42 AS answer"
 ```
 
 Build the app into the bridge package when testing UI-serving behavior:

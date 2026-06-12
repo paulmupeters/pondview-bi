@@ -1,8 +1,8 @@
 {
   "config": {
     "configType": "table",
-    "description": "Query returned 5 rows",
-    "title": "Table: SELECT user_id, SUM(total) AS total_sales\nFROM \"po..."
+    "description": "Top 5 users based on sales",
+    "title": "Top 5 users"
   },
   "id": "table-select-user-id-sum-total-as-total-sales-from-po",
   "schemaVersion": 1
