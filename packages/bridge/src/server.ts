@@ -688,25 +688,45 @@ function resolveProjectDefaultDatabasePath(
     return undefined;
   }
 
-  const bindingsFile = projects
-    .listFiles()
-    .find((file) => file.path === "pondview.sources.local.json");
-  if (!bindingsFile) {
-    return undefined;
-  }
+  const files = projects.listFiles();
+  const bindingsFile = files.find(
+    (file) => file.path === "pondview.sources.local.json",
+  );
+  const manifestFile = files.find(
+    (file) => file.path === "pondview/project.json",
+  );
 
   try {
-    const parsed = JSON.parse(bindingsFile.content) as {
-      bindings?: Record<
-        string,
-        {
-          runtimeBackend?: unknown;
-          dbIdentifier?: unknown;
-          connection?: unknown;
-        }
-      >;
-    };
-    const binding = parsed.bindings?.[defaultSourceRef];
+    const legacyBindings = bindingsFile
+      ? (
+          JSON.parse(bindingsFile.content) as {
+            bindings?: Record<
+              string,
+              {
+                runtimeBackend?: unknown;
+                dbIdentifier?: unknown;
+                connection?: unknown;
+              }
+            >;
+          }
+        ).bindings
+      : undefined;
+    const manifestBindings = manifestFile
+      ? (
+          JSON.parse(manifestFile.content) as {
+            sourceBindings?: Record<
+              string,
+              {
+                runtimeBackend?: unknown;
+                dbIdentifier?: unknown;
+                connection?: unknown;
+              }
+            >;
+          }
+        ).sourceBindings
+      : undefined;
+    const bindings = legacyBindings ?? manifestBindings;
+    const binding = bindings?.[defaultSourceRef];
     if (
       binding?.runtimeBackend !== "bridge" ||
       typeof binding.dbIdentifier !== "string" ||

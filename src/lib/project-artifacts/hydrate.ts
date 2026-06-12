@@ -444,7 +444,7 @@ export function hydrateProjectArtifacts(
     sharedQueries: ExportedSharedQueryArtifact[];
     publishedNotebooks: ExportedPublishedNotebookArtifact[];
     localSourceBindings?: LocalProjectSourceBindings | null;
-    projectManifest?: { defaultSourceRef?: string } | null;
+    projectManifest?: { defaultSourceRef?: string | null } | null;
   },
   options: ProjectArtifactHydrationOptions = {},
 ): {

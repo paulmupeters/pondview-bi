@@ -13,14 +13,8 @@ Run the full pipeline and attach the resulting database to Pondview:
 ```
 
 The script installs Python dependencies, runs ingestion, runs transformations,
-verifies the generated tables, and writes Pondview project metadata that uses
+and verifies the generated tables. The committed Pondview project metadata uses
 `carts_dwh.duckdb` as the local DuckDB runtime.
-
-You can override the output database path:
-
-```bash
-DB_PATH=./custom-pipeline.duckdb ./run-pipeline.sh
-```
 
 ## Manual commands
 

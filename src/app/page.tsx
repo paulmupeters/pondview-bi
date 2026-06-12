@@ -10,12 +10,12 @@ import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { PondviewLogo } from "@/components/pondview-logo";
-import { RecentAnalysesSection } from "@/components/recent-analyses-section";
 import {
   type ManualShellVariant,
   PromptInputWrapper,
   type PromptMode,
 } from "@/components/prompt-input-wrapper";
+import { RecentAnalysesSection } from "@/components/recent-analyses-section";
 import type { SqlConsoleApi } from "@/components/sql-console";
 import { getDefaultPromptModePreference } from "@/lib/default-prompt-mode";
 import type { ExplorerInsertPayload } from "@/lib/duckdb/table-reference";
@@ -23,7 +23,10 @@ import {
   getProjectRuntimeDefaultCatalogContext,
   getProjectRuntimeDefaultDbIdentifier,
 } from "@/lib/project-runtime";
-import { ensureSampleDataForEmptyRuntime } from "@/lib/sql/sample-data";
+import {
+  ensureSampleDataForEmptyRuntime,
+  hasVisibleTablesInRuntime,
+} from "@/lib/sql/sample-data";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
 import { useResolvedSqlBackend } from "@/lib/sql/use-sql-backend";
 import { cn } from "@/lib/utils";
@@ -35,6 +38,13 @@ const EXAMPLE_COMMANDS = [
   "Compare total unicorn valuation across countries",
   "Create a bar chart of unicorn valuations by country",
   "Which companies have the highest valuation?",
+];
+
+export const GENERIC_DATA_EXPLORATION_COMMANDS = [
+  "What data is available?",
+  "How many tables are available?",
+  "How many rows are in each table?",
+  "How many columns does each table have?",
 ];
 
 const MISSING_AI_CONFIGURATION_MESSAGE =
@@ -65,10 +75,15 @@ export async function runHomepageExampleCommand(params: {
   const ensureSampleData =
     params.ensureSampleData ?? ensureSampleDataForEmptyRuntime;
 
-  await ensureSampleData({
+  const sampleData = await ensureSampleData({
     backendPreference: params.backendPreference,
   });
-  params.submit(params.command);
+  const command =
+    sampleData.skipped &&
+    !GENERIC_DATA_EXPLORATION_COMMANDS.includes(params.command)
+      ? GENERIC_DATA_EXPLORATION_COMMANDS[0]
+      : params.command;
+  params.submit(command);
 }
 
 export function getHomepageAiWarningMessage(params: {
@@ -82,10 +97,28 @@ export function getHomepageAiWarningMessage(params: {
   return MISSING_AI_CONFIGURATION_MESSAGE;
 }
 
+export function appendExplorerReferenceToPrompt(
+  currentPrompt: string,
+  reference: string,
+): string {
+  const trimmedReference = reference.trim();
+  if (!trimmedReference) {
+    return currentPrompt;
+  }
+
+  if (!currentPrompt) {
+    return trimmedReference;
+  }
+
+  const lastChar = currentPrompt[currentPrompt.length - 1] ?? "";
+  return `${currentPrompt}${/\s/.test(lastChar) ? "" : " "}${trimmedReference}`;
+}
+
 export default function Home() {
   const [mode, setMode] = useState<PromptMode>(() =>
     getDefaultPromptModePreference(),
   );
+  const [promptInput, setPromptInput] = useState("");
   const [areSuggestionsVisible, setAreSuggestionsVisible] = useState(false);
   const [selectedDb, setSelectedDb] = useState<string | undefined>(
     () => getProjectRuntimeDefaultDbIdentifier() ?? DEFAULT_WASM_DB_IDENTIFIER,
@@ -100,6 +133,8 @@ export default function Home() {
   );
   const [isPreparingExample, setIsPreparingExample] = useState(false);
   const [exampleError, setExampleError] = useState<string | null>(null);
+  const [hasExistingRuntimeTables, setHasExistingRuntimeTables] =
+    useState(false);
   const [hasAiConfiguration, setHasAiConfiguration] = useState(() =>
     hasRequiredAiConfigurationInStorage(),
   );
@@ -107,6 +142,9 @@ export default function Home() {
   const router = useRouter();
   const manualShellVariant: ManualShellVariant = "minimal";
   const isManualMode = mode === "manual";
+  const exampleCommands = hasExistingRuntimeTables
+    ? GENERIC_DATA_EXPLORATION_COMMANDS
+    : EXAMPLE_COMMANDS;
   const homePageAiWarningMessage = getHomepageAiWarningMessage({
     mode,
     hasAiConfiguration,
@@ -152,6 +190,29 @@ export default function Home() {
     if (selectedDb === DEFAULT_WASM_DB_IDENTIFIER) {
       setSelectedDb(undefined);
     }
+  }, [effectiveSqlBackend, selectedDb]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    void hasVisibleTablesInRuntime({
+      backendPreference: effectiveSqlBackend,
+      dbIdentifier: selectedDb,
+    })
+      .then((result) => {
+        if (!isCancelled) {
+          setHasExistingRuntimeTables(result.hasVisibleTables);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setHasExistingRuntimeTables(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [effectiveSqlBackend, selectedDb]);
 
   useEffect(() => {
@@ -239,6 +300,13 @@ export default function Home() {
 
       setSelectedCatalogContext(payload.catalogContext ?? null);
 
+      if (mode === "ai") {
+        setPromptInput((current) =>
+          appendExplorerReferenceToPrompt(current, payload.reference),
+        );
+        return;
+      }
+
       if (!manualConsoleApi) {
         setPendingSqlToInsert(payload.reference);
         return;
@@ -252,7 +320,7 @@ export default function Home() {
       );
       manualConsoleApi.focus();
     },
-    [manualConsoleApi],
+    [manualConsoleApi, mode],
   );
 
   const handleExampleClick = useCallback(
@@ -303,10 +371,8 @@ export default function Home() {
             <div className="flex w-full max-w-7xl items-stretch gap-4 transition-all duration-300 ease-out">
               <div
                 className={cn(
-                  "hidden md:flex min-h-0 overflow-hidden transition-all duration-300 ease-out",
-                  isManualMode
-                    ? "w-80 min-w-80 translate-x-0 opacity-100"
-                    : "pointer-events-none w-0 min-w-0 -translate-x-4 opacity-0",
+                  "hidden md:flex min-h-0 shrink-0 transition-all duration-300 ease-out",
+                  "translate-x-0 opacity-100",
                 )}
               >
                 <ConnectedDataPanel
@@ -319,6 +385,7 @@ export default function Home() {
                   onInsertTable={handleInsertTableIntoSql}
                   sqlBackend={effectiveSqlBackend}
                   showCollapseToggle={false}
+                  defaultSidebarWidth={320}
                   className="h-full w-full rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm"
                 />
               </div>
@@ -359,6 +426,8 @@ export default function Home() {
                   manualShellVariant={manualShellVariant}
                   selectedDb={selectedDb}
                   selectedCatalogContext={selectedCatalogContext}
+                  promptValue={promptInput}
+                  onPromptChange={setPromptInput}
                 />
                 <PromptErrorBanner message={homePageAiWarningMessage} />
                 <RecentAnalysesSection visible={areSuggestionsVisible} />
@@ -388,7 +457,7 @@ export default function Home() {
                         </p>
                       ) : null}
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        {EXAMPLE_COMMANDS.map((command, i) => (
+                        {exampleCommands.map((command, i) => (
                           <button
                             key={command}
                             type="button"

@@ -46,29 +46,5 @@ finally:
 PY
 
 echo
-echo "Writing Pondview project metadata"
-DB_IDENTIFIER="$(python -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$DB_PATH" "$SCRIPT_DIR")"
-mkdir -p pondview
-cat > pondview/project.json <<EOF
-{
-  "schemaVersion": 1,
-  "name": "python-pipeline",
-  "defaultSourceRef": "local"
-}
-EOF
-cat > pondview.sources.local.json <<EOF
-{
-  "schemaVersion": 1,
-  "bindings": {
-    "local": {
-      "runtimeBackend": "bridge",
-      "dbIdentifier": "$DB_IDENTIFIER",
-      "catalogContext": "main"
-    }
-  }
-}
-EOF
-
-echo
 echo "Pondview project is ready. Open it with:"
 echo "  pondview start"

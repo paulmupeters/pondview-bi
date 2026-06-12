@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "name": "python-pipeline",
+  "name": "sql-import-unicorns",
   "defaultSourceRef": "local",
   "sourceBindings": {
     "local": {
       "runtimeBackend": "bridge",
-      "dbIdentifier": "carts_dwh.duckdb",
+      "dbIdentifier": "unicorns_dwh.duckdb",
       "catalogContext": "main"
     }
   }

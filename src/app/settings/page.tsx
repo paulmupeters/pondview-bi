@@ -17,7 +17,6 @@ import {
   saveAiSettingsToStorage,
 } from "@/ai/settings";
 import {
-  createLocalSourceBindings,
   createProjectGitignore,
   createProjectManifest,
   DEFAULT_PROJECT_DATABASE_PATH,
@@ -719,11 +718,7 @@ export default function SettingsPage() {
                 },
                 {
                   path: "pondview/project.json",
-                  content: createProjectManifest(project.name),
-                },
-                {
-                  path: "pondview.sources.local.json",
-                  content: createLocalSourceBindings({
+                  content: createProjectManifest(project.name, {
                     runtimeBackend: runtimeSelection.backend,
                     dbIdentifier: runtimeSelection.dbIdentifier ?? "",
                     catalogContext: runtimeSelection.catalogContext,

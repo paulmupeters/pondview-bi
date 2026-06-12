@@ -14,7 +14,7 @@ The import creates:
 - `unicorns_enriched`, with normalized column names and parsed valuations
 - `mart_unicorns_by_country`
 - `mart_unicorns_by_industry`
-- `mart_unicorns_joined_by_year`
+- `mart_unicorns_joined_by_year`, grouped by year and country
 
 ## Run the import
 
@@ -24,35 +24,30 @@ This example assumes the `duckdb` and `pondview` CLIs are installed.
 ./import-unicorns.sh
 ```
 
-The script refreshes `pondview.duckdb`, verifies the tables, and attaches the
-database to Pondview as a read-only source named `unicorns_demo`.
-
-You can override the output database path or Pondview source alias:
-
-```bash
-DB_PATH=./custom-unicorns.duckdb SOURCE_ALIAS=unicorns ./import-unicorns.sh
-```
+The script refreshes `unicorns_dwh.duckdb` and verifies the tables. The
+committed Pondview project metadata uses `unicorns_dwh.duckdb` as the local
+DuckDB runtime.
 
 ## Manual commands
 
 Run only the DuckDB import:
 
 ```bash
-duckdb pondview.duckdb < sql/import.sql
-duckdb pondview.duckdb < sql/verify.sql
+duckdb unicorns_dwh.duckdb < sql/import.sql
+duckdb unicorns_dwh.duckdb < sql/verify.sql
 ```
 
-Attach the database to Pondview:
+To inspect the database in Pondview, run the import and start the local app:
 
 ```bash
-pondview attach pondview.duckdb --as unicorns_demo --readonly
-pondview list-sources
+./import-unicorns.sh
+pondview start
 ```
 
-Then query it in Pondview with fully qualified table references such as:
+Then query it in Pondview:
 
 ```sql
 SELECT *
-FROM unicorns_demo.main.mart_unicorns_by_country
+FROM mart_unicorns_by_country
 ORDER BY total_valuation_billions DESC;
 ```

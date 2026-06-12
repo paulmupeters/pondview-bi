@@ -1,6 +1,14 @@
 import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { ChevronRight, Database, PanelLeft } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   PromptInputHoverCard,
   PromptInputHoverCardContent,
@@ -53,6 +61,15 @@ type ExplorerTableGroup = {
   tables: string[];
   columnsByTable?: Record<string, ExplorerColumn[]>;
 };
+
+const SIDEBAR_WIDTH_STORAGE_KEY = "pondview.connected-data-panel.width";
+const DEFAULT_SIDEBAR_WIDTH = 256;
+const MIN_SIDEBAR_WIDTH = 256;
+const MAX_SIDEBAR_WIDTH = 480;
+
+function clampSidebarWidth(width: number): number {
+  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
+}
 
 function getExplorerToggleLabel(isCollapsed: boolean): string {
   return isCollapsed ? "Show explorer" : "Hide explorer";
@@ -350,6 +367,7 @@ interface ConnectedDataPanelProps {
   onRenameStoredSqlQuery?: (queryId: string) => void;
   showStoredSqlQueries?: boolean;
   toggleShortcutLabel?: string;
+  defaultSidebarWidth?: number;
 }
 
 export function ConnectedDataPanel({
@@ -374,6 +392,7 @@ export function ConnectedDataPanel({
   onRenameStoredSqlQuery,
   showStoredSqlQueries = false,
   toggleShortcutLabel,
+  defaultSidebarWidth = DEFAULT_SIDEBAR_WIDTH,
 }: ConnectedDataPanelProps) {
   const {
     tables: wasmTables,
@@ -403,6 +422,22 @@ export function ConnectedDataPanel({
     wasm: null,
   });
   const canToggleCollapse = showCollapseToggle && Boolean(onToggleCollapse);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return clampSidebarWidth(defaultSidebarWidth);
+    }
+
+    const saved = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+    const parsed = saved ? Number.parseFloat(saved) : defaultSidebarWidth;
+    return Number.isFinite(parsed)
+      ? clampSidebarWidth(parsed)
+      : clampSidebarWidth(defaultSidebarWidth);
+  });
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const sidebarResizeHandleRef = useRef<HTMLHRElement>(null);
+  const sidebarResizePointerIdRef = useRef<number | null>(null);
+  const sidebarResizeStartXRef = useRef(0);
+  const sidebarResizeStartWidthRef = useRef(0);
   const [expandedTables, setExpandedTables] = useState<Set<string>>(
     () => new Set(),
   );
@@ -425,6 +460,83 @@ export function ConnectedDataPanel({
     }
     void refreshWasmTables();
   }, [refreshToken, refreshWasmTables]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        SIDEBAR_WIDTH_STORAGE_KEY,
+        sidebarWidth.toString(),
+      );
+    }
+  }, [sidebarWidth]);
+
+  const handleSidebarResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLHRElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      sidebarResizeStartXRef.current = event.clientX;
+      sidebarResizeStartWidthRef.current = sidebarWidth;
+      sidebarResizePointerIdRef.current = event.pointerId;
+      setIsResizingSidebar(true);
+      sidebarResizeHandleRef.current?.setPointerCapture(event.pointerId);
+    },
+    [sidebarWidth],
+  );
+
+  const handleSidebarResizeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLHRElement>) => {
+      const step = event.shiftKey ? 32 : 16;
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setSidebarWidth((previous) => clampSidebarWidth(previous - step));
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setSidebarWidth((previous) => clampSidebarWidth(previous + step));
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        setSidebarWidth(MIN_SIDEBAR_WIDTH);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        setSidebarWidth(MAX_SIDEBAR_WIDTH);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!isResizingSidebar) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const deltaX = event.clientX - sidebarResizeStartXRef.current;
+      setSidebarWidth(
+        clampSidebarWidth(sidebarResizeStartWidthRef.current + deltaX),
+      );
+    };
+
+    const handlePointerUp = () => {
+      setIsResizingSidebar(false);
+      if (
+        sidebarResizeHandleRef.current &&
+        sidebarResizePointerIdRef.current !== null
+      ) {
+        sidebarResizeHandleRef.current.releasePointerCapture(
+          sidebarResizePointerIdRef.current,
+        );
+      }
+      sidebarResizePointerIdRef.current = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isResizingSidebar]);
 
   const handleAddSampleData = useCallback(
     async (target: "remote" | "wasm") => {
@@ -980,9 +1092,11 @@ export function ConnectedDataPanel({
     return (
       <div
         className={cn(
-          "flex h-full w-64 flex-col border-r border-border transition-all duration-200 ease-out",
+          "group/explorer relative flex h-full flex-col border-r border-border transition-all duration-200 ease-out",
+          isResizingSidebar && "select-none transition-none",
           className,
         )}
+        style={{ width: sidebarWidth }}
       >
         <div className="flex h-14 items-center justify-between gap-2 border-b border-border px-4">
           <span className="text-xs font-bold tracking-widest text-[#5C6658] uppercase">
@@ -1023,6 +1137,24 @@ export function ConnectedDataPanel({
             </div>
           ) : null}
         </div>
+        <hr
+          ref={sidebarResizeHandleRef}
+          aria-label="Resize explorer"
+          aria-orientation="vertical"
+          aria-valuemin={MIN_SIDEBAR_WIDTH}
+          aria-valuemax={MAX_SIDEBAR_WIDTH}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          className={cn(
+            "absolute -right-1 top-0 z-10 h-full w-2 cursor-col-resize touch-none outline-none",
+            "after:absolute after:right-1 after:top-0 after:h-full after:w-px after:bg-transparent after:transition-colors",
+            "hover:after:bg-primary/40 focus-visible:after:bg-primary/60",
+            isResizingSidebar && "after:bg-primary/60",
+          )}
+          onPointerDown={handleSidebarResizeStart}
+          onKeyDown={handleSidebarResizeKeyDown}
+          title="Drag to resize explorer"
+        />
       </div>
     );
   }

@@ -46,8 +46,9 @@ ORDER BY total_valuation_billions DESC;
 CREATE OR REPLACE TABLE mart_unicorns_joined_by_year AS
 SELECT
   year_joined,
+  country,
   count(*) AS company_count,
   sum(valuation_billions) AS total_valuation_billions
 FROM unicorns_enriched
-GROUP BY year_joined
-ORDER BY year_joined;
+GROUP BY year_joined, country
+ORDER BY year_joined, total_valuation_billions DESC;

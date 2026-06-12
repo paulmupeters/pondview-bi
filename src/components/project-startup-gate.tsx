@@ -157,6 +157,32 @@ export function resolveInitialStartupRuntime(input: {
   };
 }
 
+export function shouldHideStartupGateForBrowserProject(input: {
+  projectStoreMode: ReturnType<typeof getProjectStoreMode>;
+  hasProjectArtifacts: boolean;
+  configuredDatabasePath?: string;
+  detectedDuckDbPaths: string[];
+}): boolean {
+  if (input.projectStoreMode !== "browser-indexeddb") {
+    return false;
+  }
+
+  if (input.hasProjectArtifacts) {
+    return false;
+  }
+
+  return (
+    !input.configuredDatabasePath?.trim() &&
+    input.detectedDuckDbPaths.length === 0
+  );
+}
+
+export function hasStartupProjectArtifacts(
+  files: Array<{ path: string }>,
+): boolean {
+  return files.some((file) => file.path !== ".gitignore");
+}
+
 export function resolveStartupRuntimeSelection(input: {
   runtimeChoice: StartupRuntimeChoice;
   duckDbPath: string;
@@ -850,12 +876,32 @@ function createBrowserProject(projectName: string): OpenProjectState {
   };
 }
 
-export function createProjectManifest(projectName: string): string {
+type ProjectManifestSourceBindingInput = {
+  runtimeBackend: SqlBackend;
+  dbIdentifier: string;
+  catalogContext: string | null;
+};
+
+export function createProjectManifest(
+  projectName: string,
+  sourceBinding?: ProjectManifestSourceBindingInput | null,
+): string {
   return `${JSON.stringify(
     {
       schemaVersion: 1,
       name: projectName,
-      defaultSourceRef: "local",
+      ...(sourceBinding
+        ? {
+            defaultSourceRef: "local",
+            sourceBindings: {
+              local: {
+                runtimeBackend: sourceBinding.runtimeBackend,
+                dbIdentifier: sourceBinding.dbIdentifier,
+                catalogContext: sourceBinding.catalogContext,
+              },
+            },
+          }
+        : {}),
     },
     null,
     2,
@@ -925,9 +971,15 @@ export function ProjectStartupGate() {
         setProject(project);
         setDetectedDuckDbPaths(databasePaths.paths);
         setConfiguredDatabasePath(databasePaths.configuredDatabasePath);
+        const hasProjectArtifacts = hasStartupProjectArtifacts(files);
         if (
           project &&
-          getProjectStoreMode(project.id) === "browser-indexeddb"
+          shouldHideStartupGateForBrowserProject({
+            projectStoreMode: getProjectStoreMode(project.id),
+            hasProjectArtifacts,
+            configuredDatabasePath: databasePaths.configuredDatabasePath,
+            detectedDuckDbPaths: databasePaths.paths,
+          })
         ) {
           setState("hidden");
           return;
@@ -938,7 +990,7 @@ export function ProjectStartupGate() {
         });
         setRuntimeChoice(initialRuntime.choice);
         setDuckDbPath(initialRuntime.duckDbPath);
-        if (files.length > 0) {
+        if (hasProjectArtifacts) {
           setState("hidden");
           return;
         }
@@ -1020,11 +1072,7 @@ export function ProjectStartupGate() {
           },
           {
             path: "pondview/project.json",
-            content: createProjectManifest(project.name),
-          },
-          {
-            path: "pondview.sources.local.json",
-            content: createLocalSourceBindings({
+            content: createProjectManifest(project.name, {
               runtimeBackend: runtimeSelection.backend,
               dbIdentifier: runtimeSelection.dbIdentifier,
               catalogContext: runtimeSelection.catalogContext,
@@ -1118,11 +1166,7 @@ export function ProjectStartupGate() {
           },
           {
             path: "pondview/project.json",
-            content: createProjectManifest(project.name),
-          },
-          {
-            path: "pondview.sources.local.json",
-            content: createLocalSourceBindings({
+            content: createProjectManifest(project.name, {
               runtimeBackend: runtimeSelection.backend,
               dbIdentifier: runtimeSelection.dbIdentifier,
               catalogContext: runtimeSelection.catalogContext,

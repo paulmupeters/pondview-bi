@@ -36,25 +36,6 @@ export const projectVisualConfigSchema = z.union([
   textConfigSchema,
 ]);
 
-export const projectManifestSchema = z.object({
-  schemaVersion: schemaVersionSchema,
-  name: nonEmptyStringSchema,
-  defaultSourceRef: projectArtifactIdSchema.optional(),
-  description: z.string().optional(),
-});
-
-export const trackedProjectSourceSchema = z.object({
-  id: projectArtifactIdSchema,
-  kind: projectSourceKindSchema,
-  externalType: projectSourceExternalTypeSchema.optional(),
-  description: z.string().optional(),
-});
-
-export const trackedProjectSourceRegistrySchema = z.object({
-  schemaVersion: schemaVersionSchema,
-  sources: z.array(trackedProjectSourceSchema),
-});
-
 export const localProjectSourceConnectionSchema = z
   .object({
     type: z.string().trim().min(1),
@@ -114,6 +95,28 @@ export const localProjectSourceBindingSchema = z.object({
 export const localProjectSourceBindingsSchema = z.object({
   schemaVersion: schemaVersionSchema,
   bindings: z.record(projectArtifactIdSchema, localProjectSourceBindingSchema),
+});
+
+export const projectManifestSchema = z.object({
+  schemaVersion: schemaVersionSchema,
+  name: nonEmptyStringSchema,
+  defaultSourceRef: projectArtifactIdSchema.nullable().optional(),
+  description: z.string().optional(),
+  sourceBindings: z
+    .record(projectArtifactIdSchema, localProjectSourceBindingSchema)
+    .optional(),
+});
+
+export const trackedProjectSourceSchema = z.object({
+  id: projectArtifactIdSchema,
+  kind: projectSourceKindSchema,
+  externalType: projectSourceExternalTypeSchema.optional(),
+  description: z.string().optional(),
+});
+
+export const trackedProjectSourceRegistrySchema = z.object({
+  schemaVersion: schemaVersionSchema,
+  sources: z.array(trackedProjectSourceSchema),
 });
 
 export const projectDashboardSlicerSchema = z.object({
