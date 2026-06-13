@@ -13,9 +13,11 @@ Current Connect Data dialog options:
 - HTTPFS remote files (`s3://`, `r2://`, `gcs://`, `gs://`, `http://`, `https://`)
 - Quack remote DuckDB endpoints
 
-The CLI can also write typed custom DuckDB attachment bindings to
-`pondview.sources.local.json` for sources that are attach-compatible but not
-exposed in the primary UI picker.
+The CLI can also write typed custom DuckDB attachment bindings for sources that
+are attach-compatible but not exposed in the primary UI picker. New projects
+store the default DuckDB source in `pondview/project.json`; the legacy
+`pondview.sources.local.json` file is still supported for machine-local
+overrides.
 
 ## Runtime requirement
 
@@ -53,10 +55,9 @@ Quack currently requires DuckDB v1.5.2 or newer in the active remote runtime. Us
 
 ## Custom CLI sources
 
-Custom sources are configured locally with `pondview source add` or by editing
-`pondview.sources.local.json`. They are SQL-backed: Pondview runs the configured
-setup SQL before using the source. That SQL can create views, tables, secrets, or
-attached catalogs.
+Custom sources are configured locally with `pondview source add`. They are
+SQL-backed: Pondview runs the configured setup SQL before using the source. That
+SQL can create views, tables, secrets, or attached catalogs.
 
 Google Sheets example:
 

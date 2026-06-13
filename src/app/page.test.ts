@@ -1,8 +1,33 @@
 import { describe, expect, test } from "bun:test";
 import {
+  appendExplorerReferenceToPrompt,
+  GENERIC_DATA_EXPLORATION_COMMANDS,
   getHomepageAiWarningMessage,
   runHomepageExampleCommand,
 } from "@/app/page";
+
+describe("appendExplorerReferenceToPrompt", () => {
+  test("adds a table reference to an empty prompt", () => {
+    expect(appendExplorerReferenceToPrompt("", "main.orders")).toBe(
+      "main.orders",
+    );
+  });
+
+  test("separates an inserted table reference from existing prompt text", () => {
+    expect(
+      appendExplorerReferenceToPrompt("Summarize sales from", "main.orders"),
+    ).toBe("Summarize sales from main.orders");
+    expect(
+      appendExplorerReferenceToPrompt("Summarize sales from ", "main.orders"),
+    ).toBe("Summarize sales from main.orders");
+  });
+
+  test("ignores blank references", () => {
+    expect(appendExplorerReferenceToPrompt("Summarize sales", "   ")).toBe(
+      "Summarize sales",
+    );
+  });
+});
 
 describe("getHomepageAiWarningMessage", () => {
   test("shows the missing AI configuration warning on AI landing", () => {
@@ -59,7 +84,7 @@ describe("runHomepageExampleCommand", () => {
     ]);
   });
 
-  test("still submits when sample data is skipped because tables already exist", async () => {
+  test("submits a generic exploration prompt when tables already exist", async () => {
     const calls: string[] = [];
 
     await runHomepageExampleCommand({
@@ -81,8 +106,28 @@ describe("runHomepageExampleCommand", () => {
 
     expect(calls).toEqual([
       "seed",
-      "submit:Compare total unicorn valuation across countries",
+      `submit:${GENERIC_DATA_EXPLORATION_COMMANDS[0]}`,
     ]);
+  });
+
+  test("preserves the clicked generic prompt when tables already exist", async () => {
+    const calls: string[] = [];
+
+    await runHomepageExampleCommand({
+      command: GENERIC_DATA_EXPLORATION_COMMANDS[2],
+      backendPreference: "bridge",
+      ensureSampleData: async () => ({
+        backend: "bridge",
+        dbIdentifier: undefined,
+        created: false,
+        skipped: true,
+      }),
+      submit: (command) => {
+        calls.push(`submit:${command}`);
+      },
+    });
+
+    expect(calls).toEqual([`submit:${GENERIC_DATA_EXPLORATION_COMMANDS[2]}`]);
   });
 
   test("propagates sample-data failures so the page can stop before chat opens", async () => {

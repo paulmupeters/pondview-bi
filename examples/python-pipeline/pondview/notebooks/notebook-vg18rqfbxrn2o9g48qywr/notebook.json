@@ -1,0 +1,17 @@
+{
+  "cells": [
+    {
+      "file": "cells/ai.md",
+      "id": "ai",
+      "kind": "ai"
+    },
+    {
+      "file": "cells/ai-2.md",
+      "id": "ai-2",
+      "kind": "ai"
+    }
+  ],
+  "id": "notebook-vg18rqfbxrn2o9g48qywr",
+  "schemaVersion": 1,
+  "title": "Exploration"
+}

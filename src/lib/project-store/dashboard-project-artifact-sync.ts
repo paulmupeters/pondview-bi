@@ -1,6 +1,7 @@
 import type { JoinDefinition } from "@/lib/joins/graph";
 import {
   exportDashboardArtifact,
+  type ProjectArtifactTextFile,
   serializeDashboardArtifact,
   toProjectArtifactId,
 } from "@/lib/project-artifacts/export";
@@ -39,6 +40,43 @@ function getDashboardArtifactId(dashboard: WorkspaceDashboard): string {
   return toProjectArtifactId(dashboard.title, "dashboard");
 }
 
+function normalizeProjectPath(path: string | null | undefined): string | null {
+  const normalized =
+    typeof path === "string"
+      ? path.trim().replace(/\\/g, "/").replace(/\/+$/, "")
+      : "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+function getManifestId(file: ProjectArtifactTextFile): string | null {
+  try {
+    const parsed = JSON.parse(file.content) as { id?: unknown };
+    return typeof parsed.id === "string" && parsed.id.trim()
+      ? parsed.id.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function findDashboardProjectPathByManifestId(
+  files: ProjectArtifactTextFile[],
+  dashboardId: string,
+): string | null {
+  for (const file of files) {
+    const path = normalizeProjectPath(file.path);
+    if (!path || !/^pondview\/dashboards\/[^/]+\/dashboard\.json$/.test(path)) {
+      continue;
+    }
+
+    if (getManifestId(file) === dashboardId) {
+      return path.replace(/\/dashboard\.json$/, "");
+    }
+  }
+
+  return null;
+}
+
 function getDashboardScopePath(input: {
   title: string;
   projectPath?: string | null;
@@ -68,14 +106,21 @@ export async function syncDashboardProjectArtifact(
     return null;
   }
 
-  const previousScopePath = snapshot.dashboard.projectPath?.trim() || null;
+  const projectFiles = await listOpenProjectFiles();
+  const previousScopePath =
+    normalizeProjectPath(snapshot.dashboard.projectPath) ??
+    findDashboardProjectPathByManifestId(projectFiles, snapshot.dashboard.id);
+  const dashboard = {
+    ...snapshot.dashboard,
+    projectPath: previousScopePath ?? snapshot.dashboard.projectPath,
+  };
   const artifact = exportDashboardArtifact({
-    dashboard: snapshot.dashboard,
+    dashboard,
     charts: snapshot.charts,
     measures: snapshot.measures,
     slicers: snapshot.slicers,
     joins: snapshot.joins,
-    artifactId: getDashboardArtifactId(snapshot.dashboard),
+    artifactId: getDashboardArtifactId(dashboard),
     fallbackSourceRef: project.defaultSourceRef ?? null,
     requireSourceRefs: false,
   });

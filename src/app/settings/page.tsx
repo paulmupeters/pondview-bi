@@ -16,6 +16,13 @@ import {
   loadAiSettingsFromStorage,
   saveAiSettingsToStorage,
 } from "@/ai/settings";
+import {
+  createProjectGitignore,
+  createProjectManifest,
+  DEFAULT_PROJECT_DATABASE_PATH,
+  resolveStartupRuntimeSelection,
+  validateStartupRuntime,
+} from "@/components/project-startup-gate";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -29,13 +36,18 @@ import {
   deleteBridgeS3BackupSecret,
   downloadBridgeS3Backup,
   getBridgeEndpoint,
+  getBridgeProject,
   getBridgeSecretsStatus,
+  initializeBridgeProject,
+  listBridgeProjectDatabasePaths,
   listBridgeS3Backup,
   type PondviewBridgeConfig,
+  pickBridgeProjectDatabasePath,
   saveBridgeAiSecret,
   saveBridgeS3BackupSecret,
   setBridgeEndpoint,
   setSessionSecret,
+  testBridgeConnection,
   testBridgeS3Backup,
   uploadBridgeS3Backup,
 } from "@/lib/bridge/pondview-bridge";
@@ -71,13 +83,17 @@ import {
 } from "@/lib/duckdb/s3-backup-storage";
 import { importParsedProjectArtifacts } from "@/lib/project-artifacts/import";
 import { parseProjectArtifactFileSet } from "@/lib/project-artifacts/parse";
-import { hydrateProjectRuntimeFromParsedArtifacts } from "@/lib/project-runtime";
+import {
+  hydrateProjectRuntimeFromParsedArtifacts,
+  setProjectRuntimeSelection,
+} from "@/lib/project-runtime";
 import {
   getOpenProject,
   listOpenProjectFiles,
   listProjects,
   type OpenProjectState,
   setOpenProject,
+  setProjectStoreMode,
 } from "@/lib/project-store";
 import {
   type BrowserProjectBundle,
@@ -97,7 +113,7 @@ import {
   useSelectedSqlBackend,
 } from "@/lib/sql/use-sql-backend";
 import { getAllThemes } from "@/themes";
-import { getActiveRuntimeLabel } from "./runtime-label";
+import { resolveBridgeProjectDatabaseSetup } from "./runtime-setup";
 import {
   SectionHeader,
   type SectionNavItem,
@@ -127,6 +143,9 @@ const CSS_PLACEHOLDER = `:root{
 
 const CUSTOM_THEME_VALUE = "custom";
 
+type BridgeProjectDatabaseChoice = "none" | "new-duckdb" | "existing-duckdb";
+type BridgeProjectStorageChoice = "browser" | "local";
+
 const SECTION_NAV: readonly SectionNavItem[] = [
   {
     id: "projects",
@@ -140,7 +159,7 @@ const SECTION_NAV: readonly SectionNavItem[] = [
   },
   {
     id: "runtime",
-    label: "Query Runtime",
+    label: "DuckDB Runtime",
     icon: Database,
   },
   {
@@ -196,7 +215,7 @@ function createBrowserProjectState(name: string): OpenProjectState {
   };
 }
 
-function getDefaultBridgeEndpoint(
+export function getDefaultBridgeEndpoint(
   config?: PondviewBridgeConfig | null,
 ): string {
   if (config) {
@@ -210,10 +229,27 @@ function getDefaultBridgeEndpoint(
   }
 
   if (typeof window === "undefined") {
-    return "";
+    return "http://127.0.0.1:17817";
   }
 
-  return window.location.origin;
+  return `${window.location.protocol}//127.0.0.1:17817`;
+}
+
+export function validateBridgeEndpoint(endpoint: string): string | null {
+  if (!endpoint.trim().length) {
+    return null;
+  }
+
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return "Bridge endpoint must use http or https.";
+    }
+  } catch {
+    return "Bridge endpoint must be a valid URL.";
+  }
+
+  return null;
 }
 
 function formatSnapshotSize(bytes: number): string {
@@ -253,6 +289,8 @@ export default function SettingsPage() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [bridgeSecret, setBridgeSecret] = useState("");
   const [bridgeEndpoint, setBridgeEndpointInput] = useState("");
+  const [isTestingBridgeConnection, setIsTestingBridgeConnection] =
+    useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [aiSettingsError, setAiSettingsError] = useState<string | null>(null);
   const [bridgeAiConfigured, setBridgeAiConfigured] = useState(false);
@@ -262,6 +300,20 @@ export default function SettingsPage() {
   const [runtimeSettingsSuccess, setRuntimeSettingsSuccess] = useState<
     string | null
   >(null);
+  const [bridgeProjectDatabaseChoice, setBridgeProjectDatabaseChoice] =
+    useState<BridgeProjectDatabaseChoice>("none");
+  const [bridgeProjectStorageChoice, setBridgeProjectStorageChoice] =
+    useState<BridgeProjectStorageChoice>("browser");
+  const [bridgeProjectDuckDbPath, setBridgeProjectDuckDbPath] = useState(
+    DEFAULT_PROJECT_DATABASE_PATH,
+  );
+  const [detectedBridgeDuckDbPaths, setDetectedBridgeDuckDbPaths] = useState<
+    string[]
+  >([]);
+  const [isPickingBridgeDuckDbPath, setIsPickingBridgeDuckDbPath] =
+    useState(false);
+  const [isSavingBridgeProjectSetup, setIsSavingBridgeProjectSetup] =
+    useState(false);
   const [s3BackupForm, setS3BackupForm] = useState<S3BackupConfig>(
     EMPTY_S3_BACKUP_CONFIG,
   );
@@ -370,6 +422,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!isBridgeQueryReady) {
       setBridgeS3BackupConfigured(false);
+      setDetectedBridgeDuckDbPaths([]);
       return;
     }
 
@@ -414,6 +467,39 @@ export default function SettingsPage() {
   }, [isBridgeQueryReady]);
 
   useEffect(() => {
+    if (!isBridgeQueryReady) {
+      return;
+    }
+
+    let cancelled = false;
+    void listBridgeProjectDatabasePaths()
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setDetectedBridgeDuckDbPaths(result.paths);
+        const databaseSetup = resolveBridgeProjectDatabaseSetup({
+          configuredDatabasePath: result.configuredDatabasePath,
+          detectedDuckDbPaths: result.paths,
+          bridgeConfig,
+        });
+        setBridgeProjectDatabaseChoice(databaseSetup.choice);
+        if (databaseSetup.duckDbPath) {
+          setBridgeProjectDuckDbPath(databaseSetup.duckDbPath);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDetectedBridgeDuckDbPaths([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bridgeConfig, isBridgeQueryReady]);
+
+  useEffect(() => {
     const hash = window.location.hash.replace(/^#/, "");
     if (SECTION_NAV.some((item) => item.id === hash)) {
       setActiveSection(hash as SettingsSection);
@@ -454,34 +540,62 @@ export default function SettingsPage() {
 
   const handleSaveBridgeEndpoint = () => {
     const endpoint = bridgeEndpoint.trim();
-    if (endpoint.length) {
-      try {
-        const url = new URL(endpoint);
-        if (url.protocol !== "http:" && url.protocol !== "https:") {
-          setRuntimeSettingsError("Bridge endpoint must use http or https.");
-          setRuntimeSettingsSuccess(null);
-          return;
-        }
-      } catch {
-        setRuntimeSettingsError("Bridge endpoint must be a valid URL.");
-        setRuntimeSettingsSuccess(null);
-        return;
-      }
+    const validationError = validateBridgeEndpoint(endpoint);
+    if (validationError) {
+      setRuntimeSettingsError(validationError);
+      setRuntimeSettingsSuccess(null);
+      return;
     }
 
     const defaultEndpoint = getDefaultBridgeEndpoint(bridgeConfig);
-    const shouldUseDefaultEndpoint = endpoint === defaultEndpoint;
-    setBridgeEndpoint(shouldUseDefaultEndpoint ? "" : endpoint);
+    setBridgeEndpoint(endpoint);
     setBridgeEndpointInput(endpoint || defaultEndpoint);
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(
-      endpoint && !shouldUseDefaultEndpoint
+      endpoint
         ? "Bridge endpoint saved."
         : "Bridge endpoint reset to the current Bridge endpoint.",
     );
     void refreshBridgeHealth();
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleTestBridgeConnection = async () => {
+    const endpoint = bridgeEndpoint.trim();
+    const validationError = validateBridgeEndpoint(endpoint);
+    if (validationError) {
+      setRuntimeSettingsError(validationError);
+      setRuntimeSettingsSuccess(null);
+      return;
+    }
+
+    setIsTestingBridgeConnection(true);
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
+    try {
+      const config = await testBridgeConnection(endpoint);
+      const saveHint =
+        endpoint === getBridgeEndpoint() ? "" : " Save endpoint to use it.";
+      if (config.requiresAuth && !hasBridgeSessionSecret) {
+        setRuntimeSettingsSuccess(
+          `Bridge is reachable. Set the session secret before querying.${saveHint}`,
+        );
+      } else {
+        setRuntimeSettingsSuccess(`Bridge connection successful.${saveHint}`);
+      }
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      setRuntimeSettingsError(
+        error instanceof Error
+          ? error.message
+          : "Bridge connection test failed.",
+      );
+      setRuntimeSettingsSuccess(null);
+    } finally {
+      setIsTestingBridgeConnection(false);
+    }
   };
 
   const handleClearBridgeEndpoint = () => {
@@ -518,15 +632,173 @@ export default function SettingsPage() {
   const handleSqlBackendChange = (backend: SqlBackend) => {
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(null);
-    if (backend === "bridge" && !isBridgeDiscoverable) {
-      setRuntimeSettingsError(
-        "Bridge is unavailable. Start Pondview Bridge or save a reachable endpoint before selecting it.",
-      );
-      return;
-    }
     setSqlBackendPreferenceInStorage(backend);
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
+  };
+
+  const handleBridgeProjectDatabaseChoiceChange = (
+    choice: BridgeProjectDatabaseChoice,
+  ) => {
+    setBridgeProjectDatabaseChoice(choice);
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
+    if (choice === "new-duckdb") {
+      setBridgeProjectDuckDbPath(DEFAULT_PROJECT_DATABASE_PATH);
+    } else if (
+      choice === "existing-duckdb" &&
+      !bridgeProjectDuckDbPath.trim() &&
+      detectedBridgeDuckDbPaths.length === 1
+    ) {
+      setBridgeProjectDuckDbPath(
+        detectedBridgeDuckDbPaths[0] ?? DEFAULT_PROJECT_DATABASE_PATH,
+      );
+    }
+  };
+
+  const handlePickBridgeDuckDbPath = async () => {
+    setIsPickingBridgeDuckDbPath(true);
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
+    try {
+      const result = await pickBridgeProjectDatabasePath();
+      if (result.path) {
+        setBridgeProjectDatabaseChoice("existing-duckdb");
+        setBridgeProjectDuckDbPath(result.path);
+      }
+    } catch (error) {
+      setRuntimeSettingsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to choose DuckDB file.",
+      );
+    } finally {
+      setIsPickingBridgeDuckDbPath(false);
+    }
+  };
+
+  const handleSaveBridgeProjectSetup = async () => {
+    const runtimeChoice =
+      bridgeProjectDatabaseChoice === "none"
+        ? null
+        : bridgeProjectDatabaseChoice;
+    const validationError = runtimeChoice
+      ? validateStartupRuntime({
+          runtimeChoice,
+          duckDbPath: bridgeProjectDuckDbPath,
+        })
+      : null;
+    if (validationError) {
+      setRuntimeSettingsError(validationError);
+      setRuntimeSettingsSuccess(null);
+      return;
+    }
+
+    setIsSavingBridgeProjectSetup(true);
+    setRuntimeSettingsError(null);
+    setRuntimeSettingsSuccess(null);
+    try {
+      const { project } = await getBridgeProject();
+      const runtimeSelection = runtimeChoice
+        ? resolveStartupRuntimeSelection({
+            runtimeChoice,
+            duckDbPath: bridgeProjectDuckDbPath,
+          })
+        : {
+            backend: "bridge" as const,
+            dbIdentifier: null,
+            catalogContext: null,
+          };
+
+      if (bridgeProjectStorageChoice === "local") {
+        setProjectStoreMode(project.id, "bridge-filesystem");
+        await initializeBridgeProject({
+          files: runtimeChoice
+            ? [
+                {
+                  path: ".gitignore",
+                  content: createProjectGitignore(),
+                },
+                {
+                  path: "pondview/project.json",
+                  content: createProjectManifest(project.name, {
+                    runtimeBackend: runtimeSelection.backend,
+                    dbIdentifier: runtimeSelection.dbIdentifier ?? "",
+                    catalogContext: runtimeSelection.catalogContext,
+                  }),
+                },
+              ]
+            : [
+                {
+                  path: ".gitignore",
+                  content: createProjectGitignore(),
+                },
+                {
+                  path: "pondview/project.json",
+                  content: `${JSON.stringify(
+                    {
+                      schemaVersion: 1,
+                      name: project.name,
+                      defaultSourceRef: null,
+                    },
+                    null,
+                    2,
+                  )}\n`,
+                },
+              ],
+          ...(runtimeChoice && "databasePath" in runtimeSelection
+            ? { databasePath: runtimeSelection.databasePath }
+            : {}),
+        });
+        await refreshBridgeHealth();
+        await hydrateProjectRuntimeFromParsedArtifacts({
+          project,
+          parsed: parseProjectArtifactFileSet(await listOpenProjectFiles()),
+        });
+        await refreshOpenProjectSummary();
+      } else {
+        if (runtimeChoice && "databasePath" in runtimeSelection) {
+          await initializeBridgeProject({
+            files: [],
+            databasePath: runtimeSelection.databasePath,
+          });
+          await refreshBridgeHealth();
+        }
+        const browserProject =
+          (await getOpenProject()) ?? createBrowserProjectState(project.name);
+        const nextBrowserProject = {
+          ...browserProject,
+          backingKind: "browser-indexeddb" as const,
+          defaultSourceRef: runtimeChoice ? "local" : null,
+          updatedAt: Date.now(),
+        };
+        setProjectStoreMode(project.id, "browser-indexeddb");
+        await setOpenProject(nextBrowserProject);
+        setProjectRuntimeSelection({
+          projectId: nextBrowserProject.id,
+          sourceRef: "local",
+          runtimeBackend: runtimeSelection.backend,
+          dbIdentifier: runtimeSelection.dbIdentifier,
+          catalogContext: runtimeSelection.catalogContext,
+          setupSql: null,
+        });
+        await refreshOpenProjectSummary();
+      }
+
+      setSqlBackendPreferenceInStorage(runtimeSelection.backend);
+      setRuntimeSettingsSuccess("Bridge project setup saved.");
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (error) {
+      setRuntimeSettingsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to save Bridge project setup.",
+      );
+      setRuntimeSettingsSuccess(null);
+    } finally {
+      setIsSavingBridgeProjectSetup(false);
+    }
   };
 
   const updateS3BackupForm = <K extends keyof S3BackupConfig>(
@@ -1081,17 +1353,7 @@ export default function SettingsPage() {
     }
   };
 
-  const effectiveRuntimeLabel = getActiveRuntimeLabel({
-    selectedSqlBackend,
-    effectiveSqlBackend,
-    isBridgeDiscoverable,
-    isBridgeQueryReady,
-  });
-  const bridgeOptionLabel = !isBridgeDiscoverable
-    ? "Bridge (Unavailable)"
-    : !isBridgeQueryReady
-      ? "Bridge (Auth required)"
-      : "Bridge (Available)";
+  const bridgeOptionLabel = "Bridge";
   const bridgeAuthStatusLabel = bridgeConfig
     ? bridgeConfig.requiresAuth
       ? hasBridgeSessionSecret
@@ -1243,8 +1505,6 @@ export default function SettingsPage() {
 
               {activeSection === "runtime" && (
                 <RuntimeSettingsSection
-                  effectiveSqlBackend={effectiveSqlBackend}
-                  effectiveRuntimeLabel={effectiveRuntimeLabel}
                   selectedSqlBackend={selectedSqlBackend}
                   onSqlBackendChange={handleSqlBackendChange}
                   bridgeOptionLabel={bridgeOptionLabel}
@@ -1255,12 +1515,35 @@ export default function SettingsPage() {
                   bridgeEndpoint={bridgeEndpoint}
                   onBridgeEndpointChange={setBridgeEndpointInput}
                   onSaveBridgeEndpoint={handleSaveBridgeEndpoint}
+                  onTestBridgeConnection={() =>
+                    void handleTestBridgeConnection()
+                  }
                   onClearBridgeEndpoint={handleClearBridgeEndpoint}
+                  isTestingBridgeConnection={isTestingBridgeConnection}
                   bridgeSecret={bridgeSecret}
                   onBridgeSecretChange={setBridgeSecret}
                   onSetBridgeSecret={handleSetBridgeSecret}
                   onClearBridgeSecret={handleClearBridgeSecret}
                   hasBridgeSessionSecret={hasBridgeSessionSecret}
+                  bridgeProjectDatabaseChoice={bridgeProjectDatabaseChoice}
+                  onBridgeProjectDatabaseChoiceChange={
+                    handleBridgeProjectDatabaseChoiceChange
+                  }
+                  bridgeProjectDuckDbPath={bridgeProjectDuckDbPath}
+                  onBridgeProjectDuckDbPathChange={setBridgeProjectDuckDbPath}
+                  detectedBridgeDuckDbPaths={detectedBridgeDuckDbPaths}
+                  onPickBridgeDuckDbPath={() =>
+                    void handlePickBridgeDuckDbPath()
+                  }
+                  isPickingBridgeDuckDbPath={isPickingBridgeDuckDbPath}
+                  bridgeProjectStorageChoice={bridgeProjectStorageChoice}
+                  onBridgeProjectStorageChoiceChange={
+                    setBridgeProjectStorageChoice
+                  }
+                  onSaveBridgeProjectSetup={() =>
+                    void handleSaveBridgeProjectSetup()
+                  }
+                  isSavingBridgeProjectSetup={isSavingBridgeProjectSetup}
                 />
               )}
 

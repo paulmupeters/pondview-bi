@@ -129,6 +129,65 @@ describe("project artifact parsing", () => {
     expect(collectProjectArtifactSourceRefs(parsed)).toEqual(["analytics"]);
   });
 
+  test("uses source bindings embedded in the project manifest", () => {
+    const parsed = parseProjectArtifactFileSet([
+      jsonFile("pondview/project.json", {
+        schemaVersion: 1,
+        name: "Example",
+        defaultSourceRef: "local",
+        sourceBindings: {
+          local: {
+            runtimeBackend: "bridge",
+            dbIdentifier: "analytics.duckdb",
+            catalogContext: "main",
+          },
+        },
+      }),
+    ]);
+
+    expect(parsed.localSourceBindings).toEqual({
+      schemaVersion: 1,
+      bindings: {
+        local: {
+          runtimeBackend: "bridge",
+          dbIdentifier: "analytics.duckdb",
+          catalogContext: "main",
+        },
+      },
+    });
+  });
+
+  test("lets legacy local source bindings override manifest bindings", () => {
+    const parsed = parseProjectArtifactFileSet([
+      jsonFile("pondview/project.json", {
+        schemaVersion: 1,
+        name: "Example",
+        defaultSourceRef: "local",
+        sourceBindings: {
+          local: {
+            runtimeBackend: "bridge",
+            dbIdentifier: "committed.duckdb",
+            catalogContext: "main",
+          },
+        },
+      }),
+      jsonFile("pondview.sources.local.json", {
+        schemaVersion: 1,
+        bindings: {
+          local: {
+            runtimeBackend: "bridge",
+            dbIdentifier: "override.duckdb",
+            catalogContext: "main",
+          },
+        },
+      }),
+    ]);
+
+    expect(parsed.localSourceBindings?.bindings.local?.dbIdentifier).toBe(
+      "override.duckdb",
+    );
+  });
+
   test("reports missing referenced files", () => {
     expect(() =>
       parseProjectArtifactFileSet([

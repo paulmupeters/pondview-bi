@@ -2,6 +2,7 @@ import {
   ArrowRight,
   ClockIcon,
   Database,
+  Eye,
   LayoutDashboard,
   Plus,
   Trash2,
@@ -18,7 +19,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { addSampleDashboard } from "@/lib/dashboard/sample-dashboard";
-import { resolveDashboardMode } from "@/lib/dashboard-mode";
+import {
+  DASHBOARD_MODE_QUERY_PARAM,
+  DASHBOARD_PREVIEW_QUERY_VALUE,
+  resolveDashboardMode,
+} from "@/lib/dashboard-mode";
 import { cn } from "@/lib/utils";
 import {
   createDashboard,
@@ -49,6 +54,7 @@ const DASHBOARD_SKELETON_KEYS = [
   "dashboard-skeleton-5",
   "dashboard-skeleton-6",
 ] as const;
+const DASHBOARD_PREVIEW_HREF = `/dashboards?${DASHBOARD_MODE_QUERY_PARAM}=${DASHBOARD_PREVIEW_QUERY_VALUE}`;
 
 /* ------------------------------------------------------------------ */
 /*  Time formatting                                                     */
@@ -336,18 +342,26 @@ export default function DashboardsPage() {
               </div>
             )}
             {!isDashboardMode ? (
-              <Button
-                size="lg"
-                className="gap-2 rounded-full px-6 shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-primary/35"
-                onClick={() => {
-                  setCreateTitle("");
-                  setCreateDialogOpen(true);
-                }}
-                disabled={isCreating}
-              >
-                <Plus className="h-4 w-4" />
-                New Dashboard
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button asChild size="lg" variant="outline">
+                  <Link href={DASHBOARD_PREVIEW_HREF}>
+                    <Eye className="h-4 w-4" />
+                    Preview
+                  </Link>
+                </Button>
+                <Button
+                  size="lg"
+                  className="gap-2 rounded-full px-6 shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-primary/35"
+                  onClick={() => {
+                    setCreateTitle("");
+                    setCreateDialogOpen(true);
+                  }}
+                  disabled={isCreating}
+                >
+                  <Plus className="h-4 w-4" />
+                  New Dashboard
+                </Button>
+              </div>
             ) : null}
           </div>
         </header>

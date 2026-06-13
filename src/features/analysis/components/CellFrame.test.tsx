@@ -48,13 +48,14 @@ describe("CellFrame", () => {
   test("renders the compact shell chrome without a badge or inline preview", () => {
     const markup = renderCellFrame(createCell());
 
-    expect(markup).toContain("Analysis");
-    expect(markup).toContain("Prompt to analysis");
+    expect(markup).not.toContain("Analysis");
+    expect(markup).not.toContain("Prompt to analysis");
     expect(markup).toContain("Cell body");
     expect(markup).not.toContain("select 5;");
     expect(markup).not.toContain('data-slot="badge"');
     expect(markup).toContain('data-status-icon="complete"');
     expect(markup).toContain('aria-label="Collapse cell"');
+    expect(markup).toContain('aria-label="Select cell 2"');
   });
 
   test("renders a status icon for each supported cell status", () => {
@@ -99,7 +100,7 @@ describe("CellFrame", () => {
     );
   });
 
-  test("labels text cells distinctly from analysis cells", () => {
+  test("uses the same shell chrome for text and analysis cells", () => {
     const analysisMarkup = renderCellFrame(createCell());
     const textMarkup = renderCellFrame(
       createCell({
@@ -108,8 +109,9 @@ describe("CellFrame", () => {
       }),
     );
 
-    expect(analysisMarkup).toContain("Analysis");
-    expect(textMarkup).toContain("Markdown");
-    expect(textMarkup).toContain("Notebook note");
+    expect(analysisMarkup).not.toContain("Analysis");
+    expect(textMarkup).not.toContain("Markdown");
+    expect(analysisMarkup).toContain('aria-label="Select cell 2"');
+    expect(textMarkup).toContain('aria-label="Select cell 2"');
   });
 });

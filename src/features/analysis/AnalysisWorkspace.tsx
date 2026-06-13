@@ -247,11 +247,22 @@ export function AnalysisWorkspace({
     state.selectedCellId,
   ]);
 
-  function handleBootstrapConsumed(cellId: string) {
+  const handleBootstrapConsumed = useCallback((cellId: string) => {
     setPendingBootstrap((current) =>
       current?.cellId === cellId ? null : current,
     );
-  }
+  }, []);
+
+  const handleSelectCell = useCallback((cellId: string) => {
+    dispatch({ type: "cellSelected", cellId });
+  }, []);
+
+  const handleSelectCellMode = useCallback(
+    (cellId: string, mode: "ai" | "sql" | "text") => {
+      dispatch({ type: "cellModeSelected", cellId, mode });
+    },
+    [],
+  );
 
   async function handleAddCell(kind: WorkspaceAnalysisCellKind) {
     setIsMutating(true);
@@ -408,14 +419,10 @@ export function AnalysisWorkspace({
             selectedCellId={state.selectedCellId}
             pendingBootstrap={pendingBootstrap}
             notebookSession={notebookSession}
-            onSelectCell={(cellId) =>
-              dispatch({ type: "cellSelected", cellId })
-            }
+            onSelectCell={handleSelectCell}
             onBootstrapConsumed={handleBootstrapConsumed}
             onDeleteCell={(cellId) => void handleDeleteCell(cellId)}
-            onSelectCellMode={(cellId, mode) =>
-              dispatch({ type: "cellModeSelected", cellId, mode })
-            }
+            onSelectCellMode={handleSelectCellMode}
             onAddCell={(kind) => void handleAddCell(kind)}
             isBusy={isMutating}
           />

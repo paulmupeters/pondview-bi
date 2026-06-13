@@ -117,6 +117,24 @@ function parseOptionalJsonFile<T>(
     : null;
 }
 
+function resolveLocalSourceBindings(input: {
+  projectManifest: ProjectManifest | null;
+  legacyLocalSourceBindings: LocalProjectSourceBindings | null;
+}): LocalProjectSourceBindings | null {
+  if (input.legacyLocalSourceBindings) {
+    return input.legacyLocalSourceBindings;
+  }
+
+  if (!input.projectManifest?.sourceBindings) {
+    return null;
+  }
+
+  return {
+    schemaVersion: 1,
+    bindings: input.projectManifest.sourceBindings,
+  };
+}
+
 function joinArtifactPath(rootPath: string, relativePath: string): string {
   return `${rootPath}/${normalizeProjectArtifactPath(relativePath)}`;
 }
@@ -305,11 +323,15 @@ export function parseProjectArtifactFileSet(
     "pondview/sources/registry.json",
     trackedProjectSourceRegistrySchema,
   );
-  const localSourceBindings = parseOptionalJsonFile(
+  const legacyLocalSourceBindings = parseOptionalJsonFile(
     fileMap,
     "pondview.sources.local.json",
     localProjectSourceBindingsSchema,
   );
+  const localSourceBindings = resolveLocalSourceBindings({
+    projectManifest,
+    legacyLocalSourceBindings,
+  });
 
   const dashboards = Array.from(fileMap.keys())
     .filter((path) =>

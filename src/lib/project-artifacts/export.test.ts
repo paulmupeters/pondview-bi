@@ -25,6 +25,17 @@ describe("project artifact id normalization", () => {
       "revenue-overview",
     );
   });
+
+  test("caps generated artifact ids so they remain valid path segments", () => {
+    const id = toProjectArtifactId(
+      "Note to self lorem dolor irure in dolore laborum veniam deserunt excepteur ullamco lorem deserunt magna adipisicing ipsum consequat anim pariatur eu et elit minim eiusmod",
+    );
+
+    expect(id).toBe(
+      "note-to-self-lorem-dolor-irure-in-dolore-laborum-veniam-deserunt-excepteur-ullam",
+    );
+    expect(id.length).toBeLessThanOrEqual(80);
+  });
 });
 
 describe("dashboard artifact export", () => {
@@ -449,5 +460,48 @@ describe("published notebook artifact export", () => {
     expect(sqlFile?.content).toBe(
       "select month, revenue from monthly_revenue\n",
     );
+  });
+
+  test("caps long notebook cell ids before writing cell content files", () => {
+    const notebook: WorkspaceAnalysisNotebook = {
+      id: "notebook_123",
+      title: "Long Cell Prompts",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const promptText =
+      "Note to self lorem dolor irure in dolore laborum veniam deserunt excepteur ullamco lorem deserunt magna adipisicing ipsum consequat anim pariatur eu et elit minim eiusmod reprehenderit ipsum laborum esse anim laborum est cupidatat";
+    const cells: WorkspaceAnalysisCell[] = [0, 1].map((position) => ({
+      id: `cell_${position}`,
+      notebookId: notebook.id,
+      position,
+      kind: "text",
+      aiEnabled: false,
+      sqlEnabled: false,
+      promptText,
+      sqlDraft: null,
+      selectedDbIdentifier: null,
+      selectedCatalogContext: null,
+      status: "complete",
+      resultPayloadJson: null,
+      createdAt: position + 1,
+      updatedAt: position + 2,
+      lastRunAt: null,
+    }));
+
+    const artifact = exportPublishedNotebookArtifact({
+      notebook,
+      cells,
+    });
+
+    expect(artifact.manifest.cells.map((cell) => cell.id)).toEqual([
+      "note-to-self-lorem-dolor-irure-in-dolore-laborum-veniam-deserunt-excepteur-ullam",
+      "note-to-self-lorem-dolor-irure-in-dolore-laborum-veniam-deserunt-excepteur-ull-2",
+    ]);
+    expect(
+      artifact.contentFiles.every(
+        (file) => (file.path.split("/").at(-1)?.length ?? 0) <= 83,
+      ),
+    ).toBe(true);
   });
 });

@@ -15,6 +15,7 @@ function createChart(input: {
   id: string;
   dashboardId?: string;
   sql: string;
+  chartConfigJson?: string;
   catalogContext?: string | null;
   sqlBackend?: DbDashboardChart["sqlBackend"];
   dbIdentifier?: string | null;
@@ -30,7 +31,7 @@ function createChart(input: {
     dbIdentifier: input.dbIdentifier ?? null,
     catalogContext: input.catalogContext ?? null,
     sqlBackend: input.sqlBackend ?? null,
-    chartConfigJson: "{}",
+    chartConfigJson: input.chartConfigJson ?? "{}",
     semanticQueryJson: null,
     exploreName: null,
     position: 0,
@@ -188,6 +189,43 @@ describe("browser-filter-engine", () => {
       runtimeSqlCalls.some((sql) => sql.includes('WITH "__filtered_base"')),
     ).toBe(true);
     expect(result.rowsByChartId[chart.id]).toEqual([{ source: "fallback" }]);
+    expect(result.metadataByChartId[chart.id]).toEqual({
+      filtersApplied: false,
+      appliedFiltersCount: 0,
+      skippedFilters: [],
+    });
+  });
+
+  test("skips SQL execution for text cards", async () => {
+    let runChartSqlCalls = 0;
+    const chart = createChart({
+      id: "text-1",
+      sql: "",
+      chartConfigJson: JSON.stringify({
+        configType: "text",
+        content: "Notes for the dashboard",
+      }),
+    });
+
+    const result = await executeDashboardChartsWithFilters(
+      {
+        dashboardId: "dashboard-1",
+        charts: [chart],
+        dashboardFilters: [],
+        chartFiltersById: {},
+      },
+      {
+        resolveBackend: () => "duckdb-wasm",
+        readJoinDefs: async () => [],
+        runChartSql: async () => {
+          runChartSqlCalls += 1;
+          throw new Error("SQL query is required");
+        },
+      },
+    );
+
+    expect(runChartSqlCalls).toBe(0);
+    expect(result.rowsByChartId[chart.id]).toEqual([]);
     expect(result.metadataByChartId[chart.id]).toEqual({
       filtersApplied: false,
       appliedFiltersCount: 0,

@@ -4,6 +4,7 @@ import {
   buildAiCellPrompt,
   buildAiCellUpdatePatch,
   buildTranscriptMessageBlocks,
+  extractNotebookTitleFromMessage,
   getLatestAssistantText,
   getMessageText,
 } from "@/features/analysis/ai-cell-message-utils";
@@ -30,6 +31,100 @@ describe("ai cell message utils", () => {
         },
       }),
     ).toContain("Current cell SQL");
+  });
+
+  test("asks the model to generate a notebook title for a new notebook", () => {
+    expect(
+      buildAiCellPrompt({
+        prompt: "Show weekly revenue",
+        shouldGenerateNotebookTitle: true,
+      }),
+    ).toContain("call set_notebook_title");
+  });
+
+  test("extracts notebook titles from the internal title tool", () => {
+    expect(
+      extractNotebookTitleFromMessage({
+        id: "assistant-title",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-set_notebook_title",
+            output: {
+              title: "Weekly Revenue",
+            },
+          },
+        ],
+      } as unknown as UIMessage),
+    ).toBe("Weekly Revenue");
+  });
+
+  test("hides the internal title tool from transcript blocks", () => {
+    const blocks = buildTranscriptMessageBlocks(
+      {
+        id: "assistant-title",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-set_notebook_title",
+            output: {
+              title: "Weekly Revenue",
+            },
+          },
+          {
+            type: "text",
+            text: "Here is the analysis.",
+          },
+        ],
+      } as unknown as UIMessage,
+      {
+        showToolCalls: true,
+        showExecuteSqlRawOutput: true,
+      },
+    );
+
+    expect(blocks).toEqual([
+      {
+        key: "assistant-title-text-1",
+        kind: "text",
+        text: "Here is the analysis.",
+      },
+    ]);
+  });
+
+  test("marks the cell as complete when artifact payload is complete even if wrapper status is streaming", () => {
+    const patch = buildAiCellUpdatePatch({
+      message: {
+        id: "assistant-streaming",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-execute_final_sql",
+            output: {
+              parts: [
+                {
+                  type: "data-execute-sql",
+                  data: {
+                    status: "streaming",
+                    payload: {
+                      stage: "complete",
+                      query: "select revenue by week",
+                      visualType: "chart",
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      } as unknown as UIMessage,
+      createdAt: 42,
+    });
+
+    expect(patch).toMatchObject({
+      status: "complete",
+      sqlDraft: "select revenue by week",
+    });
   });
 
   test("updates the shared cell payload from a final sql artifact", () => {

@@ -24,6 +24,7 @@ import type {
 
 const PROJECT_METADATA_PATH = ".pondview/project.json";
 const PROJECT_ARTIFACT_ROOT = "pondview";
+const PROJECT_GITIGNORE_PATH = ".gitignore";
 const LOCAL_SOURCE_BINDINGS_PATH = "pondview.sources.local.json";
 
 type BridgeProjectMetadataFile = {
@@ -39,9 +40,7 @@ export class BridgeProjectStore {
   readonly rootPath: string;
 
   constructor(options: BridgeProjectStoreOptions = {}) {
-    this.rootPath = resolve(
-      options.rootPath?.trim() || process.env.INIT_CWD || process.cwd(),
-    );
+    this.rootPath = resolveProjectRootPath(options.rootPath);
     if (!existsSync(this.rootPath)) {
       mkdirSync(this.rootPath, { recursive: true });
     }
@@ -75,6 +74,9 @@ export class BridgeProjectStore {
 
     const artifactRootPath = this.resolveProjectPath(PROJECT_ARTIFACT_ROOT);
     const files = [
+      ...(existsSync(this.resolveProjectPath(PROJECT_GITIGNORE_PATH))
+        ? [PROJECT_GITIGNORE_PATH]
+        : []),
       ...(existsSync(artifactRootPath)
         ? this.listFilesInDirectory(artifactRootPath)
         : []),
@@ -356,6 +358,7 @@ function normalizeProjectPath(path: string): string {
 
 function isProjectArtifactFilePath(path: string): boolean {
   return (
+    path === PROJECT_GITIGNORE_PATH ||
     path === LOCAL_SOURCE_BINDINGS_PATH ||
     path.startsWith(`${PROJECT_ARTIFACT_ROOT}/`)
   );
@@ -363,6 +366,7 @@ function isProjectArtifactFilePath(path: string): boolean {
 
 function isProjectArtifactScopePath(path: string): boolean {
   return (
+    path === PROJECT_GITIGNORE_PATH ||
     path === LOCAL_SOURCE_BINDINGS_PATH ||
     path === PROJECT_ARTIFACT_ROOT ||
     path.startsWith(`${PROJECT_ARTIFACT_ROOT}/`)
@@ -382,6 +386,18 @@ function isPathInsideRoot(rootPath: string, targetPath: string): boolean {
     relativePath === "" ||
     (!relativePath.startsWith("..") && !relativePath.startsWith(`..${sep}`))
   );
+}
+
+function resolveProjectRootPath(explicitRootPath?: string): string {
+  const candidates = [
+    explicitRootPath,
+    process.env.INIT_CWD,
+    process.env.PWD,
+    process.cwd(),
+  ];
+  const rootPath =
+    candidates.find((candidate) => candidate?.trim()) ?? process.cwd();
+  return resolve(rootPath);
 }
 
 function createProjectRootId(rootPath: string): string {

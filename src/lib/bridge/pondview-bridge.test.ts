@@ -8,6 +8,7 @@ import {
   refreshBridgeConfig,
   runBridgeQuery,
   setSessionSecret,
+  testBridgeConnection,
 } from "@/lib/bridge/pondview-bridge";
 
 type StorageLike = {
@@ -191,5 +192,46 @@ describe("pondview bridge browser state", () => {
 
     expect(result.columns).toEqual([{ name: "answer", type: "INTEGER" }]);
     expect(result.rows).toEqual([{ answer: 42 }]);
+  });
+
+  test("tests a typed bridge endpoint without relying on stored endpoint state", async () => {
+    const requestedUrls: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requestedUrls.push(String(input));
+      if (String(input).endsWith("/ping")) {
+        return new Response(JSON.stringify({ status: "ok" }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          host: "127.0.0.1",
+          port: 17817,
+          requires_auth: false,
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    const config = await testBridgeConnection("http://127.0.0.1:17817/");
+
+    expect(requestedUrls).toEqual([
+      "http://127.0.0.1:17817/ping",
+      "http://127.0.0.1:17817/api/duckdb/config",
+    ]);
+    expect(config).toEqual({
+      host: "127.0.0.1",
+      port: 17817,
+      requiresAuth: false,
+    });
   });
 });

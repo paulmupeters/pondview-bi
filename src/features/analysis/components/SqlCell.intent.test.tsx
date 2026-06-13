@@ -24,12 +24,24 @@ describe("SqlCell SQL intent prompt", () => {
     expect(getSqlIntentDraftSignature("show weekly revenue by customer")).toBe(
       null,
     );
+    expect(getSqlIntentDraftSignature("create a chart")).toBe(null);
     expect(
       shouldShowSqlIntentPopover({
         promptDraft: "show weekly revenue by customer",
         isChatMode: true,
         isAssistantThinking: false,
         dismissedDraftSignature: null,
+      }),
+    ).toBe(false);
+  });
+
+  test("keeps a dismissed suggestion hidden while the user keeps typing SQL", () => {
+    expect(
+      shouldShowSqlIntentPopover({
+        promptDraft: "SELECT * FROM customers",
+        isChatMode: true,
+        isAssistantThinking: false,
+        dismissedDraftSignature: "SELECT * FROM orders",
       }),
     ).toBe(false);
   });

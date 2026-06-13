@@ -433,7 +433,14 @@ export function SqlCell({
               autoFocus={aiEnabled}
             />
             <InputGroupAddon align="inline-end">
-              <Popover open={showSqlIntentPopover}>
+              <Popover
+                open={showSqlIntentPopover}
+                onOpenChange={(open) => {
+                  if (!open && showSqlIntentPopover) {
+                    handleKeepInChat();
+                  }
+                }}
+              >
                 <PopoverTrigger asChild>
                   <span className="inline-flex">
                     <InputGroupButton
@@ -488,7 +495,7 @@ export function SqlCell({
 
       <div
         className={cn(
-          "grid gap-3",
+          "grid items-start gap-3",
           isSqlPanelExpanded
             ? "lg:grid-cols-[minmax(18rem,0.82fr)_minmax(0,1.38fr)]"
             : "lg:grid-cols-[2.75rem_minmax(0,1fr)]",

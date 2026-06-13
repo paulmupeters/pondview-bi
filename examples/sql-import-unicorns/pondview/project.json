@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "sql-import-unicorns",
+  "defaultSourceRef": "local",
+  "sourceBindings": {
+    "local": {
+      "runtimeBackend": "bridge",
+      "dbIdentifier": "unicorns_dwh.duckdb",
+      "catalogContext": "main"
+    }
+  }
+}

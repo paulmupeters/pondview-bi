@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useChatHistory } from "@/hooks/use-chat-history";
+import { EMPTY_CHAT_HISTORY, useChatHistory } from "@/hooks/use-chat-history";
 import {
   type ChatHistoryEntry,
   getChatHistoryDisplayTitle,
@@ -36,7 +36,9 @@ interface BottomNavBarProps {
   initialChats?: ChatHistoryEntry[];
 }
 
-export function BottomNavBar({ initialChats = [] }: BottomNavBarProps) {
+export function BottomNavBar({
+  initialChats = EMPTY_CHAT_HISTORY,
+}: BottomNavBarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();

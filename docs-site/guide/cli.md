@@ -54,12 +54,14 @@ Pass `--no-ui` to run only the bridge API without serving or opening the local
 UI. Use this when the hosted Pondview app should connect to a local bridge, or
 when CLI client commands need a background API runtime.
 
-By default, the local app creates and uses
-`runtime/pondview-runtime.duckdb` in the project folder as the primary catalog.
-Pass `--database <file.duckdb>` to open a different DuckDB file as the primary
-database, so unqualified queries such as `SELECT * FROM my_table` run against
-that file. This is different from `pondview attach`, which exposes a file as an
-attached catalog that you query with its alias, for example
+By default, the local app uses the project default DuckDB source when the folder
+already has Pondview project metadata. For a new folder, initialization creates
+and uses `runtime/pondview-runtime.duckdb` in the project folder as the primary
+catalog, and records that default source in `pondview/project.json`. Pass
+`--database <file.duckdb>` to open a specific DuckDB file as the
+primary database, so unqualified queries such as `SELECT * FROM my_table` run
+against that file. This is different from `pondview attach`, which exposes a
+file as an attached catalog that you query with its alias, for example
 `analytics.main.my_table`.
 
 Bridge mode also exposes a filesystem-backed Pondview project. By default the
@@ -73,10 +75,10 @@ for `.duckdb` files in that folder's root. If exactly one is found, you get a
 quick-start screen to open it as your primary database. If you pass
 `--database <file.duckdb>`, that file is used instead. With no DuckDB file
 present, the app asks whether to initialize local project files or keep working
-from browser storage. Initializing creates `pondview/project.json`,
-`pondview.sources.local.json`, bridge metadata, and the local DuckDB runtime
-file. Browser mode leaves the folder untouched and uses the existing browser
-IndexedDB workflow for that project folder.
+from browser storage. Initializing creates `pondview/project.json`, bridge
+metadata, and the local DuckDB runtime file. Browser mode leaves the folder
+untouched and uses the existing browser IndexedDB workflow for that project
+folder.
 
 ### Client commands
 
@@ -119,9 +121,11 @@ pondview query --file ./dashboard-metadata.sql --database ./analytics.duckdb
 
 ### Local source bindings
 
-`pondview source` manages local source bindings in
-`pondview.sources.local.json`. This file is private to the local project
-checkout and should not be committed.
+New projects store their default DuckDB source in `pondview/project.json`, so a
+cloned project can start against the same relative `.duckdb` path after that
+file has been created. `pondview.sources.local.json` is still supported as a
+legacy local override for machine-specific source bindings. If present, it is
+private to the local project checkout and should not be committed.
 
 ```bash
 pondview source add google-sheet \
@@ -194,7 +198,7 @@ that port.
 | --- | --- | --- |
 | `--host <host>` | `start`, client commands | Host for the local bridge. Defaults to `127.0.0.1`. |
 | `--port <port>` | `start`, `stop`, client commands | Port for the local bridge. Defaults to `17817`. |
-| `--database <file>` | `start`, client autostart | Opens a DuckDB file as the bridge's primary database instead of using an in-memory database. |
+| `--database <file>` | `start`, client autostart | Opens a DuckDB file as the bridge's primary database instead of the project default or in-memory database. |
 | `--project-dir <dir>` | `start`, client autostart | Filesystem project root for raw Pondview artifacts. Defaults to the launch directory. |
 | `--readonly` | `attach` | Attaches a source with DuckDB `READ_ONLY`. |
 | `--token <token>` | all bridge/client commands | Requires or sends a bridge auth token. |

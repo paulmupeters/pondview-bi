@@ -1,4 +1,4 @@
-import { Check, LayoutDashboard, Loader2 } from "lucide-react";
+import { Check, LayoutDashboard, Loader2, Pencil } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,13 +79,24 @@ export function AnalysisToolbar({
           placeholder="Untitled analysis"
         />
       ) : (
-        <button
-          type="button"
-          onClick={handleTitleClick}
-          className="cursor-text rounded px-1.5 py-0.5 text-sm font-semibold tracking-tight text-foreground transition-colors hover:bg-muted"
-        >
-          {title ?? "Untitled analysis"}
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={handleTitleClick}
+              className={cn(
+                "group flex cursor-text items-center gap-1.5 rounded px-1.5 py-0.5 text-sm font-semibold tracking-tight transition-colors hover:bg-muted",
+                title ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <span className="underline-offset-4 decoration-dotted group-hover:underline">
+                {title ?? "Untitled analysis"}
+              </span>
+              <Pencil className="size-3 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Click to rename</TooltipContent>
+        </Tooltip>
       )}
 
       <div className="ml-auto flex items-center gap-3">

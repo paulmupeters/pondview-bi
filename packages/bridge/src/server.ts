@@ -80,7 +80,9 @@ export async function startBridgeServer(
       databasePath,
       resolveSource: (id) => secrets.getSource(id),
     });
-  let runtime = createRuntime(options.databasePath);
+  let runtime = createRuntime(
+    options.databasePath ?? resolveProjectDefaultDatabasePath(projects),
+  );
   const initializeProjectRuntime = async (databasePath?: string) => {
     if (options.databasePath) {
       return runtime.databaseInfo();
@@ -109,12 +111,12 @@ export async function startBridgeServer(
       ),
     );
   });
-  await listen(server, host, port);
-  boundOptions = { ...boundOptions, port: readBoundPort(server, port) };
+  const boundPort = await listen(server, host, port);
+  boundOptions = { ...boundOptions, port: boundPort };
   let stopped = false;
 
   return {
-    url: `http://${formatHostForUrl(host)}:${readBoundPort(server, port)}`,
+    url: `http://${formatHostForUrl(host)}:${boundPort}`,
     stop: async () => {
       if (stopped) {
         return;
@@ -168,12 +170,12 @@ export async function startBridgeUiServer(
       ),
     );
   });
-  await listen(server, host, port);
-  boundOptions = { ...boundOptions, port: readBoundPort(server, port) };
+  const boundPort = await listen(server, host, port);
+  boundOptions = { ...boundOptions, port: boundPort };
   let stopped = false;
 
   return {
-    url: `http://${formatHostForUrl(host)}:${readBoundPort(server, port)}`,
+    url: `http://${formatHostForUrl(host)}:${boundPort}`,
     stop: async () => {
       if (stopped) {
         return;
@@ -678,6 +680,66 @@ function getBridgeWorkspaceDbName(projects: BridgeProjectStore): string {
   return `${WORKSPACE_DB_NAME}-${projects.getProject().id}`;
 }
 
+function resolveProjectDefaultDatabasePath(
+  projects: BridgeProjectStore,
+): string | undefined {
+  const defaultSourceRef = projects.getProject().defaultSourceRef?.trim();
+  if (!defaultSourceRef) {
+    return undefined;
+  }
+
+  const files = projects.listFiles();
+  const bindingsFile = files.find(
+    (file) => file.path === "pondview.sources.local.json",
+  );
+  const manifestFile = files.find(
+    (file) => file.path === "pondview/project.json",
+  );
+
+  try {
+    const legacyBindings = bindingsFile
+      ? (
+          JSON.parse(bindingsFile.content) as {
+            bindings?: Record<
+              string,
+              {
+                runtimeBackend?: unknown;
+                dbIdentifier?: unknown;
+                connection?: unknown;
+              }
+            >;
+          }
+        ).bindings
+      : undefined;
+    const manifestBindings = manifestFile
+      ? (
+          JSON.parse(manifestFile.content) as {
+            sourceBindings?: Record<
+              string,
+              {
+                runtimeBackend?: unknown;
+                dbIdentifier?: unknown;
+                connection?: unknown;
+              }
+            >;
+          }
+        ).sourceBindings
+      : undefined;
+    const bindings = legacyBindings ?? manifestBindings;
+    const binding = bindings?.[defaultSourceRef];
+    if (
+      binding?.runtimeBackend !== "bridge" ||
+      typeof binding.dbIdentifier !== "string" ||
+      binding.connection
+    ) {
+      return undefined;
+    }
+    return createProjectDatabasePath(projects.rootPath, binding.dbIdentifier);
+  } catch {
+    return undefined;
+  }
+}
+
 function htmlResponse(html: string): Response {
   return new Response(html, {
     headers: {
@@ -710,7 +772,7 @@ async function pickProjectDatabasePath(
   }
 
   const script = [
-    `set selectedFile to choose file name with prompt ${toAppleScriptString("Choose a DuckDB file for this Pondview project")} default name ${toAppleScriptString("pondview-runtime.duckdb")} default location POSIX file ${toAppleScriptString(projectRootPath)}`,
+    `set selectedFile to choose file with prompt ${toAppleScriptString("Choose an existing DuckDB file for this Pondview project")} default location POSIX file ${toAppleScriptString(projectRootPath)} of type {"duckdb"}`,
     "POSIX path of selectedFile",
   ].join("\n");
   const process = spawn("osascript", ["-e", script], {
@@ -790,6 +852,37 @@ function contentTypeForPath(path: string): string {
 }
 
 async function listen(
+  server: Server,
+  host: string,
+  port: number,
+): Promise<number> {
+  let candidatePort = port;
+  while (true) {
+    try {
+      await listenOnce(server, host, candidatePort);
+      return readBoundPort(server, candidatePort);
+    } catch (error) {
+      if (!canRetryOnNextPort(error, port, candidatePort)) {
+        throw error;
+      }
+      candidatePort += 1;
+    }
+  }
+}
+
+function canRetryOnNextPort(
+  error: unknown,
+  requestedPort: number,
+  candidatePort: number,
+): boolean {
+  return (
+    requestedPort !== 0 &&
+    candidatePort < 65535 &&
+    (error as NodeJS.ErrnoException).code === "EADDRINUSE"
+  );
+}
+
+async function listenOnce(
   server: Server,
   host: string,
   port: number,

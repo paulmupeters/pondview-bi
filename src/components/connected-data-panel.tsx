@@ -1,6 +1,14 @@
 import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { Database, PanelLeft } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronRight, Database, PanelLeft } from "lucide-react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   PromptInputHoverCard,
   PromptInputHoverCardContent,
@@ -42,11 +50,26 @@ import type { SavedSqlQuery } from "@/lib/workspace/saved-sql-queries-repo";
 import type { DraftSqlQuery } from "@/lib/workspace/sql-editor-drafts-repo";
 import { Separator } from "./ui/separator";
 
+type ExplorerColumn = {
+  name: string;
+  type?: string;
+};
+
 type ExplorerTableGroup = {
   catalog: string;
   schema: string;
   tables: string[];
+  columnsByTable?: Record<string, ExplorerColumn[]>;
 };
+
+const SIDEBAR_WIDTH_STORAGE_KEY = "pondview.connected-data-panel.width";
+const DEFAULT_SIDEBAR_WIDTH = 256;
+const MIN_SIDEBAR_WIDTH = 256;
+const MAX_SIDEBAR_WIDTH = 480;
+
+function clampSidebarWidth(width: number): number {
+  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
+}
 
 function getExplorerToggleLabel(isCollapsed: boolean): string {
   return isCollapsed ? "Show explorer" : "Hide explorer";
@@ -264,6 +287,12 @@ export function resolveActiveRuntimeExplorer(params: {
   };
 }
 
+export function shouldShowExplorerTableGroup(
+  group: ExplorerTableGroup,
+): boolean {
+  return !isHiddenRuntimeSchema(group.schema);
+}
+
 export function getExplorerTableDisplayLabel({
   catalog,
   schema,
@@ -278,6 +307,7 @@ export function getExplorerTableDisplayLabel({
     schema,
     table,
     includeCatalog: Boolean(catalog?.trim()),
+    includeDefaultSchema: Boolean(catalog?.trim()),
   });
 }
 
@@ -337,6 +367,7 @@ interface ConnectedDataPanelProps {
   onRenameStoredSqlQuery?: (queryId: string) => void;
   showStoredSqlQueries?: boolean;
   toggleShortcutLabel?: string;
+  defaultSidebarWidth?: number;
 }
 
 export function ConnectedDataPanel({
@@ -361,6 +392,7 @@ export function ConnectedDataPanel({
   onRenameStoredSqlQuery,
   showStoredSqlQueries = false,
   toggleShortcutLabel,
+  defaultSidebarWidth = DEFAULT_SIDEBAR_WIDTH,
 }: ConnectedDataPanelProps) {
   const {
     tables: wasmTables,
@@ -390,6 +422,37 @@ export function ConnectedDataPanel({
     wasm: null,
   });
   const canToggleCollapse = showCollapseToggle && Boolean(onToggleCollapse);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return clampSidebarWidth(defaultSidebarWidth);
+    }
+
+    const saved = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+    const parsed = saved ? Number.parseFloat(saved) : defaultSidebarWidth;
+    return Number.isFinite(parsed)
+      ? clampSidebarWidth(parsed)
+      : clampSidebarWidth(defaultSidebarWidth);
+  });
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const sidebarResizeHandleRef = useRef<HTMLHRElement>(null);
+  const sidebarResizePointerIdRef = useRef<number | null>(null);
+  const sidebarResizeStartXRef = useRef(0);
+  const sidebarResizeStartWidthRef = useRef(0);
+  const [expandedTables, setExpandedTables] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const toggleTableExpanded = useCallback((tableId: string) => {
+    setExpandedTables((previous) => {
+      const next = new Set(previous);
+      if (next.has(tableId)) {
+        next.delete(tableId);
+      } else {
+        next.add(tableId);
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (refreshToken === undefined) {
@@ -397,6 +460,83 @@ export function ConnectedDataPanel({
     }
     void refreshWasmTables();
   }, [refreshToken, refreshWasmTables]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        SIDEBAR_WIDTH_STORAGE_KEY,
+        sidebarWidth.toString(),
+      );
+    }
+  }, [sidebarWidth]);
+
+  const handleSidebarResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLHRElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      sidebarResizeStartXRef.current = event.clientX;
+      sidebarResizeStartWidthRef.current = sidebarWidth;
+      sidebarResizePointerIdRef.current = event.pointerId;
+      setIsResizingSidebar(true);
+      sidebarResizeHandleRef.current?.setPointerCapture(event.pointerId);
+    },
+    [sidebarWidth],
+  );
+
+  const handleSidebarResizeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLHRElement>) => {
+      const step = event.shiftKey ? 32 : 16;
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setSidebarWidth((previous) => clampSidebarWidth(previous - step));
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setSidebarWidth((previous) => clampSidebarWidth(previous + step));
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        setSidebarWidth(MIN_SIDEBAR_WIDTH);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        setSidebarWidth(MAX_SIDEBAR_WIDTH);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!isResizingSidebar) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const deltaX = event.clientX - sidebarResizeStartXRef.current;
+      setSidebarWidth(
+        clampSidebarWidth(sidebarResizeStartWidthRef.current + deltaX),
+      );
+    };
+
+    const handlePointerUp = () => {
+      setIsResizingSidebar(false);
+      if (
+        sidebarResizeHandleRef.current &&
+        sidebarResizePointerIdRef.current !== null
+      ) {
+        sidebarResizeHandleRef.current.releasePointerCapture(
+          sidebarResizePointerIdRef.current,
+        );
+      }
+      sidebarResizePointerIdRef.current = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isResizingSidebar]);
 
   const handleAddSampleData = useCallback(
     async (target: "remote" | "wasm") => {
@@ -439,31 +579,43 @@ export function ConnectedDataPanel({
           catalog?: string;
           schema: string;
           name: string;
+          columns?: ExplorerColumn[];
         }>,
       ): ExplorerTableGroup[] => {
-        const grouped = new Map<string, string[]>();
+        const grouped = new Map<
+          string,
+          { tables: string[]; columnsByTable: Map<string, ExplorerColumn[]> }
+        >();
 
         for (const table of tables) {
           const catalog = table.catalog?.trim() || "";
           const schema = table.schema?.trim() || "main";
           const key = `${catalog}::${schema}`;
-          const existing = grouped.get(key);
-          if (existing) {
-            existing.push(table.name);
-          } else {
-            grouped.set(key, [table.name]);
+          const existing = grouped.get(key) ?? {
+            tables: [],
+            columnsByTable: new Map<string, ExplorerColumn[]>(),
+          };
+          existing.tables.push(table.name);
+          if (table.columns && table.columns.length > 0) {
+            existing.columnsByTable.set(table.name, table.columns);
           }
+          grouped.set(key, existing);
         }
 
         return Array.from(grouped.entries())
-          .map(([key, tablesForGroup]) => {
+          .map(([key, value]) => {
             const [catalog, schema] = key.split("::");
+            const columnsByTable: Record<string, ExplorerColumn[]> = {};
+            for (const [name, columns] of value.columnsByTable) {
+              columnsByTable[name] = columns;
+            }
             return {
               catalog,
               schema,
-              tables: Array.from(new Set(tablesForGroup)).sort((a, b) =>
+              tables: Array.from(new Set(value.tables)).sort((a, b) =>
                 a.localeCompare(b),
               ),
+              columnsByTable,
             };
           })
           .sort(
@@ -522,6 +674,13 @@ export function ConnectedDataPanel({
     }
   };
 
+  const handleInsertColumn = (columnName: string) => {
+    onInsertTable?.({ reference: columnName, source: "runtime" });
+    if (mode === "popover") {
+      setIsOpen(false);
+    }
+  };
+
   const renderExplorerTableGroups = (
     groups: ExplorerTableGroup[],
     options: {
@@ -531,55 +690,109 @@ export function ConnectedDataPanel({
         group: ExplorerTableGroup,
         payload: ExplorerInsertPayload,
       ) => void;
+      onColumnClick?: (columnName: string) => void;
     },
   ) =>
-    groups
-      .filter(
-        (group) =>
-          !isHiddenRuntimeSchema(group.schema) &&
-          !isHiddenRuntimeSchema(group.catalog),
-      )
-      .map((group, groupIdx) => (
-        <div
-          key={`${group.catalog || "default"}.${group.schema}`}
-          className="space-y-0"
-        >
-          {!isDefaultExplorerSchema(group.schema) && (
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              {group.schema}
-            </p>
-          )}
-          {group.tables.map((tableName, tableIdx) => {
-            const color =
-              options.palette[(groupIdx + tableIdx) % options.palette.length];
-            const payload = buildExplorerInsertPayload({
-              catalog: group.catalog,
-              currentCatalog: options.currentCatalog,
-              schema: group.schema,
-              table: tableName,
-              source: "runtime",
-            });
-            const displayReference = getExplorerTableDisplayLabel({
-              catalog: group.catalog,
-              schema: group.schema,
-              table: tableName,
-            });
+    groups.filter(shouldShowExplorerTableGroup).map((group, groupIdx) => (
+      <div
+        key={`${group.catalog || "default"}.${group.schema}`}
+        className="space-y-0.5"
+      >
+        {!isDefaultExplorerSchema(group.schema) && (
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {group.schema}
+          </p>
+        )}
+        {group.tables.map((tableName, tableIdx) => {
+          const color =
+            options.palette[(groupIdx + tableIdx) % options.palette.length];
+          const payload = buildExplorerInsertPayload({
+            catalog: group.catalog,
+            currentCatalog: options.currentCatalog,
+            schema: group.schema,
+            table: tableName,
+            source: "runtime",
+          });
+          const displayReference = getExplorerTableDisplayLabel({
+            catalog: group.catalog,
+            schema: group.schema,
+            table: tableName,
+          });
+          const tableId = `${group.catalog}.${group.schema}.${tableName}`;
+          const columns = group.columnsByTable?.[tableName] ?? [];
+          const hasColumns = columns.length > 0;
+          const isExpanded = expandedTables.has(tableId);
 
-            return (
-              <button
-                key={`${group.catalog}.${group.schema}.${tableName}`}
-                type="button"
-                className="hover:text-sidebar-foreground cursor-pointer transition-colors flex items-center gap-2 w-full text-left"
-                onClick={() => options.onTableClick(group, payload)}
-                title={displayReference}
-              >
-                <span className={cn("w-1.5 h-1.5 rounded-full", color)} />
-                <span className="truncate">{displayReference}</span>
-              </button>
-            );
-          })}
-        </div>
-      ));
+          return (
+            <div key={tableId} className="space-y-0.5">
+              <div className="flex items-center gap-1">
+                {hasColumns ? (
+                  <button
+                    type="button"
+                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-sidebar-foreground"
+                    onClick={() => toggleTableExpanded(tableId)}
+                    aria-expanded={isExpanded}
+                    aria-label={
+                      isExpanded
+                        ? `Hide columns for ${displayReference}`
+                        : `Show columns for ${displayReference}`
+                    }
+                    title={isExpanded ? "Hide columns" : "Show columns"}
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "h-3 w-3 transition-transform",
+                        isExpanded && "rotate-90",
+                      )}
+                    />
+                  </button>
+                ) : (
+                  <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+                )}
+                <button
+                  type="button"
+                  className="hover:text-sidebar-foreground cursor-pointer transition-colors flex min-w-0 flex-1 items-center gap-2 text-left"
+                  onClick={() => options.onTableClick(group, payload)}
+                  title={`Insert ${displayReference}`}
+                >
+                  <span
+                    className={cn("w-1.5 h-1.5 rounded-full shrink-0", color)}
+                  />
+                  <span className="truncate">{displayReference}</span>
+                </button>
+              </div>
+              {isExpanded && hasColumns ? (
+                <ul className="ml-[9px] border-l border-sidebar-border/60 pl-3">
+                  {columns.map((column) => (
+                    <li key={column.name}>
+                      <button
+                        type="button"
+                        className="group/col flex w-full items-center gap-2 rounded-sm py-0.5 text-left transition-colors hover:text-sidebar-foreground"
+                        onClick={() => options.onColumnClick?.(column.name)}
+                        title={
+                          column.type
+                            ? `Insert ${column.name} · ${column.type}`
+                            : `Insert ${column.name}`
+                        }
+                      >
+                        <span className="truncate text-[12px] text-sidebar-foreground/75 group-hover/col:text-sidebar-foreground">
+                          {column.name}
+                        </span>
+                        {column.type ? (
+                          <span className="ml-auto shrink-0 truncate text-[10px] uppercase tracking-wide text-muted-foreground">
+                            {column.type}
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    ));
 
   const renderQuerySection = (params: {
     title: string;
@@ -744,6 +957,7 @@ export function ConnectedDataPanel({
                       setIsOpen(false);
                     }
                   },
+                  onColumnClick: handleInsertColumn,
                 })
               ) : (
                 renderSampleDataAction("remote", "No tables found.")
@@ -756,7 +970,7 @@ export function ConnectedDataPanel({
               className={cn(
                 databaseRowClass,
                 isWasmSelected &&
-                  "border-sidebar-ring ring-1 ring-sidebar-ring/40",
+                  "border-l-2 border-l-primary bg-sidebar-accent/40",
                 databaseRowInteractiveClass,
               )}
             >
@@ -788,6 +1002,7 @@ export function ConnectedDataPanel({
                       setIsOpen(false);
                     }
                   },
+                  onColumnClick: handleInsertColumn,
                 })
               ) : (
                 renderSampleDataAction("wasm", "No local tables yet.")
@@ -877,9 +1092,11 @@ export function ConnectedDataPanel({
     return (
       <div
         className={cn(
-          "flex h-full w-64 flex-col border-r border-border transition-all duration-200 ease-out",
+          "group/explorer relative flex h-full flex-col border-r border-border transition-all duration-200 ease-out",
+          isResizingSidebar && "select-none transition-none",
           className,
         )}
+        style={{ width: sidebarWidth }}
       >
         <div className="flex h-14 items-center justify-between gap-2 border-b border-border px-4">
           <span className="text-xs font-bold tracking-widest text-[#5C6658] uppercase">
@@ -920,6 +1137,24 @@ export function ConnectedDataPanel({
             </div>
           ) : null}
         </div>
+        <hr
+          ref={sidebarResizeHandleRef}
+          aria-label="Resize explorer"
+          aria-orientation="vertical"
+          aria-valuemin={MIN_SIDEBAR_WIDTH}
+          aria-valuemax={MAX_SIDEBAR_WIDTH}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          className={cn(
+            "absolute -right-1 top-0 z-10 h-full w-2 cursor-col-resize touch-none outline-none",
+            "after:absolute after:right-1 after:top-0 after:h-full after:w-px after:bg-transparent after:transition-colors",
+            "hover:after:bg-primary/40 focus-visible:after:bg-primary/60",
+            isResizingSidebar && "after:bg-primary/60",
+          )}
+          onPointerDown={handleSidebarResizeStart}
+          onKeyDown={handleSidebarResizeKeyDown}
+          title="Drag to resize explorer"
+        />
       </div>
     );
   }

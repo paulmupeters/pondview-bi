@@ -1,5 +1,10 @@
 import { LayoutDashboard } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  DASHBOARD_MODE_QUERY_PARAM,
+  DASHBOARD_MODE_QUERY_VALUE,
+  DASHBOARD_PREVIEW_QUERY_VALUE,
+} from "@/lib/dashboard-mode";
 import { cn } from "@/lib/utils";
 import { listDashboards } from "@/lib/workspace/dashboard-repo";
 import Link from "@/vite/next-link";
@@ -11,18 +16,31 @@ type DashboardModeNavItem = {
   updatedAt: number;
 };
 
-const DASHBOARD_MODE_PARAM = "pondviewMode=dashboard";
 const DASHBOARD_LOAD_RETRY_DELAYS_MS = [250, 750, 1500, 3000] as const;
 
-function dashboardModeHref(path: string): string {
-  return `${path}${path.includes("?") ? "&" : "?"}${DASHBOARD_MODE_PARAM}`;
+function dashboardModeHref(path: string, modeValue: string): string {
+  return `${path}${path.includes("?") ? "&" : "?"}${DASHBOARD_MODE_QUERY_PARAM}=${modeValue}`;
 }
 
-export function DashboardModeNav() {
+function exitPreviewHref(pathname: string, searchParams: URLSearchParams) {
+  const params = new URLSearchParams(searchParams);
+  params.delete(DASHBOARD_MODE_QUERY_PARAM);
+  const search = params.toString();
+  return search ? `${pathname}?${search}` : pathname;
+}
+
+export function DashboardModeNav({
+  canExitPreview = false,
+}: {
+  canExitPreview?: boolean;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeDashboardId = searchParams.get("id");
   const routeKey = `${pathname}?${searchParams.toString()}`;
+  const modeValue = canExitPreview
+    ? DASHBOARD_PREVIEW_QUERY_VALUE
+    : DASHBOARD_MODE_QUERY_VALUE;
   const [dashboards, setDashboards] = useState<DashboardModeNavItem[]>([]);
 
   useEffect(() => {
@@ -85,7 +103,7 @@ export function DashboardModeNav() {
   return (
     <div className="flex h-14 flex-none items-center gap-2 overflow-x-auto border-b border-border bg-sidebar px-3">
       <Link
-        href={dashboardModeHref("/dashboards")}
+        href={dashboardModeHref("/dashboards", modeValue)}
         className={cn(
           "inline-flex h-9 flex-none items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors",
           pathname === "/dashboards"
@@ -102,6 +120,7 @@ export function DashboardModeNav() {
           key={dashboard.id}
           href={dashboardModeHref(
             `/dashboards/view?id=${encodeURIComponent(dashboard.id)}`,
+            modeValue,
           )}
           className={cn(
             "inline-flex h-9 max-w-56 flex-none items-center truncate rounded-md border px-3 text-sm font-medium transition-colors",
@@ -114,6 +133,17 @@ export function DashboardModeNav() {
           <span className="truncate">{dashboard.title || "Untitled"}</span>
         </Link>
       ))}
+      {canExitPreview ? (
+        <>
+          <div className="ml-auto h-6 w-px flex-none bg-border" />
+          <Link
+            href={exitPreviewHref(pathname, searchParams)}
+            className="inline-flex h-9 flex-none items-center rounded-md border border-transparent px-3 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+          >
+            Exit preview
+          </Link>
+        </>
+      ) : null}
     </div>
   );
 }

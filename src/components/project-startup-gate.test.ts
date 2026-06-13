@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
-  createLocalSourceBindings,
+  createProjectManifest,
+  hasStartupProjectArtifacts,
   resolveInitialStartupRuntime,
   resolveQuickStartDatabasePath,
+  resolveStartupProjectDisplayPath,
   resolveStartupRuntimeSelection,
+  shouldHideStartupGateForBrowserProject,
   shouldShowQuickStart,
   validateStartupRuntime,
 } from "@/components/project-startup-gate";
@@ -56,7 +59,40 @@ describe("ProjectStartupGate runtime selection", () => {
     });
   });
 
-  test("builds local source bindings for the selected bridge file", () => {
+  test("builds a project manifest with the selected bridge file", () => {
+    expect(
+      JSON.parse(
+        createProjectManifest("Example", {
+          runtimeBackend: "bridge",
+          dbIdentifier: "analytics.duckdb",
+          catalogContext: "main",
+        }),
+      ),
+    ).toEqual({
+      schemaVersion: 1,
+      name: "Example",
+      defaultSourceRef: "local",
+      sourceBindings: {
+        local: {
+          runtimeBackend: "bridge",
+          dbIdentifier: "analytics.duckdb",
+          catalogContext: "main",
+        },
+      },
+    });
+  });
+
+  test("builds a project manifest without a default source", () => {
+    expect(JSON.parse(createProjectManifest("Example"))).toEqual({
+      schemaVersion: 1,
+      name: "Example",
+    });
+  });
+
+  test("keeps legacy local source bindings serializable", async () => {
+    const { createLocalSourceBindings } = await import(
+      "@/components/project-startup-gate"
+    );
     expect(
       JSON.parse(
         createLocalSourceBindings({
@@ -131,5 +167,79 @@ describe("ProjectStartupGate quick start", () => {
         detectedDuckDbPaths: ["analytics.duckdb", "report.duckdb"],
       }),
     ).toBeNull();
+  });
+});
+
+describe("ProjectStartupGate browser project mode", () => {
+  test("does not hide stale browser project mode when a DuckDB file is detected", () => {
+    expect(
+      shouldHideStartupGateForBrowserProject({
+        projectStoreMode: "browser-indexeddb",
+        hasProjectArtifacts: false,
+        detectedDuckDbPaths: ["analytics.duckdb"],
+      }),
+    ).toBe(false);
+  });
+
+  test("does not hide stale browser project mode when project files exist", () => {
+    expect(
+      shouldHideStartupGateForBrowserProject({
+        projectStoreMode: "browser-indexeddb",
+        hasProjectArtifacts: true,
+        detectedDuckDbPaths: [],
+      }),
+    ).toBe(false);
+  });
+
+  test("hides browser project mode for an empty folder with no runtime choice", () => {
+    expect(
+      shouldHideStartupGateForBrowserProject({
+        projectStoreMode: "browser-indexeddb",
+        hasProjectArtifacts: false,
+        detectedDuckDbPaths: [],
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("ProjectStartupGate project artifact detection", () => {
+  test("does not treat a standalone gitignore as initialized project artifacts", () => {
+    expect(hasStartupProjectArtifacts([{ path: ".gitignore" }])).toBe(false);
+  });
+
+  test("treats Pondview project files as initialized project artifacts", () => {
+    expect(
+      hasStartupProjectArtifacts([
+        { path: ".gitignore" },
+        { path: "pondview/project.json" },
+      ]),
+    ).toBe(true);
+  });
+
+  test("treats legacy local source bindings as initialized project artifacts", () => {
+    expect(
+      hasStartupProjectArtifacts([{ path: "pondview.sources.local.json" }]),
+    ).toBe(true);
+  });
+});
+
+describe("ProjectStartupGate project path display", () => {
+  test("hides the bridge package path from the startup intro", () => {
+    expect(
+      resolveStartupProjectDisplayPath({
+        name: "bridge",
+        rootPath:
+          "/Users/paulpeters/Developer/pondview/pondview-ui/packages/bridge",
+      }),
+    ).toBeNull();
+  });
+
+  test("keeps real project paths visible", () => {
+    expect(
+      resolveStartupProjectDisplayPath({
+        name: "revenue",
+        rootPath: "/Users/paulpeters/Projects/revenue",
+      }),
+    ).toBe("/Users/paulpeters/Projects/revenue");
   });
 });

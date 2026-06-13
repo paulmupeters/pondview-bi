@@ -29,7 +29,7 @@ import {
   resolveSqlBackend,
   type SqlBackend,
 } from "@/lib/sql/sql-runtime";
-import type { Result } from "@/lib/types";
+import type { Result, TextConfig } from "@/lib/types";
 import type { AvailableDimension, Filter } from "@/lib/types/filters";
 import {
   type DbDashboardChart,
@@ -239,6 +239,17 @@ function getErrorMessage(error: unknown): string {
   return "Failed to execute dashboard query.";
 }
 
+function isTextChart(
+  chart: Pick<DbDashboardChart, "chartConfigJson">,
+): boolean {
+  try {
+    const parsed = JSON.parse(chart.chartConfigJson) as Partial<TextConfig>;
+    return parsed.configType === "text";
+  } catch {
+    return false;
+  }
+}
+
 function defaultDeps(): BrowserFilterEngineDeps {
   return {
     runRuntimeSql: runDashboardRuntimeSql,
@@ -429,6 +440,16 @@ export async function executeDashboardChartsWithFilters(
 
   await Promise.all(
     options.charts.map(async (chart) => {
+      if (isTextChart(chart)) {
+        rowsByChartId[chart.id] = [];
+        metadataByChartId[chart.id] = {
+          filtersApplied: false,
+          appliedFiltersCount: 0,
+          skippedFilters: [],
+        };
+        return;
+      }
+
       const effectiveFilters = [
         ...options.dashboardFilters,
         ...(options.chartFiltersById[chart.id] ?? []),

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "python-pipeline",
+  "defaultSourceRef": "local",
+  "sourceBindings": {
+    "local": {
+      "runtimeBackend": "bridge",
+      "dbIdentifier": "carts_dwh.duckdb",
+      "catalogContext": "main"
+    }
+  }
+}

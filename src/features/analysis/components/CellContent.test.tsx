@@ -129,7 +129,6 @@ describe("CellContent", () => {
     );
 
     expect(markup).toContain("AI says to keep this result visible.");
-    expect(markup).toContain("AI generated");
     expect(markup).toContain("Ask AI");
     expect(markup).toContain(">SQL<");
   });

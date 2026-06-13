@@ -55,7 +55,7 @@ describe("isDefaultExplorerSchema", () => {
 });
 
 describe("buildExplorerInsertPayload", () => {
-  test("uses catalog.table for runtime inserts in the default schema", () => {
+  test("uses catalog.schema.table for runtime inserts in the default schema", () => {
     expect(
       buildExplorerInsertPayload({
         catalog: "duck",
@@ -64,14 +64,14 @@ describe("buildExplorerInsertPayload", () => {
         source: "runtime",
       }),
     ).toEqual({
-      reference: "duck.astronomy",
+      reference: "duck.main.astronomy",
       catalog: "duck",
       catalogContext: null,
       source: "runtime",
     });
   });
 
-  test("uses catalog.table for connected-entry inserts in the default schema", () => {
+  test("uses catalog.schema.table for connected-entry inserts in the default schema", () => {
     expect(
       buildExplorerInsertPayload({
         catalog: "motherduck",
@@ -81,7 +81,7 @@ describe("buildExplorerInsertPayload", () => {
         dbIdentifier: "md:my_db",
       }),
     ).toEqual({
-      reference: "motherduck.unicorns",
+      reference: "motherduck.main.unicorns",
       catalog: "motherduck",
       catalogContext: null,
       dbIdentifier: "md:my_db",
@@ -89,7 +89,7 @@ describe("buildExplorerInsertPayload", () => {
     });
   });
 
-  test("uses catalog.table for public schema connected-entry inserts", () => {
+  test("uses catalog.schema.table for public schema connected-entry inserts", () => {
     expect(
       buildExplorerInsertPayload({
         catalog: "main_db",
@@ -98,7 +98,7 @@ describe("buildExplorerInsertPayload", () => {
         source: "connected-entry",
       }),
     ).toEqual({
-      reference: "main_db.keywords",
+      reference: "main_db.public.keywords",
       catalog: "main_db",
       catalogContext: null,
       source: "connected-entry",

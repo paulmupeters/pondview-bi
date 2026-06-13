@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { EMPTY_CHAT_HISTORY } from "@/hooks/use-chat-history";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { AppSidebar } from "./app-sidebar";
 import { BottomNavBar } from "./bottom-nav-bar";
@@ -10,7 +11,7 @@ interface SidebarLayoutProps {
 
 export function SidebarLayout({
   children,
-  initialChats = [],
+  initialChats = EMPTY_CHAT_HISTORY,
 }: SidebarLayoutProps) {
   return (
     <div className="flex h-full w-full">

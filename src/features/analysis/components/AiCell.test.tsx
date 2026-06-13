@@ -68,7 +68,6 @@ describe("AiResponseBanner", () => {
       />,
     );
 
-    expect(markup).toContain("AI generated");
     expect(markup).toContain("Latest user prompt");
     expect(markup).not.toContain("Earlier user prompt");
   });

@@ -177,6 +177,16 @@ function normalizeMatchValue(value: string | null | undefined): string | null {
   return normalizeOptionalString(value)?.toLowerCase() ?? null;
 }
 
+const MAX_PROJECT_ARTIFACT_ID_LENGTH = 80;
+
+function truncateProjectArtifactId(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return value.slice(0, maxLength).replace(/-+$/g, "");
+}
+
 export function toProjectArtifactId(
   value: string | null | undefined,
   fallback = "artifact",
@@ -190,7 +200,10 @@ export function toProjectArtifactId(
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
 
-  return normalized || fallback;
+  return (
+    truncateProjectArtifactId(normalized, MAX_PROJECT_ARTIFACT_ID_LENGTH) ||
+    fallback
+  );
 }
 
 function createUniqueIdFactory() {
@@ -199,7 +212,16 @@ function createUniqueIdFactory() {
     const base = toProjectArtifactId(value, fallback);
     const count = seen.get(base) ?? 0;
     seen.set(base, count + 1);
-    return count === 0 ? base : `${base}-${count + 1}`;
+    if (count === 0) {
+      return base;
+    }
+
+    const suffix = `-${count + 1}`;
+    const truncatedBase = truncateProjectArtifactId(
+      base,
+      MAX_PROJECT_ARTIFACT_ID_LENGTH - suffix.length,
+    );
+    return `${truncatedBase}${suffix}`;
   };
 }
 

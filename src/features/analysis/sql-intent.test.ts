@@ -9,6 +9,7 @@ import {
 describe("looksLikeSqlIntent", () => {
   test("matches supported leading SQL keywords", () => {
     expect(looksLikeSqlIntent("SELECT * FROM orders")).toBe(true);
+    expect(looksLikeSqlIntent("SELECT 1")).toBe(true);
     expect(
       looksLikeSqlIntent("WITH revenue AS (SELECT 1) SELECT * FROM revenue"),
     ).toBe(true);
@@ -36,6 +37,9 @@ describe("looksLikeSqlIntent", () => {
     expect(looksLikeSqlIntent("can you write a select query for me")).toBe(
       false,
     );
+    expect(looksLikeSqlIntent("create a chart of revenue")).toBe(false);
+    expect(looksLikeSqlIntent("create a")).toBe(false);
+    expect(looksLikeSqlIntent("CREATE")).toBe(false);
     expect(looksLikeSqlIntent("please explain this SQL statement")).toBe(false);
     expect(looksLikeSqlIntent("show me the orders table")).toBe(false);
   });
@@ -87,7 +91,7 @@ describe("looksLikeSqlIntent", () => {
     ).toBe(false);
   });
 
-  test("allows the suggestion to reappear after the dismissed draft changes", () => {
+  test("keeps the suggestion dismissed while the draft stays SQL-like", () => {
     expect(
       shouldShowSqlIntentPopover({
         promptDraft: "SELECT * FROM orders",
@@ -112,6 +116,17 @@ describe("looksLikeSqlIntent", () => {
         isChatMode: true,
         isAssistantThinking: false,
         dismissedDraftSignature: "SELECT * FROM orders",
+      }),
+    ).toBe(false);
+  });
+
+  test("allows the suggestion to reappear after SQL intent is reset", () => {
+    expect(
+      shouldShowSqlIntentPopover({
+        promptDraft: "SELECT * FROM customers",
+        isChatMode: true,
+        isAssistantThinking: false,
+        dismissedDraftSignature: null,
       }),
     ).toBe(true);
   });

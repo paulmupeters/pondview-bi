@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useChatHistory } from "@/hooks/use-chat-history";
+import { EMPTY_CHAT_HISTORY, useChatHistory } from "@/hooks/use-chat-history";
 import {
   type ChatHistoryEntry,
   getChatHistoryDisplayTitle,
@@ -20,7 +20,6 @@ import { deleteChat } from "@/lib/workspace/chat-repo";
 import Link from "@/vite/next-link";
 import { useRouter } from "@/vite/next-navigation";
 
-const EMPTY_INITIAL_CHATS: ChatHistoryEntry[] = [];
 const ANALYSIS_SKELETON_KEYS = [
   "analysis-skeleton-1",
   "analysis-skeleton-2",
@@ -144,7 +143,7 @@ export default function AllAnalysesPage() {
   const rtf = useRelativeTimeFormatter();
 
   const { chats, isLoading, error, loadChats } = useChatHistory(
-    EMPTY_INITIAL_CHATS,
+    EMPTY_CHAT_HISTORY,
     { limit: Number.MAX_SAFE_INTEGER },
   );
 

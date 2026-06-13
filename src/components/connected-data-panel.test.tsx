@@ -9,6 +9,7 @@ import {
   getVisibleConnectedEntryTables,
   resolveActiveRuntimeExplorer,
   shouldShowConnectedEntry,
+  shouldShowExplorerTableGroup,
   validateConnectedEntry,
 } from "@/components/connected-data-panel";
 import type { ConnectedTable } from "@/lib/connected-tables";
@@ -52,7 +53,7 @@ describe("connected source explorer helpers", () => {
         schema: "main",
         table: "unicorns",
       }),
-    ).toBe("motherduck.unicorns");
+    ).toBe("motherduck.main.unicorns");
 
     expect(
       getExplorerTableDisplayLabel({
@@ -69,6 +70,24 @@ describe("connected source explorer helpers", () => {
         table: "local_table",
       }),
     ).toBe("local_table");
+  });
+
+  test("does not hide user tables from a catalog named pondview", () => {
+    expect(
+      shouldShowExplorerTableGroup({
+        catalog: "pondview",
+        schema: "main",
+        tables: ["raw_carts"],
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldShowExplorerTableGroup({
+        catalog: "analytics",
+        schema: "pondview",
+        tables: ["dashboards"],
+      }),
+    ).toBe(false);
   });
 
   test("labels bridge runtime with the connected database filename when available", () => {
@@ -116,7 +135,7 @@ describe("connected source explorer helpers", () => {
         table: "keywords",
         source: "connected-entry",
       }).reference,
-    ).toBe("main_db.keywords");
+    ).toBe("main_db.public.keywords");
     expect(getConnectedEntryDisplayName(entry)).toBe("main_db (postgres)");
   });
 
@@ -139,7 +158,7 @@ describe("connected source explorer helpers", () => {
         table: "unicorns",
         source: "connected-entry",
       }).reference,
-    ).toBe("motherduck.unicorns");
+    ).toBe("motherduck.main.unicorns");
     expect(getConnectedEntryDisplayName(entry)).toBe("motherduck (motherduck)");
   });
 

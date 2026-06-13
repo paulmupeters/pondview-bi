@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { getOpenProject, listOpenProjectFiles } from "@/lib/project-store";
 import { listRecentAnalysisNotebooks } from "@/lib/workspace/analysis-notebook-repo";
@@ -9,7 +9,10 @@ type LoadChatsOptions = {
 
 type UseChatHistoryOptions = {
   limit?: number;
+  scopeToProject?: boolean;
 };
+
+export const EMPTY_CHAT_HISTORY: ChatHistoryEntry[] = [];
 
 function getNotebookProjectPath(path: string): string | null {
   const segments = path.trim().replace(/\\/g, "/").split("/").filter(Boolean);
@@ -28,16 +31,12 @@ function getNotebookProjectPath(path: string): string | null {
 }
 
 export function useChatHistory(
-  initialChats: ChatHistoryEntry[] = [],
-  { limit }: UseChatHistoryOptions = {},
+  initialChats: ChatHistoryEntry[] = EMPTY_CHAT_HISTORY,
+  { limit, scopeToProject = true }: UseChatHistoryOptions = {},
 ) {
   const [chats, setChats] = useState<ChatHistoryEntry[]>(initialChats);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setChats(initialChats);
-  }, [initialChats]);
 
   const loadChats = useCallback(
     async (options: LoadChatsOptions = {}): Promise<ChatHistoryEntry[]> => {
@@ -58,15 +57,19 @@ export function useChatHistory(
               ),
             )
           : [];
-        const chatList = await listRecentAnalysisNotebooks({
-          ...(limit !== undefined ? { limit } : {}),
-          ...(project
-            ? {
-                projectId: project.id,
-                projectPaths,
-              }
-            : {}),
-        });
+        const chatList = await listRecentAnalysisNotebooks(
+          scopeToProject === false
+            ? { ...(limit !== undefined ? { limit } : {}) }
+            : {
+                ...(limit !== undefined ? { limit } : {}),
+                ...(project
+                  ? {
+                      projectId: project.id,
+                      projectPaths,
+                    }
+                  : {}),
+              },
+        );
         setChats(chatList);
         return chatList;
       } catch (error) {
@@ -82,7 +85,7 @@ export function useChatHistory(
 
       return [];
     },
-    [limit],
+    [limit, scopeToProject],
   );
 
   return { chats, isLoading, error, loadChats };

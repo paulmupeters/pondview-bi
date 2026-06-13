@@ -8,6 +8,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { type AddressInfo, createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
@@ -29,6 +30,26 @@ afterEach(async () => {
 });
 
 describe("bridge server modes", () => {
+  test("falls back to the next port when the requested port is in use", async () => {
+    const occupiedServer = createServer();
+    await listenOnFreePort(occupiedServer);
+    const occupiedPort = readServerPort(occupiedServer);
+
+    try {
+      const server = await startBridgeServer({ port: occupiedPort });
+      handles.push(server);
+
+      const boundPort = Number(new URL(server.url).port);
+      expect(boundPort).toBeGreaterThan(occupiedPort);
+      const config = await fetch(`${server.url}/api/duckdb/config`);
+      expect(await config.json()).toMatchObject({
+        port: boundPort,
+      });
+    } finally {
+      await closeNetServer(occupiedServer);
+    }
+  });
+
   test("API-only bridge exposes JSON routes without serving the UI", async () => {
     const server = await startTrackedServer();
 
@@ -444,6 +465,78 @@ describe("bridge server modes", () => {
     });
   });
 
+  test("starts on the project default DuckDB source", async () => {
+    const projectDir = createTempDir();
+    mkdirSync(join(projectDir, ".pondview"));
+    writeFileSync(
+      join(projectDir, ".pondview", "project.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        project: {
+          id: "bridge-project-example",
+          name: "Example",
+          backingKind: "bridge-filesystem",
+          openedAt: Date.now(),
+          updatedAt: Date.now(),
+          defaultSourceRef: "local",
+        },
+      }),
+    );
+    writeFileSync(
+      join(projectDir, "pondview.sources.local.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        bindings: {
+          local: {
+            runtimeBackend: "bridge",
+            dbIdentifier: "pondview.duckdb",
+            catalogContext: "main",
+          },
+        },
+      }),
+    );
+    const server = await startTrackedServer({ projectDir });
+
+    const response = await fetch(`${server.url}/api/duckdb/config`);
+
+    expect(await response.json()).toMatchObject({
+      database: {
+        mode: "file",
+        name: "pondview.duckdb",
+      },
+    });
+  });
+
+  test("starts on the project default DuckDB source from the project manifest", async () => {
+    const projectDir = createTempDir();
+    mkdirSync(join(projectDir, "pondview"), { recursive: true });
+    writeFileSync(
+      join(projectDir, "pondview", "project.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        name: "Example",
+        defaultSourceRef: "local",
+        sourceBindings: {
+          local: {
+            runtimeBackend: "bridge",
+            dbIdentifier: "analytics.duckdb",
+            catalogContext: "main",
+          },
+        },
+      }),
+    );
+    const server = await startTrackedServer({ projectDir });
+
+    const response = await fetch(`${server.url}/api/duckdb/config`);
+
+    expect(await response.json()).toMatchObject({
+      database: {
+        mode: "file",
+        name: "analytics.duckdb",
+      },
+    });
+  });
+
   test("database-backed bridge runs queries against the primary DuckDB file", async () => {
     const databasePath = join(createTempDir(), "analytics.duckdb");
     const setup = await startBridgeServer({ databasePath, port: 0 });
@@ -666,6 +759,7 @@ describe("bridge server modes", () => {
       join(projectDir, "pondview", "project.json"),
       '{ "schemaVersion": 1, "name": "Revenue", "defaultSourceRef": "analytics" }\n',
     );
+    writeFileSync(join(projectDir, ".gitignore"), ".pondview/\n");
     writeFileSync(
       join(projectDir, "pondview", "queries", "shared", "orders.sql"),
       "select 1;\n",
@@ -688,6 +782,10 @@ describe("bridge server modes", () => {
     const files = await fetch(`${server.url}/project/files`);
     expect(await files.json()).toMatchObject({
       files: [
+        {
+          path: ".gitignore",
+          content: ".pondview/\n",
+        },
         {
           path: "pondview/project.json",
           content:
@@ -794,6 +892,15 @@ describe("bridge server modes", () => {
       }),
     });
     expect(escaped.status).toBe(400);
+
+    const rootFile = await fetch(`${server.url}/project/files`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files: [{ path: "package.json", content: "{}\n" }],
+      }),
+    });
+    expect(rootFile.status).toBe(400);
   });
 });
 
@@ -813,6 +920,30 @@ async function startTrackedUiServer(options: {
   const server = await startBridgeUiServer({ ...options, port: 0 });
   handles.push(server);
   return server;
+}
+
+async function listenOnFreePort(server: Server): Promise<void> {
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.once("listening", resolveListen);
+    server.listen(0, "127.0.0.1");
+  });
+}
+
+function readServerPort(server: Server): number {
+  return (server.address() as AddressInfo).port;
+}
+
+async function closeNetServer(server: Server): Promise<void> {
+  await new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => {
+      if (error) {
+        rejectClose(error);
+        return;
+      }
+      resolveClose();
+    });
+  });
 }
 
 function createTempDir(): string {

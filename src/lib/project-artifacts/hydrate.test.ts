@@ -17,10 +17,7 @@ describe("project artifact hydration", () => {
         schemaVersion: 1,
         name: "Revenue Analytics",
         defaultSourceRef: "analytics",
-      }),
-      jsonFile("pondview.sources.local.json", {
-        schemaVersion: 1,
-        bindings: {
+        sourceBindings: {
           analytics: {
             runtimeBackend: "bridge",
             dbIdentifier: "md:analytics",

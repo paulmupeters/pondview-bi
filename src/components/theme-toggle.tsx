@@ -1,31 +1,37 @@
 import { Moon, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import * as React from "react";
 import { useTheme } from "@/lib/theme-provider";
+import { cn } from "@/lib/utils";
 
-export function ThemeToggle() {
+export const ThemeToggle = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentProps<"button">
+>(({ className, ...props }, ref) => {
   const { theme, setTheme } = useTheme();
 
   const toggleTheme = () => {
-    if (theme === "light") {
-      setTheme("dark");
-    } else {
-      setTheme("light");
-    }
+    setTheme(theme === "light" ? "dark" : "light");
   };
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={toggleTheme}
-      className="h-8 w-8 bg-background/80 backdrop-blur-sm border shadow-sm"
+    <button
+      ref={ref}
+      type="button"
       aria-label="Toggle theme"
+      className={cn(
+        "group relative flex h-9 w-9 items-center justify-center rounded-lg text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+        className,
+      )}
+      {...props}
+      onClick={toggleTheme}
     >
       {theme === "dark" ? (
-        <Sun className="h-4 w-4" />
+        <Sun className="size-[18px]" />
       ) : (
-        <Moon className="h-4 w-4" />
+        <Moon className="size-[18px]" />
       )}
-    </Button>
+    </button>
   );
-}
+});
+
+ThemeToggle.displayName = "ThemeToggle";

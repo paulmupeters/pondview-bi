@@ -460,8 +460,6 @@ export function AiSettingsSections({
 // ---------------------------------------------------------------------------
 
 type RuntimeSettingsSectionProps = {
-  effectiveSqlBackend: SqlBackend;
-  effectiveRuntimeLabel: string;
   selectedSqlBackend: SqlBackend;
   onSqlBackendChange: (backend: SqlBackend) => void;
   bridgeOptionLabel: string;
@@ -472,17 +470,30 @@ type RuntimeSettingsSectionProps = {
   bridgeEndpoint: string;
   onBridgeEndpointChange: (value: string) => void;
   onSaveBridgeEndpoint: () => void;
+  onTestBridgeConnection: () => void;
   onClearBridgeEndpoint: () => void;
+  isTestingBridgeConnection: boolean;
   bridgeSecret: string;
   onBridgeSecretChange: (value: string) => void;
   onSetBridgeSecret: () => void;
   onClearBridgeSecret: () => void;
   hasBridgeSessionSecret: boolean;
+  bridgeProjectDatabaseChoice: "none" | "new-duckdb" | "existing-duckdb";
+  onBridgeProjectDatabaseChoiceChange: (
+    value: "none" | "new-duckdb" | "existing-duckdb",
+  ) => void;
+  bridgeProjectDuckDbPath: string;
+  onBridgeProjectDuckDbPathChange: (value: string) => void;
+  detectedBridgeDuckDbPaths: string[];
+  onPickBridgeDuckDbPath: () => void;
+  isPickingBridgeDuckDbPath: boolean;
+  bridgeProjectStorageChoice: "browser" | "local";
+  onBridgeProjectStorageChoiceChange: (value: "browser" | "local") => void;
+  onSaveBridgeProjectSetup: () => void;
+  isSavingBridgeProjectSetup: boolean;
 };
 
 export function RuntimeSettingsSection({
-  effectiveSqlBackend,
-  effectiveRuntimeLabel,
   selectedSqlBackend,
   onSqlBackendChange,
   bridgeOptionLabel,
@@ -493,35 +504,35 @@ export function RuntimeSettingsSection({
   bridgeEndpoint,
   onBridgeEndpointChange,
   onSaveBridgeEndpoint,
+  onTestBridgeConnection,
   onClearBridgeEndpoint,
+  isTestingBridgeConnection,
   bridgeSecret,
   onBridgeSecretChange,
   onSetBridgeSecret,
   onClearBridgeSecret,
   hasBridgeSessionSecret,
+  bridgeProjectDatabaseChoice,
+  onBridgeProjectDatabaseChoiceChange,
+  bridgeProjectDuckDbPath,
+  onBridgeProjectDuckDbPathChange,
+  detectedBridgeDuckDbPaths,
+  onPickBridgeDuckDbPath,
+  isPickingBridgeDuckDbPath,
+  bridgeProjectStorageChoice,
+  onBridgeProjectStorageChoiceChange,
+  onSaveBridgeProjectSetup,
+  isSavingBridgeProjectSetup,
 }: RuntimeSettingsSectionProps) {
   return (
     <SettingsContentSection>
       <div className="space-y-6">
         <div>
-          <h3 className="text-lg font-semibold">SQL runtime</h3>
+          <h3 className="text-lg font-semibold">DuckDB runtime</h3>
           <p className="text-sm text-muted-foreground">
-            Choose where SQL runs. Bridge uses Pondview endpoints for local or
-            remote DuckDB execution.
+            DuckDB WASM runs in your browser. Bridge runs DuckDB locally through
+            the Pondview CLI.
           </p>
-        </div>
-
-        <div className="flex items-center justify-between border-b pb-3 text-sm">
-          <span className="text-muted-foreground">Active runtime</span>
-          <span
-            className={
-              effectiveSqlBackend === "duckdb-wasm"
-                ? "font-medium text-muted-foreground"
-                : "font-medium text-green-600 dark:text-green-400"
-            }
-          >
-            {effectiveRuntimeLabel}
-          </span>
         </div>
 
         <FormField
@@ -530,7 +541,7 @@ export function RuntimeSettingsSection({
           description={
             isBridgeSelectable
               ? undefined
-              : "Start Pondview Bridge or save a reachable endpoint before selecting Bridge."
+              : "Select Bridge to configure its endpoint."
           }
         >
           <Select
@@ -542,9 +553,7 @@ export function RuntimeSettingsSection({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="duckdb-wasm">DuckDB WASM</SelectItem>
-              <SelectItem value="bridge" disabled={!isBridgeSelectable}>
-                {bridgeOptionLabel}
-              </SelectItem>
+              <SelectItem value="bridge">{bridgeOptionLabel}</SelectItem>
             </SelectContent>
           </Select>
         </FormField>
@@ -579,6 +588,14 @@ export function RuntimeSettingsSection({
                   }
                 />
                 <Button onClick={onSaveBridgeEndpoint}>Save Endpoint</Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onTestBridgeConnection}
+                  disabled={isTestingBridgeConnection}
+                >
+                  {isTestingBridgeConnection ? "Testing..." : "Test Connection"}
+                </Button>
                 <Button
                   variant="outline"
                   onClick={onClearBridgeEndpoint}
@@ -624,6 +641,138 @@ export function RuntimeSettingsSection({
                   Clear
                 </Button>
               </div>
+            </div>
+
+            <div className="space-y-4 border-t pt-5">
+              <div>
+                <h4 className="text-sm font-semibold">Project setup</h4>
+                <p className="text-sm text-muted-foreground">
+                  Configure the choices normally shown at startup. By default,
+                  Pondview keeps project state in browser storage and does not
+                  create a local DuckDB file.
+                </p>
+              </div>
+
+              <FormField
+                label="Local database"
+                htmlFor="bridge-project-database-choice"
+              >
+                <Select
+                  value={bridgeProjectDatabaseChoice}
+                  onValueChange={(value) =>
+                    onBridgeProjectDatabaseChoiceChange(
+                      value as "none" | "new-duckdb" | "existing-duckdb",
+                    )
+                  }
+                >
+                  <SelectTrigger
+                    id="bridge-project-database-choice"
+                    className="w-full sm:w-auto"
+                  >
+                    <SelectValue placeholder="Select database behavior" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No local database</SelectItem>
+                    <SelectItem value="new-duckdb">
+                      Create new DuckDB file
+                    </SelectItem>
+                    <SelectItem value="existing-duckdb">
+                      Use existing DuckDB file
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
+
+              {bridgeProjectDatabaseChoice !== "none" && (
+                <FormField
+                  label="Database file"
+                  htmlFor="bridge-project-duckdb-path"
+                  description={
+                    bridgeProjectDatabaseChoice === "new-duckdb"
+                      ? "Relative paths are created inside the bridge project folder."
+                      : "Pick a detected DuckDB file or enter a path."
+                  }
+                >
+                  <div className="space-y-2">
+                    {detectedBridgeDuckDbPaths.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {detectedBridgeDuckDbPaths.map((path) => (
+                          <Button
+                            key={path}
+                            type="button"
+                            variant={
+                              bridgeProjectDuckDbPath === path
+                                ? "default"
+                                : "outline"
+                            }
+                            size="sm"
+                            onClick={() =>
+                              onBridgeProjectDuckDbPathChange(path)
+                            }
+                          >
+                            {path}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        id="bridge-project-duckdb-path"
+                        value={bridgeProjectDuckDbPath}
+                        onChange={(event) =>
+                          onBridgeProjectDuckDbPathChange(event.target.value)
+                        }
+                        placeholder="runtime/pondview-runtime.duckdb"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={onPickBridgeDuckDbPath}
+                        disabled={isPickingBridgeDuckDbPath}
+                      >
+                        {isPickingBridgeDuckDbPath ? "Choosing..." : "Choose"}
+                      </Button>
+                    </div>
+                  </div>
+                </FormField>
+              )}
+
+              <FormField
+                label="Project storage"
+                htmlFor="bridge-project-storage-choice"
+              >
+                <Select
+                  value={bridgeProjectStorageChoice}
+                  onValueChange={(value) =>
+                    onBridgeProjectStorageChoiceChange(
+                      value as "browser" | "local",
+                    )
+                  }
+                >
+                  <SelectTrigger
+                    id="bridge-project-storage-choice"
+                    className="w-full sm:w-auto"
+                  >
+                    <SelectValue placeholder="Select project storage" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="browser">Browser storage</SelectItem>
+                    <SelectItem value="local">
+                      Save Pondview files to this folder
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
+
+              <Button
+                type="button"
+                onClick={onSaveBridgeProjectSetup}
+                disabled={isSavingBridgeProjectSetup}
+              >
+                {isSavingBridgeProjectSetup
+                  ? "Saving project setup..."
+                  : "Save Project Setup"}
+              </Button>
             </div>
           </div>
         )}

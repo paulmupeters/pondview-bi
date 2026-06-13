@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { SqlCell } from "@/features/analysis/components/SqlCell";
 import { TextCell } from "@/features/analysis/components/TextCell";
 import { useAnalysisCellAi } from "@/features/analysis/use-analysis-cell-ai";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
+import type { WorkspaceAnalysisCellEntry } from "@/lib/workspace/workspace-db";
 
 type CellContentProps = {
   cell: AnalysisCellState;
@@ -19,6 +20,8 @@ type CellContentProps = {
     statusMessage: string | null,
   ) => void;
 };
+
+const EMPTY_CELL_ENTRIES: WorkspaceAnalysisCellEntry[] = [];
 
 export function CellContent({
   cell,
@@ -52,9 +55,11 @@ function CellContentAiSql({
   onSelectCellMode,
   onStatusMessageChange,
 }: CellContentProps) {
+  const entries =
+    notebookSession.cellEntriesByCellId.get(cell.id) ?? EMPTY_CELL_ENTRIES;
   const ai = useAnalysisCellAi({
     cell,
-    entries: notebookSession.cellEntriesByCellId.get(cell.id) ?? [],
+    entries,
     notebookSession,
   });
   const bootstrapSql =
@@ -119,14 +124,24 @@ function CellContentAiSql({
     onSelectCellMode(cell.id, "sql");
   }, [bootstrapSql, cell.activeMode, cell.id, onSelectCellMode]);
 
+  const handleBootstrapConsumed = useCallback(() => {
+    onBootstrapConsumed(cell.id);
+  }, [cell.id, onBootstrapConsumed]);
+  const handleSelectMode = useCallback(
+    (mode: "ai" | "sql") => {
+      onSelectCellMode(cell.id, mode);
+    },
+    [cell.id, onSelectCellMode],
+  );
+
   return (
     <SqlCell
       cell={cell}
       bootstrapSql={bootstrapSql}
       notebookSession={notebookSession}
-      onBootstrapConsumed={() => onBootstrapConsumed(cell.id)}
+      onBootstrapConsumed={handleBootstrapConsumed}
       aiEnabled={cell.activeMode === "ai"}
-      onSelectMode={(mode) => onSelectCellMode(cell.id, mode)}
+      onSelectMode={handleSelectMode}
       ai={ai}
     />
   );

@@ -535,6 +535,7 @@ describe("bridge CLI dashboard commands", () => {
     measures?: TestRow[];
     slicers?: TestRow[];
     joinDefs?: TestRow[];
+    currentCatalog?: string;
   }) {
     const dashboards = options?.dashboards ?? [
       {
@@ -582,6 +583,16 @@ describe("bridge CLI dashboard commands", () => {
       query: async (input: { sql: string }): Promise<BridgeQueryResponse> => {
         options?.queries?.push(input.sql);
         const sql = input.sql;
+        const hasMetadataTable = (table: string) =>
+          sql.includes(`"pondview"."${table}"`) ||
+          sql.includes(`"pondview"."pondview"."${table}"`);
+        if (sql.includes("current_catalog()")) {
+          return queryResponse(
+            options?.currentCatalog
+              ? [{ current_catalog: options.currentCatalog }]
+              : [],
+          );
+        }
         if (sql.includes("information_schema.tables")) {
           return queryResponse(tables.map((table_name) => ({ table_name })));
         }
@@ -591,13 +602,16 @@ describe("bridge CLI dashboard commands", () => {
           }
           return queryResponse();
         }
-        if (sql.includes('UPDATE "pondview"."dashboards"')) {
+        if (hasMetadataTable("dashboards") && sql.includes("UPDATE")) {
           return queryResponse([], 1);
         }
         if (sql.includes("DELETE FROM")) {
           return queryResponse([], 9);
         }
-        if (sql.includes('COUNT(*) FROM "pondview"."dashboard_charts"')) {
+        if (
+          hasMetadataTable("dashboard_charts") &&
+          sql.includes("COUNT(*) FROM")
+        ) {
           return queryResponse(
             dashboards.map((dashboard) => ({
               ...dashboard,
@@ -613,19 +627,19 @@ describe("bridge CLI dashboard commands", () => {
             })),
           );
         }
-        if (sql.includes('FROM "pondview"."dashboards"')) {
+        if (hasMetadataTable("dashboards")) {
           return queryResponse(dashboards);
         }
-        if (sql.includes('FROM "pondview"."dashboard_charts"')) {
+        if (hasMetadataTable("dashboard_charts")) {
           return queryResponse(charts);
         }
-        if (sql.includes('FROM "pondview"."dashboard_measures"')) {
+        if (hasMetadataTable("dashboard_measures")) {
           return queryResponse(measures);
         }
-        if (sql.includes('FROM "pondview"."dashboard_slicers"')) {
+        if (hasMetadataTable("dashboard_slicers")) {
           return queryResponse(slicers);
         }
-        if (sql.includes('FROM "pondview"."dashboard_join_defs"')) {
+        if (hasMetadataTable("dashboard_join_defs")) {
           return queryResponse(joinDefs);
         }
         return queryResponse();
@@ -681,6 +695,22 @@ describe("bridge CLI dashboard commands", () => {
       dashboards: ["dash_1"],
       errors: [],
     });
+  });
+
+  test("dashboard commands qualify metadata refs when the catalog is also pondview", async () => {
+    const queries: string[] = [];
+    await captureStdout(() =>
+      runCli(["dashboard", "list"], {
+        createClient: () =>
+          dashboardClient({ queries, currentCatalog: "pondview" }),
+      }),
+    );
+
+    expect(
+      queries.some((sql) =>
+        sql.includes('FROM "pondview"."pondview"."dashboards"'),
+      ),
+    ).toBe(true);
   });
 
   test("dashboard validate reports metadata and SQL failures", async () => {

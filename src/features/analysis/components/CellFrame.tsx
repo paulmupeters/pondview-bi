@@ -1,15 +1,10 @@
 import {
-  BarChart3,
   ChevronDown,
   ChevronRight,
   Circle,
   CircleAlert,
   CircleCheck,
-  FileText,
   Loader2,
-  Sparkles,
-  Table2,
-  TerminalSquare,
   Trash2,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -65,57 +60,6 @@ function getStatusMeta(status: AnalysisCellState["status"]): {
   }
 }
 
-function getCellTypeMeta(cell: AnalysisCellState): {
-  label: string;
-  icon: typeof Circle;
-  className: string;
-  lineage: string;
-} {
-  if (cell.kind === "text" || cell.activeMode === "text") {
-    return {
-      label: "Markdown",
-      icon: FileText,
-      className: "border-border/70 bg-background",
-      lineage: "Notebook note",
-    };
-  }
-
-  const payload = cell.resultPayloadJson;
-  if (payload?.includes('"visualType":"chart"')) {
-    return {
-      label: "Chart",
-      icon: BarChart3,
-      className: "border-primary/15 bg-card",
-      lineage: "Generated from SQL",
-    };
-  }
-
-  if (payload?.includes('"visualType":"table"')) {
-    return {
-      label: "Table",
-      icon: Table2,
-      className: "border-border/70 bg-card",
-      lineage: "Generated from SQL",
-    };
-  }
-
-  if (cell.activeMode === "sql") {
-    return {
-      label: "SQL",
-      icon: TerminalSquare,
-      className: "border-primary/20 bg-primary/[0.035]",
-      lineage: "Prompt to query",
-    };
-  }
-
-  return {
-    label: "Analysis",
-    icon: Sparkles,
-    className: "border-primary/20 bg-primary/[0.045]",
-    lineage: "Prompt to analysis",
-  };
-}
-
 export function CellFrame({
   cell,
   isSelected,
@@ -125,15 +69,12 @@ export function CellFrame({
   children,
 }: CellFrameProps) {
   const statusMeta = getStatusMeta(cell.status);
-  const typeMeta = getCellTypeMeta(cell);
-  const TypeIcon = typeMeta.icon;
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <div
       className={cn(
-        "group/cell relative overflow-hidden rounded-lg border transition-all",
-        typeMeta.className,
+        "group/cell relative overflow-hidden rounded-lg border border-border/70 bg-card transition-all",
         isSelected && "ring-1 ring-primary/15 shadow-sm",
       )}
     >
@@ -165,18 +106,11 @@ export function CellFrame({
           />
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            className="min-h-7 min-w-0 flex-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             aria-pressed={isSelected}
+            aria-label={`Select cell ${cell.position + 1}`}
             onClick={onSelect}
-          >
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              <TypeIcon className="size-3" />
-              {typeMeta.label}
-            </span>
-            <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground/55 sm:inline">
-              {typeMeta.lineage}
-            </span>
-          </button>
+          />
         </div>
 
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover/cell:opacity-100 focus-within:opacity-100">

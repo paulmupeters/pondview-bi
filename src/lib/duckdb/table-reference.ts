@@ -101,8 +101,10 @@ export function buildExplorerInsertPayload({
   if (shouldUseCatalogName) {
     reference = buildExplorerTableReference({
       catalog: normalizedCatalog,
+      schema: normalizedSchema,
       table: normalizedTable,
       includeCatalog: true,
+      includeDefaultSchema: true,
     });
   } else {
     reference = buildExplorerTableReference({

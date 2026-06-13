@@ -43,7 +43,7 @@ From the repository root:
 ```bash
 bun run bridge:build-ui
 bun run bridge:build-cli
-bun run bridge -- start
+bun run pondview start
 bun run cli:pack:dry-run
 ```
 

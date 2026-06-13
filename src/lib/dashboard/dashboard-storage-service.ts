@@ -40,6 +40,7 @@ import { detectExternalConnection } from "../duckdb/path";
 const METADATA_SCHEMA = "pondview";
 const EXEC_SCHEMA = "pondview_exec";
 const SNAPSHOT_SCHEMA = "pondview_snapshot";
+const metadataCatalogCache = new Map<string, string | null>();
 
 type DashboardStorageTargetKind =
   | "wasm-local"
@@ -305,6 +306,114 @@ function metadataTableRef(
   tableName: string,
 ): string {
   return `${metadataSchemaRef(target)}.${quoteIdentifier(tableName)}`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function resolveMetadataCatalogForTarget(
+  target: DashboardStorageTarget,
+): Promise<string | null> {
+  if (target.kind === "attached-catalog") {
+    return null;
+  }
+
+  const cached = metadataCatalogCache.get(target.key);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const rows = await runStorageSql(
+    target,
+    "SELECT current_catalog() AS current_catalog;",
+    { skipMetadataQualification: true },
+  ).catch(() => []);
+  const catalog = toNullableString(rows[0]?.current_catalog);
+  const needsQualification =
+    catalog?.toLowerCase() === METADATA_SCHEMA.toLowerCase();
+  const resolved = needsQualification ? catalog : null;
+  metadataCatalogCache.set(target.key, resolved);
+  return resolved;
+}
+
+export function qualifyMetadataSqlForCatalog(
+  sql: string,
+  catalog: string | null,
+): string {
+  if (!catalog) {
+    return sql;
+  }
+
+  const schemaRef = quoteIdentifier(METADATA_SCHEMA);
+  const qualifiedSchemaRef = `${quoteIdentifier(catalog)}.${schemaRef}`;
+  if (sql.includes(`${qualifiedSchemaRef}.`)) {
+    return sql;
+  }
+
+  return replaceOutsideSqlStringLiterals(sql, (segment) =>
+    segment
+      .replace(
+        new RegExp(
+          `SCHEMA\\s+IF\\s+NOT\\s+EXISTS\\s+${escapeRegExp(schemaRef)}`,
+          "gi",
+        ),
+        (match) => match.replace(schemaRef, qualifiedSchemaRef),
+      )
+      .replace(
+        new RegExp(
+          `${escapeRegExp(schemaRef)}\\.(?!${escapeRegExp(schemaRef)})`,
+          "g",
+        ),
+        `${qualifiedSchemaRef}.`,
+      ),
+  );
+}
+
+function replaceOutsideSqlStringLiterals(
+  sql: string,
+  replaceSegment: (segment: string) => string,
+): string {
+  let output = "";
+  let segmentStart = 0;
+  let index = 0;
+
+  while (index < sql.length) {
+    if (sql[index] !== "'") {
+      index += 1;
+      continue;
+    }
+
+    output += replaceSegment(sql.slice(segmentStart, index));
+    const literalStart = index;
+    index += 1;
+
+    while (index < sql.length) {
+      if (sql[index] === "'") {
+        if (sql[index + 1] === "'") {
+          index += 2;
+          continue;
+        }
+        index += 1;
+        break;
+      }
+      index += 1;
+    }
+
+    output += sql.slice(literalStart, index);
+    segmentStart = index;
+  }
+
+  output += replaceSegment(sql.slice(segmentStart));
+  return output;
+}
+
+async function qualifyMetadataSqlForTarget(
+  target: DashboardStorageTarget,
+  sql: string,
+): Promise<string> {
+  const catalog = await resolveMetadataCatalogForTarget(target);
+  return qualifyMetadataSqlForCatalog(sql, catalog);
 }
 
 function getDashboardStorageId(dashboardId: string): string {
@@ -817,10 +926,14 @@ async function runStorageSql(
   sql: string,
   options: {
     catalogContext?: string | null;
+    skipMetadataQualification?: boolean;
   } = {},
 ): Promise<Record<string, unknown>[]> {
+  const executableSql = options.skipMetadataQualification
+    ? sql
+    : await qualifyMetadataSqlForTarget(target, sql);
   const result = await runQuery({
-    sql,
+    sql: executableSql,
     dbIdentifier: target.dbIdentifier ?? undefined,
     backendPreference: target.sqlBackend,
     catalogContext: options.catalogContext ?? undefined,
@@ -1395,7 +1508,19 @@ async function upsertChartRecord(
   );
 }
 
-function getInitialChartLayout(
+function rectanglesOverlap(
+  left: { x: number; y: number; w: number; h: number },
+  right: { x: number; y: number; w: number; h: number },
+): boolean {
+  return (
+    left.x < right.x + right.w &&
+    left.x + left.w > right.x &&
+    left.y < right.y + right.h &&
+    left.y + left.h > right.y
+  );
+}
+
+export function getInitialChartLayout(
   charts: ChartRecord[],
   columns: number | null | undefined,
   chartConfigJson: string,
@@ -1415,13 +1540,50 @@ function getInitialChartLayout(
     gridColumns,
     Math.max(1, Math.round(requestedWidth)),
   );
-  const layoutY = charts.reduce((bottom, chart) => {
-    const y = chart.layoutY ?? Math.floor(chart.position / gridColumns) * 3;
-    const h = chart.layoutH ?? 3;
-    return Math.max(bottom, y + h);
-  }, 0);
+  const layoutH = 3;
+  const occupied = charts.map((chart) => {
+    const w = Math.min(
+      gridColumns,
+      Math.max(1, Math.round(chart.layoutW ?? 1)),
+    );
+    return {
+      x: Math.min(
+        Math.max(0, Math.round(chart.layoutX ?? chart.position % gridColumns)),
+        Math.max(0, gridColumns - w),
+      ),
+      y: Math.max(
+        0,
+        Math.round(
+          chart.layoutY ?? Math.floor(chart.position / gridColumns) * 3,
+        ),
+      ),
+      w,
+      h: Math.max(1, Math.round(chart.layoutH ?? 3)),
+    };
+  });
 
-  return { layoutX: 0, layoutY, layoutW, layoutH: 3 };
+  const bottom = occupied.reduce(
+    (max, chart) => Math.max(max, chart.y + chart.h),
+    0,
+  );
+  const candidateRows = Array.from(
+    new Set([
+      0,
+      ...occupied.flatMap((chart) => [chart.y, chart.y + chart.h]),
+      bottom,
+    ]),
+  ).sort((left, right) => left - right);
+
+  for (const layoutY of candidateRows) {
+    for (let layoutX = 0; layoutX <= gridColumns - layoutW; layoutX += 1) {
+      const candidate = { x: layoutX, y: layoutY, w: layoutW, h: layoutH };
+      if (!occupied.some((chart) => rectanglesOverlap(candidate, chart))) {
+        return { layoutX, layoutY, layoutW, layoutH };
+      }
+    }
+  }
+
+  return { layoutX: 0, layoutY: bottom, layoutW, layoutH };
 }
 
 async function upsertMeasureRecord(
