@@ -17,10 +17,7 @@
     "type": "line",
     "visualType": "chart",
     "xKey": "company_count",
-    "yKeys": [
-      "year_joined",
-      "total_valuation_billions"
-    ]
+    "yKeys": ["year_joined", "total_valuation_billions"]
   },
   "id": "show-me-unicorns-over-the-year-in-china",
   "schemaVersion": 1

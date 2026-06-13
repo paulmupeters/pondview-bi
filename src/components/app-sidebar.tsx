@@ -50,7 +50,9 @@ const RAIL_ITEM_ACTIVE = "bg-primary/10 text-primary";
 const RAIL_ITEM_INACTIVE =
   "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground";
 
-export function AppSidebar({ initialChats = EMPTY_CHAT_HISTORY }: AppSidebarProps) {
+export function AppSidebar({
+  initialChats = EMPTY_CHAT_HISTORY,
+}: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();

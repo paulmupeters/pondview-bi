@@ -36,7 +36,9 @@ interface BottomNavBarProps {
   initialChats?: ChatHistoryEntry[];
 }
 
-export function BottomNavBar({ initialChats = EMPTY_CHAT_HISTORY }: BottomNavBarProps) {
+export function BottomNavBar({
+  initialChats = EMPTY_CHAT_HISTORY,
+}: BottomNavBarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();

@@ -1,6 +1,6 @@
 import { Suspense } from "react";
-import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { EMPTY_CHAT_HISTORY } from "@/hooks/use-chat-history";
+import type { ChatHistoryEntry } from "@/lib/chat-history";
 import { AppSidebar } from "./app-sidebar";
 import { BottomNavBar } from "./bottom-nav-bar";
 

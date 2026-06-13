@@ -38,9 +38,9 @@ export function RecentAnalysesSection({
   const { chats, isLoading, error, loadChats } = useChatHistory(
     EMPTY_CHAT_HISTORY,
     {
-    limit: RECENT_ANALYSES_LIMIT,
-    scopeToProject: false,
-  },
+      limit: RECENT_ANALYSES_LIMIT,
+      scopeToProject: false,
+    },
   );
   const [hasLoaded, setHasLoaded] = useState(false);
 
@@ -131,7 +131,9 @@ export function RecentAnalysesSection({
               key={chat.id}
               className={cn(
                 "transition-all duration-500 ease-out motion-reduce:transition-none",
-                visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2",
+                visible
+                  ? "opacity-100 translate-y-0"
+                  : "opacity-0 translate-y-2",
               )}
               style={{
                 transitionDelay: visible ? `${200 + index * 60}ms` : "0ms",

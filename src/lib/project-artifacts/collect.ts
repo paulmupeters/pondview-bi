@@ -93,9 +93,11 @@ export type ExportPublishedNotebookProjectArtifactInput =
 
 const defaultDashboardDeps: DashboardProjectArtifactCollectorDeps = {
   getDashboardWithCharts: (dashboardId) => getDashboardWithCharts(dashboardId),
-  listMeasuresByDashboard: (dashboardId) => listMeasuresByDashboard(dashboardId),
+  listMeasuresByDashboard: (dashboardId) =>
+    listMeasuresByDashboard(dashboardId),
   listSlicersByDashboard: (dashboardId) => listSlicersByDashboard(dashboardId),
-  listJoinDefsByDashboard: (dashboardId) => listJoinDefsByDashboard(dashboardId),
+  listJoinDefsByDashboard: (dashboardId) =>
+    listJoinDefsByDashboard(dashboardId),
 };
 
 const defaultSavedQueryDeps: SavedQueryProjectArtifactCollectorDeps = {

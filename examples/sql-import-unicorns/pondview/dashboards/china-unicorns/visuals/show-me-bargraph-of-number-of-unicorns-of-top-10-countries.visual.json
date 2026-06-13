@@ -16,9 +16,7 @@
     "type": "bar",
     "visualType": "chart",
     "xKey": "country",
-    "yKeys": [
-      "unicorn_count"
-    ]
+    "yKeys": ["unicorn_count"]
   },
   "id": "show-me-bargraph-of-number-of-unicorns-of-top-10-countries",
   "schemaVersion": 1
