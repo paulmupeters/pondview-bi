@@ -181,6 +181,16 @@ Useful docs entry points:
 - If adding a dependency, make sure it is necessary, maintained, and compatible with Bun/Vite/browser usage.
 - Be careful with duplicate CodeMirror packages; `vite.config.ts` intentionally dedupes CodeMirror modules.
 
+## Cursor Cloud specific instructions
+
+Standard commands and structure are documented above and in `README.md`; this section only captures non-obvious caveats for cloud agents. Dependencies are already installed by the startup update script, so do not reinstall unless something is broken.
+
+- Package manager is Bun (installed at `~/.bun/bin/bun`, also on PATH via `~/.bashrc`). Node 22 is preinstalled.
+- Install with the isolated linker: `bun install --linker isolated`. This repo commits `.bun`-style isolated symlinks inside the workspace sub-packages' `node_modules` (`packages/bridge`, `packages/bridge-protocol`). A plain hoisted `bun install` leaves those symlinks broken, which makes `bun test` fail with `ENOENT reading ".../node_modules/<dep>"` (e.g. `@duckdb/node-api`, `zod`). The isolated linker creates `node_modules/.bun/` and resolves them.
+- Run `bun test` from the repo root (`/workspace`); the Bun test runner discovers tests relative to the current directory, so running it inside a sub-package only runs that package's tests.
+- App run/build/lint/test commands are in `README.md` / `package.json`. Dev server is `bun dev` on `http://localhost:5173`.
+- The product is browser-first: DuckDB WASM executes SQL in-browser, so no backend/database is needed to run and exercise the core BI workflows. The Pondview bridge CLI (`bun run pondview start`) is only needed for server-side runtimes, local `.duckdb` files, or external sources.
+
 ## Pull request hygiene
 
 When preparing a change:
