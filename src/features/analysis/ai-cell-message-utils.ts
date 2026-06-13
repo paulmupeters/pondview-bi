@@ -5,6 +5,7 @@ import type { Result } from "@/lib/types";
 
 const EXECUTE_SQL_ARTIFACT_TYPE = "data-execute-sql";
 const EXPLORATORY_SQL_TOOL_TYPE = "tool-execute_exploratory_sql";
+const SET_NOTEBOOK_TITLE_TOOL_TYPE = "tool-set_notebook_title";
 const FINAL_SQL_TOOL_TYPES = new Set([
   "tool-execute_final_sql",
   "tool-execute_sql",
@@ -257,6 +258,10 @@ export function buildTranscriptMessageBlocks(
       return;
     }
 
+    if (part.type === SET_NOTEBOOK_TITLE_TOOL_TYPE) {
+      return;
+    }
+
     const output = extractToolOutput(part);
     const toolName = part.type.slice("tool-".length);
 
@@ -366,6 +371,7 @@ export function buildAiCellPrompt(params: {
   selectedDbIdentifier?: string | null;
   selectedCatalogContext?: string | null;
   resultPayload?: SqlAnalysisData | null;
+  shouldGenerateNotebookTitle?: boolean;
 }): string {
   const {
     prompt,
@@ -373,6 +379,7 @@ export function buildAiCellPrompt(params: {
     selectedDbIdentifier,
     selectedCatalogContext,
     resultPayload,
+    shouldGenerateNotebookTitle = false,
   } = params;
 
   const trimmedPrompt = prompt.trim();
@@ -381,6 +388,12 @@ export function buildAiCellPrompt(params: {
   }
 
   const contextLines: string[] = [];
+
+  if (shouldGenerateNotebookTitle) {
+    contextLines.push(
+      "This is the first prompt in a new notebook. Before doing the analysis, call set_notebook_title with a concise 3-6 word title for this notebook.",
+    );
+  }
 
   if (selectedDbIdentifier) {
     contextLines.push(`Selected database: ${selectedDbIdentifier}`);
@@ -506,6 +519,28 @@ export function getLatestAssistantText(messages: UIMessage[]): string | null {
 
     if (textPart) {
       return textPart.text;
+    }
+  }
+
+  return null;
+}
+
+export function extractNotebookTitleFromMessage(
+  message: UIMessage,
+): string | null {
+  for (const part of message.parts ?? []) {
+    if (part.type !== SET_NOTEBOOK_TITLE_TOOL_TYPE) {
+      continue;
+    }
+
+    const output = extractToolOutput(part);
+    if (!isRecord(output) || typeof output.title !== "string") {
+      continue;
+    }
+
+    const title = output.title.trim().replace(/\s+/g, " ");
+    if (title.length > 0) {
+      return title;
     }
   }
 

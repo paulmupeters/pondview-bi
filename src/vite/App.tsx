@@ -14,7 +14,7 @@ import { ProjectStartupGate } from "@/components/project-startup-gate";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { SqlRuntimeBootstrap } from "@/components/sql-runtime-bootstrap";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { resolveDashboardMode } from "@/lib/dashboard-mode";
+import { resolveDashboardModeState } from "@/lib/dashboard-mode";
 import { ThemeProvider } from "@/lib/theme-provider";
 
 const AllAnalysesPage = lazy(() => import("@/app/analysis/all/page"));
@@ -53,10 +53,10 @@ export function isDashboardModeRoutePath(pathname: string): boolean {
   return pathname === "/dashboards" || pathname === "/dashboards/view";
 }
 
-function DashboardModeRoutes() {
+function DashboardModeRoutes({ canExitPreview }: { canExitPreview: boolean }) {
   return (
     <div className="flex h-full w-full flex-col bg-background">
-      <DashboardModeNav />
+      <DashboardModeNav canExitPreview={canExitPreview} />
       <main className="min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={null}>
           <Routes>
@@ -101,10 +101,11 @@ function AppRoutes() {
 
 export function App() {
   const location = useLocation();
-  const isDashboardMode = useMemo(
-    () => resolveDashboardMode(location.search),
+  const dashboardModeState = useMemo(
+    () => resolveDashboardModeState(location.search),
     [location.search],
   );
+  const isDashboardMode = dashboardModeState.enabled;
   const isStartPreview = location.pathname === "/start";
   const isSettingsRoute = location.pathname === "/settings";
 
@@ -121,7 +122,7 @@ export function App() {
             <StartPreviewPage />
           </Suspense>
         ) : isDashboardMode ? (
-          <DashboardModeRoutes />
+          <DashboardModeRoutes canExitPreview={dashboardModeState.preview} />
         ) : (
           <>
             <CommandPalette />

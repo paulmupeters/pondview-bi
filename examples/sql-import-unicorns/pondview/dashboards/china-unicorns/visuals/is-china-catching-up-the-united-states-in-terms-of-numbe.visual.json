@@ -1,0 +1,27 @@
+{
+  "config": {
+    "countMode": false,
+    "description": "Bar chart using Country on the X axis and Company Count, Total Valuation Billions, Avg Valuation Billions on the Y axis.",
+    "labelYAngle": -90,
+    "legend": true,
+    "lineSize": 2,
+    "multipleLines": false,
+    "showDots": false,
+    "showGrid": true,
+    "showLine": false,
+    "showTooltip": true,
+    "showXAxis": true,
+    "showYAxis": true,
+    "title": "Is china catching up the united states? in terms of numbe...",
+    "type": "bar",
+    "visualType": "chart",
+    "xKey": "country",
+    "yKeys": [
+      "company_count",
+      "total_valuation_billions",
+      "avg_valuation_billions"
+    ]
+  },
+  "id": "is-china-catching-up-the-united-states-in-terms-of-numbe",
+  "schemaVersion": 1
+}

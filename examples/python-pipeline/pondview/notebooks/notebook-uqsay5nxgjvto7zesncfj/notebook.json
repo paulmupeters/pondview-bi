@@ -1,0 +1,27 @@
+{
+  "cells": [
+    {
+      "file": "cells/ai.md",
+      "id": "ai",
+      "kind": "ai"
+    },
+    {
+      "file": "cells/ai-2.md",
+      "id": "ai-2",
+      "kind": "ai"
+    },
+    {
+      "file": "cells/ai-3.md",
+      "id": "ai-3",
+      "kind": "ai"
+    },
+    {
+      "file": "cells/markdown-minim-mollit-reprehenderit-non-ullamco-deserunt-et-tempor-aliquip-ex-oc.md",
+      "id": "markdown-minim-mollit-reprehenderit-non-ullamco-deserunt-et-tempor-aliquip-ex-oc",
+      "kind": "text"
+    }
+  ],
+  "id": "notebook-uqsay5nxgjvto7zesncfj",
+  "schemaVersion": 1,
+  "title": "Products"
+}

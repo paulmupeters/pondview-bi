@@ -1,0 +1,37 @@
+{
+  "autoFitRows": false,
+  "columns": 4,
+  "id": "china-unicorns",
+  "measures": [],
+  "schemaVersion": 1,
+  "slicers": [],
+  "sourceRef": "local",
+  "title": "China Unicorns",
+  "visuals": [
+    {
+      "id": "show-me-unicorns-over-the-year-in-china",
+      "metadataFile": "visuals/show-me-unicorns-over-the-year-in-china.visual.json",
+      "sqlFile": "visuals/show-me-unicorns-over-the-year-in-china.sql"
+    },
+    {
+      "id": "growing-numbers",
+      "metadataFile": "visuals/growing-numbers.visual.json",
+      "sqlFile": "visuals/growing-numbers.sql"
+    },
+    {
+      "id": "is-china-catching-up-the-united-states-in-terms-of-numbe",
+      "metadataFile": "visuals/is-china-catching-up-the-united-states-in-terms-of-numbe.visual.json",
+      "sqlFile": "visuals/is-china-catching-up-the-united-states-in-terms-of-numbe.sql"
+    },
+    {
+      "id": "show-me-bargraph-of-number-of-unicorns-of-top-10-countries",
+      "metadataFile": "visuals/show-me-bargraph-of-number-of-unicorns-of-top-10-countries.visual.json",
+      "sqlFile": "visuals/show-me-bargraph-of-number-of-unicorns-of-top-10-countries.sql"
+    },
+    {
+      "id": "the-gap",
+      "metadataFile": "visuals/the-gap.visual.json",
+      "sqlFile": "visuals/the-gap.sql"
+    }
+  ]
+}

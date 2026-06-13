@@ -1,3 +1,4 @@
+import { Eye } from "lucide-react";
 import {
   Suspense,
   useCallback,
@@ -42,7 +43,11 @@ import {
   formatFirstRowMeasureValue,
   type MeasurePrimitive,
 } from "@/lib/dashboard/measures";
-import { resolveDashboardMode } from "@/lib/dashboard-mode";
+import {
+  DASHBOARD_MODE_QUERY_PARAM,
+  DASHBOARD_PREVIEW_QUERY_VALUE,
+  resolveDashboardMode,
+} from "@/lib/dashboard-mode";
 import type {
   CardConfig,
   Config,
@@ -760,6 +765,8 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
   const dashboardWarningMessage = chartQueryError ?? measureQueryError;
   const isReadOnlyDashboard =
     isDashboardMode || dashboard?.sourceKind === "attached";
+  const dashboardPreviewHref = `/dashboards/view?id=${encodeURIComponent(dashboardId)}&${DASHBOARD_MODE_QUERY_PARAM}=${DASHBOARD_PREVIEW_QUERY_VALUE}`;
+  const showDashboardActions = !isDashboardMode || !isReadOnlyDashboard;
 
   if (loading) return <DashboardLoadingPlaceholder />;
   if (!dashboard)
@@ -782,32 +789,44 @@ function DashboardDetailPageInner({ dashboardId }: { dashboardId: string }) {
           isRefreshing={isRefreshingDashboard}
           readOnly={isReadOnlyDashboard}
         />
-        {!isReadOnlyDashboard ? (
+        {showDashboardActions ? (
           <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="default">
-                  Add Card
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem
-                  onSelect={() => setIsDataCardDialogOpen(true)}
-                >
-                  Metric / Visual card
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isAddingTextCard}
-                  onSelect={() => setIsTextCardDialogOpen(true)}
-                >
-                  Text card
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <DashboardSettingsDialog
-              isOpen={isSettingsOpen}
-              onOpenChange={setIsSettingsOpen}
-            />
+            {!isDashboardMode ? (
+              <Button asChild variant="outline" size="default">
+                <Link href={dashboardPreviewHref}>
+                  <Eye className="h-4 w-4" />
+                  Preview
+                </Link>
+              </Button>
+            ) : null}
+            {!isReadOnlyDashboard ? (
+              <>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="default">
+                      Add Card
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem
+                      onSelect={() => setIsDataCardDialogOpen(true)}
+                    >
+                      Metric / Visual card
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={isAddingTextCard}
+                      onSelect={() => setIsTextCardDialogOpen(true)}
+                    >
+                      Text card
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <DashboardSettingsDialog
+                  isOpen={isSettingsOpen}
+                  onOpenChange={setIsSettingsOpen}
+                />
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>

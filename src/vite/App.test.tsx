@@ -19,6 +19,22 @@ describe("App dashboard mode", () => {
     );
 
     expect(markup).toContain("Dashboards");
+    expect(markup).not.toContain("Exit preview");
+    expect(markup).not.toContain('aria-label="Settings"');
+    expect(markup).not.toContain('aria-label="History"');
+  });
+
+  test("allows leaving dashboard preview mode", () => {
+    const markup = renderToStaticMarkup(
+      <MemoryRouter
+        initialEntries={["/dashboards?pondviewMode=dashboard-preview"]}
+      >
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(markup).toContain("Dashboards");
+    expect(markup).toContain("Exit preview");
     expect(markup).not.toContain('aria-label="Settings"');
     expect(markup).not.toContain('aria-label="History"');
   });

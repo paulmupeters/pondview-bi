@@ -1,0 +1,27 @@
+{
+  "config": {
+    "countMode": false,
+    "description": "Line chart using Company Count on the X axis and Year Joined, Total Valuation Billions on the Y axis.",
+    "labelYAngle": -90,
+    "legend": false,
+    "lineCategories": [],
+    "lineSize": 2,
+    "multipleLines": false,
+    "showDots": true,
+    "showGrid": true,
+    "showTooltip": true,
+    "showXAxis": true,
+    "showYAxis": true,
+    "takeaway": "",
+    "title": "Unicorns over the year in china",
+    "type": "line",
+    "visualType": "chart",
+    "xKey": "company_count",
+    "yKeys": [
+      "year_joined",
+      "total_valuation_billions"
+    ]
+  },
+  "id": "show-me-unicorns-over-the-year-in-china",
+  "schemaVersion": 1
+}

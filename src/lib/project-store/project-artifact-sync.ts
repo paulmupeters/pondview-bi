@@ -2,7 +2,10 @@ import {
   exportPublishedNotebookProjectFiles,
   exportSavedQueryProjectFiles,
 } from "@/lib/project-artifacts/collect";
-import { toProjectArtifactId } from "@/lib/project-artifacts/export";
+import {
+  type ProjectArtifactTextFile,
+  toProjectArtifactId,
+} from "@/lib/project-artifacts/export";
 import {
   getAnalysisNotebookSnapshot,
   upsertAnalysisNotebook,
@@ -57,6 +60,43 @@ function getSavedQueryArtifactPaths(query: SavedSqlQuery): string[] {
     `${rootPath}/${artifactId}.query.json`,
     `${rootPath}/${artifactId}.sql`,
   ];
+}
+
+function normalizeProjectPath(path: string | null | undefined): string | null {
+  const normalized =
+    typeof path === "string"
+      ? path.trim().replace(/\\/g, "/").replace(/\/+$/, "")
+      : "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+function getManifestId(file: ProjectArtifactTextFile): string | null {
+  try {
+    const parsed = JSON.parse(file.content) as { id?: unknown };
+    return typeof parsed.id === "string" && parsed.id.trim()
+      ? parsed.id.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function findPublishedNotebookProjectPathByManifestId(
+  files: ProjectArtifactTextFile[],
+  notebookId: string,
+): string | null {
+  for (const file of files) {
+    const path = normalizeProjectPath(file.path);
+    if (!path || !/^pondview\/notebooks\/[^/]+\/notebook\.json$/.test(path)) {
+      continue;
+    }
+
+    if (getManifestId(file) === notebookId) {
+      return path.replace(/\/notebook\.json$/, "");
+    }
+  }
+
+  return null;
 }
 
 export function getPublishedNotebookProjectArtifactId(input: {
@@ -150,11 +190,14 @@ export async function syncPublishedNotebookProjectArtifact(
     return;
   }
 
-  const previousScopePath = snapshot.notebook.projectPath?.trim() || null;
+  const projectFiles = await listOpenProjectFiles();
+  const previousScopePath =
+    normalizeProjectPath(snapshot.notebook.projectPath) ??
+    findPublishedNotebookProjectPathByManifestId(projectFiles, notebookId);
   const nextScopePath = getPublishedNotebookProjectScopePath({
     notebookId,
     title: snapshot.notebook.title,
-    projectPath: snapshot.notebook.projectPath ?? null,
+    projectPath: previousScopePath,
   });
 
   const files = await exportPublishedNotebookProjectFiles({
@@ -162,12 +205,12 @@ export async function syncPublishedNotebookProjectArtifact(
     artifactId: getPublishedNotebookProjectArtifactId({
       notebookId,
       title: snapshot.notebook.title,
-      projectPath: snapshot.notebook.projectPath ?? null,
+      projectPath: previousScopePath,
     }),
   });
 
   if (previousScopePath && previousScopePath !== nextScopePath) {
-    const previousPaths = (await listOpenProjectFiles())
+    const previousPaths = projectFiles
       .map((file) => file.path)
       .filter(
         (path) =>

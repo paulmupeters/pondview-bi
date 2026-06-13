@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  findPublishedNotebookProjectPathByManifestId,
   getPublishedNotebookProjectArtifactId,
   getPublishedNotebookProjectScopePath,
 } from "@/lib/project-store/project-artifact-sync";
@@ -36,5 +37,56 @@ describe("published notebook project artifact paths", () => {
 
     expect(first).toBe("pondview/notebooks/revenue-overview-notebook-1");
     expect(second).toBe("pondview/notebooks/revenue-overview-notebook-2");
+  });
+
+  test("finds an existing notebook folder by manifest id", () => {
+    expect(
+      findPublishedNotebookProjectPathByManifestId(
+        [
+          {
+            path: "pondview/notebooks/notebook-abc/notebook.json",
+            content: JSON.stringify({
+              schemaVersion: 1,
+              id: "notebook-abc",
+              title: "Exploration",
+              cells: [],
+            }),
+          },
+          {
+            path: "pondview/notebooks/products/notebook.json",
+            content: JSON.stringify({
+              schemaVersion: 1,
+              id: "notebook-products",
+              title: "Products",
+              cells: [],
+            }),
+          },
+        ],
+        "notebook-products",
+      ),
+    ).toBe("pondview/notebooks/products");
+  });
+
+  test("ignores invalid notebook manifests while matching existing folders", () => {
+    expect(
+      findPublishedNotebookProjectPathByManifestId(
+        [
+          {
+            path: "pondview/notebooks/broken/notebook.json",
+            content: "{",
+          },
+          {
+            path: "pondview/notebooks/notebook-abc/notebook.json",
+            content: JSON.stringify({
+              schemaVersion: 1,
+              id: "notebook-abc",
+              title: "Exploration",
+              cells: [],
+            }),
+          },
+        ],
+        "notebook-abc",
+      ),
+    ).toBe("pondview/notebooks/notebook-abc");
   });
 });

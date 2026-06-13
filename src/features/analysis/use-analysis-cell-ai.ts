@@ -13,6 +13,7 @@ import {
 import {
   buildAiCellPrompt,
   buildAiCellUpdatePatch,
+  extractNotebookTitleFromMessage,
   getLatestAssistantText,
 } from "@/features/analysis/ai-cell-message-utils";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
@@ -29,7 +30,11 @@ type UseAnalysisCellAiParams = {
   entries: WorkspaceAnalysisCellEntry[];
   notebookSession: Pick<
     NotebookSession,
-    "appendCellEntry" | "refreshUpdatedAt" | "updateCell"
+    | "appendCellEntry"
+    | "notebook"
+    | "refreshUpdatedAt"
+    | "updateCell"
+    | "updateTitle"
   >;
 };
 
@@ -183,6 +188,10 @@ export function useAnalysisCellAi({
         selectedDbIdentifier: cell.selectedDbIdentifier,
         selectedCatalogContext: cell.selectedCatalogContext,
       });
+      const notebookTitle = notebookSession.notebook?.title?.trim();
+      const generatedTitle = notebookTitle
+        ? null
+        : extractNotebookTitleFromMessage(message);
       const shouldPersistEntry = !persistedAssistantMessageIdsRef.current.has(
         message.id,
       );
@@ -203,6 +212,9 @@ export function useAnalysisCellAi({
 
       void persistEntryPromise
         .then(() => notebookSession.updateCell(cell.id, nextPatch))
+        .then(() =>
+          generatedTitle ? notebookSession.updateTitle(generatedTitle) : null,
+        )
         .then(() => notebookSession.refreshUpdatedAt())
         .catch((error) => {
           console.error(
@@ -215,6 +227,7 @@ export function useAnalysisCellAi({
   const submitPromptStateRef = useRef({
     agentError: agentResult.error,
     cell,
+    hasExistingEntries: entries.length > 0,
     notebookSession,
     promptDraft,
     sendMessage,
@@ -223,6 +236,7 @@ export function useAnalysisCellAi({
   submitPromptStateRef.current = {
     agentError: agentResult.error,
     cell,
+    hasExistingEntries: entries.length > 0,
     notebookSession,
     promptDraft,
     sendMessage,
@@ -295,6 +309,7 @@ export function useAnalysisCellAi({
     const {
       agentError,
       cell,
+      hasExistingEntries,
       notebookSession,
       promptDraft,
       sendMessage,
@@ -330,6 +345,8 @@ export function useAnalysisCellAi({
       selectedDbIdentifier: cell.selectedDbIdentifier,
       selectedCatalogContext: cell.selectedCatalogContext,
       resultPayload: parseStoredPayload(cell.resultPayloadJson),
+      shouldGenerateNotebookTitle:
+        !notebookSession.notebook?.title && !hasExistingEntries,
     });
 
     try {
