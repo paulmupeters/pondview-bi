@@ -39,7 +39,7 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           PROTOCOL_VERSION=$(node -p "require('./packages/bridge-protocol/package.json').version")
-          BRIDGE_VERSION=$(node -p "require('./packages/bridge/package.json').version")
+          BRIDGE_VERSION=$(node -p "require('./packages/cli/package.json').version")
 
           if [ "$TAG" != "$PROTOCOL_VERSION" ] || [ "$TAG" != "$BRIDGE_VERSION" ]; then
             echo "Tag v${TAG} must match both package versions."
@@ -57,7 +57,7 @@ jobs:
           bun run bridge:typecheck
 
       - name: Test packages
-        run: bun test packages/bridge packages/bridge-protocol
+        run: bun test packages/cli packages/bridge-protocol
 
       - name: Dry-run npm pack
         run: bun run cli:pack:dry-run
@@ -98,7 +98,7 @@ jobs:
 
       - name: Publish @pondview/cli
         run: |
-          VERSION=$(node -p "require('./packages/bridge/package.json').version")
+          VERSION=$(node -p "require('./packages/cli/package.json').version")
           if npm view "@pondview/cli@${VERSION}" version > /dev/null 2>&1; then
             echo "@pondview/cli@${VERSION} is already published; skipping."
           else

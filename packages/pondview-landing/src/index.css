@@ -1,0 +1,110 @@
+@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap");
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--pond-font-body);
+  --font-serif: var(--pond-font-display);
+  --font-mono: var(--pond-font-mono);
+  --color-pond-cream: var(--pond-cream);
+  --color-pond-linen: var(--pond-linen);
+  --color-pond-sage: var(--pond-sage);
+  --color-pond-sage-dark: var(--pond-sage-dark);
+  --color-pond-ink: var(--pond-ink);
+  --color-pond-mist: var(--pond-mist);
+}
+
+:root {
+  --pond-cream: oklch(1 0 0);
+  --pond-linen: oklch(0.9331 0.0163 95.2327);
+  --pond-sage: oklch(0.6077 0.0609 134.7899);
+  --pond-sage-dark: oklch(0.549 0.0378 139.7194);
+  --pond-ink: oklch(0.2498 0.0125 135.0835);
+  --pond-mist: oklch(0.5218 0.0047 286.2375);
+  --pond-font-body: "Roboto", ui-sans-serif, sans-serif, system-ui;
+  --pond-font-display: "Geist", ui-sans-serif, sans-serif, system-ui;
+  --pond-font-mono: "Space Mono", "Courier New", monospace;
+  --radius: 0.35rem;
+  letter-spacing: 0.025em;
+  color: var(--pond-mist);
+  background: oklch(1 0 0 / 0.99);
+  font-family: var(--pond-font-body);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    radial-gradient(circle at top, rgba(122, 145, 112, 0.12), transparent 90%),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.65) 0%,
+      oklch(1 0 0 / 0.85) 100%
+    );
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(124, 125, 123, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 125, 123, 0.04) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.4), transparent 70%);
+  opacity: 0.25;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgba(122, 145, 112, 0.55);
+  color: var(--pond-ink);
+}
+
+.pond-noise {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.22'/%3E%3C/svg%3E");
+}
+
+.pond-grid {
+  background-image:
+    linear-gradient(rgba(124, 125, 123, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 125, 123, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -15,7 +15,7 @@ Key technologies:
 - Formatting/linting: Biome
 - Data/runtime: DuckDB WASM, DuckDB HTTP, Pondview bridge runtime, DuckDB Node API
 - AI: AI SDK providers and browser-configured AI settings
-- CLI/workspaces: `pondview` bin, `packages/bridge`, `packages/bridge-protocol`
+- CLI/workspaces: `pondview` bin, `packages/cli`, `packages/bridge-protocol`
 
 ## Important commands
 
@@ -60,31 +60,31 @@ bun run test
 
 ## Repository structure
 
-- Root `package.json` defines a Bun workspace monorepo with `packages/*`.
-- The current web app intentionally remains at the repository root in `src/`; do not move it to `apps/web` until package boundaries are stable enough to justify the migration.
-- Move code into packages when there are multiple real consumers. Keep web-only code in `src/`, bridge-only code in `packages/bridge/`, and shared bridge contracts in `packages/bridge-protocol/`.
-- `src/app/` — route/page-level React code
-- `src/components/` — reusable UI and feature components
-- `src/components/ui/` — shared low-level UI primitives
-- `src/ai/` — AI settings, models, prompts, tools, and AI clients
-- `src/hooks/` — shared React hooks
-- `src/lib/` — application logic, DuckDB/runtime code, project/workspace stores, SQL helpers
-- `src/features/` — feature-specific modules
-- `src/themes/` — theme definitions
-- `packages/bridge/` — Bun CLI and local Pondview bridge server backed by DuckDB Node API
+- Root `package.json` defines a Bun workspace monorepo with `packages/*` and delegates common commands to package workspaces.
+- `packages/pondview-app/` — main Vite + React Pondview BI application.
+- `packages/pondview-app/src/app/` — route/page-level React code
+- `packages/pondview-app/src/components/` — reusable UI and feature components
+- `packages/pondview-app/src/components/ui/` — shared low-level UI primitives
+- `packages/pondview-app/src/ai/` — AI settings, models, prompts, tools, and AI clients
+- `packages/pondview-app/src/hooks/` — shared React hooks
+- `packages/pondview-app/src/lib/` — application logic, DuckDB/runtime code, project/workspace stores, SQL helpers
+- `packages/pondview-app/src/features/` — feature-specific modules
+- `packages/pondview-app/src/themes/` — theme definitions
+- `packages/pondview-app/public/` — app static assets
+- `packages/pondview-landing/` — marketing landing page workspace
+- `packages/cli/` — Bun CLI and local Pondview bridge server backed by DuckDB Node API
 - `packages/bridge-protocol/` — shared bridge client, schemas, and protocol types
-- `docs-site/` — VitePress documentation
+- `packages/pondview-docs/` — VitePress documentation
 - `scripts/` — repository maintenance scripts
-- `public/` — static assets
 
 ## Coding conventions
 
 - Keep TypeScript strict and avoid `any` unless the boundary is genuinely dynamic.
 - Prefer explicit types for public functions, exported helpers, component props, and non-obvious return values.
-- Use the `@/` import alias for imports from `src`.
+- Use the `@/` import alias for imports from `packages/pondview-app/src` within the web app.
 - Keep imports organized; Biome handles formatting and import organization.
 - Match existing file naming conventions: many components are kebab-case files exporting PascalCase components.
-- Keep components focused. Move reusable logic into hooks or `src/lib/` helpers.
+- Keep components focused. Move reusable logic into hooks or `packages/pondview-app/src/lib/` helpers.
 - Prefer deterministic, testable pure functions for SQL/query transformations and runtime adaptation logic.
 - Avoid large rewrites unless the task explicitly requires them.
 - Preserve existing public behavior unless changing it is part of the request.
@@ -113,7 +113,7 @@ When changing SQL execution, dashboard execution, source attachment, or material
 - Avoid backend-specific SQL unless guarded or adapted in the appropriate runtime layer.
 - Preserve DuckDB WASM as the local fallback path.
 - Add or update tests for SQL transformation, materialization, runtime selection, and backend-specific behavior.
-- Consult existing docs in `docs-site/guide/` when behavior changes.
+- Consult existing docs in `packages/pondview-docs/guide/` when behavior changes.
 
 ## Bridge CLI/runtime guidance
 
@@ -121,7 +121,7 @@ The repository includes a Bun CLI exposed as the `pondview` bin and developed vi
 
 Current commands include:
 
-- `pondview start` — start the bridge API server, serve the built Pondview UI from `packages/bridge/dist`, and open the browser unless `--no-open` is passed.
+- `pondview start` — start the bridge API server, serve the built Pondview UI from `packages/cli/dist`, and open the browser unless `--no-open` is passed.
 - `pondview start --no-ui` — start the bridge API server without serving the UI.
 - `pondview attach <file.duckdb|s3://...> --as <alias>` — attach a DuckDB database source.
 - `pondview list-sources`, `pondview detach <source-id-or-alias>`, and `pondview query <sql>` — client commands against a running bridge.
@@ -131,27 +131,27 @@ When changing the bridge CLI/server/protocol:
 - Keep shared request/response contracts in `packages/bridge-protocol` and validate with Zod schemas.
 - Update both server tests and browser bridge client tests when auth, config discovery, or query response shapes change.
 - Treat `--token`, `--token-env`, `PONDVIEW_TOKEN`, connection strings, and source identifiers as sensitive in logs and docs.
-- Run focused checks such as `bun test packages/bridge/src/*.test.ts`, `bun test packages/bridge/src/runtime/*.test.ts`, `bun run bridge:typecheck`, and `bun run bridge-protocol:typecheck`.
+- Run focused checks such as `bun test packages/cli/src/*.test.ts`, `bun test packages/cli/src/runtime/*.test.ts`, `bun run bridge:typecheck`, and `bun run bridge-protocol:typecheck`.
 - If `pondview start` UI-serving behavior changes, rebuild or document the bundled UI with `bun run bridge:build-ui`.
 
 ## AI feature guidance
 
 - Most AI provider configuration is stored in browser/app settings, not server environment variables.
 - Do not expose API keys or persist secrets in code, docs, tests, or snapshots.
-- Keep provider-specific behavior isolated in `src/ai/` where possible.
+- Keep provider-specific behavior isolated in `packages/pondview-app/src/ai/` where possible.
 - When changing AI prompts, tool calls, model selection, or streaming behavior, update focused tests and user-facing docs if behavior changes.
 
 ## Testing expectations
 
 - Place tests near the code they exercise using the existing `*.test.ts` / `*.test.tsx` pattern.
-- Prefer small unit tests for helpers in `src/lib/`, `src/hooks/`, and feature modules.
+- Prefer small unit tests for helpers in `packages/pondview-app/src/lib/`, `packages/pondview-app/src/hooks/`, and feature modules.
 - For UI behavior, test the smallest component or hook surface that proves the change.
 - Run targeted tests during development, then broader checks for cross-cutting changes.
 
 Example targeted test command:
 
 ```bash
-bun test src/path/to/file.test.ts
+bun test packages/pondview-app/src/path/to/file.test.ts
 ```
 
 ## Documentation expectations
@@ -162,11 +162,11 @@ Useful docs entry points:
 
 - `README.md`
 - `CONTRIBUTING.md`
-- `docs-site/user/index.md`
-- `docs-site/guide/sql-runtime-backends.md`
-- `docs-site/guide/connected-data-sources.md`
-- `docs-site/guide/ai-provider-configuration.md`
-- `docs-site/guide/dashboards.md`
+- `packages/pondview-docs/index.md`
+- `packages/pondview-docs/guide/sql-runtime-backends.md`
+- `packages/pondview-docs/guide/connected-data-sources.md`
+- `packages/pondview-docs/guide/ai-provider-configuration.md`
+- `packages/pondview-docs/guide/dashboards.md`
 
 ## Environment and secrets
 
@@ -186,7 +186,7 @@ Useful docs entry points:
 Standard commands and structure are documented above and in `README.md`; this section only captures non-obvious caveats for cloud agents. Dependencies are already installed by the startup update script, so do not reinstall unless something is broken.
 
 - Package manager is Bun (installed at `~/.bun/bin/bun`, also on PATH via `~/.bashrc`). Node 22 is preinstalled.
-- Install with the isolated linker: `bun install --linker isolated`. This repo commits `.bun`-style isolated symlinks inside the workspace sub-packages' `node_modules` (`packages/bridge`, `packages/bridge-protocol`). A plain hoisted `bun install` leaves those symlinks broken, which makes `bun test` fail with `ENOENT reading ".../node_modules/<dep>"` (e.g. `@duckdb/node-api`, `zod`). The isolated linker creates `node_modules/.bun/` and resolves them.
+- Install with the isolated linker: `bun install --linker isolated`. This repo commits `.bun`-style isolated symlinks inside the workspace sub-packages' `node_modules` (`packages/cli`, `packages/bridge-protocol`). A plain hoisted `bun install` leaves those symlinks broken, which makes `bun test` fail with `ENOENT reading ".../node_modules/<dep>"` (e.g. `@duckdb/node-api`, `zod`). The isolated linker creates `node_modules/.bun/` and resolves them.
 - Run `bun test` from the repo root (`/workspace`); the Bun test runner discovers tests relative to the current directory, so running it inside a sub-package only runs that package's tests.
 - App run/build/lint/test commands are in `README.md` / `package.json`. Dev server is `bun dev` on `http://localhost:5173`.
 - The product is browser-first: DuckDB WASM executes SQL in-browser, so no backend/database is needed to run and exercise the core BI workflows. The Pondview bridge CLI (`bun run pondview start`) is only needed for server-side runtimes, local `.duckdb` files, or external sources.
