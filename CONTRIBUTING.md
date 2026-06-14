@@ -14,15 +14,13 @@ Please open an issue or discussion for larger changes so we can align on scope f
 
 ## Repository layout
 
-Pondview is a Bun workspace monorepo. The current web app intentionally still
-lives at the repository root in `src/`, while shared/runtime packages live under
-`packages/*`.
+Pondview is a Bun workspace monorepo. The root `package.json` orchestrates common commands and delegates app/runtime work to packages under `packages/*`.
 
-- Keep browser app code in `src/` unless there is a specific reason to extract it.
-- Keep bridge-only implementation in `packages/bridge`.
+- Keep browser BI app code in `packages/pondview-app`.
+- Keep marketing landing page code in `packages/pondview-landing`.
+- Keep bridge-only implementation in `packages/cli`.
 - Keep shared bridge request/response contracts in `packages/bridge-protocol`.
-- Move code into a package when it has multiple real consumers.
-- Do not move the web app to `apps/web` until the package boundaries are stable enough to justify the churn.
+- Move code into a new package when it has multiple real consumers or a clear independent runtime boundary.
 
 ## Workflow
 

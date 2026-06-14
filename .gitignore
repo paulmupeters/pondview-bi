@@ -84,12 +84,12 @@ skills-lock.json
 # vitepress build output and cache
 .vitepress/dist/
 .vitepress/cache/
-docs-site/.vitepress/dist/
-docs-site/.vitepress/cache/
+packages/pondview-docs/.vitepress/dist/
+packages/pondview-docs/.vitepress/cache/
 
 # bridge bundled UI output
-packages/bridge/dist/
-packages/bridge/lib/
+packages/cli/dist/
+packages/cli/lib/
 packages/bridge-protocol/dist/
 
 # analyzer

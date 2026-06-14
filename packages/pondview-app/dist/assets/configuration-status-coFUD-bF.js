@@ -1,0 +1,1 @@
+import{o as e}from"./prompt-error-banner-Me99UGoW.js";import{d as t}from"./settings-YYpoddln.js";async function n(n){return t()?!0:n===`bridge`?e():!1}export{n as t};

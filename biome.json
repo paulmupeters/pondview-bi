@@ -13,8 +13,9 @@
       "!.next",
       "!dist",
       "!build",
-      "!packages/bridge/dist",
-      "!packages/bridge/static"
+      "!packages/*/dist",
+      "!packages/cli/dist",
+      "!packages/cli/static"
     ]
   },
   "formatter": {

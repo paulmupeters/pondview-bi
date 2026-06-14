@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
-const srcDir = path.join(root, "src");
+const srcRootRelative = "packages/pondview-app/src";
+const srcDir = path.join(root, srcRootRelative);
 const sourceExtensions = new Set([".ts", ".tsx"]);
 const ignoredFileSuffixes = [".test.ts", ".test.tsx", ".d.ts"];
 const entryFiles = new Set([path.join(srcDir, "vite", "main.tsx")]);
@@ -11,7 +12,7 @@ const entryFiles = new Set([path.join(srcDir, "vite", "main.tsx")]);
 const projectFiles = [];
 
 function getTrackedSourceFiles() {
-  const output = execFileSync("git", ["ls-files", "--", "src"], {
+  const output = execFileSync("git", ["ls-files", "--", srcRootRelative], {
     cwd: root,
     encoding: "utf8",
   });
@@ -80,9 +81,10 @@ const trackedSourceFiles = new Set(
 
 walk(srcDir);
 
-const trackedProjectFiles = projectFiles.filter((file) =>
-  trackedSourceFiles.has(file),
-);
+const trackedProjectFiles =
+  trackedSourceFiles.size > 0
+    ? projectFiles.filter((file) => trackedSourceFiles.has(file))
+    : projectFiles;
 
 const knownFiles = new Set(trackedProjectFiles);
 const inboundReferences = new Map(
