@@ -182,8 +182,7 @@ export function shouldAdoptBridgeFilesystemProject(input: {
   hasProjectArtifacts: boolean;
 }): boolean {
   return (
-    input.hasProjectArtifacts &&
-    input.projectStoreMode !== "bridge-filesystem"
+    input.hasProjectArtifacts && input.projectStoreMode !== "bridge-filesystem"
   );
 }
 

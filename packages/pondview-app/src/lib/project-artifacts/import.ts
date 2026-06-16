@@ -86,6 +86,75 @@ function isProjectOwnedPath(
     : false;
 }
 
+type ProjectPathBackedAsset = {
+  id: string;
+  projectPath?: string | null;
+  createdAt?: number;
+};
+
+function getProjectArtifactPathId(rootPath: string): string | null {
+  const pathSegments = normalizeProjectPath(rootPath)?.split("/") ?? [];
+  return pathSegments.at(-1)?.trim() || null;
+}
+
+function selectExistingProjectPathAsset<T extends ProjectPathBackedAsset>(
+  assets: T[],
+  rootPath: string,
+  manifestId: string,
+): T | null {
+  const normalizedRootPath = normalizeProjectPath(rootPath);
+  if (!normalizedRootPath) {
+    return null;
+  }
+
+  const matches = assets.filter(
+    (asset) => normalizeProjectPath(asset.projectPath) === normalizedRootPath,
+  );
+  if (matches.length === 0) {
+    return null;
+  }
+  if (matches.length === 1) {
+    return matches[0] ?? null;
+  }
+
+  const artifactPathId = getProjectArtifactPathId(rootPath);
+  const preferNonManifestId = manifestId === artifactPathId;
+
+  return (
+    [...matches].sort((left, right) => {
+      if (preferNonManifestId) {
+        const leftIsManifestId = left.id === manifestId;
+        const rightIsManifestId = right.id === manifestId;
+        if (leftIsManifestId !== rightIsManifestId) {
+          return leftIsManifestId ? 1 : -1;
+        }
+      } else {
+        const leftIsManifestId = left.id === manifestId;
+        const rightIsManifestId = right.id === manifestId;
+        if (leftIsManifestId !== rightIsManifestId) {
+          return leftIsManifestId ? -1 : 1;
+        }
+      }
+
+      return (
+        (left.createdAt ?? Number.MAX_SAFE_INTEGER) -
+        (right.createdAt ?? Number.MAX_SAFE_INTEGER)
+      );
+    })[0] ?? null
+  );
+}
+
+function filterAnalysisNotebooksByProjectId(
+  notebooks: WorkspaceAnalysisNotebook[],
+  projectId: string | null | undefined,
+): WorkspaceAnalysisNotebook[] {
+  if (!projectId) {
+    return notebooks;
+  }
+
+  return notebooks.filter((notebook) => notebook.projectId === projectId);
+}
+
 async function reconcileProjectOwnedQueries(
   parsed: ParsedProjectArtifacts,
   deps: ProjectArtifactImportDeps,
@@ -211,7 +280,26 @@ export async function importPublishedNotebookProjectArtifact(
   notebook: WorkspaceAnalysisNotebook;
   cells: WorkspaceAnalysisCell[];
 }> {
-  const hydrated = hydratePublishedNotebookArtifact(artifact, options);
+  const existingNotebook = selectExistingProjectPathAsset(
+    filterAnalysisNotebooksByProjectId(
+      await deps.listAnalysisNotebooks(),
+      options.projectId,
+    ),
+    artifact.rootPath,
+    artifact.manifest.id,
+  );
+  const hydrated = hydratePublishedNotebookArtifact(
+    existingNotebook && existingNotebook.id !== artifact.manifest.id
+      ? {
+          ...artifact,
+          manifest: {
+            ...artifact.manifest,
+            id: existingNotebook.id,
+          },
+        }
+      : artifact,
+    options,
+  );
   await deps.upsertAnalysisNotebook(hydrated.notebook);
   await deps.deleteAnalysisCellsByNotebookId(hydrated.notebook.id);
   for (const cell of hydrated.cells) {
@@ -225,7 +313,23 @@ export async function importDashboardProjectArtifact(
   options: ProjectArtifactHydrationOptions = {},
   deps = defaultImportDeps,
 ): Promise<{ id: string }> {
-  const hydrated = hydrateDashboardArtifact(artifact, options);
+  const existingDashboard = selectExistingProjectPathAsset(
+    await deps.listDashboards(),
+    artifact.rootPath,
+    artifact.manifest.id,
+  );
+  const hydrated = hydrateDashboardArtifact(
+    existingDashboard && existingDashboard.id !== artifact.manifest.id
+      ? {
+          ...artifact,
+          manifest: {
+            ...artifact.manifest,
+            id: existingDashboard.id,
+          },
+        }
+      : artifact,
+    options,
+  );
   return deps.replaceDashboardFromProject({
     dashboard: hydrated.dashboard,
     charts: hydrated.charts,

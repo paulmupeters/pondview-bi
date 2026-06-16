@@ -1473,10 +1473,7 @@ function resolveLaunchProjectDir(args: ParsedArgs): string {
 }
 
 function localSourceBindingsFilePath(args: ParsedArgs): string {
-  return resolve(
-    resolveLaunchProjectDir(args),
-    LOCAL_SOURCE_BINDINGS_PATH,
-  );
+  return resolve(resolveLaunchProjectDir(args), LOCAL_SOURCE_BINDINGS_PATH);
 }
 
 async function readLocalSourceBindings(

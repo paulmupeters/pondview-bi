@@ -82,6 +82,10 @@ describe("dashboard artifact export", () => {
         semanticQueryJson: '{"runtimeOnly":true}',
         exploreName: "revenue_explore",
         position: 1,
+        layoutX: 2,
+        layoutY: 3,
+        layoutW: 2,
+        layoutH: 4,
         createdAt: 3,
         updatedAt: 4,
       },
@@ -197,7 +201,7 @@ describe("dashboard artifact export", () => {
 
     expect(artifact.manifest).toEqual({
       schemaVersion: 1,
-      id: "revenue-overview",
+      id: "dashboard_123",
       title: "Revenue Overview",
       columns: 4,
       autoFitRows: true,
@@ -228,6 +232,12 @@ describe("dashboard artifact export", () => {
           id: "monthly-revenue",
           metadataFile: "visuals/monthly-revenue.visual.json",
           sqlFile: "visuals/monthly-revenue.sql",
+          layout: {
+            x: 2,
+            y: 3,
+            w: 2,
+            h: 4,
+          },
         },
         {
           id: "narrative",
@@ -289,6 +299,25 @@ describe("dashboard artifact export", () => {
     expect(
       files.some((file) => file.content.includes("semanticQueryJson")),
     ).toBe(false);
+  });
+
+  test("uses a project-safe manifest id for attached dashboard ids", () => {
+    const dashboard: WorkspaceDashboard = {
+      id: "attached:bridge::sales-catalog:dashboard_123",
+      title: "Attached Revenue",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+
+    const artifact = exportDashboardArtifact({
+      dashboard,
+      charts: [],
+    });
+
+    expect(artifact.manifest.id).toBe(
+      "attached_bridge_sales-catalog_dashboard_123",
+    );
+    expect(artifact.manifest.id).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 });
 
@@ -431,7 +460,7 @@ describe("published notebook artifact export", () => {
 
     expect(artifact.manifest).toEqual({
       schemaVersion: 1,
-      id: "pricing-review",
+      id: "notebook_123",
       title: "Pricing Review",
       cells: [
         {
