@@ -1,4 +1,5 @@
 import { type ChatTransport, DefaultChatTransport, type UIMessage } from "ai";
+import { loadAiSettingsFromStorage } from "@/ai/settings";
 import {
   getBridgeAuthHeaders,
   getBridgeRequestBaseUrl,
@@ -60,6 +61,7 @@ export function createBridgeChatTransport(
     headers: getBridgeAuthHeaders(),
     body: {
       connectedTables: connectedTables.map(({ databasePath, ...rest }) => rest),
+      customSystemPrompt: loadAiSettingsFromStorage().customSystemPrompt,
       mode,
     },
   }) as ChatTransport<UIMessage>;

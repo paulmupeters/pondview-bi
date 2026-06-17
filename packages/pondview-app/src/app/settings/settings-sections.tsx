@@ -113,6 +113,8 @@ type AiSettingsSectionsProps = {
   onModelChange: (value: string) => void;
   visualizationModel: string;
   onVisualizationModelChange: (value: string) => void;
+  customSystemPrompt: string;
+  onCustomSystemPromptChange: (value: string) => void;
   apiKey: string;
   onApiKeyChange: (value: string) => void;
   hasStoredBridgeAiKey: boolean;
@@ -139,6 +141,8 @@ export function AiSettingsSections({
   onModelChange,
   visualizationModel,
   onVisualizationModelChange,
+  customSystemPrompt,
+  onCustomSystemPromptChange,
   apiKey,
   onApiKeyChange,
   hasStoredBridgeAiKey,
@@ -256,6 +260,24 @@ export function AiSettingsSections({
                       onVisualizationModelChange(event.target.value)
                     }
                     placeholder="google/gemini-3-flash"
+                  />
+                </FormField>
+
+                <FormField
+                  label="System prompt"
+                  htmlFor="custom-system-prompt"
+                  className="mt-4"
+                  description="Optional instructions appended to Pondview's built-in analysis prompt."
+                >
+                  <Textarea
+                    id="custom-system-prompt"
+                    name="ai-custom-system-prompt"
+                    value={customSystemPrompt}
+                    onChange={(event) =>
+                      onCustomSystemPromptChange(event.target.value)
+                    }
+                    placeholder="Prefer concise answers, use business terminology, or follow team-specific analysis conventions."
+                    className="min-h-28 resize-y"
                   />
                 </FormField>
               </div>

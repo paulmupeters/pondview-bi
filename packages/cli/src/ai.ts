@@ -76,12 +76,17 @@ export async function handleAiChatRequest(
   const payload = (await request.json().catch(() => ({}))) as {
     messages?: unknown[];
     connectedTables?: unknown[];
+    customSystemPrompt?: unknown;
     mode?: "analysis" | "sql-editor";
   };
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
   const agent = new ToolLoopAgent({
     model: resolveBridgeModel(config, config.model),
-    instructions: buildInstructions(payload.connectedTables, payload.mode),
+    instructions: buildInstructions(
+      payload.connectedTables,
+      payload.mode,
+      payload.customSystemPrompt,
+    ),
     tools: createBridgeAiTools(runtime),
     stopWhen: stepCountIs(8),
   });
@@ -696,13 +701,19 @@ function resolveBridgeModel(
 function buildInstructions(
   connectedTables: unknown,
   mode: "analysis" | "sql-editor" | undefined,
+  customSystemPrompt: unknown,
 ): string {
   const tableContext = JSON.stringify(connectedTables ?? []);
+  const userSystemPrompt =
+    typeof customSystemPrompt === "string" ? customSystemPrompt.trim() : "";
+  const customPromptSection = userSystemPrompt
+    ? `\n\nUser system prompt:\n${userSystemPrompt}`
+    : "";
   if (mode === "sql-editor") {
-    return `You help users write, refine, fix, and understand SQL inside Pondview's SQL editor. Keep responses concise and practical. Use this connected-table context: ${tableContext}`;
+    return `You help users write, refine, fix, and understand SQL inside Pondview's SQL editor. Keep responses concise and practical. Use this connected-table context: ${tableContext}${customPromptSection}`;
   }
 
-  return `You are Pondview's BI analysis assistant. Help the user analyze data and write useful DuckDB SQL. First use list_tables, then use the exact table_reference returned by list_tables for get_table_schema, run_preview, and SQL. Attached databases like Postgres require the catalog alias in the table reference. When the user asks for a chart, graph, trend, distribution, ranking, or KPI card, pass their original request as userQuery to execute_final_sql and leave generateChart true so Bridge can render the visualization. Use this connected-table context: ${tableContext}`;
+  return `You are Pondview's BI analysis assistant. Help the user analyze data and write useful DuckDB SQL. First use list_tables, then use the exact table_reference returned by list_tables for get_table_schema, run_preview, and SQL. Attached databases like Postgres require the catalog alias in the table reference. When the user asks for a chart, graph, trend, distribution, ranking, or KPI card, pass their original request as userQuery to execute_final_sql and leave generateChart true so Bridge can render the visualization. Use this connected-table context: ${tableContext}${customPromptSection}`;
 }
 
 function jsonError(message: string, status: number): Response {

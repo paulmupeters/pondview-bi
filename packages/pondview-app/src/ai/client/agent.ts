@@ -2,14 +2,27 @@ import { stepCountIs, ToolLoopAgent } from "ai";
 import { resolveGatewayModel } from "@/ai/gateway-model";
 import { CHAT_MODEL } from "@/ai/models";
 import { analysisPrompt } from "@/ai/prompts";
+import { loadAiSettingsFromStorage } from "@/ai/settings";
 import { tools } from "@/ai/tools";
 import type { ConnectedTable } from "@/lib/connected-tables";
 
 function buildInstructions(connectedTables: ConnectedTable[]): string {
-  return analysisPrompt.replace(
+  const baseInstructions = analysisPrompt.replace(
     "{connectedTables}",
     JSON.stringify(connectedTables.map(({ databasePath, ...rest }) => rest)),
   );
+  const customSystemPrompt =
+    loadAiSettingsFromStorage().customSystemPrompt.trim();
+
+  if (!customSystemPrompt) {
+    return baseInstructions;
+  }
+
+  return `${baseInstructions}
+
+# User system prompt
+${customSystemPrompt}
+`;
 }
 
 export function createPondviewAgent(connectedTables: ConnectedTable[]) {

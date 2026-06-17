@@ -213,6 +213,7 @@ describe("resolveGatewayModel", () => {
       provider: "openai",
       model: "gpt-4.1",
       visualizationModel: "google/gemini-3-flash",
+      customSystemPrompt: "Use concise answers.",
       apiKey: "sk-session",
       openAiCompatibleName: "",
       openAiCompatibleUrl: "",
@@ -228,6 +229,7 @@ describe("resolveGatewayModel", () => {
       provider: "openai",
       model: "gpt-4.1",
       visualizationModel: "google/gemini-3-flash",
+      customSystemPrompt: "Use concise answers.",
       apiKey: "sk-session",
     });
   });

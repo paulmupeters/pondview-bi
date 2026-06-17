@@ -278,6 +278,7 @@ export default function SettingsPage() {
   const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
   const [model, setModel] = useState("");
   const [visualizationModel, setVisualizationModel] = useState("");
+  const [customSystemPrompt, setCustomSystemPrompt] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("");
   const [openAiCompatibleUrl, setOpenAiCompatibleUrl] = useState("");
@@ -392,6 +393,7 @@ export default function SettingsPage() {
     setAiProvider(aiSettings.provider);
     setModel(aiSettings.model);
     setVisualizationModel(aiSettings.visualizationModel);
+    setCustomSystemPrompt(aiSettings.customSystemPrompt);
     setApiKey(aiSettings.apiKey);
     setOllamaBaseUrl(aiSettings.ollamaBaseUrl ?? "");
     setOpenAiCompatibleUrl(aiSettings.openAiCompatibleUrl ?? "");
@@ -1273,6 +1275,7 @@ export default function SettingsPage() {
       provider: aiProvider,
       model,
       visualizationModel,
+      customSystemPrompt,
       apiKey,
       ollamaBaseUrl,
       openAiCompatibleUrl,
@@ -1477,6 +1480,8 @@ export default function SettingsPage() {
                   onModelChange={setModel}
                   visualizationModel={visualizationModel}
                   onVisualizationModelChange={setVisualizationModel}
+                  customSystemPrompt={customSystemPrompt}
+                  onCustomSystemPromptChange={setCustomSystemPrompt}
                   apiKey={apiKey}
                   onApiKeyChange={setApiKey}
                   hasStoredBridgeAiKey={
