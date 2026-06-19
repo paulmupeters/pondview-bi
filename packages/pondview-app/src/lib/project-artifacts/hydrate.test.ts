@@ -45,6 +45,12 @@ describe("project artifact hydration", () => {
             id: "revenue-table",
             metadataFile: "visuals/revenue-table.visual.json",
             sqlFile: "visuals/revenue-table.sql",
+            layout: {
+              x: 1,
+              y: 2,
+              w: 3,
+              h: 4,
+            },
           },
         ],
       }),
@@ -154,6 +160,10 @@ describe("project artifact hydration", () => {
       dbIdentifier: "md:analytics",
       catalogContext: null,
       snapshotId: null,
+      layoutX: 1,
+      layoutY: 2,
+      layoutW: 3,
+      layoutH: 4,
     });
     expect(hydrated.dashboards[0]?.joins).toHaveLength(1);
     expect(hydrated.sharedQueries[0]).toMatchObject({

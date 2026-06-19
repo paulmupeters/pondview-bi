@@ -30,6 +30,27 @@ describe("BridgeProjectStore", () => {
     }
   });
 
+  test("uses Bun's original launch directory before package script cwd", () => {
+    const projectDir = createTempDir();
+    const packageDir = createTempDir();
+    const previousLocalPrefix = process.env.npm_config_local_prefix;
+    const previousInitCwd = process.env.INIT_CWD;
+    const previousPwd = process.env.PWD;
+
+    process.env.npm_config_local_prefix = projectDir;
+    process.env.INIT_CWD = packageDir;
+    process.env.PWD = packageDir;
+
+    try {
+      const store = new BridgeProjectStore();
+      expect(store.rootPath).toBe(projectDir);
+    } finally {
+      restoreEnv("npm_config_local_prefix", previousLocalPrefix);
+      restoreEnv("INIT_CWD", previousInitCwd);
+      restoreEnv("PWD", previousPwd);
+    }
+  });
+
   test("prefers an explicit project dir", () => {
     const projectDir = createTempDir();
     const pwdDir = createTempDir();

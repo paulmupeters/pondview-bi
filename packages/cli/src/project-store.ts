@@ -391,6 +391,7 @@ function isPathInsideRoot(rootPath: string, targetPath: string): boolean {
 function resolveProjectRootPath(explicitRootPath?: string): string {
   const candidates = [
     explicitRootPath,
+    process.env.npm_config_local_prefix,
     process.env.INIT_CWD,
     process.env.PWD,
     process.cwd(),
