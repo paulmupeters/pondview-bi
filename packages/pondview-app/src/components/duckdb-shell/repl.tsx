@@ -68,10 +68,10 @@ function getRemoteRuntimeWarning(params: {
   const { sourceType, backendPreference } = params;
 
   if (backendPreference === "bridge") {
-    return `Bridge is not currently query-ready, so this query fell back to DuckDB WASM. DuckDB WASM cannot query external ${sourceType} sources. Re-authenticate Bridge in Settings or switch runtimes and retry.`;
+    return `CLI is not currently query-ready, so this query fell back to DuckDB WASM. DuckDB WASM cannot query external ${sourceType} sources. Re-authenticate CLI in Settings or switch runtimes and retry.`;
   }
 
-  return `DuckDB WASM cannot query external ${sourceType} sources. Switch to Bridge before running this query.`;
+  return `DuckDB WASM cannot query external ${sourceType} sources. Switch to CLI before running this query.`;
 }
 
 const SQL_SAMPLE_SQL = `-- Create a sample table with two columns (col1, col2)
@@ -387,7 +387,7 @@ export function DuckdbRepl({
       effectiveSqlBackend === "duckdb-wasm"
     ) {
       throw new Error(
-        "MotherDuck requires Bridge. Switch the SQL runtime in Settings before running this source.",
+        "MotherDuck requires CLI. Switch the SQL runtime in Settings before running this source.",
       );
     }
 

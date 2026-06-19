@@ -265,12 +265,12 @@ export function assertWasmCompatibleDbIdentifier(dbIdentifier?: string): void {
 
   if (identifierKind === "bridge-remote") {
     throw new Error(
-      "DuckDB WASM only supports local browser data. Switch runtime to Bridge to query external data sources.",
+      "DuckDB WASM only supports local browser data. Switch runtime to CLI to query external data sources.",
     );
   }
 
   throw new Error(
-    `DuckDB WASM cannot resolve this database identifier. Select a local WASM source (\`${DEFAULT_WASM_DB_IDENTIFIER}\`) or switch runtime to Bridge.`,
+    `DuckDB WASM cannot resolve this database identifier. Select a local WASM source (\`${DEFAULT_WASM_DB_IDENTIFIER}\`) or switch runtime to CLI.`,
   );
 }
 

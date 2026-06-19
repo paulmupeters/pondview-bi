@@ -334,13 +334,13 @@ export function getRemoteRuntimeDisplayLabel(
   connectionInfo: RemoteRuntimeConnectionInfo | null,
 ): string {
   if (!connectionInfo) {
-    return "Bridge";
+    return "CLI";
   }
 
   const databaseName = connectionInfo.database?.name?.trim();
   const runtimeName =
     databaseName ||
-    (connectionInfo.database?.mode === "memory" ? ":memory:" : "Bridge");
+    (connectionInfo.database?.mode === "memory" ? ":memory:" : "CLI");
 
   return `${runtimeName} (${connectionInfo.host})`;
 }
@@ -651,7 +651,7 @@ export function ConnectedDataPanel({
   const remoteLabel =
     sqlBackend === "bridge"
       ? getRemoteRuntimeDisplayLabel(remoteConnectionInfo)
-      : "Bridge";
+      : "CLI";
   const activeRuntimeExplorer = useMemo(
     () =>
       resolveActiveRuntimeExplorer({

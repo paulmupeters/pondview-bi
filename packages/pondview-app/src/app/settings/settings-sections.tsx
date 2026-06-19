@@ -290,7 +290,7 @@ export function AiSettingsSections({
                 className="mb-4"
                 description={
                   hasStoredBridgeAiKey
-                    ? "API key is stored in the bridge. Leave blank to keep it."
+                    ? "API key is stored in the CLI. Leave blank to keep it."
                     : undefined
                 }
               >
@@ -552,8 +552,8 @@ export function RuntimeSettingsSection({
         <div>
           <h3 className="text-lg font-semibold">DuckDB runtime</h3>
           <p className="text-sm text-muted-foreground">
-            DuckDB WASM runs in your browser. Bridge runs DuckDB locally through
-            the Pondview CLI.
+            DuckDB WASM runs in your browser. CLI runs DuckDB locally through
+            the Pondview command line.
           </p>
         </div>
 
@@ -563,7 +563,7 @@ export function RuntimeSettingsSection({
           description={
             isBridgeSelectable
               ? undefined
-              : "Select Bridge to configure its endpoint."
+              : "Select CLI to configure its endpoint."
           }
         >
           <Select
@@ -591,10 +591,10 @@ export function RuntimeSettingsSection({
           <div className="space-y-5 border-t pt-5">
             <div className="space-y-3">
               <div>
-                <h4 className="text-sm font-semibold">Bridge endpoint</h4>
+                <h4 className="text-sm font-semibold">CLI endpoint</h4>
                 <p className="text-sm text-muted-foreground">
-                  Override the Pondview bridge URL when the bridge is not served
-                  from the same origin as this app. Leave empty to use this app
+                  Override the Pondview CLI URL when the CLI is not served from
+                  the same origin as this app. Leave empty to use this app
                   origin.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -630,9 +630,9 @@ export function RuntimeSettingsSection({
 
             <div className="space-y-3">
               <div>
-                <h4 className="text-sm font-semibold">Bridge auth</h4>
+                <h4 className="text-sm font-semibold">CLI auth</h4>
                 <p className="text-sm text-muted-foreground">
-                  Optional session-only Pondview secret for authenticated bridge
+                  Optional session-only Pondview secret for authenticated CLI
                   queries. Leave empty when Pondview is started with an empty
                   secret.
                 </p>
@@ -711,7 +711,7 @@ export function RuntimeSettingsSection({
                   htmlFor="bridge-project-duckdb-path"
                   description={
                     bridgeProjectDatabaseChoice === "new-duckdb"
-                      ? "Relative paths are created inside the bridge project folder."
+                      ? "Relative paths are created inside the CLI project folder."
                       : "Pick a detected DuckDB file or enter a path."
                   }
                 >

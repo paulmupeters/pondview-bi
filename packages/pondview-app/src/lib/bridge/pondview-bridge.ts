@@ -538,7 +538,7 @@ export async function runBridgeQuery(
     const message = await parseError(response);
     if (response.status === 401) {
       throw new Error(
-        `Bridge authentication failed (401). Update your Pondview session secret in Settings. ${message}`,
+        `CLI authentication failed (401). Update your Pondview session secret in Settings. ${message}`,
       );
     }
     throw new Error(message);

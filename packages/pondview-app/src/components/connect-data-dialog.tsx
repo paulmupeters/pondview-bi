@@ -183,7 +183,7 @@ async function runRemoteSql(
     return result.rows;
   }
   throw new Error(
-    "Cannot run remote SQL: active runtime is DuckDB WASM. Switch to Bridge in Settings.",
+    "Cannot run remote SQL: active runtime is DuckDB WASM. Switch to CLI in Settings.",
   );
 }
 

@@ -24,6 +24,8 @@ import {
   DASHBOARD_PREVIEW_QUERY_VALUE,
   resolveDashboardMode,
 } from "@/lib/dashboard-mode";
+import { parseProjectArtifactFileSet } from "@/lib/project-artifacts/parse";
+import { getOpenProject, listOpenProjectFiles } from "@/lib/project-store";
 import { cn } from "@/lib/utils";
 import {
   createDashboard,
@@ -43,6 +45,7 @@ type DashboardLite = {
   storageStatus?: "shared" | "best-effort" | null;
   sourceKind?: "attached" | null;
   sourceCatalog?: string | null;
+  projectPath?: string | null;
 };
 
 const EMPTY_INITIAL_DASHBOARDS: DashboardLite[] = [];
@@ -235,7 +238,26 @@ export default function DashboardsPage() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const list = await listDashboards();
+      const [project, list] = await Promise.all([
+        getOpenProject(),
+        listDashboards(),
+      ]);
+      if (project?.backingKind === "bridge-filesystem") {
+        const parsed = parseProjectArtifactFileSet(
+          await listOpenProjectFiles(),
+        );
+        const projectDashboardPaths = new Set(
+          parsed.dashboards.map((dashboard) => dashboard.rootPath),
+        );
+        setDashboards(
+          list.filter(
+            (dashboard) =>
+              dashboard.projectPath &&
+              projectDashboardPaths.has(dashboard.projectPath),
+          ),
+        );
+        return;
+      }
       setDashboards(list);
     } catch (error) {
       setLoadError(

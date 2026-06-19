@@ -243,10 +243,10 @@ export function validateBridgeEndpoint(endpoint: string): string | null {
   try {
     const url = new URL(endpoint);
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return "Bridge endpoint must use http or https.";
+      return "CLI endpoint must use http or https.";
     }
   } catch {
-    return "Bridge endpoint must be a valid URL.";
+    return "CLI endpoint must be a valid URL.";
   }
 
   return null;
@@ -304,7 +304,7 @@ export default function SettingsPage() {
   const [bridgeProjectDatabaseChoice, setBridgeProjectDatabaseChoice] =
     useState<BridgeProjectDatabaseChoice>("none");
   const [bridgeProjectStorageChoice, setBridgeProjectStorageChoice] =
-    useState<BridgeProjectStorageChoice>("browser");
+    useState<BridgeProjectStorageChoice>("local");
   const [bridgeProjectDuckDbPath, setBridgeProjectDuckDbPath] = useState(
     DEFAULT_PROJECT_DATABASE_PATH,
   );
@@ -555,8 +555,8 @@ export default function SettingsPage() {
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(
       endpoint
-        ? "Bridge endpoint saved."
-        : "Bridge endpoint reset to the current Bridge endpoint.",
+        ? "CLI endpoint saved."
+        : "CLI endpoint reset to the current CLI endpoint.",
     );
     void refreshBridgeHealth();
     setShowSuccessMessage(true);
@@ -581,18 +581,16 @@ export default function SettingsPage() {
         endpoint === getBridgeEndpoint() ? "" : " Save endpoint to use it.";
       if (config.requiresAuth && !hasBridgeSessionSecret) {
         setRuntimeSettingsSuccess(
-          `Bridge is reachable. Set the session secret before querying.${saveHint}`,
+          `CLI is reachable. Set the session secret before querying.${saveHint}`,
         );
       } else {
-        setRuntimeSettingsSuccess(`Bridge connection successful.${saveHint}`);
+        setRuntimeSettingsSuccess(`CLI connection successful.${saveHint}`);
       }
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } catch (error) {
       setRuntimeSettingsError(
-        error instanceof Error
-          ? error.message
-          : "Bridge connection test failed.",
+        error instanceof Error ? error.message : "CLI connection test failed.",
       );
       setRuntimeSettingsSuccess(null);
     } finally {
@@ -605,7 +603,7 @@ export default function SettingsPage() {
     setBridgeEndpoint("");
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(
-      "Bridge endpoint reset to the current Bridge endpoint.",
+      "CLI endpoint reset to the current CLI endpoint.",
     );
     void refreshBridgeHealth();
     setShowSuccessMessage(true);
@@ -634,6 +632,9 @@ export default function SettingsPage() {
   const handleSqlBackendChange = (backend: SqlBackend) => {
     setRuntimeSettingsError(null);
     setRuntimeSettingsSuccess(null);
+    if (backend === "bridge") {
+      setBridgeProjectStorageChoice("local");
+    }
     setSqlBackendPreferenceInStorage(backend);
     setShowSuccessMessage(true);
     setTimeout(() => setShowSuccessMessage(false), 3000);
@@ -788,14 +789,14 @@ export default function SettingsPage() {
       }
 
       setSqlBackendPreferenceInStorage(runtimeSelection.backend);
-      setRuntimeSettingsSuccess("Bridge project setup saved.");
+      setRuntimeSettingsSuccess("CLI project setup saved.");
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } catch (error) {
       setRuntimeSettingsError(
         error instanceof Error
           ? error.message
-          : "Failed to save Bridge project setup.",
+          : "Failed to save CLI project setup.",
       );
       setRuntimeSettingsSuccess(null);
     } finally {
@@ -850,7 +851,7 @@ export default function SettingsPage() {
     setS3CorsError(false);
     setS3BackupSuccess(
       effectiveSqlBackend === "bridge" && isBridgeQueryReady
-        ? "S3 backup configuration saved to Bridge."
+        ? "S3 backup configuration saved to CLI."
         : "S3 backup configuration saved.",
     );
     setShowSuccessMessage(true);
@@ -1356,7 +1357,7 @@ export default function SettingsPage() {
     }
   };
 
-  const bridgeOptionLabel = "Bridge";
+  const bridgeOptionLabel = "CLI";
   const bridgeAuthStatusLabel = bridgeConfig
     ? bridgeConfig.requiresAuth
       ? hasBridgeSessionSecret

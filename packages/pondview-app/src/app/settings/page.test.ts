@@ -31,7 +31,7 @@ describe("validateBridgeEndpoint", () => {
 
   test("rejects non-http bridge endpoints", () => {
     expect(validateBridgeEndpoint("ftp://127.0.0.1:17817")).toBe(
-      "Bridge endpoint must use http or https.",
+      "CLI endpoint must use http or https.",
     );
   });
 });
