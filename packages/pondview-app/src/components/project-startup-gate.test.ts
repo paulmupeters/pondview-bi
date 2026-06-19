@@ -6,6 +6,7 @@ import {
   resolveQuickStartDatabasePath,
   resolveStartupProjectDisplayPath,
   resolveStartupRuntimeSelection,
+  shouldAdoptBridgeFilesystemProject,
   shouldHideStartupGateForBrowserProject,
   shouldShowQuickStart,
   validateStartupRuntime,
@@ -199,6 +200,27 @@ describe("ProjectStartupGate browser project mode", () => {
         detectedDuckDbPaths: [],
       }),
     ).toBe(true);
+  });
+
+  test("adopts bridge filesystem mode when project artifacts already exist", () => {
+    expect(
+      shouldAdoptBridgeFilesystemProject({
+        projectStoreMode: "browser-indexeddb",
+        hasProjectArtifacts: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAdoptBridgeFilesystemProject({
+        projectStoreMode: "bridge-filesystem",
+        hasProjectArtifacts: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAdoptBridgeFilesystemProject({
+        projectStoreMode: null,
+        hasProjectArtifacts: false,
+      }),
+    ).toBe(false);
   });
 });
 

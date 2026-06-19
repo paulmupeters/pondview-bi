@@ -1462,13 +1462,18 @@ function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
 }
 
-function localSourceBindingsFilePath(args: ParsedArgs): string {
-  return resolve(
+function resolveLaunchProjectDir(args: ParsedArgs): string {
+  return (
     readStringFlag(args, "project-dir") ??
-      process.env.INIT_CWD ??
-      process.cwd(),
-    LOCAL_SOURCE_BINDINGS_PATH,
+    process.env.npm_config_local_prefix ??
+    process.env.INIT_CWD ??
+    process.env.PWD ??
+    process.cwd()
   );
+}
+
+function localSourceBindingsFilePath(args: ParsedArgs): string {
+  return resolve(resolveLaunchProjectDir(args), LOCAL_SOURCE_BINDINGS_PATH);
 }
 
 async function readLocalSourceBindings(

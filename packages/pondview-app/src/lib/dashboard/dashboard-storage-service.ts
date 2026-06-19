@@ -746,6 +746,62 @@ async function discoverAttachedCatalogTargets(
   return Array.from(attachedTargets.values());
 }
 
+function normalizeDashboardProjectPath(
+  path: string | null | undefined,
+): string | null {
+  const normalized =
+    typeof path === "string"
+      ? path.trim().replace(/\\/g, "/").replace(/\/+$/, "")
+      : "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+function getDashboardProjectArtifactPathId(
+  dashboard: Pick<DashboardRecord, "projectPath">,
+): string | null {
+  const path = normalizeDashboardProjectPath(dashboard.projectPath);
+  return path?.startsWith("pondview/dashboards/")
+    ? (path.split("/").at(-1)?.trim() ?? null)
+    : null;
+}
+
+function getDashboardListKey(dashboard: DashboardRecord): string {
+  const projectPath = normalizeDashboardProjectPath(dashboard.projectPath);
+  if (dashboard.sourceKind !== "attached" && projectPath) {
+    return `project:${projectPath}`;
+  }
+
+  return `id:${dashboard.id}`;
+}
+
+function shouldReplaceDashboardListEntry(
+  existing: DashboardRecord,
+  candidate: DashboardRecord,
+): boolean {
+  const projectPath = normalizeDashboardProjectPath(candidate.projectPath);
+  if (
+    projectPath &&
+    projectPath === normalizeDashboardProjectPath(existing.projectPath)
+  ) {
+    if (existing.id === candidate.id) {
+      return existing.updatedAt < candidate.updatedAt;
+    }
+
+    const artifactPathId = getDashboardProjectArtifactPathId(candidate);
+    if (artifactPathId) {
+      const existingUsesPathId = existing.id === artifactPathId;
+      const candidateUsesPathId = candidate.id === artifactPathId;
+      if (existingUsesPathId !== candidateUsesPathId) {
+        return existingUsesPathId;
+      }
+    }
+
+    return candidate.createdAt < existing.createdAt;
+  }
+
+  return existing.updatedAt < candidate.updatedAt;
+}
+
 function normalizeDashboardRow(
   row: Record<string, unknown>,
 ): DashboardRecord | null {
@@ -1855,26 +1911,31 @@ export class DashboardStorageService {
   async listDashboards(): Promise<DashboardSummary[]> {
     const targets = discoverReadTargets();
     const attachedTargets = await discoverAttachedCatalogTargets(targets);
-    const dashboardsById = new Map<string, DashboardRecord>();
+    const dashboardsByKey = new Map<string, DashboardRecord>();
+
+    const addDashboard = (dashboard: DashboardRecord) => {
+      const key = getDashboardListKey(dashboard);
+      const existing = dashboardsByKey.get(key);
+      if (!existing || shouldReplaceDashboardListEntry(existing, dashboard)) {
+        dashboardsByKey.set(key, dashboard);
+      }
+    };
 
     for (const target of targets) {
       const dashboards = await listDashboardsFromTarget(target).catch(() => []);
       for (const dashboard of dashboards) {
-        const existing = dashboardsById.get(dashboard.id);
-        if (!existing || existing.updatedAt < dashboard.updatedAt) {
-          dashboardsById.set(dashboard.id, dashboard);
-        }
+        addDashboard(dashboard);
       }
     }
 
     for (const target of attachedTargets) {
       const dashboards = await listDashboardsFromTarget(target).catch(() => []);
       for (const dashboard of dashboards) {
-        dashboardsById.set(dashboard.id, dashboard);
+        addDashboard(dashboard);
       }
     }
 
-    return Array.from(dashboardsById.values()).sort(
+    return Array.from(dashboardsByKey.values()).sort(
       (left, right) => right.updatedAt - left.updatedAt,
     );
   }

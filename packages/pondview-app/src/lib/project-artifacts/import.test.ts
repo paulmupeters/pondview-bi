@@ -131,6 +131,142 @@ describe("project artifact import", () => {
     });
   });
 
+  test("reuses existing local ids when project artifact manifests use path slugs", async () => {
+    const parsed = parseProjectArtifactFileSet([
+      jsonFile("pondview/notebooks/test-notes/notebook.json", {
+        schemaVersion: 1,
+        id: "test-notes",
+        title: "Test Notes",
+        cells: [
+          {
+            id: "intro",
+            kind: "text",
+            file: "cells/intro.md",
+          },
+        ],
+      }),
+      {
+        path: "pondview/notebooks/test-notes/cells/intro.md",
+        content: "Hello\n",
+      },
+      jsonFile("pondview/dashboards/test/dashboard.json", {
+        schemaVersion: 1,
+        id: "test",
+        title: "Test",
+        measures: [],
+        visuals: [],
+      }),
+    ]);
+
+    const deps: ProjectArtifactImportDeps = {
+      listSavedSqlQueries: async () => [],
+      upsertSavedSqlQuery: async (query) => [query],
+      deleteSavedSqlQuery: async () => [],
+      listDashboards: async () => [
+        {
+          id: "dashboard_nanoid",
+          title: "Test",
+          projectPath: "pondview/dashboards/test",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      replaceDashboardFromProject: async (input) => {
+        expect(input.dashboard.id).toBe("dashboard_nanoid");
+        return { id: input.dashboard.id };
+      },
+      deleteDashboard: async () => ({ deleted: false }),
+      listAnalysisNotebooks: async () => [
+        {
+          id: "notebook_nanoid",
+          title: "Test Notes",
+          projectPath: "pondview/notebooks/test-notes",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      upsertAnalysisNotebook: async (notebook) => {
+        expect(notebook.id).toBe("notebook_nanoid");
+      },
+      deleteAnalysisCellsByNotebookId: async (notebookId) => {
+        expect(notebookId).toBe("notebook_nanoid");
+      },
+      upsertAnalysisCell: async (cell) => {
+        expect(cell.id).toBe("notebook_nanoid:cell:intro");
+      },
+      deleteAnalysisNotebook: async () => undefined,
+    };
+
+    const imported = await importParsedProjectArtifacts(parsed, {}, deps);
+
+    expect(imported.dashboards).toEqual([{ id: "dashboard_nanoid" }]);
+    expect(imported.publishedNotebooks[0]?.notebook.id).toBe("notebook_nanoid");
+  });
+
+  test("does not reuse notebook ids from another project with the same relative path", async () => {
+    const parsed = parseProjectArtifactFileSet([
+      jsonFile("pondview/notebooks/test-notes/notebook.json", {
+        schemaVersion: 1,
+        id: "test-notes",
+        title: "Test Notes",
+        cells: [
+          {
+            id: "intro",
+            kind: "text",
+            file: "cells/intro.md",
+          },
+        ],
+      }),
+      {
+        path: "pondview/notebooks/test-notes/cells/intro.md",
+        content: "Hello\n",
+      },
+    ]);
+
+    const deletedNotebookCells: string[] = [];
+    const deps: ProjectArtifactImportDeps = {
+      listSavedSqlQueries: async () => [],
+      upsertSavedSqlQuery: async (query) => [query],
+      deleteSavedSqlQuery: async () => [],
+      listDashboards: async () => [],
+      replaceDashboardFromProject: async (input) => ({
+        id: input.dashboard.id,
+      }),
+      deleteDashboard: async () => ({ deleted: false }),
+      listAnalysisNotebooks: async () => [
+        {
+          id: "other_project_notebook",
+          title: "Test Notes",
+          projectId: "project-other",
+          projectPath: "pondview/notebooks/test-notes",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      upsertAnalysisNotebook: async (notebook) => {
+        expect(notebook.id).toBe("test-notes");
+        expect(notebook.projectId).toBe("project-current");
+      },
+      deleteAnalysisCellsByNotebookId: async (notebookId) => {
+        deletedNotebookCells.push(notebookId);
+      },
+      upsertAnalysisCell: async (cell) => {
+        expect(cell.id).toBe("test-notes:cell:intro");
+        expect(cell.notebookId).toBe("test-notes");
+      },
+      deleteAnalysisNotebook: async () => undefined,
+    };
+
+    const imported = await importParsedProjectArtifacts(
+      parsed,
+      { projectId: "project-current" },
+      deps,
+    );
+
+    expect(imported.publishedNotebooks[0]?.notebook.id).toBe("test-notes");
+    expect(deletedNotebookCells).toEqual(["test-notes"]);
+  });
+
   test("reconciles stale project-owned assets that are absent from the import", async () => {
     const parsed = parseProjectArtifactFileSet([
       jsonFile("pondview/queries/shared/orders.query.json", {

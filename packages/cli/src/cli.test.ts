@@ -68,6 +68,14 @@ function createTempDir(): string {
   return mkdtempSync(join(tmpdir(), "pondview-cli-"));
 }
 
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
+}
+
 type TestRow = Record<string, BridgeJsonValue>;
 
 function queryResponse(
@@ -188,6 +196,43 @@ describe("bridge CLI source bindings", () => {
     expect(parsed.bindings.snowflake?.connection?.setupSql).toBe(setupSql);
 
     rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  test("source add uses Bun's original launch directory", async () => {
+    const projectDir = createTempDir();
+    const packageDir = createTempDir();
+    const previousLocalPrefix = process.env.npm_config_local_prefix;
+    const previousInitCwd = process.env.INIT_CWD;
+    const previousPwd = process.env.PWD;
+
+    process.env.npm_config_local_prefix = projectDir;
+    process.env.INIT_CWD = packageDir;
+    process.env.PWD = packageDir;
+
+    try {
+      await captureStdout(() =>
+        runCli(["source", "add", "warehouse", "--sql", "SELECT 1;"]),
+      );
+
+      const parsed = JSON.parse(
+        readFileSync(join(projectDir, "pondview.sources.local.json"), "utf8"),
+      ) as {
+        bindings: Record<string, unknown>;
+      };
+      expect(parsed.bindings.warehouse).toMatchObject({
+        runtimeBackend: "bridge",
+        connection: {
+          type: "custom",
+          setupSql: "SELECT 1;",
+        },
+      });
+    } finally {
+      restoreEnv("npm_config_local_prefix", previousLocalPrefix);
+      restoreEnv("INIT_CWD", previousInitCwd);
+      restoreEnv("PWD", previousPwd);
+      rmSync(projectDir, { recursive: true, force: true });
+      rmSync(packageDir, { recursive: true, force: true });
+    }
   });
 
   test("source add rejects removed attach flags", async () => {

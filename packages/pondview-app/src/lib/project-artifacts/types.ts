@@ -14,6 +14,11 @@ export const projectArtifactIdSchema = z
   .trim()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 
+const projectEntityIdSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9_-]+$/);
+
 export const projectSourceKindSchema = z.enum([
   "runtime",
   "motherduck",
@@ -145,15 +150,23 @@ export const projectDashboardMeasureRefSchema = z.object({
   sqlFile: nonEmptyStringSchema,
 });
 
+export const projectDashboardVisualLayoutSchema = z.object({
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  w: z.number().int().positive(),
+  h: z.number().int().positive(),
+});
+
 export const projectDashboardVisualRefSchema = z.object({
   id: projectArtifactIdSchema,
   metadataFile: nonEmptyStringSchema,
   sqlFile: nonEmptyStringSchema,
+  layout: projectDashboardVisualLayoutSchema.optional(),
 });
 
 export const projectDashboardManifestSchema = z.object({
   schemaVersion: schemaVersionSchema,
-  id: projectArtifactIdSchema,
+  id: projectEntityIdSchema,
   title: nonEmptyStringSchema,
   description: z.string().optional(),
   columns: z.number().int().positive().max(12).optional(),
@@ -205,7 +218,7 @@ export const projectPublishedNotebookCellSchema = z.object({
 
 export const projectPublishedNotebookManifestSchema = z.object({
   schemaVersion: schemaVersionSchema,
-  id: projectArtifactIdSchema,
+  id: projectEntityIdSchema,
   title: nonEmptyStringSchema,
   description: z.string().optional(),
   cells: z.array(projectPublishedNotebookCellSchema),
@@ -241,6 +254,9 @@ export type ProjectDashboardMeasureMetadata = z.infer<
 >;
 export type ProjectDashboardVisualMetadata = z.infer<
   typeof projectDashboardVisualMetadataSchema
+>;
+export type ProjectDashboardVisualLayout = z.infer<
+  typeof projectDashboardVisualLayoutSchema
 >;
 export type ProjectSharedQueryMetadata = z.infer<
   typeof projectSharedQueryMetadataSchema

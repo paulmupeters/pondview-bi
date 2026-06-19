@@ -198,6 +198,7 @@ export function parseDashboardProjectArtifact(
           projectDashboardVisualMetadataSchema,
         ),
         sql: getRequiredFile(fileMap, sqlPath).content,
+        layout: visual.layout,
       };
     },
   );

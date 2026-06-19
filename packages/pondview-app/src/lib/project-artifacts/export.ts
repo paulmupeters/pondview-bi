@@ -28,6 +28,7 @@ import {
   type ProjectDashboardJoinsFile,
   type ProjectDashboardManifest,
   type ProjectDashboardMeasureMetadata,
+  type ProjectDashboardVisualLayout,
   type ProjectDashboardVisualMetadata,
   type ProjectPublishedNotebookManifest,
   type ProjectSharedQueryMetadata,
@@ -78,6 +79,7 @@ export type ExportedDashboardVisualArtifact = {
   sqlPath: string;
   metadata: ProjectDashboardVisualMetadata;
   sql: string;
+  layout?: ProjectDashboardVisualLayout;
 };
 
 export type ExportedDashboardArtifact = {
@@ -204,6 +206,21 @@ export function toProjectArtifactId(
     truncateProjectArtifactId(normalized, MAX_PROJECT_ARTIFACT_ID_LENGTH) ||
     fallback
   );
+}
+
+export function toProjectEntityId(
+  value: string | null | undefined,
+  fallback = "entity",
+): string {
+  const normalized = (value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[-_]+|[-_]+$/g, "");
+
+  return normalized || toProjectArtifactId(fallback, "entity");
 }
 
 function createUniqueIdFactory() {
@@ -521,6 +538,27 @@ function getNotebookSql(cell: WorkspaceAnalysisCell): string {
   );
 }
 
+function getDashboardVisualLayout(
+  chart: WorkspaceChart,
+): ProjectDashboardVisualLayout | undefined {
+  const { layoutX, layoutY, layoutW, layoutH } = chart;
+  if (
+    layoutX == null ||
+    layoutY == null ||
+    layoutW == null ||
+    layoutH == null
+  ) {
+    return undefined;
+  }
+
+  return {
+    x: Math.max(0, Math.round(layoutX)),
+    y: Math.max(0, Math.round(layoutY)),
+    w: Math.max(1, Math.round(layoutW)),
+    h: Math.max(1, Math.round(layoutH)),
+  };
+}
+
 export function exportDashboardArtifact(input: {
   dashboard: WorkspaceDashboard;
   charts: WorkspaceChart[];
@@ -532,9 +570,9 @@ export function exportDashboardArtifact(input: {
   fallbackSourceRef?: string | null;
   requireSourceRefs?: boolean;
 }): ExportedDashboardArtifact {
-  const dashboardId =
+  const artifactId =
     input.artifactId ?? toProjectArtifactId(input.dashboard.title, "dashboard");
-  const rootPath = `pondview/dashboards/${dashboardId}`;
+  const rootPath = `pondview/dashboards/${artifactId}`;
   const manifestPath = `${rootPath}/dashboard.json`;
   const joinsPath =
     input.joins && input.joins.length > 0 ? `${rootPath}/joins.json` : null;
@@ -650,13 +688,14 @@ export function exportDashboardArtifact(input: {
         sqlPath: `${rootPath}/visuals/${id}.sql`,
         metadata,
         sql: chart.sql.trim(),
+        layout: getDashboardVisualLayout(chart),
       };
     });
 
   const manifest = projectDashboardManifestSchema.parse(
     stripUndefinedValues({
       schemaVersion: 1,
-      id: dashboardId,
+      id: toProjectEntityId(input.dashboard.id, artifactId),
       title: input.dashboard.title,
       columns: input.dashboard.columns ?? 3,
       autoFitRows: input.dashboard.autoFitRows ?? false,
@@ -680,11 +719,14 @@ export function exportDashboardArtifact(input: {
         metadataFile: `measures/${measure.id}.measure.json`,
         sqlFile: `measures/${measure.id}.sql`,
       })),
-      visuals: visuals.map((visual) => ({
-        id: visual.id,
-        metadataFile: `visuals/${visual.id}.visual.json`,
-        sqlFile: `visuals/${visual.id}.sql`,
-      })),
+      visuals: visuals.map((visual) =>
+        stripUndefinedValues({
+          id: visual.id,
+          metadataFile: `visuals/${visual.id}.visual.json`,
+          sqlFile: `visuals/${visual.id}.sql`,
+          layout: visual.layout,
+        }),
+      ),
     }),
   );
 
@@ -797,9 +839,9 @@ export function serializeSharedQueryArtifact(
 export function exportPublishedNotebookArtifact(
   input: ExportNotebookArtifactInput,
 ): ExportedPublishedNotebookArtifact {
-  const notebookId =
+  const artifactId =
     input.artifactId ?? toProjectArtifactId(input.notebook.title, "notebook");
-  const rootPath = `pondview/notebooks/${notebookId}`;
+  const rootPath = `pondview/notebooks/${artifactId}`;
   const manifestPath = `${rootPath}/notebook.json`;
   const makeCellId = createUniqueIdFactory();
   const contentFiles: ExportedNotebookCellContentFile[] = [];
@@ -808,7 +850,7 @@ export function exportPublishedNotebookArtifact(
   const manifest = projectPublishedNotebookManifestSchema.parse(
     stripUndefinedValues({
       schemaVersion: 1,
-      id: notebookId,
+      id: input.notebook.id,
       title: input.notebook.title ?? "Untitled Analysis",
       description: normalizeOptionalDescription(input.description),
       cells: [...input.cells]

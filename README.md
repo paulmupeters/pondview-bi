@@ -58,6 +58,26 @@ bun run lint
 bun run test
 ```
 
+### Cloudflare Workers
+
+The root build writes the Pondview app to `./dist`, matching `wrangler.jsonc`.
+
+For Cloudflare Workers Builds, use either:
+
+```bash
+# Build command
+bun run build
+
+# Deploy command
+npx wrangler deploy
+```
+
+or set the deploy command to:
+
+```bash
+bun run deploy
+```
+
 ### Packages
 
 - `packages/pondview-app` — React/Vite application
