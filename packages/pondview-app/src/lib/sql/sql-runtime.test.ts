@@ -232,7 +232,7 @@ describe("assertWasmCompatibleDbIdentifier", () => {
       assertWasmCompatibleDbIdentifier(
         "postgresql://demo:pw@localhost:5432/demo",
       ),
-    ).toThrow("Switch runtime to Bridge");
+    ).toThrow("Switch runtime to CLI");
   });
 
   test("rejects unknown identifiers with actionable message", () => {

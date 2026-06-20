@@ -287,8 +287,8 @@ describe("buildDataCatalogGroups", () => {
         catalog: "attached",
         schema: "main",
         origin: {
-          label: "Bridge attached database",
-          description: "DuckDB file attached via Bridge",
+          label: "CLI attached database",
+          description: "DuckDB file attached via CLI",
         },
         tables: [{ catalog: "attached", name: "events", type: "BASE TABLE" }],
       },
@@ -325,8 +325,8 @@ describe("buildDataCatalogGroups", () => {
         catalog: "analytics",
         schema: "main",
         origin: {
-          label: "Bridge attached database",
-          description: "Remote DuckDB file attached via Bridge",
+          label: "CLI attached database",
+          description: "Remote DuckDB file attached via CLI",
         },
         tables: [{ catalog: "analytics", name: "events", type: "BASE TABLE" }],
       },
@@ -380,8 +380,8 @@ describe("buildDataCatalogGroups", () => {
         catalog: "analytics",
         schema: "main",
         origin: {
-          label: "Bridge primary database",
-          description: "DuckDB file via Bridge",
+          label: "CLI primary database",
+          description: "DuckDB file via CLI",
         },
         tables: [{ catalog: "analytics", name: "metrics", type: "BASE TABLE" }],
       },

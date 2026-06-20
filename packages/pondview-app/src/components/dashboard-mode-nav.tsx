@@ -5,6 +5,8 @@ import {
   DASHBOARD_MODE_QUERY_VALUE,
   DASHBOARD_PREVIEW_QUERY_VALUE,
 } from "@/lib/dashboard-mode";
+import { parseProjectArtifactFileSet } from "@/lib/project-artifacts/parse";
+import { getOpenProject, listOpenProjectFiles } from "@/lib/project-store";
 import { cn } from "@/lib/utils";
 import { listDashboards } from "@/lib/workspace/dashboard-repo";
 import Link from "@/vite/next-link";
@@ -14,6 +16,7 @@ type DashboardModeNavItem = {
   id: string;
   title: string | null;
   updatedAt: number;
+  projectPath?: string | null;
 };
 
 const DASHBOARD_LOAD_RETRY_DELAYS_MS = [250, 750, 1500, 3000] as const;
@@ -50,10 +53,31 @@ export function DashboardModeNav({
 
     const load = async (retryIndex = 0) => {
       try {
-        const items = await listDashboards();
+        const [project, allItems] = await Promise.all([
+          getOpenProject(),
+          listDashboards(),
+        ]);
         if (cancelled) {
           return;
         }
+
+        const projectDashboardPaths =
+          project?.backingKind === "bridge-filesystem"
+            ? new Set(
+                parseProjectArtifactFileSet(
+                  await listOpenProjectFiles(),
+                ).dashboards.map((item) => item.rootPath),
+              )
+            : null;
+        const items =
+          project?.backingKind === "bridge-filesystem"
+            ? allItems.filter((dashboard) => {
+                return (
+                  dashboard.projectPath &&
+                  projectDashboardPaths?.has(dashboard.projectPath)
+                );
+              })
+            : allItems;
 
         setDashboards(items);
 

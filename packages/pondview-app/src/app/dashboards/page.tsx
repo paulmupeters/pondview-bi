@@ -24,6 +24,8 @@ import {
   DASHBOARD_PREVIEW_QUERY_VALUE,
   resolveDashboardMode,
 } from "@/lib/dashboard-mode";
+import { parseProjectArtifactFileSet } from "@/lib/project-artifacts/parse";
+import { getOpenProject, listOpenProjectFiles } from "@/lib/project-store";
 import { cn } from "@/lib/utils";
 import {
   createDashboard,
@@ -43,6 +45,7 @@ type DashboardLite = {
   storageStatus?: "shared" | "best-effort" | null;
   sourceKind?: "attached" | null;
   sourceCatalog?: string | null;
+  projectPath?: string | null;
 };
 
 const EMPTY_INITIAL_DASHBOARDS: DashboardLite[] = [];
@@ -99,11 +102,11 @@ function formatRelativeTime(
 
 function SkeletonGrid() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
       {DASHBOARD_SKELETON_KEYS.map((key) => (
         <div
           key={key}
-          className="h-36 animate-pulse rounded-lg border border-border bg-muted/40 border-l-[3px] border-l-primary/20"
+          className="h-16 animate-pulse bg-muted/40 border-l-[3px] border-l-primary/20"
         />
       ))}
     </div>
@@ -235,7 +238,26 @@ export default function DashboardsPage() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const list = await listDashboards();
+      const [project, list] = await Promise.all([
+        getOpenProject(),
+        listDashboards(),
+      ]);
+      if (project?.backingKind === "bridge-filesystem") {
+        const parsed = parseProjectArtifactFileSet(
+          await listOpenProjectFiles(),
+        );
+        const projectDashboardPaths = new Set(
+          parsed.dashboards.map((dashboard) => dashboard.rootPath),
+        );
+        setDashboards(
+          list.filter(
+            (dashboard) =>
+              dashboard.projectPath &&
+              projectDashboardPaths.has(dashboard.projectPath),
+          ),
+        );
+        return;
+      }
       setDashboards(list);
     } catch (error) {
       setLoadError(
@@ -323,7 +345,7 @@ export default function DashboardsPage() {
 
       <div className="relative mx-auto max-w-7xl px-6 py-12 lg:px-8">
         {/* Header */}
-        <header className="mb-16 flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
+        <header className="mb-10 flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-3">
             <h1 className="text-5xl font-black tracking-tighter text-foreground sm:text-6xl">
               Dashboards
@@ -385,95 +407,83 @@ export default function DashboardsPage() {
             sampleLoading={isAddingSample}
           />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
             {sortedDashboards.map((dashboard, i) => {
               const isFeatured = i === 0;
-              const delayMs = Math.min(i, 15) * 60;
+              const delayMs = Math.min(i, 15) * 40;
 
               return (
                 <article
                   key={dashboard.id}
                   className={cn(
-                    "group relative flex flex-col gap-5 rounded-lg border border-border bg-card p-5 text-left transition-[transform,box-shadow,background-color,border-color] ease-out hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/5 hover:bg-accent/[0.06]",
-                    isFeatured && "lg:col-span-2",
-                    i === 1 && "lg:col-start-1",
+                    "group relative flex items-center gap-4 border-l-primary bg-card px-5 py-3.5 text-left transition-colors ease-out hover:bg-accent/[0.06]",
                     isFeatured ? "border-l-[4px]" : "border-l-[3px]",
-                    "border-l-primary",
                   )}
                   style={{
                     transitionProperty:
                       "opacity, transform, box-shadow, background-color, border-color",
                     transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
-                    transitionDuration: gridVisible ? "600ms" : "0ms",
+                    transitionDuration: gridVisible ? "500ms" : "0ms",
                     transitionDelay: gridVisible ? `${delayMs}ms` : "0ms",
                     opacity: gridVisible ? 1 : 0,
                     transform: gridVisible
                       ? "translateY(0)"
-                      : "translateY(12px)",
+                      : "translateY(8px)",
                   }}
                 >
-                  {/* Stretched link for card-level navigation */}
+                  {/* Stretched link for row-level navigation */}
                   <Link
                     href={`/dashboards/view?id=${encodeURIComponent(dashboard.id)}`}
                     className="absolute inset-0 z-10 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     aria-label={`Open ${dashboard.title || "Untitled Dashboard"}`}
                   />
 
-                  <div className="pointer-events-none relative z-20 flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-primary/70">
-                          {String(i + 1).padStart(2, "0")}
-                        </span>
-                        {isFeatured && (
-                          <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-primary">
-                            Latest
-                          </span>
-                        )}
-                        {dashboard.sourceKind === "attached" && (
-                          <span
-                            className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400"
-                            title={
-                              dashboard.sourceCatalog
-                                ? `Attached from ${dashboard.sourceCatalog}`
-                                : "Attached dashboard"
-                            }
-                          >
-                            Attached
-                          </span>
-                        )}
-                      </div>
-                      <h3
-                        className={cn(
-                          "font-semibold leading-snug text-card-foreground line-clamp-2",
-                          isFeatured ? "text-lg" : "text-base",
-                        )}
-                      >
-                        {dashboard.title || "Untitled Dashboard"}
-                      </h3>
-                    </div>
+                  <span className="pointer-events-none relative z-20 shrink-0 font-mono text-[11px] font-semibold tabular-nums tracking-widest text-primary/70">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
 
-                    {!isDashboardMode && dashboard.sourceKind !== "attached" ? (
-                      <button
-                        type="button"
-                        className="pointer-events-auto relative z-20 mt-0.5 inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-0 ring-offset-background transition-all hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100"
-                        onClick={() => setDashboardToDelete(dashboard)}
-                        disabled={deletingId === dashboard.id}
-                        aria-label="Delete dashboard"
-                        title="Delete dashboard"
+                  <div className="pointer-events-none relative z-20 flex min-w-0 flex-1 items-center gap-3">
+                    <h3 className="truncate font-semibold leading-snug text-card-foreground">
+                      {dashboard.title || "Untitled Dashboard"}
+                    </h3>
+                    {isFeatured && (
+                      <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-primary">
+                        Latest
+                      </span>
+                    )}
+                    {dashboard.sourceKind === "attached" && (
+                      <span
+                        className="inline-flex shrink-0 items-center rounded-full bg-sky-500/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400"
+                        title={
+                          dashboard.sourceCatalog
+                            ? `Attached from ${dashboard.sourceCatalog}`
+                            : "Attached dashboard"
+                        }
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    ) : null}
+                        Attached
+                      </span>
+                    )}
                   </div>
 
-                  <div className="pointer-events-none relative z-20 mt-auto flex items-center justify-between">
-                    <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      <ClockIcon className="h-3 w-3" />
-                      {formatRelativeTime(rtf, dashboard.updatedAt)}
-                    </div>
-                    <ArrowRight className="h-4 w-4 -translate-x-1 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+                  <div className="pointer-events-none relative z-20 flex shrink-0 items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <ClockIcon className="h-3 w-3" />
+                    {formatRelativeTime(rtf, dashboard.updatedAt)}
                   </div>
+
+                  {!isDashboardMode && dashboard.sourceKind !== "attached" ? (
+                    <button
+                      type="button"
+                      className="pointer-events-auto relative z-20 inline-flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-0 ring-offset-background transition-all hover:bg-destructive/10 hover:text-destructive focus:opacity-100 group-hover:opacity-100"
+                      onClick={() => setDashboardToDelete(dashboard)}
+                      disabled={deletingId === dashboard.id}
+                      aria-label="Delete dashboard"
+                      title="Delete dashboard"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  ) : null}
+
+                  <ArrowRight className="pointer-events-none relative z-20 h-4 w-4 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
                 </article>
               );
             })}

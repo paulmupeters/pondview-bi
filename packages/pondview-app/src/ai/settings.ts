@@ -12,6 +12,7 @@ export interface AiSettings {
   provider: AiProvider;
   model: string;
   visualizationModel: string;
+  customSystemPrompt: string;
   apiKey: string;
   ollamaBaseUrl?: string;
   openAiCompatibleUrl?: string;
@@ -21,6 +22,7 @@ export interface AiSettings {
 export const AI_PROVIDER_STORAGE_KEY = "AI_PROVIDER";
 export const AI_MODEL_STORAGE_KEY = "AI_MODEL";
 export const AI_VISUALIZATION_MODEL_STORAGE_KEY = "AI_VISUALIZATION_MODEL";
+export const AI_CUSTOM_SYSTEM_PROMPT_STORAGE_KEY = "AI_CUSTOM_SYSTEM_PROMPT";
 export const OPENAI_COMPATIBLE_URL_STORAGE_KEY = "OPENAI_COMPATIBLE_URL";
 export const OPENAI_COMPATIBLE_PROVIDER_NAME_STORAGE_KEY =
   "OPENAI_COMPATIBLE_PROVIDER_NAME";
@@ -126,6 +128,7 @@ export function loadAiSettingsFromStorage(): AiSettings {
       provider: "openai",
       model: fallbackModel,
       visualizationModel: VISUALIZATION_MODEL,
+      customSystemPrompt: "",
       apiKey: "",
       ollamaBaseUrl: OLLAMA_BASE_URL,
       openAiCompatibleName: "",
@@ -153,6 +156,9 @@ export function loadAiSettingsFromStorage(): AiSettings {
     provider,
     model,
     visualizationModel,
+    customSystemPrompt: normalizeText(
+      window.localStorage.getItem(AI_CUSTOM_SYSTEM_PROMPT_STORAGE_KEY),
+    ),
     apiKey: getProviderApiKeyFromStorage(provider),
     ollamaBaseUrl:
       normalizeText(window.localStorage.getItem(OLLAMA_BASE_URL_STORAGE_KEY)) ||
@@ -173,6 +179,15 @@ export function saveAiSettingsToStorage(settings: AiSettings): void {
 
   window.localStorage.setItem(AI_PROVIDER_STORAGE_KEY, settings.provider);
   window.localStorage.setItem(AI_MODEL_STORAGE_KEY, settings.model.trim());
+  const customSystemPrompt = settings.customSystemPrompt.trim();
+  if (customSystemPrompt) {
+    window.localStorage.setItem(
+      AI_CUSTOM_SYSTEM_PROMPT_STORAGE_KEY,
+      customSystemPrompt,
+    );
+  } else {
+    window.localStorage.removeItem(AI_CUSTOM_SYSTEM_PROMPT_STORAGE_KEY);
+  }
   const visualizationModel = settings.visualizationModel.trim();
   if (visualizationModel) {
     window.localStorage.setItem(
