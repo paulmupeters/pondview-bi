@@ -1,17 +1,36 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createBridgeMcpToolHandlers } from "./mcp";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { createBridgeMcpToolHandlers, resolveMcpDatabasePath } from "./mcp";
 import { DuckDbRuntime } from "./runtime/duckdb-runtime";
 
 const runtimes: DuckDbRuntime[] = [];
+const tempDirs: string[] = [];
 
 afterEach(async () => {
   await Promise.all(runtimes.splice(0).map((runtime) => runtime.close()));
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 function createRuntime(): DuckDbRuntime {
   const runtime = new DuckDbRuntime();
   runtimes.push(runtime);
   return runtime;
+}
+
+function createTempDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "pondview-mcp-"));
+  tempDirs.push(dir);
+  return dir;
 }
 
 async function createSeededRuntime(): Promise<DuckDbRuntime> {
@@ -26,6 +45,60 @@ async function createSeededRuntime(): Promise<DuckDbRuntime> {
 }
 
 describe("bridge MCP tools", () => {
+  test("resolves the project default bridge source database", async () => {
+    const projectDir = createTempDir();
+    const expectedPath = join(projectDir, "data", "agent.duckdb");
+    mkdirSync(join(projectDir, "pondview"), { recursive: true });
+    writeFileSync(
+      join(projectDir, "pondview", "project.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        name: "MCP Project",
+        defaultSourceRef: "analytics",
+        sourceBindings: {
+          analytics: {
+            runtimeBackend: "bridge",
+            dbIdentifier: "data/agent.duckdb",
+            catalogContext: "main",
+          },
+        },
+      }),
+    );
+
+    const databasePath = resolveMcpDatabasePath({ projectDir });
+    const runtime = new DuckDbRuntime({ databasePath });
+    runtimes.push(runtime);
+    await runtime.query("CREATE TABLE mcp_resolution (id INTEGER);");
+
+    expect(databasePath).toBe(expectedPath);
+    expect(existsSync(expectedPath)).toBe(true);
+  });
+
+  test("database path overrides project default source resolution", () => {
+    const projectDir = createTempDir();
+    const overridePath = join(projectDir, "override.duckdb");
+    mkdirSync(join(projectDir, "pondview"), { recursive: true });
+    writeFileSync(
+      join(projectDir, "pondview", "project.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        name: "MCP Project",
+        defaultSourceRef: "analytics",
+        sourceBindings: {
+          analytics: {
+            runtimeBackend: "bridge",
+            dbIdentifier: "data/agent.duckdb",
+            catalogContext: "main",
+          },
+        },
+      }),
+    );
+
+    expect(
+      resolveMcpDatabasePath({ databasePath: overridePath, projectDir }),
+    ).toBe(resolve(overridePath));
+  });
+
   test("list_tables hides internal runtime schemas", async () => {
     const runtime = await createSeededRuntime();
     const tools = createBridgeMcpToolHandlers(runtime);

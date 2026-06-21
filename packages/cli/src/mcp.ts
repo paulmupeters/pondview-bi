@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { BridgeProjectStore } from "./project-store";
 import { DuckDbRuntime } from "./runtime/duckdb-runtime";
 import { BridgeSecretStore } from "./secrets";
+import {
+  createProjectDatabasePath,
+  resolveProjectDefaultDatabasePath,
+} from "./server";
 
-const DEFAULT_PROJECT_DATABASE_PATH = "runtime/pondview-runtime.duckdb";
 const DEFAULT_QUERY_LIMIT = 500;
 const DEFAULT_BRIDGE_APP_URL = "http://127.0.0.1:17817";
 const METADATA_SCHEMA = "pondview";
@@ -596,7 +599,9 @@ function createStableId(value: string, prefix: string): string {
   return `${slug || prefix}-${randomUUID().slice(0, 8)}`;
 }
 
-function resolveMcpDatabasePath(options: BridgeMcpOptions): string | undefined {
+export function resolveMcpDatabasePath(
+  options: BridgeMcpOptions,
+): string | undefined {
   if (options.databasePath?.trim()) {
     return resolve(options.databasePath.trim());
   }
@@ -606,12 +611,11 @@ function resolveMcpDatabasePath(options: BridgeMcpOptions): string | undefined {
     return undefined;
   }
 
-  const projectRoot = resolve(projectDir);
-  const databasePath = isAbsolute(DEFAULT_PROJECT_DATABASE_PATH)
-    ? resolve(DEFAULT_PROJECT_DATABASE_PATH)
-    : resolve(projectRoot, DEFAULT_PROJECT_DATABASE_PATH);
-  mkdirSync(resolve(databasePath, ".."), { recursive: true });
-  return databasePath;
+  const projects = new BridgeProjectStore({ rootPath: projectDir });
+  return (
+    resolveProjectDefaultDatabasePath(projects) ??
+    createProjectDatabasePath(projects.rootPath)
+  );
 }
 
 function assertSqlAllowed(sql: string, allowWriteSql: boolean): void {

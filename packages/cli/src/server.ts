@@ -128,7 +128,7 @@ export async function startBridgeServer(
   };
 }
 
-function createProjectDatabasePath(
+export function createProjectDatabasePath(
   projectRootPath: string,
   requestedPath?: string,
 ): string {
@@ -680,7 +680,7 @@ function getBridgeWorkspaceDbName(projects: BridgeProjectStore): string {
   return `${WORKSPACE_DB_NAME}-${projects.getProject().id}`;
 }
 
-function resolveProjectDefaultDatabasePath(
+export function resolveProjectDefaultDatabasePath(
   projects: BridgeProjectStore,
 ): string | undefined {
   const defaultSourceRef = projects.getProject().defaultSourceRef?.trim();
