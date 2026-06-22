@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { BridgeQueryResponse } from "@pondview/bridge-protocol";
 import { z } from "zod";
 import { BridgeProjectStore } from "./project-store";
 import { DuckDbRuntime } from "./runtime/duckdb-runtime";
@@ -39,6 +40,10 @@ export interface BridgeMcpOptions {
   appUrl?: string;
 }
 
+export interface McpRuntime {
+  query(sql: string, limit?: number): Promise<BridgeQueryResponse>;
+}
+
 const visualTypeSchema = z.enum([
   "line",
   "bar",
@@ -49,7 +54,7 @@ const visualTypeSchema = z.enum([
 ]);
 
 export function createBridgeMcpToolHandlers(
-  runtime: DuckDbRuntime,
+  runtime: McpRuntime,
   options: Pick<BridgeMcpOptions, "allowWriteSql" | "appUrl"> = {},
 ) {
   const appUrl = normalizeAppUrl(options.appUrl);
@@ -186,7 +191,7 @@ export function createBridgeMcpToolHandlers(
       const result = await runtime.query(input.sql, DEFAULT_QUERY_LIMIT);
       const dashboard = await ensureDashboardForVisual(runtime, {
         id: input.dashboardId,
-        title: input.dashboardTitle ?? "Codex Visuals",
+        title: input.dashboardTitle ?? "Pondview Visuals",
       });
       const chartId = createStableId(input.title, "visual");
       const now = Date.now();
@@ -259,7 +264,7 @@ export function createBridgeMcpToolHandlers(
 }
 
 export function createBridgeMcpServer(
-  runtime: DuckDbRuntime,
+  runtime: McpRuntime,
   options: Pick<BridgeMcpOptions, "allowWriteSql" | "appUrl"> = {},
 ): McpServer {
   const server = new McpServer({
@@ -320,7 +325,7 @@ export function createBridgeMcpServer(
     "create_dashboard",
     {
       description:
-        "Create or update a Pondview dashboard and return a local URL that can be opened in the Codex browser.",
+        "Create or update a Pondview dashboard and return a local URL that the agent can open in a browser.",
       inputSchema: {
         title: z.string().min(1),
         id: z.string().min(1).optional(),
@@ -353,7 +358,7 @@ export function createBridgeMcpServer(
     "open_dashboard",
     {
       description:
-        "Return the local Pondview dashboard URL for the Codex browser to open.",
+        "Return the local Pondview dashboard URL for the agent to open in a browser.",
       inputSchema: {
         dashboardId: z.string().min(1).optional(),
       },
@@ -365,6 +370,14 @@ export function createBridgeMcpServer(
   return server;
 }
 
+export async function runBridgeMcpServerWithRuntime(
+  runtime: McpRuntime,
+  options: Pick<BridgeMcpOptions, "allowWriteSql" | "appUrl"> = {},
+): Promise<void> {
+  const server = createBridgeMcpServer(runtime, options);
+  await server.connect(new StdioServerTransport());
+}
+
 export async function runBridgeMcpServer(
   options: BridgeMcpOptions = {},
 ): Promise<void> {
@@ -374,7 +387,6 @@ export async function runBridgeMcpServer(
     databasePath,
     resolveSource: (id) => secrets.getSource(id),
   });
-  const server = createBridgeMcpServer(runtime, options);
 
   process.once("exit", () => {
     void runtime.close();
@@ -386,7 +398,7 @@ export async function runBridgeMcpServer(
     void runtime.close().finally(() => process.exit(143));
   });
 
-  await server.connect(new StdioServerTransport());
+  await runBridgeMcpServerWithRuntime(runtime, options);
 }
 
 function toToolResult(value: Record<string, unknown>): CallToolResult {
@@ -412,7 +424,7 @@ function metadataTable(table: string): string {
   return `${quoteIdentifier(METADATA_SCHEMA)}.${quoteIdentifier(table)}`;
 }
 
-async function ensureDashboardMetadata(runtime: DuckDbRuntime): Promise<void> {
+async function ensureDashboardMetadata(runtime: McpRuntime): Promise<void> {
   await runtime.query(
     `CREATE SCHEMA IF NOT EXISTS ${quoteIdentifier(METADATA_SCHEMA)};`,
   );
@@ -460,7 +472,7 @@ async function ensureDashboardMetadata(runtime: DuckDbRuntime): Promise<void> {
 }
 
 async function ensureDashboardForVisual(
-  runtime: DuckDbRuntime,
+  runtime: McpRuntime,
   input: { id?: string; title: string },
 ): Promise<{ dashboardId: string }> {
   const handlers = createBridgeMcpToolHandlers(runtime, {
@@ -470,7 +482,7 @@ async function ensureDashboardForVisual(
 }
 
 async function nextChartPosition(
-  runtime: DuckDbRuntime,
+  runtime: McpRuntime,
   dashboardId: string,
 ): Promise<number> {
   await ensureDashboardMetadata(runtime);
@@ -490,7 +502,7 @@ async function nextChartPosition(
 }
 
 async function touchDashboard(
-  runtime: DuckDbRuntime,
+  runtime: McpRuntime,
   dashboardId: string,
   updatedAt: number,
 ): Promise<void> {

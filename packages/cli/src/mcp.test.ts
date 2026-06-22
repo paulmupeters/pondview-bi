@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { BridgeQueryResponse } from "@pondview/bridge-protocol";
 import { createBridgeMcpToolHandlers, resolveMcpDatabasePath } from "./mcp";
 import { DuckDbRuntime } from "./runtime/duckdb-runtime";
 
@@ -33,6 +34,14 @@ function createTempDir(): string {
   return dir;
 }
 
+function queryResponse(): BridgeQueryResponse {
+  return {
+    columns: [],
+    rows: [],
+    rowCount: 0,
+  };
+}
+
 async function createSeededRuntime(): Promise<DuckDbRuntime> {
   const runtime = createRuntime();
   await runtime.query("CREATE TABLE users (id INTEGER, name VARCHAR);");
@@ -45,6 +54,24 @@ async function createSeededRuntime(): Promise<DuckDbRuntime> {
 }
 
 describe("bridge MCP tools", () => {
+  test("handlers accept a query-only bridge client runtime", async () => {
+    const calls: Array<{ sql: string; limit?: number }> = [];
+    const runtime = {
+      query: async (
+        sql: string,
+        limit?: number,
+      ): Promise<BridgeQueryResponse> => {
+        calls.push({ sql, limit });
+        return queryResponse();
+      },
+    };
+    const tools = createBridgeMcpToolHandlers(runtime);
+
+    await tools.executeSql("SELECT 42 AS answer", 12);
+
+    expect(calls).toEqual([{ sql: "SELECT 42 AS answer", limit: 12 }]);
+  });
+
   test("resolves the project default bridge source database", async () => {
     const projectDir = createTempDir();
     const expectedPath = join(projectDir, "data", "agent.duckdb");
