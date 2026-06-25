@@ -123,8 +123,11 @@ pondview query --file ./dashboard-metadata.sql --database ./analytics.duckdb
 
 `pondview mcp` runs a stdio Model Context Protocol server backed by the Bridge
 DuckDB runtime. It is intended for local agents such as Claude Code or Codex CLI
-to spawn on demand. For project workflows, run MCP through the bridge HTTP API so
-the bridge is the only process that opens the DuckDB file:
+to spawn on demand. See [MCP for Local Agents](/guide/mcp) for the full setup,
+tool list, and recommended agent workflows.
+
+For project workflows, run MCP through the bridge HTTP API so the bridge is the
+only process that opens the DuckDB file:
 
 ```bash
 pondview start --project-dir ./example
@@ -179,6 +182,11 @@ pondview mcp --allow-write-sql
 Dashboard creation tools write Pondview dashboard metadata through the bridge.
 The `execute_sql` tool still requires `--allow-write-sql` for user-supplied
 write statements.
+
+The MCP server also exposes dashboard discovery and navigation helpers:
+`list_dashboards`, `get_dashboard`, `open_dashboard`, and `open_ui`. These tools
+return local Pondview URLs for the agent to share; MCP autostart remains
+headless and does not open a browser.
 
 This MCP mode uses the Bridge runtime and Bridge secret store. It does not read
 browser-only AI provider settings and does not expose provider API keys to MCP

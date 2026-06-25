@@ -41,23 +41,27 @@ pondview query "SELECT 42 AS answer"
 pondview mcp --project-dir ./my-pondview-project
 ```
 
+### Claude and Codex
+
+Start Pondview, then register its MCP server with your agent:
+
+```bash
+pondview start --project-dir ./my-pondview-project
+
+claude mcp add pondview -- pondview mcp --url http://127.0.0.1:17817
+codex mcp add pondview -- pondview mcp --url http://127.0.0.1:17817
+```
+
+For a headless workflow, let MCP autostart the project bridge:
+
+```bash
+claude mcp add pondview -- pondview mcp --project-dir ./my-pondview-project
+codex mcp add pondview -- pondview mcp --project-dir ./my-pondview-project
+```
+
 ### Documentation
 
 For setup, configuration, runtimes, connected sources, dashboards, and AI providers, see the [Pondview docs](./packages/pondview-docs/index.md).
-
-### Development
-
-```bash
-bun install
-bun dev
-
-bun run pondview start
-bun run pondview query "SELECT 42 AS answer"
-bun run cli -- mcp
-bun run typecheck
-bun run lint
-bun run test
-```
 
 ### Packages
 

@@ -238,6 +238,77 @@ describe("bridge MCP tools", () => {
     expect(dashboards.rows).toEqual([{ id: "sales", title: "Sales" }]);
   });
 
+  test("list_dashboards returns dashboard summaries and URLs", async () => {
+    const runtime = await createSeededRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime, {
+      appUrl: "http://127.0.0.1:17818/",
+    });
+
+    await tools.createVisual({
+      dashboardId: "sales",
+      dashboardTitle: "Sales",
+      title: "Users by id",
+      sql: "SELECT id, name FROM users ORDER BY id",
+      visualType: "table",
+    });
+    const result = await tools.listDashboards();
+    const dashboard = result.dashboards[0] ?? {};
+
+    expect(result.count).toBe(1);
+    expect(dashboard).toMatchObject({
+      id: "sales",
+      title: "Sales",
+      url: "http://127.0.0.1:17818/dashboards/view?id=sales&pondviewMode=dashboard",
+    });
+    expect(String(dashboard.chart_count)).toBe("1");
+  });
+
+  test("get_dashboard returns dashboard metadata and child rows", async () => {
+    const runtime = await createSeededRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime);
+
+    await tools.createVisual({
+      dashboardId: "sales",
+      dashboardTitle: "Sales",
+      title: "Users by id",
+      sql: "SELECT id, name FROM users ORDER BY id",
+      visualType: "table",
+    });
+    const result = await tools.getDashboard("sales");
+    const dashboard = result.dashboard as Record<string, unknown>;
+    const charts = result.charts as Array<Record<string, unknown>>;
+
+    expect(dashboard).toMatchObject({
+      id: "sales",
+      title: "Sales",
+      url: "http://127.0.0.1:17817/dashboards/view?id=sales&pondviewMode=dashboard",
+    });
+    expect(charts).toHaveLength(1);
+    expect(charts[0]).toMatchObject({
+      dashboard_id: "sales",
+      title: "Users by id",
+      sql: "SELECT id, name FROM users ORDER BY id",
+    });
+    expect(result.measures).toEqual([]);
+    expect(result.slicers).toEqual([]);
+    expect(result.joinDefs).toEqual([]);
+  });
+
+  test("dashboard discovery tolerates missing metadata tables", async () => {
+    const runtime = createRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime);
+
+    await expect(tools.listDashboards()).resolves.toEqual({
+      dashboards: [],
+      count: 0,
+    });
+    await expect(tools.getDashboard("missing")).resolves.toMatchObject({
+      dashboard: null,
+      charts: [],
+      url: "http://127.0.0.1:17817/dashboards/view?id=missing&pondviewMode=dashboard",
+    });
+  });
+
   test("create_visual stores chart metadata and returns dashboard URL", async () => {
     const runtime = await createSeededRuntime();
     const tools = createBridgeMcpToolHandlers(runtime);
@@ -273,6 +344,32 @@ describe("bridge MCP tools", () => {
       type: "bar",
       xKey: "name",
       yKeys: ["id"],
+    });
+  });
+
+  test("open_ui returns app, dashboard, and analysis URLs without opening a browser", async () => {
+    const runtime = createRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime, {
+      appUrl: "http://127.0.0.1:17818/",
+    });
+
+    await expect(tools.openUi({})).resolves.toMatchObject({
+      view: "app",
+      url: "http://127.0.0.1:17818",
+    });
+    await expect(
+      tools.openUi({ view: "dashboard", dashboardId: "sales dashboard" }),
+    ).resolves.toMatchObject({
+      view: "dashboard",
+      dashboardId: "sales dashboard",
+      url: "http://127.0.0.1:17818/dashboards/view?id=sales%20dashboard&pondviewMode=dashboard",
+    });
+    await expect(
+      tools.openUi({ view: "analysis", analysisId: "analysis:1" }),
+    ).resolves.toMatchObject({
+      view: "analysis",
+      analysisId: "analysis:1",
+      url: "http://127.0.0.1:17818/analysis?id=analysis%3A1",
     });
   });
 });

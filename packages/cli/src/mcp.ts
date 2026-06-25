@@ -52,6 +52,13 @@ const visualTypeSchema = z.enum([
   "table",
   "card",
 ]);
+const uiViewSchema = z.enum([
+  "app",
+  "dashboards",
+  "dashboard",
+  "analysis",
+  "analyses",
+]);
 
 export function createBridgeMcpToolHandlers(
   runtime: McpRuntime,
@@ -137,6 +144,12 @@ export function createBridgeMcpToolHandlers(
         rowsChanged: result.rowsChanged,
       };
     },
+    listDashboards: async () => {
+      const dashboards = await listDashboardSummaries(runtime, appUrl);
+      return { dashboards, count: dashboards.length };
+    },
+    getDashboard: async (dashboardId: string) =>
+      getDashboardSnapshot(runtime, appUrl, dashboardId),
     createDashboard: async (input: { id?: string; title: string }) => {
       const now = Date.now();
       const id = input.id?.trim() || createStableId(input.title, "dashboard");
@@ -256,6 +269,16 @@ export function createBridgeMcpToolHandlers(
         url: dashboardUrl(appUrl, dashboard.dashboardId),
       };
     },
+    openUi: async (input: {
+      view?: z.infer<typeof uiViewSchema>;
+      dashboardId?: string;
+      analysisId?: string;
+    }) => ({
+      view: input.view ?? "app",
+      dashboardId: input.dashboardId?.trim() || null,
+      analysisId: input.analysisId?.trim() || null,
+      url: uiUrl(appUrl, input),
+    }),
     openDashboard: async (dashboardId?: string) => ({
       dashboardId: dashboardId?.trim() || null,
       url: dashboardUrl(appUrl, dashboardId?.trim() || undefined),
@@ -322,6 +345,29 @@ export function createBridgeMcpServer(
   );
 
   server.registerTool(
+    "list_dashboards",
+    {
+      description:
+        "List existing Pondview dashboards, including chart counts and dashboard URLs.",
+      inputSchema: {},
+    },
+    async () => toToolResult(await handlers.listDashboards()),
+  );
+
+  server.registerTool(
+    "get_dashboard",
+    {
+      description:
+        "Get a Pondview dashboard with its charts, measures, slicers, join definitions, and URL.",
+      inputSchema: {
+        dashboardId: z.string().min(1),
+      },
+    },
+    async ({ dashboardId }) =>
+      toToolResult(await handlers.getDashboard(dashboardId)),
+  );
+
+  server.registerTool(
     "create_dashboard",
     {
       description:
@@ -352,6 +398,20 @@ export function createBridgeMcpServer(
       },
     },
     async (input) => toToolResult(await handlers.createVisual(input)),
+  );
+
+  server.registerTool(
+    "open_ui",
+    {
+      description:
+        "Return a local Pondview UI URL for the app, dashboards, a dashboard, analyses, or an analysis. This does not open a browser.",
+      inputSchema: {
+        view: uiViewSchema.optional(),
+        dashboardId: z.string().min(1).optional(),
+        analysisId: z.string().min(1).optional(),
+      },
+    },
+    async (input) => toToolResult(await handlers.openUi(input)),
   );
 
   server.registerTool(
@@ -420,8 +480,164 @@ function dashboardUrl(appUrl: string, dashboardId?: string): string {
   return `${appUrl}${path}`;
 }
 
+function uiUrl(
+  appUrl: string,
+  input: {
+    view?: z.infer<typeof uiViewSchema>;
+    dashboardId?: string;
+    analysisId?: string;
+  },
+): string {
+  const view = input.view ?? "app";
+  if (view === "dashboards") {
+    return dashboardUrl(appUrl);
+  }
+  if (view === "dashboard") {
+    return dashboardUrl(appUrl, input.dashboardId?.trim() || undefined);
+  }
+  if (view === "analyses") {
+    return `${appUrl}/analysis/all`;
+  }
+  if (view === "analysis") {
+    const analysisId = input.analysisId?.trim();
+    return analysisId
+      ? `${appUrl}/analysis?id=${encodeURIComponent(analysisId)}`
+      : `${appUrl}/analysis`;
+  }
+  return appUrl;
+}
+
 function metadataTable(table: string): string {
   return `${quoteIdentifier(METADATA_SCHEMA)}.${quoteIdentifier(table)}`;
+}
+
+async function listMetadataTables(runtime: McpRuntime): Promise<Set<string>> {
+  const result = await runtime.query(
+    `SELECT table_name
+     FROM information_schema.tables
+     WHERE table_schema = ${quoteString(METADATA_SCHEMA)};`,
+  );
+  return new Set(result.rows.map((row) => String(row.table_name ?? "")));
+}
+
+async function listDashboardSummaries(
+  runtime: McpRuntime,
+  appUrl: string,
+): Promise<Array<Record<string, unknown>>> {
+  const tables = await listMetadataTables(runtime);
+  if (!tables.has("dashboards")) {
+    return [];
+  }
+
+  const chartCount = tables.has("dashboard_charts")
+    ? `(SELECT COUNT(*) FROM ${metadataTable("dashboard_charts")} c WHERE c.dashboard_id = d.id)`
+    : "0";
+  const measureCount = tables.has("dashboard_measures")
+    ? `(SELECT COUNT(*) FROM ${metadataTable("dashboard_measures")} m WHERE m.dashboard_id = d.id)`
+    : "0";
+  const slicerCount = tables.has("dashboard_slicers")
+    ? `(SELECT COUNT(*) FROM ${metadataTable("dashboard_slicers")} s WHERE s.dashboard_id = d.id)`
+    : "0";
+  const result = await runtime.query(
+    `SELECT
+       d.id,
+       d.title,
+       d.created_at,
+       d.updated_at,
+       d.columns,
+       d.auto_fit_rows,
+       d.runtime_backend,
+       d.storage_status,
+       d.project_path,
+       ${chartCount} AS chart_count,
+       ${measureCount} AS measure_count,
+       ${slicerCount} AS slicer_count
+     FROM ${metadataTable("dashboards")} d
+     ORDER BY d.updated_at DESC;`,
+  );
+
+  return result.rows.map((row) => ({
+    ...row,
+    url: dashboardUrl(appUrl, String(row.id ?? "")),
+  }));
+}
+
+async function getDashboardSnapshot(
+  runtime: McpRuntime,
+  appUrl: string,
+  dashboardId: string,
+): Promise<Record<string, unknown>> {
+  const id = dashboardId.trim();
+  const tables = await listMetadataTables(runtime);
+  if (!tables.has("dashboards")) {
+    return emptyDashboardSnapshot(appUrl, id);
+  }
+
+  const dashboardResult = await runtime.query(
+    `SELECT *
+     FROM ${metadataTable("dashboards")}
+     WHERE id = ${quoteString(id)}
+     LIMIT 1;`,
+  );
+  const dashboard = dashboardResult.rows[0] ?? null;
+  if (!dashboard) {
+    return emptyDashboardSnapshot(appUrl, id);
+  }
+
+  return {
+    dashboard: {
+      ...dashboard,
+      url: dashboardUrl(appUrl, id),
+    },
+    charts: await queryDashboardRows(runtime, tables, "dashboard_charts", id),
+    measures: await queryDashboardRows(
+      runtime,
+      tables,
+      "dashboard_measures",
+      id,
+    ),
+    slicers: await queryDashboardRows(runtime, tables, "dashboard_slicers", id),
+    joinDefs: await queryDashboardRows(
+      runtime,
+      tables,
+      "dashboard_join_defs",
+      id,
+    ),
+    url: dashboardUrl(appUrl, id),
+  };
+}
+
+function emptyDashboardSnapshot(
+  appUrl: string,
+  dashboardId: string,
+): Record<string, unknown> {
+  return {
+    dashboard: null,
+    charts: [],
+    measures: [],
+    slicers: [],
+    joinDefs: [],
+    url: dashboardUrl(appUrl, dashboardId),
+  };
+}
+
+async function queryDashboardRows(
+  runtime: McpRuntime,
+  tables: Set<string>,
+  table: string,
+  dashboardId: string,
+): Promise<Array<Record<string, unknown>>> {
+  if (!tables.has(table)) {
+    return [];
+  }
+  const orderBy = table === "dashboard_join_defs" ? "position" : "created_at";
+  const result = await runtime.query(
+    `SELECT *
+     FROM ${metadataTable(table)}
+     WHERE dashboard_id = ${quoteString(dashboardId)}
+     ORDER BY ${quoteIdentifier(orderBy)};`,
+  );
+  return result.rows;
 }
 
 async function ensureDashboardMetadata(runtime: McpRuntime): Promise<void> {

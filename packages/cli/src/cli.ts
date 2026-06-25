@@ -12,6 +12,7 @@ import {
   runBridgeMcpServerWithRuntime,
 } from "./mcp";
 import { type BrowserOpener, openBrowser } from "./open-browser";
+import { resolveProjectRootPath } from "./project-store";
 import { startBridgeServer } from "./server";
 
 interface ParsedArgs {
@@ -1520,9 +1521,7 @@ function printJson(value: unknown): void {
 
 function localSourceBindingsFilePath(args: ParsedArgs): string {
   return resolve(
-    readStringFlag(args, "project-dir") ??
-      process.env.INIT_CWD ??
-      process.cwd(),
+    resolveProjectRootPath(readStringFlag(args, "project-dir")),
     LOCAL_SOURCE_BINDINGS_PATH,
   );
 }
