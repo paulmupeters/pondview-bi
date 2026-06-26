@@ -1,4 +1,10 @@
-import { Check, ChevronDown, Copy, Pencil, SlidersHorizontal } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  Pencil,
+  SlidersHorizontal,
+} from "lucide-react";
 import { type ReactNode, type RefObject, useState } from "react";
 import {
   type AiProvider,
@@ -478,8 +484,7 @@ function BridgeMcpCard({
       await navigator.clipboard.writeText(text);
       setCopiedKey(key);
       setTimeout(
-        () =>
-          setCopiedKey((current) => (current === key ? null : current)),
+        () => setCopiedKey((current) => (current === key ? null : current)),
         2000,
       );
     } catch {
