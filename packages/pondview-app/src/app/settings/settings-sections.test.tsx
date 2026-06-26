@@ -24,6 +24,9 @@ describe("RuntimeSettingsSection", () => {
       <RuntimeSettingsSection
         selectedSqlBackend="duckdb-wasm"
         onSqlBackendChange={noop}
+        mcpEndpointUrl="http://127.0.0.1:17817/mcp"
+        mcpRequiresAuth={false}
+        mcpAllowWriteSql={false}
         bridgeOptionLabel="Bridge"
         isBridgeSelectable={false}
         runtimeSettingsError={null}
@@ -53,6 +56,9 @@ describe("RuntimeSettingsSection", () => {
       <RuntimeSettingsSection
         selectedSqlBackend="bridge"
         onSqlBackendChange={noop}
+        mcpEndpointUrl="http://127.0.0.1:17817/mcp"
+        mcpRequiresAuth={false}
+        mcpAllowWriteSql={false}
         bridgeOptionLabel="Bridge"
         isBridgeSelectable={false}
         runtimeSettingsError={null}
@@ -88,6 +94,9 @@ describe("RuntimeSettingsSection", () => {
       <RuntimeSettingsSection
         selectedSqlBackend="bridge"
         onSqlBackendChange={noop}
+        mcpEndpointUrl="http://127.0.0.1:17817/mcp"
+        mcpRequiresAuth={false}
+        mcpAllowWriteSql={false}
         bridgeOptionLabel="Bridge"
         isBridgeSelectable={false}
         runtimeSettingsError={null}

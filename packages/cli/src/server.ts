@@ -226,6 +226,7 @@ export async function handleBridgeRequest(
         host: options.host ?? "127.0.0.1",
         port: options.port ?? 17817,
         requires_auth: Boolean(options.token),
+        mcp_allow_write_sql: Boolean(options.mcpAllowWriteSql),
         database: runtime.databaseInfo(),
       });
     }

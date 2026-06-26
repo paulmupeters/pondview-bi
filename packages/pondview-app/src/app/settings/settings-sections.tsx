@@ -1,4 +1,4 @@
-import { ChevronDown, Pencil, SlidersHorizontal } from "lucide-react";
+import { Check, ChevronDown, Copy, Pencil, SlidersHorizontal } from "lucide-react";
 import { type ReactNode, type RefObject, useState } from "react";
 import {
   type AiProvider,
@@ -459,9 +459,112 @@ export function AiSettingsSections({
 // Runtime settings
 // ---------------------------------------------------------------------------
 
+function BridgeMcpCard({
+  endpointUrl,
+  requiresAuth,
+  allowWriteSql,
+}: {
+  endpointUrl: string;
+  requiresAuth: boolean;
+  allowWriteSql: boolean;
+}) {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const claudeRegisterCommand = `claude mcp add --transport http pondview ${endpointUrl}`;
+  const codexRegisterCommand = `codex mcp add pondview --url ${endpointUrl}`;
+
+  const handleCopy = async (key: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(
+        () =>
+          setCopiedKey((current) => (current === key ? null : current)),
+        2000,
+      );
+    } catch {
+      // Clipboard access can be unavailable (e.g. insecure context); ignore.
+    }
+  };
+
+  const renderCopyButton = (key: string, text: string) => (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className="shrink-0"
+      onClick={() => void handleCopy(key, text)}
+      aria-label={copiedKey === key ? "Copied" : "Copy to clipboard"}
+    >
+      {copiedKey === key ? (
+        <Check className="h-4 w-4" />
+      ) : (
+        <Copy className="h-4 w-4" />
+      )}
+    </Button>
+  );
+
+  const registerCommands = [
+    { key: "claude", label: "Claude Code", command: claudeRegisterCommand },
+    { key: "codex", label: "Codex", command: codexRegisterCommand },
+  ];
+
+  return (
+    <div className="space-y-3 border-t pt-5">
+      <div>
+        <h4 className="text-sm font-semibold">MCP endpoint</h4>
+        <p className="text-sm text-muted-foreground">
+          Connect local agents (Claude Code, Codex) to this bridge over
+          Streamable HTTP. Keep Pondview running, then register the endpoint
+          below.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Write SQL: {allowWriteSql ? "enabled" : "read-only"} • Auth:{" "}
+          {requiresAuth ? "required" : "not required"}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input type="url" readOnly value={endpointUrl} />
+        {renderCopyButton("endpoint", endpointUrl)}
+      </div>
+
+      <div className="space-y-2">
+        {registerCommands.map(({ key, label, command }) => (
+          <div key={key} className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs">
+                {command}
+              </code>
+              {renderCopyButton(key, command)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {requiresAuth && (
+        <p className="text-xs text-muted-foreground">
+          This bridge requires a token. Pass it when registering, e.g.{" "}
+          <code>--header "Authorization: Bearer &lt;token&gt;"</code>.
+        </p>
+      )}
+      {allowWriteSql && (
+        <AlertBlock kind="info">
+          MCP clients can run write SQL against this database. Restart the CLI
+          without <code>--mcp-allow-write-sql</code> to make it read-only.
+        </AlertBlock>
+      )}
+    </div>
+  );
+}
+
 type RuntimeSettingsSectionProps = {
   selectedSqlBackend: SqlBackend;
   onSqlBackendChange: (backend: SqlBackend) => void;
+  mcpEndpointUrl: string;
+  mcpRequiresAuth: boolean;
+  mcpAllowWriteSql: boolean;
   bridgeOptionLabel: string;
   isBridgeSelectable: boolean;
   runtimeSettingsError: string | null;
@@ -496,6 +599,9 @@ type RuntimeSettingsSectionProps = {
 export function RuntimeSettingsSection({
   selectedSqlBackend,
   onSqlBackendChange,
+  mcpEndpointUrl,
+  mcpRequiresAuth,
+  mcpAllowWriteSql,
   bridgeOptionLabel,
   isBridgeSelectable,
   runtimeSettingsError,
@@ -642,6 +748,12 @@ export function RuntimeSettingsSection({
                 </Button>
               </div>
             </div>
+
+            <BridgeMcpCard
+              endpointUrl={mcpEndpointUrl}
+              requiresAuth={mcpRequiresAuth}
+              allowWriteSql={mcpAllowWriteSql}
+            />
 
             <div className="space-y-4 border-t pt-5">
               <div>

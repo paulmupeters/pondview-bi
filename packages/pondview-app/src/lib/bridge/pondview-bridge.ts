@@ -43,6 +43,7 @@ export interface PondviewBridgeConfig {
   host: string;
   port: number;
   requiresAuth: boolean;
+  mcpAllowWriteSql?: boolean;
   database?: PondviewBridgeDatabaseInfo;
 }
 
@@ -344,6 +345,7 @@ function parseBridgeConfig(payload: unknown): PondviewBridgeConfig | null {
     host: parsed.data.host,
     port: parsed.data.port,
     requiresAuth: parsed.data.requires_auth,
+    mcpAllowWriteSql: parsed.data.mcp_allow_write_sql ?? false,
     database: parsed.data.database,
   };
 }

@@ -105,6 +105,7 @@ describe("pondview bridge browser state", () => {
       host: "127.0.0.1",
       port: 4386,
       requiresAuth: true,
+      mcpAllowWriteSql: false,
     });
 
     const session = await getBridgeSession();
@@ -232,6 +233,7 @@ describe("pondview bridge browser state", () => {
       host: "127.0.0.1",
       port: 17817,
       requiresAuth: false,
+      mcpAllowWriteSql: false,
     });
   });
 });
