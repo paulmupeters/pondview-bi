@@ -9,57 +9,52 @@ project metadata as the Pondview app.
 
 ## Quick start
 
-For the best local workflow, start Pondview first so the app and the MCP server
-share one bridge process:
+Start Pondview. The cli serves the app, DuckDB runtime, and primary
+Streamable HTTP MCP endpoint from one process:
 
 ```bash
 pondview start --project-dir ./example
 ```
 
-Then register MCP with your agent:
+Then register the bridge MCP endpoint with your agent:
 
 ```bash
-claude mcp add pondview -- pondview mcp --url http://127.0.0.1:17817
+claude mcp add --transport http pondview http://127.0.0.1:17817/mcp
 ```
 
 For Codex CLI:
 
 ```bash
-codex mcp add pondview -- pondview mcp --url http://127.0.0.1:17817
+codex mcp add pondview --url http://127.0.0.1:17817/mcp
 ```
 
-This keeps the bridge as the only process opening the DuckDB file. The MCP
-server talks to it over HTTP, just like other Pondview CLI client commands.
+The cli remains the only process opening the DuckDB file. MCP tools execute
+directly against that shared runtime.
 
-## Project autostart
+## Headless use
 
-You can also let MCP start a headless bridge for a project:
+Run the same endpoint without serving the Pondview UI:
 
 ```bash
-pondview mcp --project-dir ./example
+pondview start --no-ui --project-dir ./example
 ```
 
-This starts `pondview start --no-ui` when no bridge is reachable. It does not
-open a browser or serve the full UI automatically. Tools that return dashboard
-or analysis links still return local Pondview URLs.
-
-If you want the UI available for those links, start Pondview separately with
-`pondview start --project-dir ./example`, then run MCP with `--url`.
+Dashboard and analysis tools can still return URLs, but those pages require a
+cli started without `--no-ui`.
 
 ## Inspect with MCP Inspector
 
 MCP Inspector is useful for checking the tool list and trying calls manually:
 
 ```bash
-npx @modelcontextprotocol/inspector \
-  pondview mcp --project-dir ./example
+npx @modelcontextprotocol/inspector
 ```
 
-During development from the repository, run the CLI source directly:
+In the Inspector connection pane, select **Streamable HTTP** and enter
+`http://127.0.0.1:17817/mcp`. Start the development cli first:
 
 ```bash
-npx @modelcontextprotocol/inspector \
-  bun run packages/cli/src/cli.ts mcp --project-dir ./example
+bun run bridge -- start --project-dir ./example
 ```
 
 ## Available tools
@@ -85,11 +80,11 @@ see changes live.
 
 ## Write access
 
-`execute_sql` is read-only by default. Start MCP with `--allow-write-sql` only
-for trusted local workflows:
+`execute_sql` is read-only by default. Enable write SQL only for trusted local
+workflows:
 
 ```bash
-pondview mcp --project-dir ./example --allow-write-sql
+pondview start --project-dir ./example --mcp-allow-write-sql
 ```
 
 Dashboard creation tools still write Pondview metadata because creating
@@ -97,40 +92,36 @@ dashboards and visuals is their purpose.
 
 ## URLs and UI links
 
-By default, URLs point at `http://127.0.0.1:17817`. If your Pondview UI is served
-elsewhere, pass `--app-url`:
-
-```bash
-pondview mcp --project-dir ./example --app-url http://127.0.0.1:17818
-```
-
 Use `open_ui` when an agent needs to return a link to the app, dashboards list,
 one dashboard, the analyses list, or one analysis. The tool returns the URL; it
 does not open a browser.
 
-## Standalone DuckDB files
+## Stdio compatibility
 
-For standalone use against a private DuckDB file, you can run MCP in embedded
-mode:
+`pondview mcp` remains available for clients that only support stdio and for
+standalone embedded DuckDB use:
 
 ```bash
 pondview mcp --database ./analytics.duckdb
 ```
 
-When a Pondview app is already using the same file, prefer the bridge-client
-workflow with `pondview start` plus `pondview mcp --url ...` to avoid DuckDB file
-lock conflicts.
+Do not point embedded stdio MCP and `pondview start` at the same DuckDB file.
+Prefer the primary `/mcp` endpoint whenever the bridge is running.
 
 ## Authentication
 
 If the bridge is token-protected, pass the same token configuration to MCP:
 
 ```bash
-pondview mcp --url http://127.0.0.1:17817 --token-env PONDVIEW_TOKEN
+pondview start --project-dir ./example --token-env PONDVIEW_TOKEN
+codex mcp add pondview \
+  --url http://127.0.0.1:17817/mcp \
+  --bearer-token-env-var PONDVIEW_TOKEN
+claude mcp add --transport http pondview http://127.0.0.1:17817/mcp \
+  --header "Authorization: Bearer $PONDVIEW_TOKEN"
 ```
 
-Bridge tokens only authenticate the MCP process to the bridge. They do not
-configure AI provider credentials.
+Bridge tokens do not configure AI provider credentials.
 
 ## Related guides
 

@@ -36,6 +36,15 @@ pondview stop
 `pondview start` serves the Pondview UI from bundled files in this package.
 Those assets are built during packaging with `bun run bridge:build-ui`.
 
+It also serves Pondview's primary Streamable HTTP MCP interface:
+
+```bash
+codex mcp add pondview --url http://127.0.0.1:17817/mcp
+claude mcp add --transport http pondview http://127.0.0.1:17817/mcp
+```
+
+`pondview mcp` remains available as a compatibility stdio transport.
+
 ## Development
 
 From the repository root:

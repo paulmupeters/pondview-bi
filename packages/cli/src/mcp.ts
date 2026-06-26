@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import {
+  type CallToolResult,
+  isInitializeRequest,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { BridgeQueryResponse } from "@pondview/bridge-protocol";
 import { z } from "zod";
 import { BridgeProjectStore } from "./project-store";
@@ -43,6 +47,16 @@ export interface BridgeMcpOptions {
 export interface McpRuntime {
   query(sql: string, limit?: number): Promise<BridgeQueryResponse>;
 }
+
+export interface BridgeMcpHttpHandler {
+  handleRequest(request: Request): Promise<Response>;
+  close(): Promise<void>;
+}
+
+type BridgeMcpHttpSession = {
+  server: McpServer;
+  transport: WebStandardStreamableHTTPServerTransport;
+};
 
 const visualTypeSchema = z.enum([
   "line",
@@ -371,7 +385,7 @@ export function createBridgeMcpServer(
     "create_dashboard",
     {
       description:
-        "Create or update a Pondview dashboard and return a local URL that the agent can open in a browser.",
+        "Create or update a Pondview dashboard and return a local URL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered dashboard instead of a raw link.",
       inputSchema: {
         title: z.string().min(1),
         id: z.string().min(1).optional(),
@@ -384,7 +398,7 @@ export function createBridgeMcpServer(
     "create_visual",
     {
       description:
-        "Create a Pondview dashboard visual from SQL and return a local dashboard URL. visualType can be line, bar, area, pie, table, or card.",
+        "Create a Pondview dashboard visual from SQL and return a local dashboard URL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered visual instead of a raw link. visualType can be line, bar, area, pie, table, or card.",
       inputSchema: {
         dashboardId: z.string().min(1).optional(),
         dashboardTitle: z.string().min(1).optional(),
@@ -404,7 +418,7 @@ export function createBridgeMcpServer(
     "open_ui",
     {
       description:
-        "Return a local Pondview UI URL for the app, dashboards, a dashboard, analyses, or an analysis. This does not open a browser.",
+        "Return a local Pondview UI URL for the app, dashboards, a dashboard, analyses, or an analysis. This tool does not open anything itself, but if you have a browser or in-app preview tool you should open the returned URL there so the user sees the rendered UI.",
       inputSchema: {
         view: uiViewSchema.optional(),
         dashboardId: z.string().min(1).optional(),
@@ -418,7 +432,7 @@ export function createBridgeMcpServer(
     "open_dashboard",
     {
       description:
-        "Return the local Pondview dashboard URL for the agent to open in a browser.",
+        "Return the local Pondview dashboard URL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered dashboard instead of a raw link.",
       inputSchema: {
         dashboardId: z.string().min(1).optional(),
       },
@@ -461,11 +475,119 @@ export async function runBridgeMcpServer(
   await runBridgeMcpServerWithRuntime(runtime, options);
 }
 
-function toToolResult(value: Record<string, unknown>): CallToolResult {
+export function createBridgeMcpHttpHandler(
+  runtime: McpRuntime,
+  options: Pick<BridgeMcpOptions, "allowWriteSql" | "appUrl"> = {},
+): BridgeMcpHttpHandler {
+  const sessions = new Map<string, BridgeMcpHttpSession>();
+
+  const jsonRpcError = (
+    status: number,
+    message: string,
+    code = -32000,
+  ): Response =>
+    new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        error: { code, message },
+        id: null,
+      }),
+      {
+        status,
+        headers: { "content-type": "application/json" },
+      },
+    );
+
   return {
-    content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
+    async handleRequest(request) {
+      if (request.method === "GET") {
+        return new Response(null, {
+          status: 405,
+          headers: { allow: "POST, DELETE" },
+        });
+      }
+
+      const sessionId = request.headers.get("mcp-session-id");
+      const existingSession = sessionId ? sessions.get(sessionId) : undefined;
+      if (existingSession) {
+        return existingSession.transport.handleRequest(request);
+      }
+
+      if (request.method === "DELETE") {
+        return jsonRpcError(404, "Session not found", -32001);
+      }
+
+      if (request.method !== "POST") {
+        return new Response(null, {
+          status: 405,
+          headers: { allow: "POST, DELETE" },
+        });
+      }
+
+      const message = await request
+        .clone()
+        .json()
+        .catch(() => undefined);
+      if (sessionId || !isInitializeRequest(message)) {
+        return jsonRpcError(
+          sessionId ? 404 : 400,
+          sessionId
+            ? "Session not found"
+            : "Bad Request: initialize request required",
+          sessionId ? -32001 : -32600,
+        );
+      }
+
+      let session: BridgeMcpHttpSession;
+      const transport = new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: randomUUID,
+        enableJsonResponse: true,
+        onsessioninitialized: (initializedSessionId) => {
+          sessions.set(initializedSessionId, session);
+        },
+        onsessionclosed: (closedSessionId) => {
+          if (closedSessionId) {
+            sessions.delete(closedSessionId);
+          }
+        },
+      });
+      const server = createBridgeMcpServer(runtime, options);
+      session = { server, transport };
+      await server.connect(transport);
+
+      const response = await transport.handleRequest(request);
+      if (!transport.sessionId) {
+        await server.close();
+      }
+      return response;
+    },
+    async close() {
+      const activeSessions = [...sessions.values()];
+      sessions.clear();
+      await Promise.allSettled(
+        activeSessions.map(({ server }) => server.close()),
+      );
+    },
+  };
+}
+
+export function toToolResult(value: Record<string, unknown>): CallToolResult {
+  const content: CallToolResult["content"] = [];
+  if (typeof value.url === "string" && value.url.length > 0) {
+    content.push({ type: "text", text: openInBrowserNudge(value.url) });
+  }
+  content.push({ type: "text", text: JSON.stringify(value, null, 2) });
+  return {
+    content,
     structuredContent: value,
   };
+}
+
+function openInBrowserNudge(url: string): string {
+  return (
+    `Open this in a browser to view it: ${url}\n` +
+    "If you have an in-app/preview browser tool, render it there instead of just returning the link."
+  );
 }
 
 function normalizeAppUrl(value: string | undefined): string {

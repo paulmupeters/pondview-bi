@@ -38,7 +38,6 @@ pondview start --database ./analytics.duckdb
 pondview start --project-dir ./my-pondview-project
 pondview attach ./analytics.duckdb --as analytics
 pondview query "SELECT 42 AS answer"
-pondview mcp --project-dir ./my-pondview-project
 ```
 
 ### Claude and Codex
@@ -48,16 +47,17 @@ Start Pondview, then register its MCP server with your agent:
 ```bash
 pondview start --project-dir ./my-pondview-project
 
-claude mcp add pondview -- pondview mcp --url http://127.0.0.1:17817
-codex mcp add pondview -- pondview mcp --url http://127.0.0.1:17817
+claude mcp add --transport http pondview http://127.0.0.1:17817/mcp
+codex mcp add pondview --url http://127.0.0.1:17817/mcp
 ```
 
-For a headless workflow, let MCP autostart the project bridge:
+For a headless workflow, start the same bridge without its UI:
 
 ```bash
-claude mcp add pondview -- pondview mcp --project-dir ./my-pondview-project
-codex mcp add pondview -- pondview mcp --project-dir ./my-pondview-project
+pondview start --no-ui --project-dir ./my-pondview-project
 ```
+
+`pondview mcp` remains available as a compatibility stdio transport.
 
 ### Documentation
 

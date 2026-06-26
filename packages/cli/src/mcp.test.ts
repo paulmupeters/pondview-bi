@@ -9,7 +9,11 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { BridgeQueryResponse } from "@pondview/bridge-protocol";
-import { createBridgeMcpToolHandlers, resolveMcpDatabasePath } from "./mcp";
+import {
+  createBridgeMcpToolHandlers,
+  resolveMcpDatabasePath,
+  toToolResult,
+} from "./mcp";
 import { DuckDbRuntime } from "./runtime/duckdb-runtime";
 
 const runtimes: DuckDbRuntime[] = [];
@@ -345,6 +349,52 @@ describe("bridge MCP tools", () => {
       xKey: "name",
       yKeys: ["id"],
     });
+  });
+
+  const textOfBlock = (block: { type: string }): string => {
+    if (block.type !== "text" || !("text" in block)) {
+      throw new Error(`expected a text content block, got ${block.type}`);
+    }
+    return (block as { text: string }).text;
+  };
+
+  test("toToolResult adds an open-in-browser nudge when a url is present", () => {
+    const dashboardUrl =
+      "http://127.0.0.1:17817/dashboards/view?id=sales&pondviewMode=dashboard";
+    const result = toToolResult({ dashboardId: "sales", url: dashboardUrl });
+
+    expect(result.structuredContent).toEqual({
+      dashboardId: "sales",
+      url: dashboardUrl,
+    });
+    expect(result.content).toHaveLength(2);
+    const nudgeText = textOfBlock(result.content[0]);
+    expect(nudgeText).toContain("Open this in a browser");
+    expect(nudgeText).toContain(dashboardUrl);
+    const jsonText = textOfBlock(result.content[1]);
+    expect(jsonText).toBe(
+      JSON.stringify({ dashboardId: "sales", url: dashboardUrl }, null, 2),
+    );
+  });
+
+  test("toToolResult omits the nudge when no url is present", () => {
+    const value = { rows: [{ id: 1 }], rowCount: 1 };
+    const result = toToolResult(value);
+
+    expect(result.content).toHaveLength(1);
+    const jsonText = textOfBlock(result.content[0]);
+    expect(jsonText).toBe(JSON.stringify(value, null, 2));
+    expect(jsonText).not.toContain("Open this in a browser");
+    expect(result.structuredContent).toEqual(value);
+  });
+
+  test("toToolResult omits the nudge when url is an empty string", () => {
+    const result = toToolResult({ url: "" });
+
+    expect(result.content).toHaveLength(1);
+    expect(textOfBlock(result.content[0])).not.toContain(
+      "Open this in a browser",
+    );
   });
 
   test("open_ui returns app, dashboard, and analysis URLs without opening a browser", async () => {

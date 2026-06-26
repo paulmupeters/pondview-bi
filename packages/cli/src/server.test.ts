@@ -65,6 +65,156 @@ describe("bridge server modes", () => {
     expect(root.headers.get("content-type")).toContain("application/json");
   });
 
+  test("serves MCP tools over the primary Streamable HTTP endpoint", async () => {
+    const server = await startTrackedServer();
+    const initialize = await fetch(`${server.url}/mcp`, {
+      method: "POST",
+      headers: mcpHeaders(),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-25",
+          capabilities: {},
+          clientInfo: { name: "pondview-test", version: "1.0.0" },
+        },
+      }),
+    });
+
+    expect(initialize.status).toBe(200);
+    const sessionId = initialize.headers.get("mcp-session-id");
+    expect(sessionId).toBeTruthy();
+    expect(await initialize.json()).toMatchObject({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        serverInfo: { name: "pondview-bridge" },
+      },
+    });
+
+    const initialized = await fetch(`${server.url}/mcp`, {
+      method: "POST",
+      headers: mcpHeaders(sessionId ?? undefined),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "notifications/initialized",
+      }),
+    });
+    expect(initialized.status).toBe(202);
+
+    const tools = await fetch(`${server.url}/mcp`, {
+      method: "POST",
+      headers: mcpHeaders(sessionId ?? undefined),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/list",
+        params: {},
+      }),
+    });
+    expect(tools.status).toBe(200);
+    expect(await tools.json()).toMatchObject({
+      result: {
+        tools: expect.arrayContaining([
+          expect.objectContaining({ name: "list_tables" }),
+          expect.objectContaining({ name: "create_visual" }),
+        ]),
+      },
+    });
+
+    const call = await fetch(`${server.url}/mcp`, {
+      method: "POST",
+      headers: mcpHeaders(sessionId ?? undefined),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: { name: "list_tables", arguments: {} },
+      }),
+    });
+    expect(call.status).toBe(200);
+    expect(await call.json()).toMatchObject({
+      result: {
+        structuredContent: {
+          tables: expect.any(Array),
+          count: expect.any(Number),
+        },
+      },
+    });
+
+    const close = await fetch(`${server.url}/mcp`, {
+      method: "DELETE",
+      headers: mcpHeaders(sessionId ?? undefined),
+    });
+    expect(close.status).toBe(200);
+
+    const closedSession = await fetch(`${server.url}/mcp`, {
+      method: "POST",
+      headers: mcpHeaders(sessionId ?? undefined),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/list",
+        params: {},
+      }),
+    });
+    expect(closedSession.status).toBe(404);
+  });
+
+  test("MCP endpoint enforces bridge auth and rejects untrusted origins", async () => {
+    const server = await startTrackedServer({ token: "secret" });
+    const initializeBody = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-11-25",
+        capabilities: {},
+        clientInfo: { name: "pondview-test", version: "1.0.0" },
+      },
+    });
+
+    const unauthorized = await fetch(`${server.url}/mcp`, {
+      method: "POST",
+      headers: mcpHeaders(),
+      body: initializeBody,
+    });
+    expect(unauthorized.status).toBe(401);
+
+    const invalidOrigin = await fetch(`${server.url}/mcp`, {
+      method: "POST",
+      headers: {
+        ...mcpHeaders(),
+        authorization: "Bearer secret",
+        origin: "https://attacker.example",
+      },
+      body: initializeBody,
+    });
+    expect(invalidOrigin.status).toBe(403);
+
+    const validOrigin = await fetch(`${server.url}/mcp`, {
+      method: "POST",
+      headers: {
+        ...mcpHeaders(),
+        authorization: "Bearer secret",
+        origin: server.url,
+      },
+      body: initializeBody,
+    });
+    expect(validOrigin.status).toBe(200);
+  });
+
+  test("MCP endpoint declines standalone SSE streams", async () => {
+    const server = await startTrackedServer();
+    const response = await fetch(`${server.url}/mcp`, {
+      headers: { accept: "text/event-stream" },
+    });
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("POST, DELETE");
+  });
+
   test("serve mode serves static UI files and React Router fallbacks", async () => {
     const staticDir = createStaticDir();
     const server = await startTrackedServer({ serveUi: true, staticDir });
@@ -903,6 +1053,15 @@ describe("bridge server modes", () => {
     expect(rootFile.status).toBe(400);
   });
 });
+
+function mcpHeaders(sessionId?: string): Record<string, string> {
+  return {
+    accept: "application/json, text/event-stream",
+    "content-type": "application/json",
+    "mcp-protocol-version": "2025-11-25",
+    ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+  };
+}
 
 async function startTrackedServer(
   options: BridgeServerOptions = {},

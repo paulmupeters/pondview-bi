@@ -121,37 +121,23 @@ pondview query --file ./dashboard-metadata.sql --database ./analytics.duckdb
 
 ### MCP server
 
-`pondview mcp` runs a stdio Model Context Protocol server backed by the Bridge
-DuckDB runtime. It is intended for local agents such as Claude Code or Codex CLI
-to spawn on demand. See [MCP for Local Agents](/guide/mcp) for the full setup,
-tool list, and recommended agent workflows.
-
-For project workflows, run MCP through the bridge HTTP API so the bridge is the
-only process that opens the DuckDB file:
+`pondview start` serves the primary Streamable HTTP MCP endpoint alongside the
+Bridge DuckDB runtime and Pondview UI:
 
 ```bash
 pondview start --project-dir ./example
-claude mcp add pondview -- pondview mcp --url http://127.0.0.1:17817
+claude mcp add --transport http pondview http://127.0.0.1:17817/mcp
+codex mcp add pondview --url http://127.0.0.1:17817/mcp
 ```
 
-You can also let MCP autostart a no-UI bridge for a project:
+For a headless bridge:
 
 ```bash
-pondview mcp --project-dir ./example
+pondview start --no-ui --project-dir ./example
 ```
 
-Register it with whichever MCP client you use:
-
-```bash
-# Claude Code
-claude mcp add pondview -- pondview mcp --project-dir /path/to/project
-
-# Codex CLI
-codex mcp add pondview -- pondview mcp --project-dir /path/to/project
-```
-
-You can point the MCP server at a specific DuckDB file for standalone embedded
-use:
+`pondview mcp` is retained as a compatibility stdio server and supports
+standalone embedded use:
 
 ```bash
 pondview mcp --database ./data.duckdb
@@ -165,28 +151,20 @@ creation returns a local dashboard URL that agents can open in a browser:
 Using Pondview, create a monthly revenue line chart and return the dashboard URL.
 ```
 
-If your local app is not running on the default `http://127.0.0.1:17817`, pass
-the app URL used in returned dashboard links:
+SQL execution is read-only by default. For trusted local HTTP workflows:
 
 ```bash
-pondview mcp --project-dir /path/to/project --app-url http://127.0.0.1:17818
-```
-
-SQL execution is read-only by default. For trusted local workflows, start it
-with explicit write access:
-
-```bash
-pondview mcp --allow-write-sql
+pondview start --mcp-allow-write-sql
 ```
 
 Dashboard creation tools write Pondview dashboard metadata through the bridge.
-The `execute_sql` tool still requires `--allow-write-sql` for user-supplied
-write statements.
+The `execute_sql` tool still requires `--mcp-allow-write-sql` for user-supplied
+write statements over HTTP. The compatibility stdio command uses
+`--allow-write-sql`.
 
 The MCP server also exposes dashboard discovery and navigation helpers:
 `list_dashboards`, `get_dashboard`, `open_dashboard`, and `open_ui`. These tools
-return local Pondview URLs for the agent to share; MCP autostart remains
-headless and does not open a browser.
+return local Pondview URLs for the agent to share.
 
 This MCP mode uses the Bridge runtime and Bridge secret store. It does not read
 browser-only AI provider settings and does not expose provider API keys to MCP

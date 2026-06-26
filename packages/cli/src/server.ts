@@ -26,6 +26,7 @@ import {
   bridgeSecretSourceSchema,
 } from "@pondview/bridge-protocol";
 import { handleAiChatRequest } from "./ai";
+import { type BridgeMcpHttpHandler, createBridgeMcpHttpHandler } from "./mcp";
 import { BridgeProjectStore } from "./project-store";
 import { DuckDbRuntime } from "./runtime/duckdb-runtime";
 import {
@@ -51,6 +52,7 @@ export interface BridgeServerOptions {
   staticDir?: string;
   secretsPath?: string;
   projectDir?: string;
+  mcpAllowWriteSql?: boolean;
 }
 
 export interface BridgeUiServerOptions {
@@ -97,6 +99,7 @@ export async function startBridgeServer(
     return runtime.databaseInfo();
   };
 
+  let mcp: BridgeMcpHttpHandler | undefined;
   let boundOptions = { ...options, host, port };
   const server = createServer(async (incoming, outgoing) => {
     await writeResponse(
@@ -108,11 +111,21 @@ export async function startBridgeServer(
         secrets,
         projects,
         initializeProjectRuntime,
+        mcp,
       ),
     );
   });
   const boundPort = await listen(server, host, port);
   boundOptions = { ...boundOptions, port: boundPort };
+  mcp = createBridgeMcpHttpHandler(
+    {
+      query: (sql, limit) => runtime.query(sql, limit),
+    },
+    {
+      allowWriteSql: options.mcpAllowWriteSql,
+      appUrl: `http://${formatHostForUrl(host)}:${boundPort}`,
+    },
+  );
   let stopped = false;
 
   return {
@@ -123,6 +136,7 @@ export async function startBridgeServer(
       }
       stopped = true;
       await closeServer(server);
+      await mcp?.close();
       await runtime.close();
     },
   };
@@ -451,7 +465,13 @@ async function handleRequest(
   secrets: BridgeSecretStore,
   projects: BridgeProjectStore,
   initializeProjectRuntime?: (databasePath?: string) => Promise<unknown>,
+  mcp?: BridgeMcpHttpHandler,
 ): Promise<Response> {
+  const url = new URL(request.url);
+  if (url.pathname === "/mcp") {
+    return handleMcpRequest(request, options, mcp);
+  }
+
   const apiResponse = await handleBridgeRequest(
     request,
     getRuntime(),
@@ -528,6 +548,7 @@ function shouldProxyToBridge(request: Request): boolean {
     url.pathname === "/project/files/replace" ||
     url.pathname === "/catalog" ||
     url.pathname === "/query" ||
+    url.pathname === "/mcp" ||
     url.pathname === "/ai/chat" ||
     url.pathname === "/cancel" ||
     url.pathname === "/sources" ||
@@ -573,6 +594,103 @@ async function proxyBridgeRequest(
   }
 
   return fetch(upstreamUrl, init);
+}
+
+async function handleMcpRequest(
+  request: Request,
+  options: BridgeServerOptions,
+  mcp: BridgeMcpHttpHandler | undefined,
+): Promise<Response> {
+  const originError = validateMcpOrigin(request, options);
+  if (originError) {
+    return originError;
+  }
+
+  if (request.method === "OPTIONS") {
+    const headers = new Headers({
+      "access-control-allow-methods": "POST, DELETE, OPTIONS",
+      "access-control-allow-headers":
+        "authorization, content-type, mcp-protocol-version, mcp-session-id, x-api-key",
+    });
+    const origin = request.headers.get("origin");
+    if (origin) {
+      headers.set("access-control-allow-origin", origin);
+      headers.set("vary", "origin");
+    }
+    return new Response(null, { status: 204, headers });
+  }
+
+  if (!isAuthorized(request, options.token)) {
+    return mcpErrorResponse(401, "Unauthorized", -32001);
+  }
+  if (!mcp) {
+    return mcpErrorResponse(503, "MCP endpoint is not ready");
+  }
+  return mcp.handleRequest(request);
+}
+
+function validateMcpOrigin(
+  request: Request,
+  options: BridgeServerOptions,
+): Response | null {
+  const origin = request.headers.get("origin");
+  if (!origin) {
+    return null;
+  }
+
+  try {
+    const originUrl = new URL(origin);
+    const requestUrl = new URL(request.url);
+    const configuredHost = options.host ?? "127.0.0.1";
+    const configuredPort = String(options.port ?? 17817);
+    const originPort =
+      originUrl.port || (originUrl.protocol === "https:" ? "443" : "80");
+    const samePort = originPort === configuredPort;
+    // Browser clients must be same-origin with the bridge (DNS-rebinding
+    // protection). When bound to a wildcard host (0.0.0.0 / ::) there is no
+    // single canonical origin to match, so any request carrying an Origin
+    // header is rejected; CLI agents send no Origin and are unaffected.
+    const allowedHost =
+      (isLoopbackHost(configuredHost) && isLoopbackHost(originUrl.hostname)) ||
+      (configuredHost !== "0.0.0.0" &&
+        configuredHost !== "::" &&
+        originUrl.hostname === configuredHost);
+
+    if (originUrl.protocol === requestUrl.protocol && samePort && allowedHost) {
+      return null;
+    }
+  } catch {
+    // Invalid origins are rejected below.
+  }
+
+  return mcpErrorResponse(403, "Invalid Origin header");
+}
+
+function isLoopbackHost(host: string): boolean {
+  const normalized = host.replace(/^\[|\]$/g, "").toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1"
+  );
+}
+
+function mcpErrorResponse(
+  status: number,
+  message: string,
+  code = -32000,
+): Response {
+  return new Response(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      error: { code, message },
+      id: null,
+    }),
+    {
+      status,
+      headers: { "content-type": "application/json" },
+    },
+  );
 }
 
 function isAuthorized(request: Request, token: string | undefined): boolean {

@@ -107,6 +107,8 @@ describe("bridge CLI help", () => {
 
     expect(output).toContain("Usage:\n  pondview start [flags]");
     expect(output).toContain("--no-ui");
+    expect(output).toContain("--mcp-allow-write-sql");
+    expect(output).toContain("http://127.0.0.1:17817/mcp");
     expect(output).not.toContain("listening at");
     expect(openedUrls).toEqual([]);
   });
@@ -128,6 +130,8 @@ describe("bridge CLI help", () => {
 
     expect(output).toContain("Usage:\n  pondview mcp [flags]");
     expect(output).toContain("--allow-write-sql");
+    expect(output).toContain("primary MCP interface");
+    expect(output).toContain("http://127.0.0.1:17817/mcp");
     expect(output).toContain("claude mcp add pondview");
     expect(output).toContain("codex mcp add pondview");
   });

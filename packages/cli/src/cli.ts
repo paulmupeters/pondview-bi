@@ -237,6 +237,7 @@ async function runStart(
     "dashboard-mode",
     "database",
     "host",
+    "mcp-allow-write-sql",
     "no-open",
     "no-ui",
     "port",
@@ -261,6 +262,7 @@ async function runStart(
     token,
     databasePath,
     projectDir,
+    mcpAllowWriteSql: args.flags.has("mcp-allow-write-sql"),
     serveUi: !args.flags.has("no-ui"),
     dashboardMode: args.flags.has("dashboard-mode"),
   });
@@ -270,6 +272,14 @@ async function runStart(
       ? `Pondview bridge listening at ${server.url}`
       : `Pondview local app listening at ${server.url}`,
   );
+  console.log(`MCP endpoint: ${server.url}/mcp`);
+  if (!token && !isLoopbackHost(host)) {
+    console.warn(
+      `Warning: the bridge is bound to a non-loopback host (${host}) without a token. ` +
+        "Its HTTP API and MCP endpoint (which can run SQL) are reachable from the network. " +
+        "Pass --token or --token-env to require authentication.",
+    );
+  }
   console.log("Press Ctrl+C to stop.");
 
   if (!args.flags.has("no-ui") && !args.flags.has("no-open")) {
@@ -1311,6 +1321,15 @@ function getClientBaseUrl(args: ParsedArgs): string {
   return readStringFlag(args, "url") ?? `http://${host}:${port}`;
 }
 
+function isLoopbackHost(host: string): boolean {
+  const normalizedHost = host.replace(/^\[|\]$/g, "").toLowerCase();
+  return (
+    normalizedHost === "localhost" ||
+    normalizedHost === "127.0.0.1" ||
+    normalizedHost === "::1"
+  );
+}
+
 function startBridgeProcess(args: ParsedArgs): void {
   const childArgs = [fileURLToPath(import.meta.url), "start", "--no-ui"];
   appendFlag(childArgs, args, "host");
@@ -1643,7 +1662,7 @@ Usage:
 
 Local Runtime
   start          Start the local Pondview app and bridge API
-  mcp            Run a stdio MCP server for local agents
+  mcp            Run the compatibility stdio MCP server
 
 Data
   attach         Attach a DuckDB database source
@@ -1684,6 +1703,7 @@ Examples:
   pondview start --database ./analytics.duckdb
   pondview start --no-ui
   pondview start --dashboard-mode --no-open
+  codex mcp add pondview --url http://127.0.0.1:17817/mcp
 
 Flags:
       --host <host>        Local bridge host (default: 127.0.0.1)
@@ -1691,6 +1711,8 @@ Flags:
       --database <file>    Open a DuckDB file as the primary database
       --project-dir <dir>  Filesystem project root (default: launch directory)
       --dashboard-mode     Open a view-only dashboards UI
+      --mcp-allow-write-sql
+                           Allow MCP execute_sql to run write statements
       --no-open            Do not open the browser
       --no-ui              Start the bridge API only
       --token <token>      Require a bearer token
@@ -1699,7 +1721,10 @@ Flags:
 }
 
 function printMcpHelp(): void {
-  console.log(`Run a stdio MCP server backed by the Pondview Bridge runtime.
+  console.log(`Run the compatibility stdio MCP server.
+
+The primary MCP interface is the Streamable HTTP endpoint served by
+"pondview start" at http://127.0.0.1:17817/mcp.
 
 Usage:
   pondview mcp [flags]
