@@ -351,6 +351,46 @@ describe("bridge MCP tools", () => {
     });
   });
 
+  test("create_text_card stores markdown text card metadata without caller SQL", async () => {
+    const runtime = createRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime);
+
+    const result = await tools.createTextCard({
+      dashboardId: "sales",
+      dashboardTitle: "Sales",
+      title: "Executive Notes",
+      content: "## Summary\nRevenue is **up** this month.",
+      colSpan: 3,
+    });
+    const charts = await runtime.query(
+      "SELECT dashboard_id, title, description, sql, source_sql, sql_backend, chart_config_json, layout_w, layout_h FROM pondview.dashboard_charts",
+    );
+    const config = JSON.parse(String(charts.rows[0]?.chart_config_json));
+
+    expect(result).toMatchObject({
+      dashboardId: "sales",
+      textCardId: expect.stringContaining("executive-notes-"),
+      title: "Executive Notes",
+      url: "http://127.0.0.1:17817/dashboards/view?id=sales&pondviewMode=dashboard",
+    });
+    expect(charts.rows[0]).toMatchObject({
+      dashboard_id: "sales",
+      title: "Executive Notes",
+      description: null,
+      sql: "SELECT 1 AS pondview_text_card",
+      source_sql: "SELECT 1 AS pondview_text_card",
+      sql_backend: "bridge",
+      layout_w: 3,
+      layout_h: 2,
+    });
+    expect(config).toEqual({
+      configType: "text",
+      title: "Executive Notes",
+      content: "## Summary\nRevenue is **up** this month.",
+      colSpan: 3,
+    });
+  });
+
   const textOfBlock = (block: { type: string }): string => {
     if (block.type !== "text" || !("text" in block)) {
       throw new Error(`expected a text content block, got ${block.type}`);

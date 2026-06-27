@@ -226,53 +226,17 @@ export function createBridgeMcpToolHandlers(
       const chartConfig = buildVisualConfig(input, result.columns);
       const layout = initialLayout(chartConfig, position);
 
-      await runtime.query(
-        `INSERT OR REPLACE INTO ${metadataTable("dashboard_charts")} (
-          id,
-          dashboard_id,
-          title,
-          description,
-          sql,
-          db_identifier,
-          catalog_context,
-          sql_backend,
-          source_sql,
-          source_descriptor_json,
-          snapshot_id,
-          chart_config_json,
-          semantic_query_json,
-          explore_name,
-          position,
-          layout_x,
-          layout_y,
-          layout_w,
-          layout_h,
-          created_at,
-          updated_at
-        ) VALUES (
-          ${quoteString(chartId)},
-          ${quoteString(dashboard.dashboardId)},
-          ${quoteString(input.title)},
-          ${sqlNullableString(input.description)},
-          ${quoteString(input.sql)},
-          NULL,
-          NULL,
-          'bridge',
-          ${quoteString(input.sql)},
-          ${quoteString(JSON.stringify(defaultBridgeSourceDescriptor()))},
-          NULL,
-          ${quoteString(JSON.stringify(chartConfig))},
-          NULL,
-          NULL,
-          ${position},
-          ${layout.layoutX},
-          ${layout.layoutY},
-          ${layout.layoutW},
-          ${layout.layoutH},
-          COALESCE((SELECT created_at FROM ${metadataTable("dashboard_charts")} WHERE id = ${quoteString(chartId)}), ${now}),
-          ${now}
-        );`,
-      );
+      await insertDashboardChart(runtime, {
+        id: chartId,
+        dashboardId: dashboard.dashboardId,
+        title: input.title,
+        description: input.description,
+        sql: input.sql,
+        chartConfig,
+        position,
+        layout,
+        now,
+      });
       await touchDashboard(runtime, dashboard.dashboardId, now);
 
       return {
@@ -280,6 +244,45 @@ export function createBridgeMcpToolHandlers(
         visualId: chartId,
         title: input.title,
         rowsPreviewed: result.rows.length,
+        url: dashboardUrl(appUrl, dashboard.dashboardId),
+      };
+    },
+    createTextCard: async (input: {
+      dashboardId?: string;
+      dashboardTitle?: string;
+      title?: string;
+      content: string;
+      colSpan?: number;
+    }) => {
+      const title = input.title?.trim() || "Text";
+      const dashboard = await ensureDashboardForVisual(runtime, {
+        id: input.dashboardId,
+        title: input.dashboardTitle ?? "Pondview Notes",
+      });
+      const chartId = createStableId(title, "text-card");
+      const now = Date.now();
+      const position = await nextChartPosition(runtime, dashboard.dashboardId);
+      const chartConfig = buildTextCardConfig(input, title);
+      const layout = initialLayout(chartConfig, position);
+      const sql = "SELECT 1 AS pondview_text_card";
+
+      await insertDashboardChart(runtime, {
+        id: chartId,
+        dashboardId: dashboard.dashboardId,
+        title,
+        description: null,
+        sql,
+        chartConfig,
+        position,
+        layout,
+        now,
+      });
+      await touchDashboard(runtime, dashboard.dashboardId, now);
+
+      return {
+        dashboardId: dashboard.dashboardId,
+        textCardId: chartId,
+        title,
         url: dashboardUrl(appUrl, dashboard.dashboardId),
       };
     },
@@ -412,6 +415,22 @@ export function createBridgeMcpServer(
       },
     },
     async (input) => toToolResult(await handlers.createVisual(input)),
+  );
+
+  server.registerTool(
+    "create_text_card",
+    {
+      description:
+        "Create a markdown text card on a Pondview dashboard and return a local dashboard URL. Use this for narrative notes, headings, and explanations that do not need SQL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered card instead of a raw link.",
+      inputSchema: {
+        dashboardId: z.string().min(1).optional(),
+        dashboardTitle: z.string().min(1).optional(),
+        title: z.string().min(1).optional(),
+        content: z.string().min(1),
+        colSpan: z.number().int().min(1).max(4).optional(),
+      },
+    },
+    async (input) => toToolResult(await handlers.createTextCard(input)),
   );
 
   server.registerTool(
@@ -839,6 +858,74 @@ async function nextChartPosition(
   return Number.isFinite(position) ? position : 0;
 }
 
+async function insertDashboardChart(
+  runtime: McpRuntime,
+  input: {
+    id: string;
+    dashboardId: string;
+    title: string;
+    description?: string | null;
+    sql: string;
+    chartConfig: Record<string, unknown>;
+    position: number;
+    layout: {
+      layoutX: number;
+      layoutY: number;
+      layoutW: number;
+      layoutH: number;
+    };
+    now: number;
+  },
+): Promise<void> {
+  await runtime.query(
+    `INSERT OR REPLACE INTO ${metadataTable("dashboard_charts")} (
+      id,
+      dashboard_id,
+      title,
+      description,
+      sql,
+      db_identifier,
+      catalog_context,
+      sql_backend,
+      source_sql,
+      source_descriptor_json,
+      snapshot_id,
+      chart_config_json,
+      semantic_query_json,
+      explore_name,
+      position,
+      layout_x,
+      layout_y,
+      layout_w,
+      layout_h,
+      created_at,
+      updated_at
+    ) VALUES (
+      ${quoteString(input.id)},
+      ${quoteString(input.dashboardId)},
+      ${quoteString(input.title)},
+      ${sqlNullableString(input.description)},
+      ${quoteString(input.sql)},
+      NULL,
+      NULL,
+      'bridge',
+      ${quoteString(input.sql)},
+      ${quoteString(JSON.stringify(defaultBridgeSourceDescriptor()))},
+      NULL,
+      ${quoteString(JSON.stringify(input.chartConfig))},
+      NULL,
+      NULL,
+      ${input.position},
+      ${input.layout.layoutX},
+      ${input.layout.layoutY},
+      ${input.layout.layoutW},
+      ${input.layout.layoutH},
+      COALESCE((SELECT created_at FROM ${metadataTable("dashboard_charts")} WHERE id = ${quoteString(input.id)}), ${input.now}),
+      ${input.now}
+    );`,
+  );
+}
+
 async function touchDashboard(
   runtime: McpRuntime,
   dashboardId: string,
@@ -908,6 +995,21 @@ function buildVisualConfig(
     lineSize: 2,
     labelYAngle: -90,
     ...(input.chartConfig ?? {}),
+  };
+}
+
+function buildTextCardConfig(
+  input: {
+    content: string;
+    colSpan?: number;
+  },
+  title: string,
+): Record<string, unknown> {
+  return {
+    configType: "text",
+    title,
+    content: input.content,
+    ...(input.colSpan === undefined ? {} : { colSpan: input.colSpan }),
   };
 }
 
