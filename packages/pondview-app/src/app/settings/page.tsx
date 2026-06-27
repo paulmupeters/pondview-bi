@@ -1507,6 +1507,9 @@ export default function SettingsPage() {
                   onShowExecuteSqlRawOutputChange={
                     setExecuteSqlRawOutputPreference
                   }
+                  mcpEndpointUrl={mcpEndpointUrl}
+                  mcpRequiresAuth={mcpRequiresAuth}
+                  mcpAllowWriteSql={mcpAllowWriteSql}
                 />
               )}
 
@@ -1514,9 +1517,6 @@ export default function SettingsPage() {
                 <RuntimeSettingsSection
                   selectedSqlBackend={selectedSqlBackend}
                   onSqlBackendChange={handleSqlBackendChange}
-                  mcpEndpointUrl={mcpEndpointUrl}
-                  mcpRequiresAuth={mcpRequiresAuth}
-                  mcpAllowWriteSql={mcpAllowWriteSql}
                   bridgeOptionLabel={bridgeOptionLabel}
                   isBridgeSelectable={isBridgeDiscoverable}
                   runtimeSettingsError={runtimeSettingsError}

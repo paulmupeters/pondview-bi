@@ -136,6 +136,9 @@ type AiSettingsSectionsProps = {
   onShowToolCallsChange: (value: boolean) => void;
   showExecuteSqlRawOutput: boolean;
   onShowExecuteSqlRawOutputChange: (value: boolean) => void;
+  mcpEndpointUrl: string;
+  mcpRequiresAuth: boolean;
+  mcpAllowWriteSql: boolean;
 };
 
 export function AiSettingsSections({
@@ -162,6 +165,9 @@ export function AiSettingsSections({
   onShowToolCallsChange,
   showExecuteSqlRawOutput,
   onShowExecuteSqlRawOutputChange,
+  mcpEndpointUrl,
+  mcpRequiresAuth,
+  mcpAllowWriteSql,
 }: AiSettingsSectionsProps) {
   const isOllamaProvider = aiProvider === "ollama";
   const usesCustomCompatibleSettings =
@@ -372,6 +378,24 @@ export function AiSettingsSections({
       <SettingsContentSection>
         <div className="space-y-4">
           <div>
+            <h3 className="text-lg font-semibold">MCP</h3>
+            <p className="text-sm text-muted-foreground">
+              Connect local agents to Pondview AI context through the bridge MCP
+              endpoint.
+            </p>
+          </div>
+
+          <BridgeMcpCard
+            endpointUrl={mcpEndpointUrl}
+            requiresAuth={mcpRequiresAuth}
+            allowWriteSql={mcpAllowWriteSql}
+          />
+        </div>
+      </SettingsContentSection>
+
+      <SettingsContentSection>
+        <div className="space-y-4">
+          <div>
             <h3 className="text-lg font-semibold">Chat display</h3>
             <p className="text-sm text-muted-foreground">
               Configure how chat opens and how tool results are shown in
@@ -567,9 +591,6 @@ function BridgeMcpCard({
 type RuntimeSettingsSectionProps = {
   selectedSqlBackend: SqlBackend;
   onSqlBackendChange: (backend: SqlBackend) => void;
-  mcpEndpointUrl: string;
-  mcpRequiresAuth: boolean;
-  mcpAllowWriteSql: boolean;
   bridgeOptionLabel: string;
   isBridgeSelectable: boolean;
   runtimeSettingsError: string | null;
@@ -604,9 +625,6 @@ type RuntimeSettingsSectionProps = {
 export function RuntimeSettingsSection({
   selectedSqlBackend,
   onSqlBackendChange,
-  mcpEndpointUrl,
-  mcpRequiresAuth,
-  mcpAllowWriteSql,
   bridgeOptionLabel,
   isBridgeSelectable,
   runtimeSettingsError,
@@ -753,12 +771,6 @@ export function RuntimeSettingsSection({
                 </Button>
               </div>
             </div>
-
-            <BridgeMcpCard
-              endpointUrl={mcpEndpointUrl}
-              requiresAuth={mcpRequiresAuth}
-              allowWriteSql={mcpAllowWriteSql}
-            />
 
             <div className="space-y-4 border-t pt-5">
               <div>
