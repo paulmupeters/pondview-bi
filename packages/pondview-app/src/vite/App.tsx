@@ -26,6 +26,7 @@ const HomePage = lazy(() => import("@/app/page"));
 const SettingsPage = lazy(() => import("@/app/settings/page"));
 const SqlEditorPage = lazy(() => import("@/app/sql-editor/page"));
 const StartPreviewPage = lazy(() => import("@/app/start/page"));
+const VisualViewPage = lazy(() => import("@/app/visual/page"));
 
 function ChatRedirect() {
   const [searchParams] = useSearchParams();
@@ -50,7 +51,11 @@ function LegacyDashboardDeepLinkRedirect() {
 }
 
 export function isDashboardModeRoutePath(pathname: string): boolean {
-  return pathname === "/dashboards" || pathname === "/dashboards/view";
+  return (
+    pathname === "/dashboards" ||
+    pathname === "/dashboards/view" ||
+    pathname.startsWith("/visual/")
+  );
 }
 
 function DashboardModeRoutes({ canExitPreview }: { canExitPreview: boolean }) {
@@ -66,6 +71,7 @@ function DashboardModeRoutes({ canExitPreview }: { canExitPreview: boolean }) {
               path="/dashboards/:dashboardId"
               element={<LegacyDashboardDeepLinkRedirect />}
             />
+            <Route path="/visual/:visualId" element={<VisualViewPage />} />
             <Route path="*" element={<Navigate to="/dashboards" replace />} />
           </Routes>
         </Suspense>
@@ -89,6 +95,7 @@ function AppRoutes() {
             path="/dashboards/:dashboardId"
             element={<LegacyDashboardDeepLinkRedirect />}
           />
+          <Route path="/visual/:visualId" element={<VisualViewPage />} />
           <Route path="/data" element={<DataPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/sql-editor" element={<SqlEditorPage />} />

@@ -293,9 +293,89 @@ describe("bridge MCP tools", () => {
       title: "Users by id",
       sql: "SELECT id, name FROM users ORDER BY id",
     });
+    expect(charts[0]?.visualUrl).toBeUndefined();
     expect(result.measures).toEqual([]);
     expect(result.slicers).toEqual([]);
     expect(result.joinDefs).toEqual([]);
+  });
+
+  test("list_visuals returns visual summaries and standalone URLs", async () => {
+    const runtime = await createSeededRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime, {
+      appUrl: "http://127.0.0.1:17818/",
+    });
+
+    const salesVisual = await tools.createVisual({
+      dashboardId: "sales",
+      dashboardTitle: "Sales",
+      title: "Users by id",
+      sql: "SELECT id, name FROM users ORDER BY id",
+      visualType: "bar",
+      xKey: "name",
+      yKeys: ["id"],
+    });
+    await tools.createTextCard({
+      dashboardId: "ops",
+      dashboardTitle: "Ops",
+      title: "Ops Notes",
+      content: "**Watch** the queue.",
+    });
+
+    const allResult = await tools.listVisuals();
+    const salesResult = await tools.listVisuals("sales");
+
+    expect(allResult.count).toBe(2);
+    expect(salesResult.count).toBe(1);
+    expect(salesResult.visuals[0]).toMatchObject({
+      id: salesVisual.visualId,
+      visualId: salesVisual.visualId,
+      dashboardId: "sales",
+      dashboardTitle: "Sales",
+      title: "Users by id",
+      configType: "chart",
+      type: "bar",
+      dashboardUrl:
+        "http://127.0.0.1:17818/dashboards/view?id=sales&pondviewMode=dashboard",
+      visualUrl: `http://127.0.0.1:17818/visual/${salesVisual.visualId}?pondviewMode=dashboard`,
+    });
+  });
+
+  test("get_visual returns one visual or an empty standalone URL result", async () => {
+    const runtime = await createSeededRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime);
+
+    const created = await tools.createVisual({
+      dashboardId: "sales",
+      dashboardTitle: "Sales",
+      title: "Users by id",
+      sql: "SELECT id, name FROM users ORDER BY id",
+      visualType: "table",
+    });
+
+    const found = await tools.getVisual(created.visualId);
+    const missing = await tools.getVisual("missing");
+
+    expect(found).toMatchObject({
+      visualId: created.visualId,
+      url: `http://127.0.0.1:17817/visual/${created.visualId}?pondviewMode=dashboard`,
+      visualUrl: `http://127.0.0.1:17817/visual/${created.visualId}?pondviewMode=dashboard`,
+    });
+    expect(found.visual).toMatchObject({
+      id: created.visualId,
+      dashboard_id: "sales",
+      title: "Users by id",
+      configType: "table",
+      type: null,
+      dashboardUrl:
+        "http://127.0.0.1:17817/dashboards/view?id=sales&pondviewMode=dashboard",
+      visualUrl: `http://127.0.0.1:17817/visual/${created.visualId}?pondviewMode=dashboard`,
+    });
+    expect(missing).toEqual({
+      visual: null,
+      visualId: "missing",
+      url: "http://127.0.0.1:17817/visual/missing?pondviewMode=dashboard",
+      visualUrl: "http://127.0.0.1:17817/visual/missing?pondviewMode=dashboard",
+    });
   });
 
   test("dashboard discovery tolerates missing metadata tables", async () => {
@@ -313,7 +393,7 @@ describe("bridge MCP tools", () => {
     });
   });
 
-  test("create_visual stores chart metadata and returns dashboard URL", async () => {
+  test("create_visual stores chart metadata and returns visual URL", async () => {
     const runtime = await createSeededRuntime();
     const tools = createBridgeMcpToolHandlers(runtime);
 
@@ -335,6 +415,9 @@ describe("bridge MCP tools", () => {
     expect(result.dashboardId).toBe("sales");
     expect(result.url).toBe(
       "http://127.0.0.1:17817/dashboards/view?id=sales&pondviewMode=dashboard",
+    );
+    expect(result.visualUrl).toBe(
+      `http://127.0.0.1:17817/visual/${result.visualId}?pondviewMode=dashboard`,
     );
     expect(charts.rows[0]).toMatchObject({
       dashboard_id: "sales",
@@ -372,6 +455,9 @@ describe("bridge MCP tools", () => {
       textCardId: expect.stringContaining("executive-notes-"),
       title: "Executive Notes",
       url: "http://127.0.0.1:17817/dashboards/view?id=sales&pondviewMode=dashboard",
+      visualUrl: expect.stringContaining(
+        "http://127.0.0.1:17817/visual/executive-notes-",
+      ),
     });
     expect(charts.rows[0]).toMatchObject({
       dashboard_id: "sales",
@@ -415,6 +501,24 @@ describe("bridge MCP tools", () => {
     expect(jsonText).toBe(
       JSON.stringify({ dashboardId: "sales", url: dashboardUrl }, null, 2),
     );
+  });
+
+  test("toToolResult prefers visualUrl for the open-in-browser nudge", () => {
+    const dashboardUrl =
+      "http://127.0.0.1:17817/dashboards/view?id=sales&pondviewMode=dashboard";
+    const visualUrl =
+      "http://127.0.0.1:17817/visual/users-by-id-123?pondviewMode=dashboard";
+    const result = toToolResult({
+      dashboardId: "sales",
+      visualId: "users-by-id-123",
+      url: dashboardUrl,
+      visualUrl,
+    });
+
+    expect(result.content).toHaveLength(2);
+    const nudgeText = textOfBlock(result.content[0]);
+    expect(nudgeText).toContain(visualUrl);
+    expect(nudgeText).not.toContain(dashboardUrl);
   });
 
   test("toToolResult omits the nudge when no url is present", () => {

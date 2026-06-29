@@ -164,6 +164,12 @@ export function createBridgeMcpToolHandlers(
     },
     getDashboard: async (dashboardId: string) =>
       getDashboardSnapshot(runtime, appUrl, dashboardId),
+    listVisuals: async (dashboardId?: string) => {
+      const visuals = await listVisualSummaries(runtime, appUrl, dashboardId);
+      return { visuals, count: visuals.length };
+    },
+    getVisual: async (visualId: string) =>
+      getVisualSnapshot(runtime, appUrl, visualId),
     createDashboard: async (input: { id?: string; title: string }) => {
       const now = Date.now();
       const id = input.id?.trim() || createStableId(input.title, "dashboard");
@@ -245,6 +251,7 @@ export function createBridgeMcpToolHandlers(
         title: input.title,
         rowsPreviewed: result.rows.length,
         url: dashboardUrl(appUrl, dashboard.dashboardId),
+        visualUrl: visualUrl(appUrl, chartId),
       };
     },
     createTextCard: async (input: {
@@ -284,6 +291,7 @@ export function createBridgeMcpToolHandlers(
         textCardId: chartId,
         title,
         url: dashboardUrl(appUrl, dashboard.dashboardId),
+        visualUrl: visualUrl(appUrl, chartId),
       };
     },
     openUi: async (input: {
@@ -300,6 +308,13 @@ export function createBridgeMcpToolHandlers(
       dashboardId: dashboardId?.trim() || null,
       url: dashboardUrl(appUrl, dashboardId?.trim() || undefined),
     }),
+    openVisual: async (visualId: string) => {
+      const id = visualId.trim();
+      return {
+        visualId: id,
+        url: visualUrl(appUrl, id),
+      };
+    },
   };
 }
 
@@ -385,6 +400,31 @@ export function createBridgeMcpServer(
   );
 
   server.registerTool(
+    "list_visuals",
+    {
+      description:
+        "List Pondview dashboard visuals, optionally filtered by dashboard, including standalone visual URLs.",
+      inputSchema: {
+        dashboardId: z.string().min(1).optional(),
+      },
+    },
+    async ({ dashboardId }) =>
+      toToolResult(await handlers.listVisuals(dashboardId)),
+  );
+
+  server.registerTool(
+    "get_visual",
+    {
+      description:
+        "Get one Pondview dashboard visual by id, including its standalone visual URL.",
+      inputSchema: {
+        visualId: z.string().min(1),
+      },
+    },
+    async ({ visualId }) => toToolResult(await handlers.getVisual(visualId)),
+  );
+
+  server.registerTool(
     "create_dashboard",
     {
       description:
@@ -458,6 +498,18 @@ export function createBridgeMcpServer(
     },
     async ({ dashboardId }) =>
       toToolResult(await handlers.openDashboard(dashboardId)),
+  );
+
+  server.registerTool(
+    "open_visual",
+    {
+      description:
+        "Return a local Pondview standalone visual URL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered visual instead of a raw link.",
+      inputSchema: {
+        visualId: z.string().min(1),
+      },
+    },
+    async ({ visualId }) => toToolResult(await handlers.openVisual(visualId)),
   );
 
   return server;
@@ -592,8 +644,12 @@ export function createBridgeMcpHttpHandler(
 
 export function toToolResult(value: Record<string, unknown>): CallToolResult {
   const content: CallToolResult["content"] = [];
-  if (typeof value.url === "string" && value.url.length > 0) {
-    content.push({ type: "text", text: openInBrowserNudge(value.url) });
+  const primaryUrl =
+    typeof value.visualUrl === "string" && value.visualUrl.length > 0
+      ? value.visualUrl
+      : value.url;
+  if (typeof primaryUrl === "string" && primaryUrl.length > 0) {
+    content.push({ type: "text", text: openInBrowserNudge(primaryUrl) });
   }
   content.push({ type: "text", text: JSON.stringify(value, null, 2) });
   return {
@@ -619,6 +675,10 @@ function dashboardUrl(appUrl: string, dashboardId?: string): string {
     ? `/dashboards/view?id=${encodeURIComponent(dashboardId)}&pondviewMode=dashboard`
     : "/dashboards?pondviewMode=dashboard";
   return `${appUrl}${path}`;
+}
+
+function visualUrl(appUrl: string, visualId: string): string {
+  return `${appUrl}/visual/${encodeURIComponent(visualId)}?pondviewMode=dashboard`;
 }
 
 function uiUrl(
@@ -746,6 +806,145 @@ async function getDashboardSnapshot(
     ),
     url: dashboardUrl(appUrl, id),
   };
+}
+
+async function listVisualSummaries(
+  runtime: McpRuntime,
+  appUrl: string,
+  dashboardId?: string,
+): Promise<Array<Record<string, unknown>>> {
+  const tables = await listMetadataTables(runtime);
+  if (!tables.has("dashboard_charts")) {
+    return [];
+  }
+
+  const id = dashboardId?.trim();
+  const dashboardTitleSelect = tables.has("dashboards")
+    ? ", d.title AS dashboard_title"
+    : ", NULL AS dashboard_title";
+  const dashboardJoin = tables.has("dashboards")
+    ? `LEFT JOIN ${metadataTable("dashboards")} d ON d.id = c.dashboard_id`
+    : "";
+  const where = id ? `WHERE c.dashboard_id = ${quoteString(id)}` : "";
+  const result = await runtime.query(
+    `SELECT
+       c.id,
+       c.dashboard_id,
+       c.title,
+       c.description,
+       c.chart_config_json,
+       c.position,
+       c.created_at,
+       c.updated_at
+       ${dashboardTitleSelect}
+     FROM ${metadataTable("dashboard_charts")} c
+     ${dashboardJoin}
+     ${where}
+     ORDER BY c.updated_at DESC, c.position ASC;`,
+  );
+
+  return result.rows.map((row) => visualSummaryFromRow(row, appUrl));
+}
+
+async function getVisualSnapshot(
+  runtime: McpRuntime,
+  appUrl: string,
+  visualId: string,
+): Promise<Record<string, unknown>> {
+  const id = visualId.trim();
+  const tables = await listMetadataTables(runtime);
+  if (!tables.has("dashboard_charts")) {
+    return emptyVisualSnapshot(appUrl, id);
+  }
+
+  const dashboardTitleSelect = tables.has("dashboards")
+    ? ", d.title AS dashboard_title"
+    : ", NULL AS dashboard_title";
+  const dashboardJoin = tables.has("dashboards")
+    ? `LEFT JOIN ${metadataTable("dashboards")} d ON d.id = c.dashboard_id`
+    : "";
+  const result = await runtime.query(
+    `SELECT
+       c.*
+       ${dashboardTitleSelect}
+     FROM ${metadataTable("dashboard_charts")} c
+     ${dashboardJoin}
+     WHERE c.id = ${quoteString(id)}
+     LIMIT 1;`,
+  );
+  const visual = result.rows[0] ?? null;
+  if (!visual) {
+    return emptyVisualSnapshot(appUrl, id);
+  }
+
+  return {
+    visual: {
+      ...visual,
+      ...visualConfigMetadata(visual.chart_config_json),
+      dashboardUrl: dashboardUrl(appUrl, String(visual.dashboard_id ?? "")),
+      visualUrl: visualUrl(appUrl, String(visual.id ?? id)),
+    },
+    visualId: id,
+    url: visualUrl(appUrl, id),
+    visualUrl: visualUrl(appUrl, id),
+  };
+}
+
+function emptyVisualSnapshot(
+  appUrl: string,
+  visualId: string,
+): Record<string, unknown> {
+  return {
+    visual: null,
+    visualId,
+    url: visualUrl(appUrl, visualId),
+    visualUrl: visualUrl(appUrl, visualId),
+  };
+}
+
+function visualSummaryFromRow(
+  row: Record<string, unknown>,
+  appUrl: string,
+): Record<string, unknown> {
+  const id = String(row.id ?? "");
+  const dashboardId = String(row.dashboard_id ?? "");
+  return {
+    id,
+    visualId: id,
+    dashboardId,
+    dashboardTitle: row.dashboard_title ?? null,
+    title: row.title ?? null,
+    description: row.description ?? null,
+    ...visualConfigMetadata(row.chart_config_json),
+    position: row.position ?? null,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+    dashboardUrl: dashboardUrl(appUrl, dashboardId),
+    visualUrl: visualUrl(appUrl, id),
+  };
+}
+
+function visualConfigMetadata(value: unknown): {
+  configType: string | null;
+  type: string | null;
+} {
+  if (typeof value !== "string") {
+    return { configType: null, type: null };
+  }
+  try {
+    const config = JSON.parse(value) as Record<string, unknown>;
+    return {
+      configType:
+        typeof config.configType === "string"
+          ? config.configType
+          : typeof config.visualType === "string"
+            ? config.visualType
+            : null,
+      type: typeof config.type === "string" ? config.type : null,
+    };
+  } catch {
+    return { configType: null, type: null };
+  }
 }
 
 function emptyDashboardSnapshot(

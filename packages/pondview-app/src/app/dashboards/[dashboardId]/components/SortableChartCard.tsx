@@ -60,7 +60,7 @@ export function DashboardChartCard({
   const isExpanded = expandedSqlChartId === chart.id;
 
   const isTable = Boolean(config && isTableConfig(config));
-  const canPreview = Boolean(config && !isTextConfig(config));
+  const canPreview = Boolean(config && !isTextConfig(config) && onPreviewChart);
 
   useEffect(() => {
     if (isExpanded) {
@@ -296,14 +296,16 @@ export function DashboardChartCard({
                   {isRefreshing ? "Refreshing" : "Refresh"}
                 </button>
               ) : null}
-              <button
-                type="button"
-                onClick={() => onSelect?.(chart.id)}
-                className={`${settingsButtonClassName} ${isSelected ? "text-primary" : ""}`}
-              >
-                <Funnel className={settingsIconClassName} />
-                Filter this visual
-              </button>
+              {onSelect ? (
+                <button
+                  type="button"
+                  onClick={() => onSelect(chart.id)}
+                  className={`${settingsButtonClassName} ${isSelected ? "text-primary" : ""}`}
+                >
+                  <Funnel className={settingsIconClassName} />
+                  Filter this visual
+                </button>
+              ) : null}
               {settingsDialog}
               {!readOnly ? (
                 <button
