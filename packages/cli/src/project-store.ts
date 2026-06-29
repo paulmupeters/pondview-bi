@@ -388,17 +388,19 @@ function isPathInsideRoot(rootPath: string, targetPath: string): boolean {
   );
 }
 
-function resolveProjectRootPath(explicitRootPath?: string): string {
-  const candidates = [
-    explicitRootPath,
-    process.env.npm_config_local_prefix,
-    process.env.INIT_CWD,
-    process.env.PWD,
-    process.cwd(),
-  ];
-  const rootPath =
-    candidates.find((candidate) => candidate?.trim()) ?? process.cwd();
-  return resolve(rootPath);
+export function resolveProjectRootPath(explicitRootPath?: string): string {
+  const launchDirectory =
+    [
+      process.env.npm_config_local_prefix,
+      process.env.INIT_CWD,
+      process.env.PWD,
+      process.cwd(),
+    ].find((candidate) => candidate?.trim()) ?? process.cwd();
+  const projectRootPath = explicitRootPath?.trim();
+
+  return projectRootPath
+    ? resolve(launchDirectory, projectRootPath)
+    : resolve(launchDirectory);
 }
 
 function createProjectRootId(rootPath: string): string {

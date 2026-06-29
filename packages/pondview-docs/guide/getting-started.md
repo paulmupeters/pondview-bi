@@ -89,6 +89,9 @@ pondview query "SELECT 42 AS answer"
 
 See [Pondview CLI](/guide/cli) for commands, flags, and local project behavior.
 
+If you want Claude Code, Codex CLI, or another local agent to work with the same
+Bridge runtime, see [MCP for Local Agents](/guide/mcp).
+
 ## 1. Set up your AI key
 
 Open **Settings** and configure:

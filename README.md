@@ -40,6 +40,25 @@ pondview attach ./analytics.duckdb --as analytics
 pondview query "SELECT 42 AS answer"
 ```
 
+### Claude and Codex
+
+Start Pondview, then register its MCP server with your agent:
+
+```bash
+pondview start --project-dir ./my-pondview-project
+
+claude mcp add --transport http pondview http://127.0.0.1:17817/mcp
+codex mcp add pondview --url http://127.0.0.1:17817/mcp
+```
+
+For a headless workflow, start the same bridge without its UI:
+
+```bash
+pondview start --no-ui --project-dir ./my-pondview-project
+```
+
+`pondview mcp` remains available as a compatibility stdio transport.
+
 ### Documentation
 
 For setup, configuration, runtimes, connected sources, dashboards, and AI providers, see the [Pondview docs](./packages/pondview-docs/index.md).

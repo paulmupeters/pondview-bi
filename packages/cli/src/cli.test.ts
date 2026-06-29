@@ -115,6 +115,8 @@ describe("bridge CLI help", () => {
 
     expect(output).toContain("Usage:\n  pondview start [flags]");
     expect(output).toContain("--no-ui");
+    expect(output).toContain("--mcp-allow-write-sql");
+    expect(output).toContain("http://127.0.0.1:17817/mcp");
     expect(output).not.toContain("listening at");
     expect(openedUrls).toEqual([]);
   });
@@ -129,6 +131,17 @@ describe("bridge CLI help", () => {
     );
     expect(output).not.toContain("use-existing");
     expect(output).not.toContain("ui-port");
+  });
+
+  test("prints MCP help", async () => {
+    const output = await captureStdout(() => runCli(["mcp", "--help"]));
+
+    expect(output).toContain("Usage:\n  pondview mcp [flags]");
+    expect(output).toContain("--allow-write-sql");
+    expect(output).toContain("primary MCP interface");
+    expect(output).toContain("http://127.0.0.1:17817/mcp");
+    expect(output).toContain("claude mcp add pondview");
+    expect(output).toContain("codex mcp add pondview");
   });
 });
 
@@ -524,6 +537,132 @@ describe("bridge CLI client autostart", () => {
       token: "secret",
       "token-env": "PONDVIEW_TEST_TOKEN",
       database: "./analytics.duckdb",
+    });
+  });
+});
+
+describe("bridge CLI MCP runtime selection", () => {
+  test("project-backed MCP autostarts and uses a bridge client runtime", async () => {
+    const startedFlags: Record<string, string | boolean> = {};
+    const queries: Array<{ sql: string; limit?: number }> = [];
+    let healthCalls = 0;
+    let embeddedStarted = false;
+    let runtimeStarted = false;
+
+    await runCli(["mcp", "--project-dir", "./example"], {
+      createClient: () => ({
+        ...createNoopClient(),
+        health: async () => {
+          healthCalls += 1;
+          if (healthCalls === 1) {
+            throw new TypeError("fetch failed");
+          }
+          return createNoopClient().health();
+        },
+        query: async (input) => {
+          queries.push(input);
+          return queryResponse();
+        },
+      }),
+      startBridgeProcess: (args) => {
+        for (const [name, value] of args.flags) {
+          startedFlags[name] = value;
+        }
+      },
+      runBridgeMcpServer: async () => {
+        embeddedStarted = true;
+      },
+      runBridgeMcpServerWithRuntime: async (runtime) => {
+        runtimeStarted = true;
+        await runtime.query("SELECT 1", 7);
+      },
+      sleep: async () => {},
+    });
+
+    expect(runtimeStarted).toBe(true);
+    expect(embeddedStarted).toBe(false);
+    expect(startedFlags).toMatchObject({ "project-dir": "./example" });
+    expect(queries).toEqual([{ sql: "SELECT 1", limit: 7 }]);
+    expect(healthCalls).toBeGreaterThanOrEqual(3);
+  });
+
+  test("--url selects bridge client mode without autostarting", async () => {
+    let started = false;
+    let runtimeStarted = false;
+
+    await runCli(["mcp", "--url", "http://example.test"], {
+      createClient: () => createNoopClient(),
+      startBridgeProcess: () => {
+        started = true;
+      },
+      runBridgeMcpServer: async () => {
+        throw new Error("embedded MCP should not start");
+      },
+      runBridgeMcpServerWithRuntime: async () => {
+        runtimeStarted = true;
+      },
+    });
+
+    expect(runtimeStarted).toBe(true);
+    expect(started).toBe(false);
+  });
+
+  test("--database keeps embedded MCP mode", async () => {
+    let embeddedOptions: unknown;
+
+    await runCli(["mcp", "--database", "./analytics.duckdb"], {
+      createClient: () => {
+        throw new Error("client should not be created");
+      },
+      runBridgeMcpServer: async (options) => {
+        embeddedOptions = options;
+      },
+      runBridgeMcpServerWithRuntime: async () => {
+        throw new Error("client MCP should not start");
+      },
+    });
+
+    expect(embeddedOptions).toMatchObject({
+      databasePath: "./analytics.duckdb",
+    });
+  });
+
+  test("MCP client mode accepts token flags", async () => {
+    const originalValue = process.env.PONDVIEW_TEST_TOKEN;
+    process.env.PONDVIEW_TEST_TOKEN = "env-secret";
+    const seenFlags: Array<Record<string, string | boolean>> = [];
+
+    try {
+      await runCli(
+        [
+          "mcp",
+          "--project-dir",
+          "./example",
+          "--token",
+          "inline-secret",
+          "--token-env",
+          "PONDVIEW_TEST_TOKEN",
+        ],
+        {
+          createClient: (args) => {
+            seenFlags.push(Object.fromEntries(args.flags));
+            return createNoopClient();
+          },
+          runBridgeMcpServerWithRuntime: async () => {},
+        },
+      );
+    } finally {
+      if (originalValue === undefined) {
+        delete process.env.PONDVIEW_TEST_TOKEN;
+      } else {
+        process.env.PONDVIEW_TEST_TOKEN = originalValue;
+      }
+    }
+
+    expect(seenFlags.length).toBeGreaterThan(0);
+    expect(seenFlags[0]).toMatchObject({
+      token: "inline-secret",
+      "token-env": "PONDVIEW_TEST_TOKEN",
     });
   });
 });
@@ -951,6 +1090,24 @@ describe("bridge CLI stop", () => {
 });
 
 describe("bridge CLI validation", () => {
+  test("MCP accepts client flags", async () => {
+    let embeddedOptions: unknown;
+
+    await runCli(["mcp", "--port", "17817"], {
+      runBridgeMcpServer: async (options) => {
+        embeddedOptions = options;
+      },
+    });
+
+    expect(embeddedOptions).toBeDefined();
+  });
+
+  test("rejects unsupported MCP flags", async () => {
+    await expect(runCli(["mcp", "--ui-port", "17818"])).rejects.toThrow(
+      "Unsupported flag for pondview mcp: --ui-port",
+    );
+  });
+
   test("fails fast when --token-env is explicit but unset", async () => {
     const originalValue = process.env.PONDVIEW_MISSING_TEST_TOKEN;
     delete process.env.PONDVIEW_MISSING_TEST_TOKEN;

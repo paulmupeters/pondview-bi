@@ -28,6 +28,7 @@ export default defineConfig({
         text: "Features",
         items: [
           { text: "Dashboards", link: "/guide/dashboards" },
+          { text: "MCP for Local Agents", link: "/guide/mcp" },
           {
             text: "AI Provider Configuration",
             link: "/guide/ai-provider-configuration",

@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { RuntimeSettingsSection } from "@/app/settings/settings-sections";
+import {
+  AiSettingsSections,
+  RuntimeSettingsSection,
+} from "@/app/settings/settings-sections";
 
 function noop() {}
 
@@ -81,6 +84,7 @@ describe("RuntimeSettingsSection", () => {
     expect(markup).toContain("Local database");
     expect(markup).toContain("Project storage");
     expect(markup).toContain("does not create a local DuckDB file");
+    expect(markup).not.toContain("MCP endpoint");
   });
 
   test("shows bridge connection testing state", () => {
@@ -109,5 +113,46 @@ describe("RuntimeSettingsSection", () => {
     );
 
     expect(markup).toContain("Testing...");
+  });
+});
+
+describe("AiSettingsSections", () => {
+  test("shows MCP settings in the AI tab", () => {
+    const markup = renderToStaticMarkup(
+      <AiSettingsSections
+        aiProvider="openai"
+        onAiProviderChange={noop}
+        model="gpt-4.1"
+        onModelChange={noop}
+        visualizationModel="gpt-4.1"
+        onVisualizationModelChange={noop}
+        customSystemPrompt=""
+        onCustomSystemPromptChange={noop}
+        apiKey=""
+        onApiKeyChange={noop}
+        hasStoredBridgeAiKey={false}
+        ollamaBaseUrl=""
+        onOllamaBaseUrlChange={noop}
+        openAiCompatibleUrl=""
+        onOpenAiCompatibleUrlChange={noop}
+        openAiCompatibleName=""
+        onOpenAiCompatibleNameChange={noop}
+        aiSettingsError={null}
+        onSaveAiSettings={noop}
+        isSaving={false}
+        defaultPromptMode="ai"
+        showToolCalls={true}
+        onShowToolCallsChange={noop}
+        showExecuteSqlRawOutput={false}
+        onShowExecuteSqlRawOutputChange={noop}
+        mcpEndpointUrl="http://127.0.0.1:17817/mcp"
+        mcpRequiresAuth={false}
+        mcpAllowWriteSql={false}
+      />,
+    );
+
+    expect(markup).toContain("MCP endpoint");
+    expect(markup).toContain("http://127.0.0.1:17817/mcp");
+    expect(markup).toContain("codex mcp add pondview");
   });
 });

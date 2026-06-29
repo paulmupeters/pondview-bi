@@ -5,7 +5,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BridgeClient } from "@pondview/bridge-protocol";
+import {
+  type BridgeMcpOptions,
+  type McpRuntime,
+  runBridgeMcpServer,
+  runBridgeMcpServerWithRuntime,
+} from "./mcp";
 import { type BrowserOpener, openBrowser } from "./open-browser";
+import { resolveProjectRootPath } from "./project-store";
 import { startBridgeServer } from "./server";
 
 interface ParsedArgs {
@@ -42,11 +49,24 @@ interface BridgeApiClient {
   query: BridgeClient["query"];
 }
 
+class BridgeClientRuntime implements McpRuntime {
+  constructor(private readonly client: Pick<BridgeApiClient, "query">) {}
+
+  query(sql: string, limit?: number) {
+    return this.client.query({ sql, limit });
+  }
+}
+
 interface CliDeps {
   openBrowser?: BrowserOpener;
   waitForShutdown?: () => Promise<void>;
   createClient?: (args: ParsedArgs) => BridgeApiClient;
   startBridgeProcess?: (args: ParsedArgs) => void;
+  runBridgeMcpServer?: (options: BridgeMcpOptions) => Promise<void>;
+  runBridgeMcpServerWithRuntime?: (
+    runtime: McpRuntime,
+    options: Pick<BridgeMcpOptions, "allowWriteSql" | "appUrl">,
+  ) => Promise<void>;
   findProcessIdsByPort?: (port: number) => Promise<number[]>;
   isPondviewBridgePort?: (args: ParsedArgs) => Promise<boolean>;
   killProcess?: (pid: number) => void;
@@ -58,6 +78,8 @@ const defaultDeps = {
   waitForShutdown,
   createClient,
   startBridgeProcess,
+  runBridgeMcpServer,
+  runBridgeMcpServerWithRuntime,
   findProcessIdsByPort,
   isPondviewBridgePort,
   killProcess,
@@ -94,6 +116,9 @@ export async function runCli(
       break;
     case "dashboard":
       await runDashboard(args, resolvedDeps);
+      break;
+    case "mcp":
+      await runMcp(args, resolvedDeps);
       break;
     case "source":
       await runSource(args);
@@ -212,6 +237,7 @@ async function runStart(
     "dashboard-mode",
     "database",
     "host",
+    "mcp-allow-write-sql",
     "no-open",
     "no-ui",
     "port",
@@ -236,6 +262,7 @@ async function runStart(
     token,
     databasePath,
     projectDir,
+    mcpAllowWriteSql: args.flags.has("mcp-allow-write-sql"),
     serveUi: !args.flags.has("no-ui"),
     dashboardMode: args.flags.has("dashboard-mode"),
   });
@@ -245,6 +272,14 @@ async function runStart(
       ? `Pondview bridge listening at ${server.url}`
       : `Pondview local app listening at ${server.url}`,
   );
+  console.log(`MCP endpoint: ${server.url}/mcp`);
+  if (!token && !isLoopbackHost(host)) {
+    console.warn(
+      `Warning: the bridge is bound to a non-loopback host (${host}) without a token. ` +
+        "Its HTTP API and MCP endpoint (which can run SQL) are reachable from the network. " +
+        "Pass --token or --token-env to require authentication.",
+    );
+  }
   console.log("Press Ctrl+C to stop.");
 
   if (!args.flags.has("no-ui") && !args.flags.has("no-open")) {
@@ -512,6 +547,38 @@ async function runDashboardOpen(
   }
   await deps.waitForShutdown();
   await server.stop();
+}
+
+async function runMcp(
+  args: ParsedArgs,
+  deps: Required<CliDeps>,
+): Promise<void> {
+  assertAllowedFlags(args, [...CLIENT_FLAGS, "allow-write-sql", "app-url"]);
+
+  const options = {
+    allowWriteSql: args.flags.has("allow-write-sql"),
+    appUrl: readStringFlag(args, "app-url"),
+    databasePath: readStringFlag(args, "database"),
+    projectDir: readStringFlag(args, "project-dir"),
+  };
+
+  if (shouldUseBridgeClientForMcp(args)) {
+    await runClientCommand(args, deps, (client) => client.health());
+    await deps.runBridgeMcpServerWithRuntime(
+      new BridgeClientRuntime(deps.createClient(args)),
+      options,
+    );
+    return;
+  }
+
+  await deps.runBridgeMcpServer(options);
+}
+
+function shouldUseBridgeClientForMcp(args: ParsedArgs): boolean {
+  return (
+    args.flags.has("url") ||
+    (args.flags.has("project-dir") && !args.flags.has("database"))
+  );
 }
 
 async function runStop(
@@ -1254,6 +1321,15 @@ function getClientBaseUrl(args: ParsedArgs): string {
   return readStringFlag(args, "url") ?? `http://${host}:${port}`;
 }
 
+function isLoopbackHost(host: string): boolean {
+  const normalizedHost = host.replace(/^\[|\]$/g, "").toLowerCase();
+  return (
+    normalizedHost === "localhost" ||
+    normalizedHost === "127.0.0.1" ||
+    normalizedHost === "::1"
+  );
+}
+
 function startBridgeProcess(args: ParsedArgs): void {
   const childArgs = [fileURLToPath(import.meta.url), "start", "--no-ui"];
   appendFlag(childArgs, args, "host");
@@ -1462,18 +1538,11 @@ function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
 }
 
-function resolveLaunchProjectDir(args: ParsedArgs): string {
-  return (
-    readStringFlag(args, "project-dir") ??
-    process.env.npm_config_local_prefix ??
-    process.env.INIT_CWD ??
-    process.env.PWD ??
-    process.cwd()
-  );
-}
-
 function localSourceBindingsFilePath(args: ParsedArgs): string {
-  return resolve(resolveLaunchProjectDir(args), LOCAL_SOURCE_BINDINGS_PATH);
+  return resolve(
+    resolveProjectRootPath(readStringFlag(args, "project-dir")),
+    LOCAL_SOURCE_BINDINGS_PATH,
+  );
 }
 
 async function readLocalSourceBindings(
@@ -1568,6 +1637,9 @@ function printHelp(command?: string, subcommand?: string): void {
     case "dashboard":
       printDashboardHelp(subcommand);
       break;
+    case "mcp":
+      printMcpHelp();
+      break;
     case "source":
       printSourceHelp(subcommand);
       break;
@@ -1590,6 +1662,7 @@ Usage:
 
 Local Runtime
   start          Start the local Pondview app and bridge API
+  mcp            Run the compatibility stdio MCP server
 
 Data
   attach         Attach a DuckDB database source
@@ -1630,6 +1703,7 @@ Examples:
   pondview start --database ./analytics.duckdb
   pondview start --no-ui
   pondview start --dashboard-mode --no-open
+  codex mcp add pondview --url http://127.0.0.1:17817/mcp
 
 Flags:
       --host <host>        Local bridge host (default: 127.0.0.1)
@@ -1637,10 +1711,44 @@ Flags:
       --database <file>    Open a DuckDB file as the primary database
       --project-dir <dir>  Filesystem project root (default: launch directory)
       --dashboard-mode     Open a view-only dashboards UI
+      --mcp-allow-write-sql
+                           Allow MCP execute_sql to run write statements
       --no-open            Do not open the browser
       --no-ui              Start the bridge API only
       --token <token>      Require a bearer token
       --token-env <name>   Read bearer token from an environment variable
+`);
+}
+
+function printMcpHelp(): void {
+  console.log(`Run the compatibility stdio MCP server.
+
+The primary MCP interface is the Streamable HTTP endpoint served by
+"pondview start" at http://127.0.0.1:17817/mcp.
+
+Usage:
+  pondview mcp [flags]
+
+Examples:
+  claude mcp add pondview -- pondview mcp --project-dir /path/to/project
+  codex mcp add pondview -- pondview mcp --project-dir /path/to/project
+  pondview start --project-dir ./example
+  pondview mcp --url http://127.0.0.1:17817
+  pondview mcp --database ./analytics.duckdb
+  pondview mcp --allow-write-sql
+
+Flags:
+      --database <file>       Open a DuckDB file as the primary database
+      --project-dir <dir>     Filesystem project root
+      --url <url>             Existing bridge URL to use as the MCP runtime
+      --host <host>           Bridge host for autostart/client mode
+      --port <port>           Bridge port for autostart/client mode
+      --token <token>         Bearer token for a protected bridge
+      --token-env <name>      Read bearer token from an environment variable
+      --no-autostart          Do not start a bridge if client mode cannot connect
+      --app-url <url>         Local Pondview app URL returned by dashboard tools
+      --allow-write-sql       Allow execute_sql to run write statements
+  -h, --help                  Print usage
 `);
 }
 

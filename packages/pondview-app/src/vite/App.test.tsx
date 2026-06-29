@@ -7,6 +7,7 @@ describe("App dashboard mode", () => {
   test("only allows dashboard routes", () => {
     expect(isDashboardModeRoutePath("/dashboards")).toBe(true);
     expect(isDashboardModeRoutePath("/dashboards/view")).toBe(true);
+    expect(isDashboardModeRoutePath("/visual/example")).toBe(true);
     expect(isDashboardModeRoutePath("/settings")).toBe(false);
     expect(isDashboardModeRoutePath("/sql-editor")).toBe(false);
   });
@@ -35,6 +36,17 @@ describe("App dashboard mode", () => {
 
     expect(markup).toContain("Dashboards");
     expect(markup).toContain("Exit preview");
+    expect(markup).not.toContain('aria-label="Settings"');
+    expect(markup).not.toContain('aria-label="History"');
+  });
+
+  test("omits app navigation chrome on standalone visual routes in dashboard mode", () => {
+    const markup = renderToStaticMarkup(
+      <MemoryRouter initialEntries={["/visual/example?pondviewMode=dashboard"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
     expect(markup).not.toContain('aria-label="Settings"');
     expect(markup).not.toContain('aria-label="History"');
   });

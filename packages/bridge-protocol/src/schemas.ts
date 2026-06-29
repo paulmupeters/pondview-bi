@@ -90,6 +90,7 @@ export const bridgeConfigResponseSchema = z.object({
   host: z.string().min(1),
   port: z.number().int().min(1).max(65535),
   requires_auth: z.boolean(),
+  mcp_allow_write_sql: z.boolean().optional(),
   database: bridgeDatabaseInfoSchema.optional(),
 });
 

@@ -1369,6 +1369,13 @@ export default function SettingsPage() {
     ? `Health: ${bridgeHealthStatus} • Endpoint: ${bridgeConfig.host}:${bridgeConfig.port} • Auth: ${bridgeAuthStatusLabel}`
     : `Health: ${bridgeHealthStatus} • Auth: ${bridgeAuthStatusLabel}`;
 
+  const resolvedBridgeEndpoint = (
+    bridgeEndpoint.trim() || getDefaultBridgeEndpoint(bridgeConfig)
+  ).replace(/\/+$/, "");
+  const mcpEndpointUrl = `${resolvedBridgeEndpoint}/mcp`;
+  const mcpRequiresAuth = bridgeConfig?.requiresAuth ?? false;
+  const mcpAllowWriteSql = bridgeConfig?.mcpAllowWriteSql ?? false;
+
   const activeNavItem =
     SECTION_NAV.find((item) => item.id === activeSection) ?? SECTION_NAV[0];
 
@@ -1506,6 +1513,9 @@ export default function SettingsPage() {
                   onShowExecuteSqlRawOutputChange={
                     setExecuteSqlRawOutputPreference
                   }
+                  mcpEndpointUrl={mcpEndpointUrl}
+                  mcpRequiresAuth={mcpRequiresAuth}
+                  mcpAllowWriteSql={mcpAllowWriteSql}
                 />
               )}
 
