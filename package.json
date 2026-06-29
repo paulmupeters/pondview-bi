@@ -16,10 +16,11 @@
   "homepage": "https://github.com/paulmupeters/pondview-bi",
   "scripts": {
     "dev": "bun run --cwd packages/pondview-app dev",
-    "build": "bun run --cwd packages/pondview-app build",
-    "preview": "bun run --cwd packages/pondview-app preview",
+    "build": "bun run --cwd packages/pondview-app build --outDir ../../dist --emptyOutDir",
+    "preview": "bun run --cwd packages/pondview-app preview --outDir ../../dist",
     "typecheck": "bun run --cwd packages/pondview-app typecheck",
     "test": "bun run --cwd packages/pondview-app test",
+    "deploy": "bun run build && npx wrangler deploy",
     "bridge": "bun run --cwd packages/cli src/cli.ts",
     "pondview": "bun run cli --",
     "bridge:build-ui": "bun run --cwd packages/pondview-app build --outDir ../cli/dist --emptyOutDir",
@@ -49,7 +50,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.15",
     "@types/bun": "^1.3.13",
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.9.3",
     "typescript": "^5.9.3"
   },
   "trustedDependencies": [

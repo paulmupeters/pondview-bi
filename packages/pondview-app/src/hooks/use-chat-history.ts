@@ -57,18 +57,31 @@ export function useChatHistory(
               ),
             )
           : [];
+        if (
+          scopeToProject !== false &&
+          project?.backingKind === "bridge-filesystem" &&
+          projectPaths.length === 0
+        ) {
+          setChats([]);
+          return [];
+        }
         const chatList = await listRecentAnalysisNotebooks(
           scopeToProject === false
             ? { ...(limit !== undefined ? { limit } : {}) }
-            : {
-                ...(limit !== undefined ? { limit } : {}),
-                ...(project
-                  ? {
-                      projectId: project.id,
-                      projectPaths,
-                    }
-                  : {}),
-              },
+            : project?.backingKind === "bridge-filesystem"
+              ? {
+                  ...(limit !== undefined ? { limit } : {}),
+                  projectPaths,
+                }
+              : {
+                  ...(limit !== undefined ? { limit } : {}),
+                  ...(project
+                    ? {
+                        projectId: project.id,
+                        projectPaths,
+                      }
+                    : {}),
+                },
         );
         setChats(chatList);
         return chatList;

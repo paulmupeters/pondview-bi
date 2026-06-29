@@ -367,6 +367,63 @@ function normalizeProjectPath(path: string | null | undefined): string | null {
   return normalized ? normalized.replace(/\/+$/, "") : null;
 }
 
+function getNotebookProjectArtifactPathId(
+  notebook: Pick<WorkspaceAnalysisNotebook, "projectPath">,
+): string | null {
+  const path = normalizeProjectPath(notebook.projectPath);
+  return path?.startsWith("pondview/notebooks/")
+    ? (path.split("/").at(-1)?.trim() ?? null)
+    : null;
+}
+
+function getNotebookListKey(notebook: WorkspaceAnalysisNotebook): string {
+  const projectPath = normalizeProjectPath(notebook.projectPath);
+  return projectPath ? `project:${projectPath}` : `id:${notebook.id}`;
+}
+
+function shouldReplaceNotebookListEntry(
+  existing: WorkspaceAnalysisNotebook,
+  candidate: WorkspaceAnalysisNotebook,
+): boolean {
+  const projectPath = normalizeProjectPath(candidate.projectPath);
+  if (
+    projectPath &&
+    projectPath === normalizeProjectPath(existing.projectPath)
+  ) {
+    if (existing.id === candidate.id) {
+      return existing.updatedAt < candidate.updatedAt;
+    }
+
+    const artifactPathId = getNotebookProjectArtifactPathId(candidate);
+    if (artifactPathId) {
+      const existingUsesPathId = existing.id === artifactPathId;
+      const candidateUsesPathId = candidate.id === artifactPathId;
+      if (existingUsesPathId !== candidateUsesPathId) {
+        return existingUsesPathId;
+      }
+    }
+
+    return candidate.createdAt < existing.createdAt;
+  }
+
+  return existing.updatedAt < candidate.updatedAt;
+}
+
+function dedupeNotebooksForList(
+  notebooks: WorkspaceAnalysisNotebook[],
+): WorkspaceAnalysisNotebook[] {
+  const notebooksByKey = new Map<string, WorkspaceAnalysisNotebook>();
+  for (const notebook of notebooks) {
+    const key = getNotebookListKey(notebook);
+    const existing = notebooksByKey.get(key);
+    if (!existing || shouldReplaceNotebookListEntry(existing, notebook)) {
+      notebooksByKey.set(key, notebook);
+    }
+  }
+
+  return Array.from(notebooksByKey.values());
+}
+
 function resolveListRecentOptions(
   optionsOrLimit: ListRecentAnalysisNotebooksOptions | number,
 ): Required<ListRecentAnalysisNotebooksOptions> {
@@ -543,8 +600,8 @@ export async function listRecentAnalysisNotebooks(
   const notebooks = await getAllFromStore<WorkspaceAnalysisNotebook>(
     STORE_ANALYSIS_NOTEBOOKS,
   );
-  return notebooks
-    .filter((notebook) => {
+  return dedupeNotebooksForList(
+    notebooks.filter((notebook) => {
       if (!hasProjectScope) {
         return true;
       }
@@ -558,7 +615,8 @@ export async function listRecentAnalysisNotebooks(
 
       const projectPath = normalizeProjectPath(notebook.projectPath);
       return projectPath ? projectPaths.has(projectPath) : false;
-    })
+    }),
+  )
     .sort((left, right) => right.updatedAt - left.updatedAt)
     .slice(0, Math.max(0, options.limit))
     .map((item) => ({

@@ -209,11 +209,11 @@ function resolveCatalogOrigin(
       isAttachedDuckDbSourceType(matchedSource.type)
     ) {
       return {
-        label: "Bridge attached database",
+        label: "CLI attached database",
         description:
           matchedSource.type.trim().toLowerCase() === "httpfs"
-            ? "Remote DuckDB file attached via Bridge"
-            : "DuckDB file attached via Bridge",
+            ? "Remote DuckDB file attached via CLI"
+            : "DuckDB file attached via CLI",
       };
     }
 
@@ -247,11 +247,11 @@ function resolveCatalogOrigin(
 
     const runtimeDescription =
       options.bridgeDatabaseMode === "file"
-        ? "DuckDB file via Bridge"
-        : "In-memory DuckDB via Bridge";
+        ? "DuckDB file via CLI"
+        : "In-memory DuckDB via CLI";
 
     return {
-      label: "Bridge primary database",
+      label: "CLI primary database",
       description: runtimeDescription,
     };
   }

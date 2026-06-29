@@ -27,7 +27,7 @@ describe("RuntimeSettingsSection", () => {
       <RuntimeSettingsSection
         selectedSqlBackend="duckdb-wasm"
         onSqlBackendChange={noop}
-        bridgeOptionLabel="Bridge"
+        bridgeOptionLabel="CLI"
         isBridgeSelectable={false}
         runtimeSettingsError={null}
         runtimeSettingsSuccess={null}
@@ -47,8 +47,8 @@ describe("RuntimeSettingsSection", () => {
       />,
     );
 
-    expect(markup).toContain("Select Bridge to configure its endpoint");
-    expect(markup).not.toContain("Bridge endpoint");
+    expect(markup).toContain("Select CLI to configure its endpoint");
+    expect(markup).not.toContain("CLI endpoint");
   });
 
   test("shows bridge settings when bridge is selected but unavailable", () => {
@@ -56,7 +56,7 @@ describe("RuntimeSettingsSection", () => {
       <RuntimeSettingsSection
         selectedSqlBackend="bridge"
         onSqlBackendChange={noop}
-        bridgeOptionLabel="Bridge"
+        bridgeOptionLabel="CLI"
         isBridgeSelectable={false}
         runtimeSettingsError={null}
         runtimeSettingsSuccess={null}
@@ -76,7 +76,7 @@ describe("RuntimeSettingsSection", () => {
       />,
     );
 
-    expect(markup).toContain("Bridge endpoint");
+    expect(markup).toContain("CLI endpoint");
     expect(markup).toContain("http://127.0.0.1:17817");
     expect(markup).toContain("Save Endpoint");
     expect(markup).toContain("Test Connection");
@@ -92,7 +92,7 @@ describe("RuntimeSettingsSection", () => {
       <RuntimeSettingsSection
         selectedSqlBackend="bridge"
         onSqlBackendChange={noop}
-        bridgeOptionLabel="Bridge"
+        bridgeOptionLabel="CLI"
         isBridgeSelectable={false}
         runtimeSettingsError={null}
         runtimeSettingsSuccess={null}

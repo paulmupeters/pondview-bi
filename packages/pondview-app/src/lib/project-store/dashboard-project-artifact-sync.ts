@@ -4,6 +4,7 @@ import {
   type ProjectArtifactTextFile,
   serializeDashboardArtifact,
   toProjectArtifactId,
+  toProjectEntityId,
 } from "@/lib/project-artifacts/export";
 import type {
   WorkspaceChart,
@@ -63,13 +64,16 @@ export function findDashboardProjectPathByManifestId(
   files: ProjectArtifactTextFile[],
   dashboardId: string,
 ): string | null {
+  const projectSafeDashboardId = toProjectEntityId(dashboardId);
+
   for (const file of files) {
     const path = normalizeProjectPath(file.path);
     if (!path || !/^pondview\/dashboards\/[^/]+\/dashboard\.json$/.test(path)) {
       continue;
     }
 
-    if (getManifestId(file) === dashboardId) {
+    const manifestId = getManifestId(file);
+    if (manifestId === dashboardId || manifestId === projectSafeDashboardId) {
       return path.replace(/\/dashboard\.json$/, "");
     }
   }

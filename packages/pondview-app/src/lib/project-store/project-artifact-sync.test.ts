@@ -1,9 +1,32 @@
 import { describe, expect, test } from "bun:test";
+import { findDashboardProjectPathByManifestId } from "@/lib/project-store/dashboard-project-artifact-sync";
 import {
   findPublishedNotebookProjectPathByManifestId,
   getPublishedNotebookProjectArtifactId,
   getPublishedNotebookProjectScopePath,
 } from "@/lib/project-store/project-artifact-sync";
+
+describe("dashboard project artifact paths", () => {
+  test("finds an existing dashboard folder by project-safe attached manifest id", () => {
+    expect(
+      findDashboardProjectPathByManifestId(
+        [
+          {
+            path: "pondview/dashboards/attached-revenue/dashboard.json",
+            content: JSON.stringify({
+              schemaVersion: 1,
+              id: "attached_bridge_sales-catalog_dashboard_123",
+              title: "Attached Revenue",
+              measures: [],
+              visuals: [],
+            }),
+          },
+        ],
+        "attached:bridge::sales-catalog:dashboard_123",
+      ),
+    ).toBe("pondview/dashboards/attached-revenue");
+  });
+});
 
 describe("published notebook project artifact paths", () => {
   test("uses the stored project path when one exists", () => {

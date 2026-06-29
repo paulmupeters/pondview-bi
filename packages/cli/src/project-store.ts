@@ -392,8 +392,8 @@ export function resolveProjectRootPath(explicitRootPath?: string): string {
   const launchDirectory =
     [
       process.env.npm_config_local_prefix,
-      process.env.PWD,
       process.env.INIT_CWD,
+      process.env.PWD,
       process.cwd(),
     ].find((candidate) => candidate?.trim()) ?? process.cwd();
   const projectRootPath = explicitRootPath?.trim();

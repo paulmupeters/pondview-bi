@@ -177,6 +177,15 @@ export function shouldHideStartupGateForBrowserProject(input: {
   );
 }
 
+export function shouldAdoptBridgeFilesystemProject(input: {
+  projectStoreMode: ReturnType<typeof getProjectStoreMode>;
+  hasProjectArtifacts: boolean;
+}): boolean {
+  return (
+    input.hasProjectArtifacts && input.projectStoreMode !== "bridge-filesystem"
+  );
+}
+
 export function hasStartupProjectArtifacts(
   files: Array<{ path: string }>,
 ): boolean {
@@ -975,10 +984,11 @@ export function ProjectStartupGate() {
         setDetectedDuckDbPaths(databasePaths.paths);
         setConfiguredDatabasePath(databasePaths.configuredDatabasePath);
         const hasProjectArtifacts = hasStartupProjectArtifacts(files);
+        const projectStoreMode = getProjectStoreMode(project.id);
         if (
           project &&
           shouldHideStartupGateForBrowserProject({
-            projectStoreMode: getProjectStoreMode(project.id),
+            projectStoreMode,
             hasProjectArtifacts,
             configuredDatabasePath: databasePaths.configuredDatabasePath,
             detectedDuckDbPaths: databasePaths.paths,
@@ -994,6 +1004,18 @@ export function ProjectStartupGate() {
         setRuntimeChoice(initialRuntime.choice);
         setDuckDbPath(initialRuntime.duckDbPath);
         if (hasProjectArtifacts) {
+          if (
+            shouldAdoptBridgeFilesystemProject({
+              projectStoreMode,
+              hasProjectArtifacts,
+            })
+          ) {
+            setProjectStoreMode(project.id, "bridge-filesystem");
+          }
+          await hydrateAndImportOpenProjectFromStore();
+          if (cancelled) {
+            return;
+          }
           setState("hidden");
           return;
         }

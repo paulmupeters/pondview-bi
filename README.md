@@ -63,6 +63,40 @@ pondview start --no-ui --project-dir ./my-pondview-project
 
 For setup, configuration, runtimes, connected sources, dashboards, and AI providers, see the [Pondview docs](./packages/pondview-docs/index.md).
 
+### Development
+
+```bash
+bun install
+bun dev
+
+bun run pondview start
+bun run pondview query "SELECT 42 AS answer"
+
+bun run typecheck
+bun run lint
+bun run test
+```
+
+### Cloudflare Workers
+
+The root build writes the Pondview app to `./dist`, matching `wrangler.jsonc`.
+
+For Cloudflare Workers Builds, use either:
+
+```bash
+# Build command
+bun run build
+
+# Deploy command
+npx wrangler deploy
+```
+
+or set the deploy command to:
+
+```bash
+bun run deploy
+```
+
 ### Packages
 
 - `packages/pondview-app` — React/Vite application
