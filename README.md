@@ -15,6 +15,8 @@
 
 [![Pondview analysis workspace](packages/pondview-landing/public/analysis-workspace-preview.png)](./packages/pondview-docs/index.md)
 
+An AI agent querying and charting data through Pondview's MCP server:
+
 <video src="https://github.com/user-attachments/assets/bf72928d-14a3-41b4-bca8-7b5d3c2c67ed" controls width="600"></video>
 
 ---
