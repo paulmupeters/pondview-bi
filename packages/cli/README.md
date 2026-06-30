@@ -59,8 +59,9 @@ bun run cli:pack:dry-run
 ## Release
 
 1. Bump the version in both `packages/bridge-protocol/package.json` and
-   `packages/cli/package.json`, and update the `@pondview/bridge-protocol`
-   dependency range in `packages/cli/package.json`.
+   `packages/cli/package.json`. Keep the local `@pondview/bridge-protocol`
+   dependency in `packages/cli/package.json` as `workspace:*`; Bun rewrites it
+   when publishing.
 2. Commit the version bump and push a matching tag, for example `v0.1.1`.
 3. GitHub Actions publishes `@pondview/bridge-protocol` first, then `@pondview/cli`.
 

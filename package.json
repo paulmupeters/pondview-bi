@@ -1,6 +1,6 @@
 {
   "name": "pondview",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "Apache-2.0",
   "bin": {
@@ -28,7 +28,7 @@
     "bridge:typecheck": "bun run --cwd packages/cli typecheck",
     "bridge-protocol:build": "node -e \"require('node:fs').rmSync('packages/bridge-protocol/dist',{recursive:true,force:true})\" && bun build packages/bridge-protocol/src/index.ts --target=node --format=esm --packages=external --outfile packages/bridge-protocol/dist/index.js && tsc -p packages/bridge-protocol/tsconfig.build.json",
     "bridge-protocol:typecheck": "bun run --cwd packages/bridge-protocol typecheck",
-    "cli:pack:dry-run": "bun run bridge-protocol:typecheck && bun run bridge:typecheck && npm pack --workspace @pondview/bridge-protocol --dry-run && npm pack --workspace @pondview/cli --dry-run",
+    "cli:pack:dry-run": "bun run bridge-protocol:typecheck && bun run bridge:typecheck && bun publish --cwd packages/bridge-protocol --dry-run --access public && bun publish --cwd packages/cli --dry-run --access public",
     "docs:dev": "bun run --cwd packages/pondview-docs dev",
     "docs:build": "bun run --cwd packages/pondview-docs build",
     "docs:preview": "bun run --cwd packages/pondview-docs preview",

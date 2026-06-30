@@ -91,7 +91,7 @@ jobs:
           if npm view "@pondview/bridge-protocol@${VERSION}" version > /dev/null 2>&1; then
             echo "@pondview/bridge-protocol@${VERSION} is already published; skipping."
           else
-            npm publish --workspace @pondview/bridge-protocol --provenance --access public
+            bun publish --cwd packages/bridge-protocol --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -102,7 +102,7 @@ jobs:
           if npm view "@pondview/cli@${VERSION}" version > /dev/null 2>&1; then
             echo "@pondview/cli@${VERSION} is already published; skipping."
           else
-            npm publish --workspace @pondview/cli --provenance --access public
+            bun publish --cwd packages/cli --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
