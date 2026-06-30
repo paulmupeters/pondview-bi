@@ -15,9 +15,13 @@
 
 [![Pondview analysis workspace](packages/pondview-landing/public/analysis-workspace-preview.png)](./packages/pondview-docs/index.md)
 
+An AI agent querying and charting data through Pondview's MCP server:
+
+<video src="https://github.com/user-attachments/assets/bf72928d-14a3-41b4-bca8-7b5d3c2c67ed" controls width="600"></video>
+
 ---
 
-### Installation
+## Installation
 
 ```bash
 # Package managers
@@ -30,7 +34,7 @@ npx @pondview/cli@latest start
 bunx @pondview/cli@latest start
 ```
 
-### Usage
+## Usage
 
 ```bash
 pondview start
@@ -40,7 +44,7 @@ pondview attach ./analytics.duckdb --as analytics
 pondview query "SELECT 42 AS answer"
 ```
 
-### Claude and Codex
+## Claude and Codex
 
 Start Pondview, then register its MCP server with your agent:
 
@@ -59,11 +63,11 @@ pondview start --no-ui --project-dir ./my-pondview-project
 
 `pondview mcp` remains available as a compatibility stdio transport.
 
-### Documentation
+## Documentation
 
 For setup, configuration, runtimes, connected sources, dashboards, and AI providers, see the [Pondview docs](./packages/pondview-docs/index.md).
 
-### Development
+## Development
 
 ```bash
 bun install
@@ -77,7 +81,7 @@ bun run lint
 bun run test
 ```
 
-### Cloudflare Workers
+## Cloudflare Workers
 
 The root build writes the Pondview app to `./dist`, matching `wrangler.jsonc`.
 
@@ -97,7 +101,7 @@ or set the deploy command to:
 bun run deploy
 ```
 
-### Packages
+## Packages
 
 - `packages/pondview-app` — React/Vite application
 - `packages/cli` — local DuckDB bridge and packaged CLI
@@ -105,6 +109,6 @@ bun run deploy
 - `packages/pondview-docs` — documentation site
 - `packages/pondview-landing` — marketing site
 
-### License
+## License
 
 Apache-2.0. See [LICENSE](./LICENSE).
