@@ -1,6 +1,6 @@
 {
   "name": "@pondview/bridge-protocol",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "description": "Shared Pondview bridge protocol schemas, types, and client.",
   "type": "module",
