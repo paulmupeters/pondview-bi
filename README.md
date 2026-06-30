@@ -15,7 +15,7 @@
 
 [![Pondview analysis workspace](packages/pondview-landing/public/analysis-workspace-preview.png)](./packages/pondview-docs/index.md)
 
-<video src="packages/pondview-landing/public/pondview-mcp-demo.mp4" controls width="600"></video>
+<video src="https://github.com/user-attachments/assets/bf72928d-14a3-41b4-bca8-7b5d3c2c67ed" controls width="600"></video>
 
 ---
 
