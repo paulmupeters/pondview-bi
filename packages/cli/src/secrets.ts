@@ -22,9 +22,9 @@ const SECRET_STORE_VERSION = 1;
 
 const secretStoreSchema = z.object({
   version: z.literal(SECRET_STORE_VERSION).optional(),
-  sources: z.record(z.string(), bridgeSecretSourceSchema).optional(),
-  ai: bridgeSecretAiSchema.optional(),
-  s3Backup: bridgeSecretS3BackupSchema.optional(),
+  sources: z.record(z.string(), z.unknown()).optional(),
+  ai: z.unknown().optional(),
+  s3Backup: z.unknown().optional(),
 });
 
 type SecretStoreData = {
@@ -52,11 +52,23 @@ export class BridgeSecretStore {
     }
 
     const parsed = secretStoreSchema.parse(JSON.parse(raw));
+    const sources = Object.fromEntries(
+      Object.entries(parsed.sources ?? {}).map(([id, source]) => [
+        id,
+        bridgeSecretSourceSchema.parse(source),
+      ]),
+    );
     return {
       version: SECRET_STORE_VERSION,
-      sources: parsed.sources ?? {},
-      ai: parsed.ai,
-      s3Backup: parsed.s3Backup,
+      sources,
+      ai:
+        parsed.ai === undefined
+          ? undefined
+          : bridgeSecretAiSchema.parse(parsed.ai),
+      s3Backup:
+        parsed.s3Backup === undefined
+          ? undefined
+          : bridgeSecretS3BackupSchema.parse(parsed.s3Backup),
     };
   }
 
