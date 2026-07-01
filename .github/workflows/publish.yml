@@ -94,7 +94,7 @@ jobs:
             bun publish --cwd packages/bridge-protocol --access public
           fi
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @pondview/cli
         run: |
@@ -105,4 +105,4 @@ jobs:
             bun publish --cwd packages/cli --access public
           fi
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
