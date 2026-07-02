@@ -13,6 +13,8 @@
   <a href="./CONTRIBUTING.md">Contributing</a>
 </p>
 
+Preform AI assisted data analysis in the pondview analysis workspace: 
+
 [![Pondview analysis workspace](packages/pondview-landing/public/analysis-workspace-preview.png)](./packages/pondview-docs/index.md)
 
 An AI agent querying and charting data through Pondview's MCP server:
