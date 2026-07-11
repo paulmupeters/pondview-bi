@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const binDir = dirname(fileURLToPath(import.meta.url));
-const cliPath = resolve(binDir, "../src/cli.ts");
+const cliPath = resolve(binDir, "../src/cli-entry.ts");
 
 const child = spawn("bun", ["run", cliPath, ...process.argv.slice(2)], {
   stdio: "inherit",
