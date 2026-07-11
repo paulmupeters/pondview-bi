@@ -1884,4 +1884,3 @@ function waitForShutdown(): Promise<void> {
     process.on("SIGTERM", resolve);
   });
 }
-
