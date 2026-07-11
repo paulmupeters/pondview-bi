@@ -1,10 +1,51 @@
 import { describe, expect, test } from "bun:test";
 import {
   appendExplorerReferenceToPrompt,
+  createBlankHomepageAnalysis,
   GENERIC_DATA_EXPLORATION_COMMANDS,
   getHomepageAiWarningMessage,
   runHomepageExampleCommand,
 } from "@/app/page";
+
+describe("createBlankHomepageAnalysis", () => {
+  test("persists and opens a fresh AI notebook", async () => {
+    const calls: string[] = [];
+
+    const chatId = await createBlankHomepageAnalysis({
+      createId: () => "analysis/id with spaces",
+      persistChat: async (id, title) => {
+        calls.push(`persist:${id}:${title}`);
+      },
+      navigate: (href) => {
+        calls.push(`navigate:${href}`);
+      },
+    });
+
+    expect(chatId).toBe("analysis/id with spaces");
+    expect(calls).toEqual([
+      "persist:analysis/id with spaces:Untitled analysis",
+      "navigate:/analysis?id=analysis%2Fid%20with%20spaces&mode=ai",
+    ]);
+  });
+
+  test("does not navigate when the notebook cannot be persisted", async () => {
+    let navigated = false;
+
+    await expect(
+      createBlankHomepageAnalysis({
+        createId: () => "new-analysis",
+        persistChat: async () => {
+          throw new Error("storage unavailable");
+        },
+        navigate: () => {
+          navigated = true;
+        },
+      }),
+    ).rejects.toThrow("storage unavailable");
+
+    expect(navigated).toBe(false);
+  });
+});
 
 describe("appendExplorerReferenceToPrompt", () => {
   test("adds a table reference to an empty prompt", () => {

@@ -368,6 +368,7 @@ interface ConnectedDataPanelProps {
   showStoredSqlQueries?: boolean;
   toggleShortcutLabel?: string;
   defaultSidebarWidth?: number;
+  triggerLabel?: string;
 }
 
 export function ConnectedDataPanel({
@@ -393,6 +394,7 @@ export function ConnectedDataPanel({
   showStoredSqlQueries = false,
   toggleShortcutLabel,
   defaultSidebarWidth = DEFAULT_SIDEBAR_WIDTH,
+  triggerLabel,
 }: ConnectedDataPanelProps) {
   const {
     tables: wasmTables,
@@ -1168,6 +1170,7 @@ export function ConnectedDataPanel({
             <PromptInputHoverCardTrigger asChild>
               <Button variant="ghost" className={cn("h-10", className)}>
                 <Database className="h-4 w-4 shrink-0" />
+                {triggerLabel ? <span>{triggerLabel}</span> : null}
               </Button>
             </PromptInputHoverCardTrigger>
           </TooltipTrigger>
@@ -1191,6 +1194,7 @@ export function ConnectedDataPanel({
           <PromptInputHoverCardTrigger asChild>
             <Button variant="outline" className={cn("h-10", className)}>
               <Database className="h-4 w-4 shrink-0" />
+              {triggerLabel ? <span>{triggerLabel}</span> : null}
             </Button>
           </PromptInputHoverCardTrigger>
         </TooltipTrigger>
