@@ -668,16 +668,16 @@ export default function Home() {
                 sqlRepl={{
                   result: null,
                   setConsoleApi: setManualConsoleApi,
-                  saveQuery: async () => { },
+                  saveQuery: async () => {},
                   isSavingQuery: false,
-                  persistManualResultToChat: async () => { },
+                  persistManualResultToChat: async () => {},
                 }}
                 manualVisualization={{
                   chartConfig: null,
                   cardConfig: null,
                   visualType: null,
-                  handleReplResultChange: () => { },
-                  focusManualVisualization: () => { },
+                  handleReplResultChange: () => {},
+                  focusManualVisualization: () => {},
                   createPayload: () => null,
                 }}
                 className="transition duration-300 ease-in-out"
