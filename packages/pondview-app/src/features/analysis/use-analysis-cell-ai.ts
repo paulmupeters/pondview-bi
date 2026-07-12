@@ -16,6 +16,7 @@ import {
   extractNotebookTitleFromMessage,
   getLatestAssistantText,
 } from "@/features/analysis/ai-cell-message-utils";
+import { MISSING_AI_CONFIGURATION_MESSAGE } from "@/features/analysis/ai-configuration-message";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { useConnectedTables } from "@/hooks/use-connected-tables";
 import type { NotebookSession } from "@/hooks/use-notebook-session";
@@ -37,9 +38,6 @@ type UseAnalysisCellAiParams = {
     | "updateTitle"
   >;
 };
-
-const MISSING_AI_CONFIGURATION_MESSAGE =
-  "Missing AI configuration. Open Settings and configure provider, API key, and model.";
 
 type BridgeAiAvailability = "checking" | "available" | "unavailable";
 
@@ -254,12 +252,6 @@ export function useAnalysisCellAi({
       }
     }
   }, [persistedMessages]);
-
-  useEffect(() => {
-    if (agentResult.error) {
-      setPromptError(toPromptErrorMessage(agentResult.error));
-    }
-  }, [agentResult.error]);
 
   useEffect(() => {
     if (hydratedCellIdRef.current === cell.id) {

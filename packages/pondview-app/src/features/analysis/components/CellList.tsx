@@ -143,6 +143,9 @@ export function CellList({
   const [statusMessagesByCellId, setStatusMessagesByCellId] = useState<
     Record<string, string | null>
   >({});
+  const [warningMessagesByCellId, setWarningMessagesByCellId] = useState<
+    Record<string, string | null>
+  >({});
   const [explicitChatModeByCellId, setExplicitChatModeByCellId] = useState<
     Record<string, true>
   >({});
@@ -229,6 +232,34 @@ export function CellList({
     [],
   );
 
+  const handleWarningMessageChange = useCallback(
+    (cellId: string, warningMessage: string | null) => {
+      setWarningMessagesByCellId((previousWarningMessages) => {
+        if (previousWarningMessages[cellId] === warningMessage) {
+          return previousWarningMessages;
+        }
+
+        if (warningMessage == null) {
+          if (!Object.hasOwn(previousWarningMessages, cellId)) {
+            return previousWarningMessages;
+          }
+
+          const {
+            [cellId]: _removedWarningMessage,
+            ...remainingWarningMessages
+          } = previousWarningMessages;
+          return remainingWarningMessages;
+        }
+
+        return {
+          ...previousWarningMessages,
+          [cellId]: warningMessage,
+        };
+      });
+    },
+    [],
+  );
+
   const handleSelectCellMode = useCallback(
     (cellId: string, mode: "ai" | "sql" | "text") => {
       setExplicitChatModeByCellId((previousExplicitChatModeByCellId) => {
@@ -304,6 +335,7 @@ export function CellList({
               onSelect={() => onSelectCell(displayedCell.id)}
               onDelete={() => onDeleteCell(displayedCell.id)}
               statusMessage={statusMessagesByCellId[displayedCell.id] ?? null}
+              warningMessage={warningMessagesByCellId[displayedCell.id] ?? null}
             >
               <CellContent
                 cell={displayedCell}
@@ -312,6 +344,7 @@ export function CellList({
                 onBootstrapConsumed={onBootstrapConsumed}
                 onSelectCellMode={handleSelectCellMode}
                 onStatusMessageChange={handleStatusMessageChange}
+                onWarningMessageChange={handleWarningMessageChange}
               />
             </CellFrame>
           </div>

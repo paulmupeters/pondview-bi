@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { MISSING_AI_CONFIGURATION_MESSAGE } from "@/features/analysis/ai-configuration-message";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { SqlCell } from "@/features/analysis/components/SqlCell";
 import { TextCell } from "@/features/analysis/components/TextCell";
@@ -19,6 +20,10 @@ type CellContentProps = {
     cellId: string,
     statusMessage: string | null,
   ) => void;
+  onWarningMessageChange?: (
+    cellId: string,
+    warningMessage: string | null,
+  ) => void;
 };
 
 const EMPTY_CELL_ENTRIES: WorkspaceAnalysisCellEntry[] = [];
@@ -30,6 +35,7 @@ export function CellContent({
   onBootstrapConsumed,
   onSelectCellMode,
   onStatusMessageChange,
+  onWarningMessageChange,
 }: CellContentProps) {
   if (cell.activeMode === "text") {
     return <TextCell cell={cell} notebookSession={notebookSession} />;
@@ -43,6 +49,7 @@ export function CellContent({
       onBootstrapConsumed={onBootstrapConsumed}
       onSelectCellMode={onSelectCellMode}
       onStatusMessageChange={onStatusMessageChange}
+      onWarningMessageChange={onWarningMessageChange}
     />
   );
 }
@@ -54,6 +61,7 @@ function CellContentAiSql({
   onBootstrapConsumed,
   onSelectCellMode,
   onStatusMessageChange,
+  onWarningMessageChange,
 }: CellContentProps) {
   const entries =
     notebookSession.cellEntriesByCellId.get(cell.id) ?? EMPTY_CELL_ENTRIES;
@@ -115,6 +123,19 @@ function CellContentAiSql({
       onStatusMessageChange?.(cell.id, null);
     };
   }, [ai.promptError, cell.activeMode, cell.id, onStatusMessageChange]);
+
+  useEffect(() => {
+    onWarningMessageChange?.(
+      cell.id,
+      ai.promptError === MISSING_AI_CONFIGURATION_MESSAGE
+        ? ai.promptError
+        : null,
+    );
+
+    return () => {
+      onWarningMessageChange?.(cell.id, null);
+    };
+  }, [ai.promptError, cell.id, onWarningMessageChange]);
 
   useEffect(() => {
     if (!bootstrapSql || cell.activeMode === "sql") {

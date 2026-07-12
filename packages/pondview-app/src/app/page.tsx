@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   BarChart3,
-  Clock3,
   Database,
   FilePlus2,
   LayoutDashboard,
@@ -62,7 +61,7 @@ const MISSING_AI_CONFIGURATION_MESSAGE =
   "Missing AI configuration. Open Settings and configure provider, API key, and model.";
 
 type HomepageQuickAction = {
-  id: "new-analysis" | "recent-analyses" | "sql-editor" | "upload-data";
+  id: "new-analysis" | "sql-editor" | "upload-data";
   label: string;
   description: string;
   icon: ComponentType<{ className?: string }>;
@@ -495,13 +494,6 @@ export default function Home() {
       onClick: handleCreateBlankAnalysis,
     },
     {
-      id: "recent-analyses",
-      label: "Recent analyses",
-      description: "Return to notebooks you worked on recently.",
-      icon: Clock3,
-      href: "/analysis/all",
-    },
-    {
       id: "sql-editor",
       label: "SQL editor",
       description: "Write and run a query directly against your data.",
@@ -557,9 +549,9 @@ export default function Home() {
                 Pondview workspace
               </span>
             </div>
-            <h1 className="text-balance text-4xl font-black tracking-[-0.045em] text-foreground sm:text-5xl lg:text-6xl">
+            {/* <h1 className="text-balance text-4xl font-black tracking-[-0.045em] text-foreground sm:text-5xl lg:text-6xl">
               Where should we dive in?
-            </h1>
+            </h1> */}
             <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
               Start with a notebook, work directly in SQL, or bring in fresh
               data for your next question.
