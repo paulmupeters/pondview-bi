@@ -1,6 +1,6 @@
 {
   "name": "@pondview/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": false,
   "description": "Pondview CLI for running the local DuckDB bridge and bundled Pondview app.",
   "type": "module",
