@@ -6,6 +6,7 @@ import {
   CircleCheck,
   Loader2,
   Trash2,
+  TriangleAlert,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +29,7 @@ type CellFrameProps = {
   onSelect: () => void;
   onDelete: () => void;
   statusMessage?: string | null;
+  warningMessage?: string | null;
   children: ReactNode;
 };
 
@@ -30,6 +37,7 @@ type StatusIconProps = {
   cell: AnalysisCellState;
   className: string;
   statusMessage?: string | null;
+  warningMessage?: string | null;
 };
 
 function getStatusMeta(status: AnalysisCellState["status"]): {
@@ -66,6 +74,7 @@ export function CellFrame({
   onSelect,
   onDelete,
   statusMessage,
+  warningMessage,
   children,
 }: CellFrameProps) {
   const statusMeta = getStatusMeta(cell.status);
@@ -103,6 +112,7 @@ export function CellFrame({
             cell={cell}
             className={statusMeta.className}
             statusMessage={statusMessage}
+            warningMessage={warningMessage}
           />
           <button
             type="button"
@@ -134,7 +144,12 @@ export function CellFrame({
   );
 }
 
-function StatusIcon({ cell, className, statusMessage }: StatusIconProps) {
+function StatusIcon({
+  cell,
+  className,
+  statusMessage,
+  warningMessage,
+}: StatusIconProps) {
   const statusMeta = getStatusMeta(cell.status);
   const IconComponent = statusMeta.icon;
   const iconMarkup = (
@@ -152,35 +167,56 @@ function StatusIcon({ cell, className, statusMessage }: StatusIconProps) {
     </span>
   );
 
-  if (cell.status !== "error" || !statusMessage) {
-    return iconMarkup;
+  if (cell.status === "error" && statusMessage) {
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label="Show error details"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                event.stopPropagation();
+              }
+            }}
+          >
+            {iconMarkup}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-80 px-3 py-2 text-sm"
+          side="bottom"
+          align="start"
+        >
+          {statusMessage}
+        </PopoverContent>
+      </Popover>
+    );
   }
 
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          aria-label="Show error details"
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              event.stopPropagation();
-            }
-          }}
-        >
-          {iconMarkup}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-80 px-3 py-2 text-sm"
-        side="bottom"
-        align="start"
-      >
-        {statusMessage}
-      </PopoverContent>
-    </Popover>
-  );
+  if (warningMessage) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-warning-icon="missing-ai-config"
+            className="rounded-sm text-amber-600 transition-colors hover:text-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:text-amber-400 dark:hover:text-amber-300"
+            aria-label="AI setup warning"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <TriangleAlert className="size-3.5" aria-hidden="true" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="start" sideOffset={6}>
+          {warningMessage}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return iconMarkup;
 }

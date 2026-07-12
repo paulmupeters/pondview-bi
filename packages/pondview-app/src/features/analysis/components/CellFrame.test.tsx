@@ -29,7 +29,10 @@ function createCell(
 
 function renderCellFrame(
   cell: AnalysisCellState,
-  options: { statusMessage?: string | null } = {},
+  options: {
+    statusMessage?: string | null;
+    warningMessage?: string | null;
+  } = {},
 ): string {
   return renderToStaticMarkup(
     <CellFrame
@@ -38,6 +41,7 @@ function renderCellFrame(
       onSelect={() => {}}
       onDelete={() => {}}
       statusMessage={options.statusMessage}
+      warningMessage={options.warningMessage}
     >
       <div>Cell body</div>
     </CellFrame>,
@@ -86,6 +90,16 @@ describe("CellFrame", () => {
 
     expect(markup).toContain('data-status-icon="error"');
     expect(markup).not.toContain('aria-label="Show error details"');
+  });
+
+  test("renders a hoverable AI setup warning when AI has not been configured", () => {
+    const markup = renderCellFrame(createCell({ status: "idle" }), {
+      warningMessage:
+        "Missing AI configuration. Open Settings and configure provider, API key, and model.",
+    });
+
+    expect(markup).toContain('aria-label="AI setup warning"');
+    expect(markup).toContain('data-warning-icon="missing-ai-config"');
   });
 
   test("keeps the collapse, select, and delete actions separate", () => {

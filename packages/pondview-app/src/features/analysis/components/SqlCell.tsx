@@ -25,6 +25,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { MISSING_AI_CONFIGURATION_MESSAGE } from "@/features/analysis/ai-configuration-message";
 import type { AnalysisCellState } from "@/features/analysis/analysis-reducer";
 import {
   type AiCellState,
@@ -491,7 +492,10 @@ export function SqlCell({
         </form>
       </div>
 
-      <AiResponseBanner ai={ai} />
+      <AiResponseBanner
+        ai={ai}
+        showPromptError={ai.promptError !== MISSING_AI_CONFIGURATION_MESSAGE}
+      />
 
       <div
         className={cn(

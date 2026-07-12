@@ -133,7 +133,7 @@ describe("CellContent", () => {
     expect(markup).toContain(">SQL<");
   });
 
-  test("shows prompt errors from the inline composer while SQL mode is selected", () => {
+  test("does not render a persistent banner for missing AI configuration", () => {
     aiState.promptError =
       "Missing AI configuration. Open Settings and configure provider, API key, and model.";
     aiState.latestAssistantText = null;
@@ -150,7 +150,7 @@ describe("CellContent", () => {
       </MemoryRouter>,
     );
 
-    expect(markup).toContain("Missing AI configuration");
+    expect(markup).not.toContain("Missing AI configuration");
     expect(markup).toContain("Ask AI");
     expect(markup).toContain(">SQL<");
   });
