@@ -18,14 +18,14 @@
     "react-dom": "^19.2.7",
     "recharts": "^3.8.1",
     "tailwindcss": "^4.3.2",
-    "three": "^0.183.2"
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@types/node": "^26.1.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.184.1",
+    "@types/three": "^0.185.1",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
