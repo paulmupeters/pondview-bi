@@ -61,6 +61,9 @@ This matters when:
 
 For shared or repeatable work, prefer connected data sources or a Bridge-backed
 project workflow instead of relying on one browser's uploaded files.
+Project ZIP exports do not include these browser upload blobs. See
+[Sharing Projects and Dashboards](/guide/sharing-projects-and-dashboards) for
+the current project-sharing boundary.
 
 ## Deletion and cleanup
 

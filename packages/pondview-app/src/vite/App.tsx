@@ -23,6 +23,7 @@ const DashboardsPage = lazy(() => import("@/app/dashboards/page"));
 const DashboardViewPage = lazy(() => import("@/app/dashboards/view/page"));
 const DataPage = lazy(() => import("@/app/data/page"));
 const HomePage = lazy(() => import("@/app/page"));
+const OpenProjectPage = lazy(() => import("@/app/open/page"));
 const SettingsPage = lazy(() => import("@/app/settings/page"));
 const SqlEditorPage = lazy(() => import("@/app/sql-editor/page"));
 const StartPreviewPage = lazy(() => import("@/app/start/page"));
@@ -56,6 +57,10 @@ export function isDashboardModeRoutePath(pathname: string): boolean {
     pathname === "/dashboards/view" ||
     pathname.startsWith("/visual/")
   );
+}
+
+export function isOpenProjectRoutePath(pathname: string): boolean {
+  return pathname === "/open";
 }
 
 function DashboardModeRoutes({ canExitPreview }: { canExitPreview: boolean }) {
@@ -113,6 +118,7 @@ export function App() {
     [location.search],
   );
   const isDashboardMode = dashboardModeState.enabled;
+  const isOpenProjectRoute = isOpenProjectRoutePath(location.pathname);
   const isStartPreview = location.pathname === "/start";
   const isSettingsRoute = location.pathname === "/settings";
 
@@ -121,12 +127,19 @@ export function App() {
       <TooltipProvider>
         <CustomCssLoader />
         <SqlRuntimeBootstrap />
-        {!isDashboardMode && !isStartPreview && !isSettingsRoute ? (
+        {!isDashboardMode &&
+        !isOpenProjectRoute &&
+        !isStartPreview &&
+        !isSettingsRoute ? (
           <ProjectStartupGate />
         ) : null}
         {isStartPreview ? (
           <Suspense fallback={null}>
             <StartPreviewPage />
+          </Suspense>
+        ) : isOpenProjectRoute ? (
+          <Suspense fallback={null}>
+            <OpenProjectPage />
           </Suspense>
         ) : isDashboardMode ? (
           <DashboardModeRoutes canExitPreview={dashboardModeState.preview} />

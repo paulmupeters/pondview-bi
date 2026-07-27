@@ -96,12 +96,11 @@ import {
   setProjectStoreMode,
 } from "@/lib/project-store";
 import {
-  type BrowserProjectBundle,
-  createBrowserProjectArchive,
-  parseBrowserProjectArchive,
-  parseBrowserProjectBundle,
-  restoreBrowserProjectBundle,
-} from "@/lib/project-store/project-transfer";
+  importInspectedPortableProject,
+  inspectPortableProjectFile,
+  sanitizePortableProjectFiles,
+} from "@/lib/project-store/project-import-service";
+import { createBrowserProjectArchive } from "@/lib/project-store/project-transfer";
 import {
   refreshBridgeHealth,
   type SqlBackend,
@@ -112,6 +111,7 @@ import {
   useResolvedSqlBackend,
   useSelectedSqlBackend,
 } from "@/lib/sql/use-sql-backend";
+import { listDashboards } from "@/lib/workspace/dashboard-repo";
 import { getAllThemes } from "@/themes";
 import { resolveBridgeProjectDatabaseSetup } from "./runtime-setup";
 import {
@@ -176,7 +176,7 @@ function projectDownloadName(name: string): string {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "project";
-  return `pondview-project-${slug}.zip`;
+  return `pondview-project-${slug}.pondview`;
 }
 
 function createProjectSlug(name: string): string {
@@ -350,6 +350,10 @@ export default function SettingsPage() {
   const [isImportingProject, setIsImportingProject] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [exportIncludeSnapshot, setExportIncludeSnapshot] = useState(false);
+  const [exportEntryDashboardId, setExportEntryDashboardId] = useState("");
+  const [exportDashboards, setExportDashboards] = useState<
+    Array<{ id: string; title: string }>
+  >([]);
   const projectImportFileRef = useRef<HTMLInputElement>(null);
   const availableThemes = getAllThemes();
   const bridgeRuntimeState = useBridgeRuntimeState();
@@ -975,9 +979,22 @@ export default function SettingsPage() {
     }
   };
 
-  const handleOpenExportDialog = () => {
+  const handleOpenExportDialog = async () => {
     setOpenProjectError(null);
     setS3BackupError(null);
+    try {
+      const dashboards = (await listDashboards()).map((dashboard) => ({
+        id: dashboard.id,
+        title: dashboard.title || "Untitled Dashboard",
+      }));
+      setExportDashboards(dashboards);
+      setExportEntryDashboardId(dashboards[0]?.id ?? "");
+      setExportIncludeSnapshot(effectiveSqlBackend === "duckdb-wasm");
+    } catch {
+      setExportDashboards([]);
+      setExportEntryDashboardId("");
+      setExportIncludeSnapshot(effectiveSqlBackend === "duckdb-wasm");
+    }
     setIsExportDialogOpen(true);
   };
 
@@ -1013,6 +1030,16 @@ export default function SettingsPage() {
     setS3CorsError(false);
 
     try {
+      if (
+        downloadArchive &&
+        includeSnapshot &&
+        effectiveSqlBackend !== "duckdb-wasm"
+      ) {
+        throw new Error(
+          "Self-contained browser packages can only include a DuckDB snapshot while DuckDB WASM is the active runtime.",
+        );
+      }
+
       const project = await getOpenProject();
       if (!project) {
         throw new Error("Open a browser-local project before exporting it.");
@@ -1037,9 +1064,11 @@ export default function SettingsPage() {
       }
 
       if (downloadArchive) {
+        const parsedArtifacts = parseProjectArtifactFileSet(files);
         const archive = createBrowserProjectArchive({
           project,
-          files,
+          files: sanitizePortableProjectFiles(files, parsedArtifacts),
+          entryDashboardId: exportEntryDashboardId || null,
           runtimeSnapshot:
             includeSnapshot && snapshotBytes
               ? {
@@ -1055,7 +1084,7 @@ export default function SettingsPage() {
               : undefined,
         });
         const blob = new Blob([uint8ArrayToArrayBuffer(archive)], {
-          type: "application/zip",
+          type: "application/vnd.pondview.project+zip",
         });
         const href = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
@@ -1233,29 +1262,24 @@ export default function SettingsPage() {
     setOpenProjectError(null);
 
     try {
-      let bundle: BrowserProjectBundle;
-      if (file.name.toLowerCase().endsWith(".zip")) {
-        bundle = parseBrowserProjectArchive(await file.arrayBuffer());
-      } else {
-        try {
-          bundle = parseBrowserProjectBundle(await file.text());
-        } catch {
-          bundle = parseBrowserProjectArchive(await file.arrayBuffer());
-        }
+      const inspection = await inspectPortableProjectFile(file);
+      const warningSummary = [
+        inspection.runtimeSnapshotBytes
+          ? "The bundled DuckDB snapshot will replace the active browser database."
+          : "This package does not include a DuckDB snapshot.",
+        ...inspection.warnings
+          .filter((warning) => warning.severity !== "info")
+          .map((warning) => warning.message),
+      ].join("\n\n");
+      if (
+        !window.confirm(
+          `Open "${inspection.bundle.project.name}"?\n\n${warningSummary}`,
+        )
+      ) {
+        return;
       }
-      const project = await restoreBrowserProjectBundle(bundle);
-      const parsedArtifacts = parseProjectArtifactFileSet(bundle.files);
-      await hydrateProjectRuntimeFromParsedArtifacts({
-        project,
-        parsed: parsedArtifacts,
-      });
-      await importParsedProjectArtifacts(parsedArtifacts, {
-        projectId: project.id,
-        defaultSourceRef:
-          parsedArtifacts.projectManifest?.defaultSourceRef ??
-          project.defaultSourceRef ??
-          null,
-      });
+
+      await importInspectedPortableProject(inspection);
       await refreshOpenProjectSummary();
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
@@ -1582,7 +1606,7 @@ export default function SettingsPage() {
                     projectImportFileRef.current?.click()
                   }
                   isImportingProject={isImportingProject}
-                  onOpenExportDialog={handleOpenExportDialog}
+                  onOpenExportDialog={() => void handleOpenExportDialog()}
                   isExportingProject={isExportingProject}
                   activeProjectId={activeProjectId}
                   showExternalProjectIntegrations={
@@ -1649,6 +1673,10 @@ export default function SettingsPage() {
                 }}
                 exportIncludeSnapshot={exportIncludeSnapshot}
                 onExportIncludeSnapshotChange={setExportIncludeSnapshot}
+                canIncludeSnapshot={effectiveSqlBackend === "duckdb-wasm"}
+                dashboards={exportDashboards}
+                entryDashboardId={exportEntryDashboardId}
+                onEntryDashboardIdChange={setExportEntryDashboardId}
                 openProjectError={openProjectError}
                 onCloseExportDialog={() => setIsExportDialogOpen(false)}
                 isExportingProject={isExportingProject}

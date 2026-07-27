@@ -43,6 +43,7 @@ pondview start --port 17818
 pondview start --host 127.0.0.1 --port 17817 --no-open
 pondview start --database ./analytics.duckdb
 pondview start --project-dir ./my-pondview-project
+pondview start --dashboard-mode
 pondview start --no-ui
 ```
 
@@ -214,7 +215,11 @@ metadata is consistent, and that stored chart and measure SQL can run as a small
 preview query.
 
 `dashboard open` starts the bundled local app in dashboard mode and opens either
-the dashboard list or a specific dashboard view.
+the dashboard list or a specific dashboard view. Dashboard mode hides authoring
+controls and makes dashboard content read-only in the UI, but it is not an
+authorization boundary. Protect a network-accessible Bridge with a token and
+appropriate network controls. See
+[Sharing Projects and Dashboards](/guide/sharing-projects-and-dashboards).
 
 `pondview doctor` checks the configured bridge URL and prints a machine-readable
 JSON diagnostic report. It does not autostart a bridge, so it is safe to use in
@@ -261,6 +266,7 @@ that port.
 | `--no-autostart` | client commands | Fails when no bridge is reachable instead of starting one. |
 | `--no-open` | `start`, `dashboard open` | Does not open the browser after starting the local app. |
 | `--no-ui` | `start` | Starts the bridge API only. |
+| `--dashboard-mode` | `start` | Opens the restricted dashboards-only interface. This is a UI mode, not an authorization boundary. |
 | `--force` | `stop` | Stops whatever is listening on the configured port without checking whether it is a Pondview bridge. |
 
 ## Bridge API compatibility

@@ -51,7 +51,13 @@ export default defineConfig({
       },
       {
         text: "CLI & Projects",
-        items: [{ text: "Pondview CLI", link: "/guide/cli" }],
+        items: [
+          {
+            text: "Sharing Projects and Dashboards",
+            link: "/guide/sharing-projects-and-dashboards",
+          },
+          { text: "Pondview CLI", link: "/guide/cli" },
+        ],
       },
       {
         text: "Help",
