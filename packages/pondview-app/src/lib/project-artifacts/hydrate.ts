@@ -259,6 +259,7 @@ export function hydrateSharedQueryArtifact(
   const now = getNow(options);
   return {
     id: getWorkspaceQueryId(artifact),
+    projectId: options.projectId ?? null,
     name: artifact.metadata.name,
     sql: artifact.sql.trim(),
     kind: artifact.metadata.kind ?? "query",

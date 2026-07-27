@@ -668,7 +668,15 @@ export async function getOpenProject(): Promise<OpenProjectState | null> {
 export async function setOpenProject(
   project: OpenProjectState | null,
 ): Promise<void> {
-  await getProjectStore().setOpenProject(project);
+  const store = getProjectStore();
+  const currentProject = await store.getOpenProject();
+  if (currentProject && currentProject.id !== project?.id) {
+    const { migrateLegacySqlQueryStateToProject } = await import(
+      "@/lib/workspace/sql-query-project-scope"
+    );
+    await migrateLegacySqlQueryStateToProject(currentProject.id);
+  }
+  await store.setOpenProject(project);
 }
 
 export async function listProjects(): Promise<OpenProjectState[]> {

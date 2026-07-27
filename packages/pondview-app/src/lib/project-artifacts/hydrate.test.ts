@@ -144,7 +144,10 @@ describe("project artifact hydration", () => {
       ),
     ]);
 
-    const hydrated = hydrateProjectArtifacts(parsed, { now: 123 });
+    const hydrated = hydrateProjectArtifacts(parsed, {
+      now: 123,
+      projectId: "project-revenue",
+    });
 
     expect(hydrated.dashboards[0]?.dashboard).toMatchObject({
       id: "revenue",
@@ -168,6 +171,7 @@ describe("project artifact hydration", () => {
     expect(hydrated.dashboards[0]?.joins).toHaveLength(1);
     expect(hydrated.sharedQueries[0]).toMatchObject({
       id: "project-query:views:monthly-revenue",
+      projectId: "project-revenue",
       kind: "view",
       sourceRef: "analytics",
       tags: ["finance"],

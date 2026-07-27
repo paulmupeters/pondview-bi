@@ -35,7 +35,7 @@ Project artifacts include:
 
 - Dashboard definitions, layouts, SQL, visual configuration, measures, slicers,
   and joins
-- Saved SQL queries
+- Saved SQL queries belonging to the shared project
 - Published notebook prompts or text, SQL cells, and visual configuration
 - Project and source-reference metadata needed to associate the artifacts
 
@@ -43,6 +43,7 @@ They do not include the complete browser workspace. In particular, the archive
 does not transfer:
 
 - Chat and AI response history
+- Unsaved SQL editor drafts
 - Browser uploads and their stored blobs
 - Browser preferences and project-session state
 - Browser AI settings, API keys, or the Bridge secret store

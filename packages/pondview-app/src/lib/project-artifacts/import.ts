@@ -158,6 +158,7 @@ function filterAnalysisNotebooksByProjectId(
 async function reconcileProjectOwnedQueries(
   parsed: ParsedProjectArtifacts,
   deps: ProjectArtifactImportDeps,
+  projectId?: string | null,
 ): Promise<string[]> {
   const importedPaths = new Set(
     parsed.sharedQueries
@@ -167,6 +168,9 @@ async function reconcileProjectOwnedQueries(
   const deletedIds: string[] = [];
 
   for (const query of await deps.listSavedSqlQueries()) {
+    if (projectId && query.projectId && query.projectId !== projectId) {
+      continue;
+    }
     const projectPath = normalizeProjectPath(query.projectPath);
     if (!isProjectOwnedPath(projectPath, "pondview/queries")) {
       continue;
@@ -250,7 +254,7 @@ async function reconcileImportedProjectArtifacts(
 ): Promise<ProjectImportReconciliationResult> {
   const [deletedSavedQueryIds, deletedDashboardIds, deletedNotebookIds] =
     await Promise.all([
-      reconcileProjectOwnedQueries(parsed, deps),
+      reconcileProjectOwnedQueries(parsed, deps, options.projectId),
       reconcileProjectOwnedDashboards(parsed, deps),
       reconcileProjectOwnedNotebooks(parsed, deps, options.projectId),
     ]);

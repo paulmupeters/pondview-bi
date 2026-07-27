@@ -4,6 +4,7 @@ import type { ProjectArtifactTextFile } from "@/lib/project-artifacts/export";
 import { normalizeProjectArtifactPath } from "@/lib/project-artifacts/parse";
 import {
   BrowserProjectStore,
+  getOpenProject,
   type OpenProjectState,
   setProjectStoreMode,
 } from "./index";
@@ -330,6 +331,14 @@ export function parseBrowserProjectArchiveWithRuntime(
 export async function restoreBrowserProjectBundle(
   bundle: BrowserProjectBundle,
 ): Promise<OpenProjectState> {
+  const previousProject = await getOpenProject();
+  if (previousProject && previousProject.id !== bundle.project.id) {
+    const { migrateLegacySqlQueryStateToProject } = await import(
+      "@/lib/workspace/sql-query-project-scope"
+    );
+    await migrateLegacySqlQueryStateToProject(previousProject.id);
+  }
+
   const now = Date.now();
   const project: OpenProjectState = {
     id: bundle.project.id,

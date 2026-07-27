@@ -158,9 +158,6 @@ export default function OpenProjectPage() {
 
         <div className="grid flex-1 items-center gap-12 py-12 lg:grid-cols-[0.78fr_1.22fr] lg:py-20">
           <section className="max-w-xl">
-            <p className="mb-5 font-mono text-xs font-semibold uppercase tracking-[0.24em] text-primary">
-              No CLI. No deployment.
-            </p>
             <h1 className="font-serif text-5xl font-semibold leading-[0.95] tracking-[-0.045em] sm:text-6xl">
               Open a Pondview project in your browser.
             </h1>
