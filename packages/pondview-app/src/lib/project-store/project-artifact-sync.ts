@@ -17,6 +17,7 @@ import {
   getOpenProject,
   listOpenProjectFiles,
   replaceOpenProjectFiles,
+  saveOpenProjectFiles,
 } from "./index";
 
 function getSavedQueryGroup(query: SavedSqlQuery): string {
@@ -48,10 +49,6 @@ function getSavedQueryArtifactId(query: SavedSqlQuery): string {
   return toProjectArtifactId(query.name, "saved-query");
 }
 
-function getSavedQueryScopePath(query: SavedSqlQuery): string {
-  return `pondview/queries/${getSavedQueryGroup(query)}`;
-}
-
 function getSavedQueryArtifactPaths(query: SavedSqlQuery): string[] {
   const group = getSavedQueryGroup(query);
   const artifactId = getSavedQueryArtifactId(query);
@@ -60,6 +57,20 @@ function getSavedQueryArtifactPaths(query: SavedSqlQuery): string[] {
     `${rootPath}/${artifactId}.query.json`,
     `${rootPath}/${artifactId}.sql`,
   ];
+}
+
+export function getSavedQueryProjectArtifactMetadataPath(
+  query: Pick<SavedSqlQuery, "name" | "projectPath">,
+): string {
+  const artifactLikeQuery: SavedSqlQuery = {
+    id: "query-path",
+    name: query.name,
+    sql: "",
+    createdAt: 0,
+    updatedAt: 0,
+    projectPath: query.projectPath ?? null,
+  };
+  return getSavedQueryArtifactPaths(artifactLikeQuery)[0] as string;
 }
 
 function normalizeProjectPath(path: string | null | undefined): string | null {
@@ -154,7 +165,7 @@ export async function syncSavedQueryProjectArtifact(
     requireSourceRef: false,
   });
 
-  await replaceOpenProjectFiles(getSavedQueryScopePath(query), files);
+  await saveOpenProjectFiles(files);
 }
 
 export async function deleteSavedQueryProjectArtifact(

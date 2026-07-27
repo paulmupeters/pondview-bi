@@ -1,3 +1,4 @@
+import { getOpenProject } from "@/lib/project-store";
 import { getPreference, setPreference } from "@/lib/workspace/preferences-repo";
 
 const SQL_EDITOR_DRAFTS_KEY = "workspace:sql-editor-drafts";
@@ -5,10 +6,23 @@ const MAX_SQL_EDITOR_DRAFTS = 25;
 
 export type DraftSqlQuery = {
   id: string;
+  projectId?: string | null;
   name: string;
   sql: string;
   createdAt: number;
   updatedAt: number;
+};
+
+type SqlQueryDraftsRepoDeps = {
+  getPreference: typeof getPreference;
+  setPreference: typeof setPreference;
+  getActiveProjectId: () => Promise<string | null>;
+};
+
+const defaultRepoDeps: SqlQueryDraftsRepoDeps = {
+  getPreference,
+  setPreference,
+  getActiveProjectId: async () => (await getOpenProject())?.id ?? null,
 };
 
 function formatFallbackDraftName(timestamp: number): string {
@@ -62,6 +76,10 @@ function normalizeRow(value: unknown): DraftSqlQuery | null {
 
   return {
     id: candidate.id,
+    projectId:
+      typeof candidate.projectId === "string" && candidate.projectId.trim()
+        ? candidate.projectId.trim()
+        : null,
     name: candidate.name,
     sql: candidate.sql,
     createdAt: candidate.createdAt,
@@ -74,22 +92,82 @@ function normalizeList(value: unknown): DraftSqlQuery[] {
     return [];
   }
 
+  const countsByProject = new Map<string, number>();
   return value
     .map((entry) => normalizeRow(entry))
     .filter((entry): entry is DraftSqlQuery => entry !== null)
     .sort((left, right) => right.updatedAt - left.updatedAt)
-    .slice(0, MAX_SQL_EDITOR_DRAFTS);
+    .filter((entry) => {
+      const projectKey = entry.projectId ?? "";
+      const count = countsByProject.get(projectKey) ?? 0;
+      if (count >= MAX_SQL_EDITOR_DRAFTS) {
+        return false;
+      }
+      countsByProject.set(projectKey, count + 1);
+      return true;
+    });
 }
 
-export async function listDraftSqlQueries(): Promise<DraftSqlQuery[]> {
-  const stored = await getPreference<unknown>(SQL_EDITOR_DRAFTS_KEY);
-  return normalizeList(stored);
+async function resolveProjectId(
+  projectId: string | null | undefined,
+  deps: SqlQueryDraftsRepoDeps,
+): Promise<string | null> {
+  if (projectId !== undefined) {
+    return projectId?.trim() || null;
+  }
+  return deps.getActiveProjectId();
+}
+
+export async function migrateLegacyDraftSqlQueriesToProject(
+  projectId: string,
+  deps: SqlQueryDraftsRepoDeps = defaultRepoDeps,
+): Promise<void> {
+  const normalizedProjectId = projectId.trim();
+  if (!normalizedProjectId) {
+    return;
+  }
+  const all = normalizeList(
+    await deps.getPreference<unknown>(SQL_EDITOR_DRAFTS_KEY),
+  );
+  if (!all.some((draft) => (draft.projectId ?? null) === null)) {
+    return;
+  }
+  await deps.setPreference(
+    SQL_EDITOR_DRAFTS_KEY,
+    all.map((draft) =>
+      (draft.projectId ?? null) === null
+        ? { ...draft, projectId: normalizedProjectId }
+        : draft,
+    ),
+  );
+}
+
+export async function listDraftSqlQueries(
+  projectId?: string | null,
+  deps: SqlQueryDraftsRepoDeps = defaultRepoDeps,
+): Promise<DraftSqlQuery[]> {
+  const resolvedProjectId = await resolveProjectId(projectId, deps);
+  const all = normalizeList(
+    await deps.getPreference<unknown>(SQL_EDITOR_DRAFTS_KEY),
+  );
+  return all.filter((draft) => (draft.projectId ?? null) === resolvedProjectId);
 }
 
 export async function replaceDraftSqlQueries(
   drafts: DraftSqlQuery[],
+  projectId?: string | null,
+  deps: SqlQueryDraftsRepoDeps = defaultRepoDeps,
 ): Promise<DraftSqlQuery[]> {
-  const normalized = normalizeList(drafts);
-  await setPreference(SQL_EDITOR_DRAFTS_KEY, normalized);
+  const resolvedProjectId = await resolveProjectId(projectId, deps);
+  const all = normalizeList(
+    await deps.getPreference<unknown>(SQL_EDITOR_DRAFTS_KEY),
+  );
+  const normalized = normalizeList(
+    drafts.map((draft) => ({ ...draft, projectId: resolvedProjectId })),
+  );
+  await deps.setPreference(SQL_EDITOR_DRAFTS_KEY, [
+    ...normalized,
+    ...all.filter((draft) => (draft.projectId ?? null) !== resolvedProjectId),
+  ]);
   return normalized;
 }

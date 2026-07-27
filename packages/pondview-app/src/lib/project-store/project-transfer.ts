@@ -3,9 +3,10 @@ import { z } from "zod";
 import type { ProjectArtifactTextFile } from "@/lib/project-artifacts/export";
 import { normalizeProjectArtifactPath } from "@/lib/project-artifacts/parse";
 import {
-  getProjectStore,
+  BrowserProjectStore,
+  getOpenProject,
   type OpenProjectState,
-  setOpenProject,
+  setProjectStoreMode,
 } from "./index";
 
 const browserProjectFileSchema = z.object({
@@ -57,6 +58,12 @@ const runtimeSnapshotManifestSchema = z.union([
 const exportManifestSchema = z.object({
   schemaVersion: z.literal(1),
   exportedAt: z.string(),
+  package: z
+    .object({
+      kind: z.literal("pondview-project"),
+      entryDashboardId: z.string().trim().min(1).nullable().optional(),
+    })
+    .optional(),
   projectArtifacts: z.object({
     included: z.boolean(),
   }),
@@ -77,6 +84,36 @@ export const BROWSER_PROJECT_EXPORT_MANIFEST_PATH =
   ".pondview/export-manifest.json";
 export const BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH =
   "runtime/pondview-runtime.duckdb";
+export const PONDVIEW_PROJECT_FILE_EXTENSION = ".pondview";
+export const MAX_PORTABLE_PROJECT_ARCHIVE_BYTES = 512 * 1024 * 1024;
+export const MAX_PORTABLE_PROJECT_EXPANDED_BYTES = 1024 * 1024 * 1024;
+export const MAX_PORTABLE_PROJECT_ENTRY_COUNT = 5_000;
+
+function assertSafeArchivePath(path: string): string {
+  const portablePath = path.trim().replace(/\\/g, "/");
+  if (
+    !portablePath ||
+    portablePath.startsWith("/") ||
+    /^[A-Za-z]:\//.test(portablePath) ||
+    portablePath.split("/").some((segment) => segment === "..")
+  ) {
+    throw new Error(`Project archive contains an unsafe path "${path}".`);
+  }
+
+  const normalized = normalizeProjectArtifactPath(path);
+  if (!normalized) {
+    throw new Error(`Project archive contains an unsafe path "${path}".`);
+  }
+  return normalized;
+}
+
+function assertArchiveInputSize(input: ArrayBuffer | Uint8Array): void {
+  if (input.byteLength > MAX_PORTABLE_PROJECT_ARCHIVE_BYTES) {
+    throw new Error(
+      `Project archive is too large. The maximum supported size is ${MAX_PORTABLE_PROJECT_ARCHIVE_BYTES} bytes.`,
+    );
+  }
+}
 
 export function createBrowserProjectBundle(input: {
   project: OpenProjectState;
@@ -103,6 +140,7 @@ export function createBrowserProjectBundle(input: {
 export function createBrowserProjectArchive(input: {
   project: OpenProjectState;
   files: ProjectArtifactTextFile[];
+  entryDashboardId?: string | null;
   runtimeSnapshot?: {
     bytes: Uint8Array;
     pointer?: RuntimeSnapshotPointer;
@@ -124,14 +162,20 @@ export function createBrowserProjectArchive(input: {
   };
 
   for (const file of bundle.files) {
-    archiveFiles[normalizeProjectArtifactPath(file.path)] = strToU8(
-      file.content,
-    );
+    const path = assertSafeArchivePath(file.path);
+    if (archiveFiles[path]) {
+      throw new Error(`Project contains duplicate path "${path}".`);
+    }
+    archiveFiles[path] = strToU8(file.content);
   }
 
   const manifest: ProjectExportManifest = {
     schemaVersion: 1,
     exportedAt: bundle.exportedAt,
+    package: {
+      kind: "pondview-project",
+      entryDashboardId: input.entryDashboardId?.trim() || null,
+    },
     projectArtifacts: { included: true },
   };
 
@@ -176,11 +220,58 @@ export function parseBrowserProjectArchiveWithRuntime(
   bundle: BrowserProjectBundle;
   manifest: ProjectExportManifest | null;
   runtimeSnapshotBytes: Uint8Array | null;
+  entryCount: number;
+  expandedSizeBytes: number;
 } {
+  assertArchiveInputSize(input);
+  let entryCount = 0;
+  let expandedSizeBytes = 0;
+  const archivePaths = new Set<string>();
   const archive = unzipSync(
     input instanceof Uint8Array ? input : new Uint8Array(input),
+    {
+      filter: (file) => {
+        entryCount += 1;
+        if (entryCount > MAX_PORTABLE_PROJECT_ENTRY_COUNT) {
+          throw new Error(
+            `Project archive contains too many files. The maximum supported count is ${MAX_PORTABLE_PROJECT_ENTRY_COUNT}.`,
+          );
+        }
+
+        expandedSizeBytes += file.originalSize;
+        if (expandedSizeBytes > MAX_PORTABLE_PROJECT_EXPANDED_BYTES) {
+          throw new Error(
+            `Expanded project archive is too large. The maximum supported size is ${MAX_PORTABLE_PROJECT_EXPANDED_BYTES} bytes.`,
+          );
+        }
+
+        const normalizedPath = assertSafeArchivePath(file.name);
+        if (archivePaths.has(normalizedPath)) {
+          throw new Error(
+            `Project archive contains duplicate path "${normalizedPath}".`,
+          );
+        }
+        archivePaths.add(normalizedPath);
+        return true;
+      },
+    },
   );
-  const metadataEntry = archive[BROWSER_PROJECT_ARCHIVE_METADATA_PATH];
+  const archiveEntries = Object.entries(archive);
+
+  const normalizedArchive = new Map<string, Uint8Array>();
+  for (const [path, bytes] of archiveEntries) {
+    const normalizedPath = assertSafeArchivePath(path);
+    if (normalizedArchive.has(normalizedPath)) {
+      throw new Error(
+        `Project archive contains duplicate path "${normalizedPath}".`,
+      );
+    }
+    normalizedArchive.set(normalizedPath, bytes);
+  }
+
+  const metadataEntry = normalizedArchive.get(
+    BROWSER_PROJECT_ARCHIVE_METADATA_PATH,
+  );
   if (!metadataEntry) {
     throw new Error(
       `Project archive is missing "${BROWSER_PROJECT_ARCHIVE_METADATA_PATH}".`,
@@ -191,18 +282,19 @@ export function parseBrowserProjectArchiveWithRuntime(
     JSON.parse(strFromU8(metadataEntry)),
   );
 
-  const manifestEntry = archive[BROWSER_PROJECT_EXPORT_MANIFEST_PATH];
+  const manifestEntry = normalizedArchive.get(
+    BROWSER_PROJECT_EXPORT_MANIFEST_PATH,
+  );
   const manifest = manifestEntry
     ? exportManifestSchema.parse(JSON.parse(strFromU8(manifestEntry)))
     : null;
 
   const runtimeSnapshotBytes =
-    archive[BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH] ?? null;
+    normalizedArchive.get(BROWSER_PROJECT_RUNTIME_SNAPSHOT_PATH) ?? null;
 
   const files = new Map<string, ProjectArtifactTextFile>();
 
-  for (const [path, bytes] of Object.entries(archive)) {
-    const normalizedPath = normalizeProjectArtifactPath(path);
+  for (const [normalizedPath, bytes] of normalizedArchive) {
     if (
       !normalizedPath ||
       normalizedPath === BROWSER_PROJECT_ARCHIVE_METADATA_PATH ||
@@ -227,12 +319,26 @@ export function parseBrowserProjectArchiveWithRuntime(
     ),
   });
 
-  return { bundle, manifest, runtimeSnapshotBytes };
+  return {
+    bundle,
+    manifest,
+    runtimeSnapshotBytes,
+    entryCount,
+    expandedSizeBytes,
+  };
 }
 
 export async function restoreBrowserProjectBundle(
   bundle: BrowserProjectBundle,
 ): Promise<OpenProjectState> {
+  const previousProject = await getOpenProject();
+  if (previousProject && previousProject.id !== bundle.project.id) {
+    const { migrateLegacySqlQueryStateToProject } = await import(
+      "@/lib/workspace/sql-query-project-scope"
+    );
+    await migrateLegacySqlQueryStateToProject(previousProject.id);
+  }
+
   const now = Date.now();
   const project: OpenProjectState = {
     id: bundle.project.id,
@@ -243,8 +349,10 @@ export async function restoreBrowserProjectBundle(
     defaultSourceRef: bundle.project.defaultSourceRef ?? null,
   };
 
-  await setOpenProject(project);
-  await getProjectStore().replaceProjectFiles(project.id, "", bundle.files);
+  const browserStore = new BrowserProjectStore();
+  setProjectStoreMode(project.id, "browser-indexeddb");
+  await browserStore.setOpenProject(project);
+  await browserStore.replaceProjectFiles(project.id, "", bundle.files);
 
   return project;
 }

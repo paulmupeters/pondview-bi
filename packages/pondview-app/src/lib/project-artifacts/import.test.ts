@@ -324,6 +324,15 @@ describe("project artifact import", () => {
           createdAt: 1,
           updatedAt: 1,
         },
+        {
+          id: "other-project-query",
+          projectId: "project-other",
+          name: "Other project",
+          sql: "select * from other_project",
+          projectPath: "pondview/queries/shared/other.query.json",
+          createdAt: 1,
+          updatedAt: 1,
+        },
       ],
       upsertSavedSqlQuery: async (query) => [query],
       deleteSavedSqlQuery: async (queryId) => {
@@ -363,6 +372,7 @@ describe("project artifact import", () => {
       listAnalysisNotebooks: async () => [
         {
           id: "order-notes",
+          projectId: "project-current",
           title: "Order Notes",
           projectPath: "pondview/notebooks/order-notes",
           createdAt: 1,
@@ -370,6 +380,7 @@ describe("project artifact import", () => {
         },
         {
           id: "legacy-notebook",
+          projectId: "project-current",
           title: "Legacy Notebook",
           projectPath: "pondview/notebooks/legacy-notebook",
           createdAt: 1,
@@ -391,7 +402,11 @@ describe("project artifact import", () => {
       },
     };
 
-    const imported = await importParsedProjectArtifacts(parsed, {}, deps);
+    const imported = await importParsedProjectArtifacts(
+      parsed,
+      { projectId: "project-current" },
+      deps,
+    );
 
     expect(imported.reconciliation).toEqual({
       deletedDashboardIds: ["legacy-dashboard"],

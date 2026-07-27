@@ -110,11 +110,23 @@ Over time, you can combine these into a dashboard that answers a broader busines
 - Where are we seeing growth?
 - Which segments need attention?
 
+## Share a dashboard
 
+Pondview can transfer dashboard definitions—and optionally a DuckDB WASM
+snapshot—in a `.pondview` file, or expose the same dashboard to clients
+connected to one Bridge project. A recipient can open the file at
+`app.pondview.app/open` without installing the CLI. Browser-local dashboards are
+not automatically visible in another browser, and dashboard mode is not an
+access-control mechanism.
+
+See [Sharing Projects and Dashboards](/guide/sharing-projects-and-dashboards)
+for what is included in a package, the local-import security model, and the
+security boundary for Bridge dashboard URLs.
 
 ## Related guides
 
 - [Getting Started](/guide/getting-started)
+- [Sharing Projects and Dashboards](/guide/sharing-projects-and-dashboards)
 - [Connected Data Sources](/guide/connected-data-sources)
 - [Uploads and Browser Storage](/guide/uploads-and-browser-storage)
 - [AI Provider Configuration](/guide/ai-provider-configuration)

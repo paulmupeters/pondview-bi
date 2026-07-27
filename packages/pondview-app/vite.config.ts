@@ -72,6 +72,11 @@ export default defineConfig(({ command, mode }) => {
               {
                 name: "vendor-radix",
                 test: /node_modules\/@radix-ui\//,
+                // Radix packages have circular dependencies between shared
+                // primitives. Splitting the group can evaluate a dependent
+                // chunk before the React-backed context helpers are initialized
+                // in production builds ("createContext" of undefined).
+                maxSize: 2_000_000,
               },
               {
                 name: "vendor-aws",

@@ -1151,14 +1151,14 @@ export function ProjectsSettingsSections({
               onClick={onOpenExportDialog}
               disabled={isExportingProject || isProjectBusy || !activeProjectId}
             >
-              {isExportingProject ? "Exporting..." : "Export Project..."}
+              {isExportingProject ? "Preparing..." : "Share Project..."}
             </Button>
           </div>
 
           <input
             ref={projectImportFileRef}
             type="file"
-            accept=".zip,.json,application/zip,application/json"
+            accept=".pondview,.zip,.json,application/zip,application/json,application/vnd.pondview.project+zip"
             className="hidden"
             onChange={onImportProject}
           />
@@ -1172,7 +1172,7 @@ export function ProjectsSettingsSections({
               <h3 className="text-lg font-semibold">S3-compatible backup</h3>
               <p className="text-sm text-muted-foreground">
                 Configure an S3-compatible bucket (Cloudflare R2, Backblaze B2,
-                MinIO, etc.) so Export Project... can upload runtime snapshots
+                MinIO, etc.) so Share Project... can upload runtime snapshots
                 and so saved snapshots can be restored here. Credentials are
                 kept only for the current browser session - use a scoped key
                 limited to one bucket.
@@ -1617,6 +1617,10 @@ type ExportProjectDialogProps = {
   onExportDialogOpenChange: (open: boolean) => void;
   exportIncludeSnapshot: boolean;
   onExportIncludeSnapshotChange: (value: boolean) => void;
+  canIncludeSnapshot: boolean;
+  dashboards: Array<{ id: string; title: string }>;
+  entryDashboardId: string;
+  onEntryDashboardIdChange: (value: string) => void;
   openProjectError: string | null;
   onCloseExportDialog: () => void;
   isExportingProject: boolean;
@@ -1628,6 +1632,10 @@ export function ExportProjectDialog({
   onExportDialogOpenChange,
   exportIncludeSnapshot,
   onExportIncludeSnapshotChange,
+  canIncludeSnapshot,
+  dashboards,
+  entryDashboardId,
+  onEntryDashboardIdChange,
   openProjectError,
   onCloseExportDialog,
   isExportingProject,
@@ -1637,10 +1645,10 @@ export function ExportProjectDialog({
     <Dialog open={isExportDialogOpen} onOpenChange={onExportDialogOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Export Project</DialogTitle>
+          <DialogTitle>Share Project</DialogTitle>
           <DialogDescription>
-            Download a project archive with artifacts and an optional DuckDB
-            runtime snapshot.
+            Download one browser-ready .pondview file. Recipients can open it at
+            app.pondview.app without the CLI.
           </DialogDescription>
         </DialogHeader>
 
@@ -1673,6 +1681,7 @@ export function ExportProjectDialog({
                 id="export-include-snapshot"
                 type="checkbox"
                 checked={exportIncludeSnapshot}
+                disabled={!canIncludeSnapshot}
                 onChange={(event) =>
                   onExportIncludeSnapshotChange(event.target.checked)
                 }
@@ -1685,6 +1694,39 @@ export function ExportProjectDialog({
                 </span>
               </span>
             </label>
+            {!canIncludeSnapshot ? (
+              <p className="text-xs text-muted-foreground">
+                Switch to DuckDB WASM to create a self-contained package. Bridge
+                projects can currently share definitions only.
+              </p>
+            ) : null}
+          </div>
+
+          {dashboards.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Open first</p>
+              <Select
+                value={entryDashboardId}
+                onValueChange={onEntryDashboardIdChange}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose a dashboard" />
+                </SelectTrigger>
+                <SelectContent>
+                  {dashboards.map((dashboard) => (
+                    <SelectItem key={dashboard.id} value={dashboard.id}>
+                      {dashboard.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
+          <div className="rounded border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            Source connections and credential fields are removed from portable
+            packages. Imported SQL runs locally only after the recipient
+            approves the package.
           </div>
 
           {openProjectError && <ErrorMessage>{openProjectError}</ErrorMessage>}
@@ -1699,7 +1741,7 @@ export function ExportProjectDialog({
             Cancel
           </Button>
           <Button onClick={onExportProject} disabled={isExportingProject}>
-            {isExportingProject ? "Exporting..." : "Export"}
+            {isExportingProject ? "Preparing..." : "Download .pondview"}
           </Button>
         </DialogFooter>
       </DialogContent>

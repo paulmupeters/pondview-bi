@@ -108,6 +108,7 @@ describe("browser project transfer", () => {
         },
       ],
       runtimeSnapshot: { bytes: snapshotBytes },
+      entryDashboardId: "dashboard-revenue",
     });
 
     const { bundle, manifest, runtimeSnapshotBytes } =
@@ -117,6 +118,10 @@ describe("browser project transfer", () => {
       "pondview/queries/shared/revenue.sql",
     ]);
     expect(manifest?.projectArtifacts.included).toBe(true);
+    expect(manifest?.package).toEqual({
+      kind: "pondview-project",
+      entryDashboardId: "dashboard-revenue",
+    });
     expect(manifest?.runtimeSnapshot).toMatchObject({
       included: true,
       kind: "local",
