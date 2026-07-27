@@ -1419,7 +1419,7 @@ export default function SettingsPage() {
           {/* Header */}
           <header className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-3">
-              <h1 className="text-5xl font-black tracking-tighter text-foreground sm:text-6xl">
+              <h1 className="text-xl font-black tracking-tighter text-foreground sm:text-3xl">
                 Settings
               </h1>
             </div>
