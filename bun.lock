@@ -12,7 +12,7 @@
     },
     "packages/bridge-protocol": {
       "name": "@pondview/bridge-protocol",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "zod": "^4.3.6",
       },
@@ -23,7 +23,7 @@
     },
     "packages/cli": {
       "name": "@pondview/cli",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "bin": {
         "pondview": "./bin/pondview.mjs",
       },
