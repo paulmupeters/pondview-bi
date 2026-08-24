@@ -4,7 +4,9 @@ import {
   createBlankHomepageAnalysis,
   GENERIC_DATA_EXPLORATION_COMMANDS,
   getHomepageAiWarningMessage,
+  MANUAL_EXAMPLE_QUERIES,
   runHomepageExampleCommand,
+  runHomepageExampleQuery,
 } from "@/app/page";
 
 describe("createBlankHomepageAnalysis", () => {
@@ -186,5 +188,59 @@ describe("runHomepageExampleCommand", () => {
         submit,
       }),
     ).rejects.toThrow("network down");
+  });
+});
+
+describe("runHomepageExampleQuery", () => {
+  test("offers sample queries that all target the built-in dataset", () => {
+    expect(MANUAL_EXAMPLE_QUERIES).toHaveLength(4);
+    for (const query of MANUAL_EXAMPLE_QUERIES) {
+      expect(query).toContain("FROM unicorns");
+    }
+  });
+
+  test("ensures sample data before running the selected query", async () => {
+    const calls: string[] = [];
+    const query = MANUAL_EXAMPLE_QUERIES[1];
+
+    if (!query) {
+      throw new Error("Expected a second manual example query.");
+    }
+
+    await runHomepageExampleQuery({
+      query,
+      backendPreference: "duckdb-wasm",
+      ensureSampleData: async () => {
+        calls.push("seed");
+        return { backend: "duckdb-wasm", dbIdentifier: "wasm:local" };
+      },
+      run: (query) => calls.push(`run:${query}`),
+    });
+
+    expect(calls).toEqual(["seed", `run:${query}`]);
+  });
+
+  test("does not run the query when sample data cannot be loaded", async () => {
+    let didRun = false;
+    const query = MANUAL_EXAMPLE_QUERIES[0];
+
+    if (!query) {
+      throw new Error("Expected a first manual example query.");
+    }
+
+    await expect(
+      runHomepageExampleQuery({
+        query,
+        backendPreference: "bridge",
+        ensureSampleData: async () => {
+          throw new Error("sample unavailable");
+        },
+        run: () => {
+          didRun = true;
+        },
+      }),
+    ).rejects.toThrow("sample unavailable");
+
+    expect(didRun).toBe(false);
   });
 });

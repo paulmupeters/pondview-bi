@@ -12,7 +12,33 @@ import {
 
 export const SAMPLE_DATA_TABLE_NAME = "unicorns";
 export const SAMPLE_DATA_URL = "https://data.pondview.app/unicorns.csv";
+export const LOCAL_SAMPLE_DATA_PATH = "/unicorns.csv";
 export const SAMPLE_DATA_SQL = `CREATE TABLE ${SAMPLE_DATA_TABLE_NAME} AS SELECT * FROM read_csv_auto('${SAMPLE_DATA_URL}')`;
+export const ENSURE_SAMPLE_DATA_SQL = `CREATE TABLE IF NOT EXISTS ${SAMPLE_DATA_TABLE_NAME} AS SELECT * FROM read_csv_auto('${SAMPLE_DATA_URL}')`;
+
+export function getSampleDataUrl(
+  backend: SqlBackend,
+  browserOrigin = typeof window !== "undefined"
+    ? window.location.origin
+    : undefined,
+): string {
+  if (backend === "duckdb-wasm" && browserOrigin) {
+    return new URL(LOCAL_SAMPLE_DATA_PATH, browserOrigin).toString();
+  }
+
+  return SAMPLE_DATA_URL;
+}
+
+export function buildSampleDataSql(
+  backend: SqlBackend,
+  options: { ifNotExists?: boolean; browserOrigin?: string } = {},
+): string {
+  const createClause = options.ifNotExists
+    ? "CREATE TABLE IF NOT EXISTS"
+    : "CREATE TABLE";
+  const url = getSampleDataUrl(backend, options.browserOrigin);
+  return `${createClause} ${SAMPLE_DATA_TABLE_NAME} AS SELECT * FROM read_csv_auto('${url}')`;
+}
 
 export const LIST_VISIBLE_TABLES_SQL = `
   SELECT table_catalog, table_schema, table_name, table_type
@@ -105,7 +131,7 @@ export async function ensureSampleDataForEmptyRuntime(
   }
 
   await mergedDeps.runSql({
-    sql: SAMPLE_DATA_SQL,
+    sql: buildSampleDataSql(visibleTables.backend),
     backendPreference: visibleTables.backend,
     dbIdentifier: visibleTables.dbIdentifier,
   });
@@ -116,4 +142,21 @@ export async function ensureSampleDataForEmptyRuntime(
     created: true,
     skipped: false,
   };
+}
+
+/** Ensures the built-in sample table exists even when the runtime has other tables. */
+export async function ensureSampleDataIsAvailable(
+  options: SampleDataRuntimeOptions = {},
+  deps: Partial<SampleDataDeps> = {},
+): Promise<ResolvedSampleDataRuntime> {
+  const mergedDeps = { ...defaultDeps, ...deps };
+  const runtime = resolveSampleDataRuntime(options, mergedDeps);
+
+  await mergedDeps.runSql({
+    sql: buildSampleDataSql(runtime.backend, { ifNotExists: true }),
+    backendPreference: runtime.backend,
+    dbIdentifier: runtime.dbIdentifier,
+  });
+
+  return runtime;
 }

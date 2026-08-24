@@ -1001,7 +1001,7 @@ export default function SqlEditorPage() {
                     onNoticeAction={setLatestQueryNotice}
                     inlineResults={false}
                     onResultChangeAction={handleResultChange}
-                    showRunControls={false}
+                    showRunControls
                     showExplorer={false}
                     showCopySnippetButton
                     showClearButton
