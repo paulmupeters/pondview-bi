@@ -39,4 +39,7 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      - name: Dashboard persistence E2E
+        run: bun run test:e2e
         
