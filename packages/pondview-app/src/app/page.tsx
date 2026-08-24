@@ -34,6 +34,7 @@ import {
 } from "@/lib/project-runtime";
 import {
   ensureSampleDataForEmptyRuntime,
+  ensureSampleDataIsAvailable,
   hasVisibleTablesInRuntime,
 } from "@/lib/sql/sample-data";
 import { DEFAULT_WASM_DB_IDENTIFIER } from "@/lib/sql/sql-runtime";
@@ -48,6 +49,13 @@ const EXAMPLE_COMMANDS = [
   "Compare total unicorn valuation across countries",
   "Create a bar chart of unicorn valuations by country",
   "Which companies have the highest valuation?",
+];
+
+export const MANUAL_EXAMPLE_QUERIES = [
+  `SELECT *\nFROM unicorns\nLIMIT 10;`,
+  `SELECT Country, count(*) AS unicorns\nFROM unicorns\nGROUP BY Country\nORDER BY unicorns DESC\nLIMIT 10;`,
+  `SELECT Industry, count(*) AS unicorns\nFROM unicorns\nGROUP BY Industry\nORDER BY unicorns DESC;`,
+  `SELECT year("Date Joined") AS joined_year, count(*) AS unicorns\nFROM unicorns\nGROUP BY joined_year\nORDER BY joined_year;`,
 ];
 
 export const GENERIC_DATA_EXPLORATION_COMMANDS = [
@@ -202,6 +210,18 @@ export async function runHomepageExampleCommand(params: {
   params.submit(command);
 }
 
+export async function runHomepageExampleQuery(params: {
+  query: string;
+  backendPreference: "bridge" | "duckdb-wasm";
+  ensureSampleData?: typeof ensureSampleDataIsAvailable;
+  run: (query: string) => void;
+}) {
+  await (params.ensureSampleData ?? ensureSampleDataIsAvailable)({
+    backendPreference: params.backendPreference,
+  });
+  params.run(params.query);
+}
+
 export function getHomepageAiWarningMessage(params: {
   mode: PromptMode;
   hasAiConfiguration: boolean;
@@ -266,6 +286,7 @@ export default function Home() {
   const exampleCommands = hasExistingRuntimeTables
     ? GENERIC_DATA_EXPLORATION_COMMANDS
     : EXAMPLE_COMMANDS;
+  const examples = isManualMode ? MANUAL_EXAMPLE_QUERIES : exampleCommands;
   const homePageAiWarningMessage = getHomepageAiWarningMessage({
     mode,
     hasAiConfiguration,
@@ -459,7 +480,7 @@ export default function Home() {
   );
 
   const handleExampleClick = useCallback(
-    async (command: string) => {
+    async (example: string) => {
       if (isPreparingExample) {
         return;
       }
@@ -468,11 +489,19 @@ export default function Home() {
       setExampleError(null);
 
       try {
-        await runHomepageExampleCommand({
-          command,
-          backendPreference: effectiveSqlBackend,
-          submit: (nextCommand) => handleSubmit({ text: nextCommand }),
-        });
+        if (isManualMode) {
+          await runHomepageExampleQuery({
+            query: example,
+            backendPreference: effectiveSqlBackend,
+            run: handleManualRun,
+          });
+        } else {
+          await runHomepageExampleCommand({
+            command: example,
+            backendPreference: effectiveSqlBackend,
+            submit: (nextCommand) => handleSubmit({ text: nextCommand }),
+          });
+        }
       } catch (error) {
         setExampleError(
           error instanceof Error ? error.message : "Failed to add sample data.",
@@ -481,7 +510,13 @@ export default function Home() {
         setIsPreparingExample(false);
       }
     },
-    [effectiveSqlBackend, handleSubmit, isPreparingExample],
+    [
+      effectiveSqlBackend,
+      handleManualRun,
+      handleSubmit,
+      isManualMode,
+      isPreparingExample,
+    ],
   );
 
   const quickActions: HomepageQuickAction[] = [
@@ -611,20 +646,22 @@ export default function Home() {
         >
           <section
             className="min-w-0 rounded-3xl border border-border/70 bg-card/70 p-4 shadow-sm backdrop-blur-sm sm:p-6"
-            aria-labelledby="try-asking-heading"
+            aria-labelledby="homepage-examples-heading"
           >
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
                   <h2
-                    id="try-asking-heading"
+                    id="homepage-examples-heading"
                     className="text-lg font-semibold tracking-tight text-foreground"
                   >
-                    Try asking
+                    {isManualMode ? "Try a query" : "Try asking"}
                   </h2>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Ask in plain language or switch to manual SQL.
+                  {isManualMode
+                    ? "Run SQL against the included unicorn sample dataset."
+                    : "Ask in plain language or switch to manual SQL."}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -684,14 +721,7 @@ export default function Home() {
                 onPromptChange={setPromptInput}
               />
               <PromptErrorBanner message={homePageAiWarningMessage} />
-              <div
-                className={cn(
-                  "grid transition-[grid-template-rows,opacity,transform,margin] duration-300 ease-out",
-                  isManualMode
-                    ? "pointer-events-none mt-0 grid-rows-[0fr] -translate-y-2 opacity-0"
-                    : "grid-rows-[1fr] translate-y-0 opacity-100",
-                )}
-              >
+              <div className="grid grid-rows-[1fr] translate-y-0 opacity-100 transition-[grid-template-rows,opacity,transform,margin] duration-300 ease-out">
                 <div className="min-h-0 overflow-hidden">
                   {exampleError ? (
                     <p className="mb-3 mt-4 text-center text-xs text-destructive">
@@ -699,14 +729,15 @@ export default function Home() {
                     </p>
                   ) : null}
                   <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {exampleCommands.map((command, i) => (
+                    {examples.map((example, i) => (
                       <button
-                        key={command}
+                        key={example}
                         type="button"
-                        onClick={() => handleExampleClick(command)}
+                        onClick={() => handleExampleClick(example)}
                         disabled={isPreparingExample}
                         className={cn(
                           "group rounded-xl border border-border/50 bg-background/55 px-4 py-3 text-left text-xs leading-relaxed text-foreground/80 transition-all duration-500 ease-out hover:border-primary/50 hover:bg-primary/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+                          isManualMode && "font-mono",
                           isPreparingExample
                             ? "cursor-wait opacity-70"
                             : "cursor-pointer",
@@ -721,10 +752,14 @@ export default function Home() {
                         }}
                       >
                         <span className="flex items-center justify-between gap-3">
-                          <span>
+                          <span
+                            className={cn(
+                              isManualMode && "whitespace-pre-wrap",
+                            )}
+                          >
                             {isPreparingExample
                               ? "Adding sample data..."
-                              : command}
+                              : example}
                           </span>
                           <ArrowRight className="h-3.5 w-3.5 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-primary group-hover:opacity-100" />
                         </span>
