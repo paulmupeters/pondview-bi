@@ -20,6 +20,7 @@
     "preview": "bun run --cwd packages/pondview-app preview --outDir ../../dist",
     "typecheck": "bun run --cwd packages/pondview-app typecheck",
     "test": "bun run --cwd packages/pondview-app test",
+    "test:e2e": "bun run --cwd packages/pondview-app test:e2e",
     "deploy": "bun run build && npx wrangler deploy",
     "bridge": "bun run --cwd packages/cli src/cli.ts",
     "pondview": "bun run cli --",
