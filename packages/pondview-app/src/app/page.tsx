@@ -1,9 +1,10 @@
 import {
   ArrowRight,
-  BarChart3,
+  CircleAlert,
   Database,
   FilePlus2,
   LayoutDashboard,
+  Settings2,
   SquareTerminal,
   Upload,
 } from "lucide-react";
@@ -15,7 +16,6 @@ import {
   hasRequiredAiConfigurationInStorage,
 } from "@/ai/settings";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import { PromptErrorBanner } from "@/components/chat/prompt-error-banner";
 import { ConnectDataDialog } from "@/components/connect-data-dialog";
 import { ConnectedDataPanel } from "@/components/connected-data-panel";
 import { PondviewLogo } from "@/components/pondview-logo";
@@ -94,52 +94,34 @@ function HomepageQuickActionCard({
   visible,
 }: HomepageQuickActionCardProps) {
   const className = cn(
-    "group relative flex min-h-36 w-full overflow-hidden rounded-2xl border p-5 text-left outline-none transition-all duration-500 ease-out motion-reduce:transition-none",
+    "group relative flex min-h-24 w-full overflow-hidden rounded-2xl border p-4 text-left outline-none transition-all duration-500 ease-out motion-reduce:transition-none",
     "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
     emphasis === "primary"
-      ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/15 hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/25"
-      : "border-border/70 bg-card/75 text-card-foreground shadow-sm backdrop-blur-sm hover:-translate-y-1 hover:border-primary/40 hover:bg-card hover:shadow-lg",
+      ? "border-primary/35 bg-primary/10 text-card-foreground shadow-sm hover:-translate-y-0.5 hover:border-primary/60 hover:bg-primary/15 hover:shadow-md"
+      : "border-border/70 bg-card/70 text-card-foreground shadow-sm backdrop-blur-sm hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card hover:shadow-md",
     visible ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0",
   );
 
   const content = (
     <>
-      <div
-        className={cn(
-          "absolute -right-8 -top-8 h-28 w-28 rounded-full border transition-transform duration-500 group-hover:scale-110",
-          emphasis === "primary"
-            ? "border-primary-foreground/15"
-            : "border-primary/10",
-        )}
-        aria-hidden="true"
-      />
-      <div className="relative flex h-full w-full flex-col justify-between gap-5">
-        <div className="flex items-start justify-between gap-3">
-          <span
-            className={cn(
-              "flex size-9 items-center justify-center rounded-xl border",
-              emphasis === "primary"
-                ? "border-primary-foreground/20 bg-primary-foreground/10"
-                : "border-border bg-background/80 text-primary",
-            )}
-          >
-            <Icon className="size-[18px]" />
-          </span>
-          <ArrowRight className="size-4 -translate-x-1 opacity-40 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100" />
-        </div>
-        <div>
+      <div className="relative flex h-full w-full items-center gap-4">
+        <span
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-xl border",
+            emphasis === "primary"
+              ? "border-primary/25 bg-primary text-primary-foreground"
+              : "border-border bg-background/80 text-primary",
+          )}
+        >
+          <Icon className="size-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold tracking-tight">{label}</h3>
-          <p
-            className={cn(
-              "mt-1 text-xs leading-relaxed",
-              emphasis === "primary"
-                ? "text-primary-foreground/70"
-                : "text-muted-foreground",
-            )}
-          >
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             {description}
           </p>
         </div>
+        <ArrowRight className="size-4 shrink-0 -translate-x-1 text-muted-foreground opacity-50 transition-all duration-200 group-hover:translate-x-0 group-hover:text-primary group-hover:opacity-100" />
       </div>
     </>
   );
@@ -160,6 +142,27 @@ function HomepageQuickActionCard({
     <button type="button" onClick={onClick} className={className} style={style}>
       {content}
     </button>
+  );
+}
+
+function HomepageAiConfigurationNotice() {
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3.5 py-2.5 text-xs text-foreground/80">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <CircleAlert
+          className="size-4 shrink-0 text-amber-600 dark:text-amber-400"
+          aria-hidden="true"
+        />
+        <p>Connect an AI provider to use chat. Manual SQL is ready now.</p>
+      </div>
+      <Link
+        href="/settings"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 font-medium text-foreground transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Settings2 className="size-3.5" aria-hidden="true" />
+        Configure AI
+      </Link>
+    </div>
   );
 }
 
@@ -523,26 +526,31 @@ export default function Home() {
     {
       id: "new-analysis",
       label: "New analysis",
-      description: "Open a clean notebook and start exploring.",
+      description: "Start a focused notebook.",
       icon: FilePlus2,
       emphasis: "primary",
       onClick: handleCreateBlankAnalysis,
     },
     {
       id: "sql-editor",
-      label: "SQL editor",
-      description: "Write and run a query directly against your data.",
+      label: "Open SQL editor",
+      description: "Write and run SQL directly.",
       icon: SquareTerminal,
       href: "/sql-editor",
     },
     {
       id: "upload-data",
-      label: "Upload data",
-      description: "Import a CSV, Parquet, or Excel workbook.",
+      label: "Add data",
+      description: "Import CSV, Parquet, or Excel.",
       icon: Upload,
       onClick: () => setIsUploadDialogOpen(true),
     },
   ];
+
+  const databaseLabel =
+    effectiveSqlBackend === "duckdb-wasm"
+      ? "Local DuckDB"
+      : (selectedDb ?? "Choose a database");
 
   return (
     <div className="relative h-full w-full overflow-y-auto bg-background">
@@ -550,52 +558,46 @@ export default function Home() {
         className="pointer-events-none absolute inset-0 overflow-hidden"
         aria-hidden="true"
       >
-        <div className="absolute left-1/2 top-[-28rem] h-[50rem] w-[50rem] -translate-x-1/2 rounded-full border border-primary/10" />
-        <div className="absolute left-1/2 top-[-22rem] h-[39rem] w-[39rem] -translate-x-1/2 rounded-full border border-primary/10" />
-        <div className="absolute left-1/2 top-[-15rem] h-[27rem] w-[27rem] -translate-x-1/2 rounded-full border border-primary/10" />
+        <div className="absolute left-1/2 top-[-30rem] h-[48rem] w-[48rem] -translate-x-1/2 rounded-full border border-primary/[0.07]" />
+        <div className="absolute left-1/2 top-[-23rem] h-[34rem] w-[34rem] -translate-x-1/2 rounded-full border border-primary/[0.06]" />
         <div
           className="absolute inset-x-0 top-0 h-[32rem]"
           style={{
             background:
-              "radial-gradient(ellipse 55% 42% at 50% 0%, hsl(var(--primary) / 0.09), transparent 72%)",
+              "radial-gradient(ellipse 48% 38% at 50% 0%, hsl(var(--primary) / 0.065), transparent 74%)",
           }}
         />
       </div>
 
-      <main className="relative mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
+      <main className="relative mx-auto flex min-h-full w-full max-w-6xl flex-col px-4 py-7 sm:px-6 sm:py-9 lg:px-8 lg:py-10">
         <header
           className={cn(
-            "flex flex-col gap-7 transition-all duration-500 ease-out motion-reduce:transition-none sm:flex-row sm:items-end sm:justify-between",
+            "flex flex-col gap-5 transition-all duration-500 ease-out motion-reduce:transition-none sm:flex-row sm:items-start sm:justify-between",
             areSuggestionsVisible
               ? "translate-y-0 opacity-100"
               : "translate-y-2 opacity-0",
           )}
         >
           <div className="max-w-2xl">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center overflow-hidden rounded-xl border border-border/70 bg-card/80 shadow-sm backdrop-blur-sm">
-                <PondviewLogo
-                  className="h-8 w-12"
-                  title=""
-                  aria-hidden="true"
-                />
+            <div className="mb-4 flex items-center gap-2.5">
+              <div className="flex size-8 items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-card/70 backdrop-blur-sm">
+                <PondviewLogo className="h-6 w-9" title="" aria-hidden="true" />
               </div>
-              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
                 Pondview workspace
               </span>
             </div>
-            {/* <h1 className="text-balance text-4xl font-black tracking-[-0.045em] text-foreground sm:text-5xl lg:text-6xl">
-              Where should we dive in?
-            </h1> */}
-            <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
-              Start with a notebook, work directly in SQL, or bring in fresh
-              data for your next question.
+            <h1 className="text-balance text-3xl font-semibold tracking-[-0.035em] text-foreground sm:text-4xl">
+              What would you like to explore?
+            </h1>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+              Ask a question, write SQL, or connect data to begin.
             </p>
           </div>
 
           <Link
             href="/dashboards"
-            className="group inline-flex w-fit items-center gap-2 rounded-full border border-border/70 bg-card/70 px-4 py-2 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur-sm transition-all hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="group inline-flex w-fit items-center gap-2 rounded-full border border-border/70 bg-card/60 px-3.5 py-2 text-xs font-medium text-muted-foreground backdrop-blur-sm transition-all hover:border-primary/40 hover:bg-card hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <LayoutDashboard className="size-3.5 text-primary" />
             Dashboards
@@ -603,17 +605,11 @@ export default function Home() {
           </Link>
         </header>
 
-        <section className="mt-10" aria-labelledby="quick-actions-heading">
-          <div className="mb-3 flex items-center gap-2">
-            <BarChart3 className="size-3.5 text-primary" aria-hidden="true" />
-            <h2
-              id="quick-actions-heading"
-              className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground"
-            >
-              Quick actions
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-7" aria-labelledby="quick-actions-heading">
+          <h2 id="quick-actions-heading" className="sr-only">
+            Start here
+          </h2>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {quickActions.map((action, index) => (
               <HomepageQuickActionCard
                 key={action.id}
@@ -632,10 +628,10 @@ export default function Home() {
 
         <div
           className={cn(
-            "mt-10 grid items-start gap-5 transition-all duration-500 ease-out motion-reduce:transition-none",
+            "mt-7 grid items-start gap-4 transition-all duration-500 ease-out motion-reduce:transition-none",
             isManualMode
               ? "grid-cols-1"
-              : "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_20rem]",
+              : "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_18rem]",
             areSuggestionsVisible
               ? "translate-y-0 opacity-100"
               : "translate-y-3 opacity-0",
@@ -645,7 +641,7 @@ export default function Home() {
           }}
         >
           <section
-            className="min-w-0 rounded-3xl border border-border/70 bg-card/70 p-4 shadow-sm backdrop-blur-sm sm:p-6"
+            className="min-w-0 rounded-2xl border border-border/70 bg-card/65 p-4 shadow-sm backdrop-blur-sm sm:p-5"
             aria-labelledby="homepage-examples-heading"
           >
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -653,20 +649,21 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <h2
                     id="homepage-examples-heading"
-                    className="text-lg font-semibold tracking-tight text-foreground"
+                    className="text-xl font-semibold tracking-tight text-foreground"
                   >
-                    {isManualMode ? "Try a query" : "Try asking"}
+                    {isManualMode ? "Write a query" : "Ask your data"}
                   </h2>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {isManualMode
-                    ? "Run SQL against the included unicorn sample dataset."
-                    : "Ask in plain language or switch to manual SQL."}
+                    ? "Run SQL directly against the selected data."
+                    : "Describe what you want to understand in plain language."}
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="hidden max-w-40 truncate font-mono text-[10px] text-muted-foreground sm:inline">
-                  {selectedDb ?? "Choose a database"}
+                <span className="hidden max-w-40 items-center gap-1.5 truncate text-[11px] text-muted-foreground sm:flex">
+                  <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+                  {databaseLabel}
                 </span>
                 <ConnectedDataPanel
                   selectedDb={selectedDb}
@@ -720,7 +717,9 @@ export default function Home() {
                 promptValue={promptInput}
                 onPromptChange={setPromptInput}
               />
-              <PromptErrorBanner message={homePageAiWarningMessage} />
+              {homePageAiWarningMessage ? (
+                <HomepageAiConfigurationNotice />
+              ) : null}
               <div className="grid grid-rows-[1fr] translate-y-0 opacity-100 transition-[grid-template-rows,opacity,transform,margin] duration-300 ease-out">
                 <div className="min-h-0 overflow-hidden">
                   {exampleError ? (
@@ -771,7 +770,7 @@ export default function Home() {
             </div>
           </section>
 
-          <aside className="rounded-3xl border border-border/70 bg-card/70 p-5 shadow-sm backdrop-blur-sm">
+          <aside className="rounded-2xl border border-border/70 bg-card/60 p-4 shadow-sm backdrop-blur-sm">
             <RecentAnalysesSection
               visible={areSuggestionsVisible}
               className="mt-0"
@@ -779,7 +778,7 @@ export default function Home() {
           </aside>
         </div>
 
-        <footer className="mt-10 flex items-center justify-center gap-2 pb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">
+        <footer className="mt-7 flex items-center justify-center gap-2 pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/50">
           <Database className="size-3" aria-hidden="true" />
           Query locally with DuckDB
         </footer>
