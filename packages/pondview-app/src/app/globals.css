@@ -450,15 +450,15 @@
 }
 
 .startup-gate-panel {
-  animation: startup-gate-enter 0.85s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: startup-gate-enter 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .startup-gate-intro-item {
-  animation: startup-gate-fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: startup-gate-fade-up 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .startup-gate-choice {
-  animation: startup-gate-fade-right 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: startup-gate-fade-right 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .startup-gate-choice-icon {
@@ -488,7 +488,7 @@
 }
 
 .startup-gate-footer {
-  animation: startup-gate-fade-right 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: startup-gate-fade-right 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .startup-gate-path {

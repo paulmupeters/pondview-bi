@@ -266,63 +266,77 @@ function StartupIntroPanel({
   showAllOptions: boolean;
 }) {
   const projectPath = resolveStartupProjectDisplayPath(project);
+  const heading = showAllOptions
+    ? `Set up ${project.name}`
+    : `Open ${project.name}`;
+  const description = showAllOptions
+    ? step === 1
+      ? "Choose the database Pondview should use."
+      : "Choose where Pondview should save its project files."
+    : "Pondview found a database for this project.";
 
   return (
-    <div className="relative order-2 border-border border-b bg-gradient-to-br from-primary/10 via-muted/20 to-background p-6 sm:p-8 md:order-1 md:border-r md:border-b-0">
+    <div className="relative min-w-0 border-border border-b bg-gradient-to-br from-primary/10 via-muted/20 to-background p-5 sm:p-6 md:border-r md:border-b-0 md:p-8">
       <div
         className="pointer-events-none absolute inset-y-8 left-0 w-px bg-gradient-to-b from-transparent via-primary/50 to-transparent"
         aria-hidden="true"
       />
 
-      {projectPath ? (
+      <div className="flex h-full min-w-0 flex-col">
         <div
-          className="startup-gate-intro-item mb-5 flex min-w-0 items-start gap-2 font-mono text-[11px] text-muted-foreground"
+          className="startup-gate-intro-item flex items-center gap-2.5"
           style={{ animationDelay: "80ms" }}
-          title={projectPath}
         >
-          <FolderOpen
-            className="mt-0.5 h-3.5 w-3.5 shrink-0"
-            aria-hidden="true"
+          <PondviewLogo
+            title=""
+            className="h-7 w-7 shrink-0 opacity-80"
+            style={
+              {
+                "--secondary": "var(--primary)",
+              } as CSSProperties
+            }
           />
-          <span className="truncate">{projectPath}</span>
+          <span className="font-mono text-[11px] text-muted-foreground uppercase tracking-[0.18em]">
+            Pondview
+          </span>
         </div>
-      ) : null}
 
-      <h1
-        id="startup-gate-title"
-        className="startup-gate-display startup-gate-intro-item font-semibold text-[2rem] text-foreground leading-[1.05] tracking-tight sm:text-[2.35rem]"
-        style={{ animationDelay: "160ms" }}
-      >
-        Open the Pond
-      </h1>
+        <div className="mt-7 sm:mt-9">
+          <p
+            className="startup-gate-intro-item font-mono text-[11px] text-primary uppercase tracking-[0.16em]"
+            style={{ animationDelay: "120ms" }}
+          >
+            {showAllOptions ? `Step ${step} of 2` : "Ready to open"}
+          </p>
+          <h1
+            id="startup-gate-title"
+            className="startup-gate-display startup-gate-intro-item mt-2 break-words font-semibold text-[1.9rem] text-foreground leading-[1.05] tracking-tight sm:text-[2.25rem]"
+            style={{ animationDelay: "160ms" }}
+          >
+            {heading}
+          </h1>
 
-      <p
-        className="startup-gate-intro-item mt-4 max-w-sm text-muted-foreground text-sm leading-6"
-        style={{ animationDelay: "240ms" }}
-      >
-        {showAllOptions
-          ? step === 1
-            ? "Choose where queries run, then pick where Pondview saves your project."
-            : "Decide whether project files live in this folder or in browser storage."
-          : "We found a database in this folder. Open it now, or choose a different setup."}
-      </p>
+          <p
+            className="startup-gate-intro-item mt-3 max-w-sm text-muted-foreground text-sm leading-6"
+            style={{ animationDelay: "200ms" }}
+          >
+            {description}
+          </p>
+        </div>
 
-      <div
-        className="startup-gate-intro-item mt-8 flex items-center gap-3"
-        style={{ animationDelay: "320ms" }}
-      >
-        <PondviewLogo
-          title=""
-          className="h-10 w-10 shrink-0 opacity-80"
-          style={
-            {
-              "--secondary": "var(--primary)",
-            } as CSSProperties
-          }
-        />
-        <span className="font-mono text-[11px] text-muted-foreground uppercase tracking-[0.18em]">
-          Pondview
-        </span>
+        {projectPath ? (
+          <div
+            className="startup-gate-intro-item mt-6 flex min-w-0 items-start gap-2 border-border/60 border-t pt-4 font-mono text-[11px] text-muted-foreground md:mt-auto md:pt-6"
+            style={{ animationDelay: "240ms" }}
+            title={projectPath}
+          >
+            <FolderOpen
+              className="mt-0.5 h-3.5 w-3.5 shrink-0"
+              aria-hidden="true"
+            />
+            <span className="truncate">{projectPath}</span>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -400,7 +414,7 @@ export function ProjectStartupGateView({
   const localStorageDisabled = runtimeChoice === "wasm";
 
   return (
-    <div className="startup-gate-overlay fixed inset-0 z-50 flex items-center justify-center bg-background/95 px-4 backdrop-blur-sm">
+    <div className="startup-gate-overlay fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-background/95 px-4 py-4 backdrop-blur-sm md:items-center md:py-8">
       <div className="relative w-full max-w-4xl">
         <ProjectStartupGateBackdrop />
 
@@ -410,14 +424,14 @@ export function ProjectStartupGateView({
         >
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
 
-          <div className="grid gap-0 md:grid-cols-[0.92fr_1.08fr]">
+          <div className="grid min-w-0 gap-0 md:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
             <StartupIntroPanel
               project={project}
               step={step}
               showAllOptions={showAllOptions}
             />
 
-            <div className="order-1 p-4 sm:p-6 md:order-2">
+            <div className="min-w-0 p-4 sm:p-6">
               {showQuickStart ? (
                 <QuickStartPanel
                   databasePath={quickStartPath ?? ""}
@@ -451,7 +465,12 @@ export function ProjectStartupGateView({
                     />
                   )}
 
-                  <div className="startup-gate-footer flex flex-wrap items-center justify-between gap-3 border-border border-t pt-4">
+                  <div
+                    className={cn(
+                      "startup-gate-footer flex min-w-0 flex-wrap items-center gap-3 border-border border-t pt-4",
+                      step === 2 ? "justify-between" : "justify-end",
+                    )}
+                  >
                     {step === 2 ? (
                       <Button
                         type="button"
@@ -467,9 +486,7 @@ export function ProjectStartupGateView({
                         />
                         Back
                       </Button>
-                    ) : (
-                      <span aria-hidden="true" />
-                    )}
+                    ) : null}
 
                     {step === 1 ? (
                       <Button
@@ -566,18 +583,25 @@ function QuickStartPanel({
   return (
     <div className="grid gap-5">
       <div
-        className="startup-gate-choice border border-primary/25 bg-primary/5 p-5"
-        style={{ animationDelay: "420ms" }}
+        className="startup-gate-choice flex min-w-0 items-start gap-4 border border-primary/25 bg-primary/5 p-5"
+        style={{ animationDelay: "80ms" }}
       >
-        <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.16em]">
-          Detected database
-        </p>
-        <p className="startup-gate-display mt-2 font-medium text-2xl text-foreground tracking-tight">
-          {fileName}
-        </p>
-        <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-          {databasePath}
-        </p>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-primary/25 bg-background/70">
+          <Database className="h-5 w-5 text-primary" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-[0.14em]">
+            Database ready
+          </p>
+          <p className="startup-gate-display mt-1.5 truncate font-medium text-2xl text-foreground tracking-tight">
+            {fileName}
+          </p>
+          {databasePath !== fileName ? (
+            <p className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
+              {databasePath}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <div className="startup-gate-footer grid gap-3">
@@ -597,7 +621,7 @@ function QuickStartPanel({
             </>
           ) : (
             <>
-              Open with this database
+              Open project
               <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
             </>
           )}
@@ -609,7 +633,7 @@ function QuickStartPanel({
           disabled={isWorking}
           onClick={onShowAllOptions}
         >
-          Choose another setup
+          Change setup
         </Button>
       </div>
     </div>
@@ -619,29 +643,46 @@ function QuickStartPanel({
 function StepIndicator({ currentStep }: { currentStep: StartupStep }) {
   return (
     <nav
-      className="startup-gate-intro-item flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.16em]"
-      style={{ animationDelay: "380ms" }}
+      className="startup-gate-intro-item flex min-w-0 items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em]"
+      style={{ animationDelay: "60ms" }}
       aria-label={`Setup progress, step ${currentStep} of 2`}
     >
-      <StepPill active={currentStep === 1} label="Runtime" />
-      <span className="text-border" aria-hidden="true">
-        /
-      </span>
-      <StepPill active={currentStep === 2} label="Storage" />
+      <StepPill active={currentStep === 1} label="Database" step={1} />
+      <span className="h-px min-w-3 flex-1 bg-border/80" aria-hidden="true" />
+      <StepPill active={currentStep === 2} label="Project files" step={2} />
     </nav>
   );
 }
 
-function StepPill({ active, label }: { active: boolean; label: string }) {
+function StepPill({
+  active,
+  label,
+  step,
+}: {
+  active: boolean;
+  label: string;
+  step: StartupStep;
+}) {
   return (
     <span
       className={cn(
-        "border px-2 py-1 transition-colors",
+        "flex shrink-0 items-center gap-2 border px-2.5 py-1.5 transition-colors",
         active
           ? "border-primary/50 bg-primary/10 text-foreground"
           : "border-border/70 text-muted-foreground",
       )}
     >
+      <span
+        className={cn(
+          "flex h-4 w-4 items-center justify-center rounded-full text-[9px]",
+          active
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-muted-foreground",
+        )}
+        aria-hidden="true"
+      >
+        {step}
+      </span>
       {label}
     </span>
   );
@@ -669,36 +710,36 @@ function RuntimeStep({
   onPickDuckDbPath: () => void;
 }) {
   return (
-    <fieldset className="grid gap-3 border-0 p-0">
-      <legend className="mb-1 font-mono text-[10px] text-muted-foreground uppercase tracking-[0.16em]">
-        Where should queries run?
+    <fieldset className="grid min-w-0 gap-3 border-0 p-0">
+      <legend className="mb-1 font-mono text-[11px] text-muted-foreground uppercase tracking-[0.14em]">
+        Choose a database
       </legend>
       <div
         id={groupId}
         role="radiogroup"
-        aria-label="Query runtime"
-        className="grid gap-3"
+        aria-label="Database"
+        className="grid min-w-0 gap-3"
       >
         <RadioChoiceCard
           name={`${groupId}-runtime`}
           value="new-duckdb"
           icon={Plus}
-          title="Create new database"
-          description="Start with a fresh DuckDB file in this project folder."
+          title="Create a new database"
+          description="Create a DuckDB file inside this project."
           selected={runtimeChoice === "new-duckdb"}
           disabled={isWorking}
-          delayMs={440}
+          delayMs={80}
           onSelect={() => onRuntimeChoiceChange("new-duckdb")}
         />
         <RadioChoiceCard
           name={`${groupId}-runtime`}
           value="existing-duckdb"
           icon={Database}
-          title="Use existing database"
-          description="Open a DuckDB file from this folder or pick another path."
+          title="Open a DuckDB file"
+          description="Use a database from this project or choose another file."
           selected={runtimeChoice === "existing-duckdb"}
           disabled={isWorking}
-          delayMs={500}
+          delayMs={110}
           onSelect={() => onRuntimeChoiceChange("existing-duckdb")}
         >
           <ExistingDatabasePicker
@@ -714,11 +755,11 @@ function RuntimeStep({
           name={`${groupId}-runtime`}
           value="wasm"
           icon={Globe}
-          title="Run in browser only"
-          description="Use DuckDB in the browser without a local database file."
+          title="Use a browser database"
+          description="Run locally in this browser without creating a database file."
           selected={runtimeChoice === "wasm"}
           disabled={isWorking}
-          delayMs={580}
+          delayMs={140}
           onSelect={() => onRuntimeChoiceChange("wasm")}
         />
       </div>
@@ -741,13 +782,26 @@ function ExistingDatabasePicker({
   onDuckDbPathChange: (value: string) => void;
   onPickDuckDbPath: () => void;
 }) {
+  const isDetectedPath = detectedDuckDbPaths.includes(duckDbPath);
+  const [showPathInput, setShowPathInput] = useState(
+    detectedDuckDbPaths.length === 0 || !isDetectedPath,
+  );
+
+  useEffect(() => {
+    if (detectedDuckDbPaths.length === 0 || !isDetectedPath) {
+      setShowPathInput(true);
+    }
+  }, [detectedDuckDbPaths.length, isDetectedPath]);
+
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 gap-2">
       <label
         htmlFor="startup-duckdb-path"
-        className="block font-mono text-[10px] text-muted-foreground uppercase tracking-[0.16em]"
+        className="block font-mono text-[11px] text-muted-foreground uppercase tracking-[0.14em]"
       >
-        Database file
+        {detectedDuckDbPaths.length > 0
+          ? "Detected in this project"
+          : "Database path"}
       </label>
       {detectedDuckDbPaths.length > 0 ? (
         <div className="flex flex-wrap gap-2">
@@ -759,39 +813,87 @@ function ExistingDatabasePicker({
               size="sm"
               className="h-7 rounded-none px-2 font-mono text-[11px]"
               disabled={isWorking || isPickingDuckDbPath}
-              onClick={() => onDuckDbPathChange(path)}
+              onClick={() => {
+                onDuckDbPathChange(path);
+                setShowPathInput(false);
+              }}
             >
               {path}
             </Button>
           ))}
         </div>
       ) : null}
-      <div className="flex gap-2">
-        <Input
-          id="startup-duckdb-path"
-          value={duckDbPath}
-          onChange={(event) => onDuckDbPathChange(event.currentTarget.value)}
-          disabled={isWorking || isPickingDuckDbPath}
-          placeholder="Choose a .duckdb file"
-          className="h-8 rounded-none border-border/70 bg-background/70 font-mono text-xs shadow-none"
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="h-8 w-8 shrink-0 rounded-none border-border/70 bg-background/70 shadow-none"
-          disabled={isWorking || isPickingDuckDbPath}
-          onClick={onPickDuckDbPath}
-          title="Choose DuckDB file"
-          aria-label="Choose DuckDB file"
-        >
-          {isPickingDuckDbPath ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-        </Button>
-      </div>
+      {showPathInput ? (
+        <div className="grid min-w-0 gap-2">
+          {detectedDuckDbPaths.length > 0 ? (
+            <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.14em]">
+              Or enter another path
+            </span>
+          ) : null}
+          <div className="flex min-w-0 gap-2">
+            <Input
+              id="startup-duckdb-path"
+              value={isDetectedPath ? "" : duckDbPath}
+              onChange={(event) =>
+                onDuckDbPathChange(event.currentTarget.value)
+              }
+              disabled={isWorking || isPickingDuckDbPath}
+              placeholder="Choose a .duckdb file"
+              className="h-8 min-w-0 flex-1 rounded-none border-border/70 bg-background/70 font-mono text-xs shadow-none"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 shrink-0 rounded-none border-border/70 bg-background/70 shadow-none"
+              disabled={isWorking || isPickingDuckDbPath}
+              onClick={onPickDuckDbPath}
+              title="Choose DuckDB file"
+              aria-label="Choose DuckDB file"
+            >
+              {isPickingDuckDbPath ? (
+                <Loader2
+                  className="h-3.5 w-3.5 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 rounded-none px-2 text-muted-foreground text-xs"
+            disabled={isWorking || isPickingDuckDbPath}
+            onClick={() => setShowPathInput(true)}
+          >
+            Enter a path
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 rounded-none px-2 text-xs"
+            disabled={isWorking || isPickingDuckDbPath}
+            onClick={onPickDuckDbPath}
+          >
+            {isPickingDuckDbPath ? (
+              <Loader2
+                className="mr-1.5 h-3.5 w-3.5 animate-spin"
+                aria-hidden="true"
+              />
+            ) : (
+              <FolderOpen className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            Choose another file
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -810,15 +912,15 @@ function StorageStep({
   onStorageChoiceChange: (value: StartupStorageChoice) => void;
 }) {
   return (
-    <fieldset className="grid gap-3 border-0 p-0">
-      <legend className="mb-1 font-mono text-[10px] text-muted-foreground uppercase tracking-[0.16em]">
-        Where should Pondview save your project?
+    <fieldset className="grid min-w-0 gap-3 border-0 p-0">
+      <legend className="mb-1 font-mono text-[11px] text-muted-foreground uppercase tracking-[0.14em]">
+        Where should Pondview save project files?
       </legend>
       <div
         id={groupId}
         role="radiogroup"
         aria-label="Project storage"
-        className="grid gap-3"
+        className="grid min-w-0 gap-3"
       >
         <RadioChoiceCard
           name={`${groupId}-storage`}
@@ -828,22 +930,22 @@ function StorageStep({
           description={
             localStorageDisabled
               ? "Unavailable with browser-only runtime. Pick a local database on the previous step."
-              : "Create Pondview project files here so work stays with the repo."
+              : "Keep Pondview project files and settings with this project."
           }
           selected={storageChoice === "local"}
           disabled={isWorking || localStorageDisabled}
-          delayMs={620}
+          delayMs={80}
           onSelect={() => onStorageChoiceChange("local")}
         />
         <RadioChoiceCard
           name={`${groupId}-storage`}
           value="browser"
           icon={Cloud}
-          title="Keep in browser storage"
-          description="Skip project files for now and store state in this browser."
+          title="Save in this browser"
+          description="Keep Pondview state in this browser without creating project files."
           selected={storageChoice === "browser"}
           disabled={isWorking}
-          delayMs={680}
+          delayMs={110}
           onSelect={() => onStorageChoiceChange("browser")}
         />
       </div>
@@ -1280,7 +1382,7 @@ function RadioChoiceCard({
   return (
     <div
       className={cn(
-        "startup-gate-choice group relative w-full overflow-hidden rounded-none border border-border/80 bg-background/70 text-left transition-[border-color,background-color,transform,box-shadow] duration-300",
+        "startup-gate-choice group relative min-w-0 w-full overflow-hidden rounded-none border border-border/80 bg-background/70 text-left transition-[border-color,background-color,transform,box-shadow] duration-300",
         !disabled &&
           "hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/5 hover:shadow-[0_12px_32px_-20px_color-mix(in_oklch,var(--primary)_55%,transparent)]",
         disabled && "pointer-events-none opacity-50",
