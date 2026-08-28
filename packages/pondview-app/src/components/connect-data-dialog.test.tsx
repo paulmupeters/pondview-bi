@@ -18,13 +18,13 @@ describe("ConnectDataDialog runtime source support", () => {
     expect(isWasmCompatibleDatabase("quack")).toBe(false);
   });
 
-  test("requires worksheet selection only for Bridge XLSX imports", () => {
+  test("requires worksheet selection for XLSX imports in both runtimes", () => {
     expect(shouldSelectWorksheetBeforeImport("workbook.xlsx", "bridge")).toBe(
       true,
     );
     expect(
       shouldSelectWorksheetBeforeImport("workbook.xlsx", "duckdb-wasm"),
-    ).toBe(false);
+    ).toBe(true);
     expect(shouldSelectWorksheetBeforeImport("data.csv", "bridge")).toBe(false);
   });
 

@@ -17,12 +17,13 @@ Maximum file size:
 
 ## What happens after upload
 
-CSV and Parquet files are imported as local DuckDB tables. After import, you can
-query them in the SQL editor and ask the AI to use them in analysis.
+CSV, Parquet, and selected worksheets from XLSX files are imported as local
+DuckDB tables. After import, you can query them in the SQL editor and ask the AI
+to use them in analysis.
 
-Excel files are stored as uploaded files. In DuckDB WASM they remain available
-as chat attachments; in Bridge-backed projects, `.xlsx` files can be imported
-after worksheet selection.
+XLSX files are imported after worksheet selection in both DuckDB WASM and
+Bridge-backed projects. Legacy `.xls` files remain available as browser-stored
+chat attachments in WASM, but cannot be imported as DuckDB tables.
 
 1. Validate extension and size.
 2. Generate `fileId` and metadata entry.
@@ -36,7 +37,7 @@ after worksheet selection.
 | --- | --- | --- | --- |
 | CSV | Imported | Imported | Stored + imported (`importStatus: imported`) |
 | Parquet | Imported | Imported | Stored + imported (`importStatus: imported`) |
-| XLSX | Stored only | Imported after worksheet selection | Stored, and imported in Bridge |
+| XLSX | Imported after worksheet selection | Imported after worksheet selection | Stored and imported |
 | XLS | Stored only | Unsupported | Use `.xlsx` instead for Bridge imports |
 
 ## Where uploads are used
@@ -44,7 +45,7 @@ after worksheet selection.
 You can use uploaded files from:
 
 - **Data page**: upload files, review upload status, and see imported table names.
-- **SQL editor**: query imported CSV, Parquet, and Bridge-imported XLSX tables.
+- **SQL editor**: query imported CSV, Parquet, and XLSX tables.
 - **Prompt input**: attach uploaded files to an AI message.
 
 ## Browser storage
