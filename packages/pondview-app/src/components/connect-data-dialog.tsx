@@ -213,7 +213,8 @@ export function shouldSelectWorksheetBeforeImport(
   effectiveSqlBackend: SqlBackend,
 ): boolean {
   return (
-    effectiveSqlBackend === "bridge" &&
+    (effectiveSqlBackend === "bridge" ||
+      effectiveSqlBackend === "duckdb-wasm") &&
     getLocalFileExtension(fileName) === ".xlsx"
   );
 }
@@ -1440,9 +1441,8 @@ export function ConnectDataDialog({
             }}
           />
           <p className="text-xs text-muted-foreground">
-            CSV and Parquet import as DuckDB tables in WASM and Bridge. XLSX
-            imports as a selected worksheet in Bridge, and is stored only in
-            WASM.
+            CSV, Parquet, and a selected XLSX worksheet import as DuckDB tables
+            in WASM and Bridge.
           </p>
           {isReadingLocalFile ? (
             <p className="text-xs text-muted-foreground">

@@ -168,10 +168,7 @@ function FileAttachmentHoverCard() {
     setIsUploading(true);
 
     try {
-      if (
-        effectiveSqlBackend === "bridge" &&
-        nextFile.name.toLowerCase().endsWith(".xlsx")
-      ) {
+      if (nextFile.name.toLowerCase().endsWith(".xlsx")) {
         const sheets = await readXlsxSheetNames(nextFile);
         setPendingXlsxFile(nextFile);
         setXlsxSheets(sheets);
@@ -208,7 +205,7 @@ function FileAttachmentHoverCard() {
     setIsUploading(true);
     try {
       const uploadedFile = await persistUploadedFile(pendingXlsxFile, {
-        backend: "bridge",
+        backend: effectiveSqlBackend,
         xlsxSheet: selectedXlsxSheet,
       });
       const browserFile = await getUploadedFileBlob(uploadedFile.fileId);

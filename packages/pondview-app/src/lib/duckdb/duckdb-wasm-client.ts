@@ -19,7 +19,8 @@ interface ImportBrowserFileOptions {
   registeredName: string;
   schema: string;
   tableName: string;
-  format: "csv" | "parquet";
+  format: "csv" | "parquet" | "xlsx";
+  xlsxSheet?: string;
 }
 
 type QueryResult = Awaited<ReturnType<AsyncDuckDBConnection["query"]>>;
@@ -142,6 +143,10 @@ export class DuckdbWasmClient {
 
   async importBrowserFile(options: ImportBrowserFileOptions): Promise<void> {
     const task = async () => {
+      if (options.format === "xlsx" && !options.xlsxSheet?.trim()) {
+        throw new Error("Select a worksheet before importing an XLSX file.");
+      }
+
       const { db, con } = await this.provider.getCurrentWasm();
       const database = db as typeof db & {
         registerFileHandle: (
@@ -158,13 +163,20 @@ export class DuckdbWasmClient {
         true,
       );
 
+      if (options.format === "xlsx") {
+        await con.query("INSTALL excel;");
+        await con.query("LOAD excel;");
+      }
+
       const schemaSql = `CREATE SCHEMA IF NOT EXISTS ${this.quoteIdentifier(options.schema)}`;
       await con.query(schemaSql);
 
       const sourceSql =
         options.format === "csv"
           ? `read_csv_auto('${this.escapeSqlString(options.registeredName)}')`
-          : `read_parquet('${this.escapeSqlString(options.registeredName)}')`;
+          : options.format === "parquet"
+            ? `read_parquet('${this.escapeSqlString(options.registeredName)}')`
+            : `read_xlsx('${this.escapeSqlString(options.registeredName)}', sheet = '${this.escapeSqlString(options.xlsxSheet ?? "")}')`;
 
       const createTableSql = `CREATE OR REPLACE TABLE ${this.quoteIdentifier(options.schema)}.${this.quoteIdentifier(options.tableName)} AS SELECT * FROM ${sourceSql}`;
       await con.query(createTableSql);

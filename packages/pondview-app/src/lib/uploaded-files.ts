@@ -151,7 +151,9 @@ function validateUploadEntry(entry: UploadedFileLegacy): UploadedFile | null {
 }
 
 function isImportableByWasm(extension: string): boolean {
-  return extension === ".csv" || extension === ".parquet";
+  return (
+    extension === ".csv" || extension === ".parquet" || extension === ".xlsx"
+  );
 }
 
 function isImportableByBridge(extension: string): boolean {
@@ -289,7 +291,7 @@ export async function persistUploadedFile(
   if (backend === "bridge" && extension === ".xls") {
     throw new Error("Legacy .xls files are not supported. Use .xlsx instead.");
   }
-  if (backend === "bridge" && extension === ".xlsx" && !options.xlsxSheet) {
+  if (extension === ".xlsx" && !options.xlsxSheet) {
     throw new Error("Select a worksheet before importing an XLSX file.");
   }
 
@@ -342,7 +344,13 @@ export async function persistUploadedFile(
         registeredName: buildRegisteredFileName(baseEntry),
         schema: UPLOADED_FILES_SCHEMA,
         tableName,
-        format: extension === ".parquet" ? "parquet" : "csv",
+        format:
+          extension === ".parquet"
+            ? "parquet"
+            : extension === ".xlsx"
+              ? "xlsx"
+              : "csv",
+        xlsxSheet: options.xlsxSheet,
       });
 
       finalEntry = {
