@@ -63,7 +63,7 @@
     "nanoid": "^6.0.0",
     "picomatch": "^4.0.4",
     "react": "19.2.8",
-    "react-dom": "19.2.7",
+    "react-dom": "19.2.8",
     "react-grid-layout": "^2.2.4",
     "react-markdown": "^10.1.0",
     "react-native-purchases": "^10.1.2",

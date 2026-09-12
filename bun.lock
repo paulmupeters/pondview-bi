@@ -91,7 +91,7 @@
         "nanoid": "^6.0.0",
         "picomatch": "^4.0.4",
         "react": "19.2.8",
-        "react-dom": "19.2.7",
+        "react-dom": "19.2.8",
         "react-grid-layout": "^2.2.4",
         "react-markdown": "^10.1.0",
         "react-native-purchases": "^10.1.2",
@@ -136,7 +136,7 @@
         "@tailwindcss/vite": "^4.3.2",
         "gsap": "^3.14.2",
         "react": "^19.2.8",
-        "react-dom": "^19.2.7",
+        "react-dom": "^19.2.8",
         "recharts": "^3.9.2",
         "tailwindcss": "^4.3.2",
         "three": "^0.185.1",
@@ -1718,7 +1718,7 @@
 
     "react-devtools-core": ["react-devtools-core@6.1.5", "", { "dependencies": { "shell-quote": "^1.6.1", "ws": "^7" } }, "sha512-ePrwPfxAnB+7hgnEr8vpKxL9cmnp7F322t8oqcPshbIQQhDKgFDW4tjhF2wjVbdXF9O/nyuy3sQWd9JGpiLPvA=="],
 
-    "react-dom": ["react-dom@19.2.7", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.7" } }, "sha512-t0BRVXvbiE/o20Hfw669rLbMCDWtYZLvmJigy2f0MxsXF+71pxhR3xOkspmsO8h3ZlNzyibAmtCa3l4lYKk6gQ=="],
+    "react-dom": ["react-dom@19.2.8", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.8" } }, "sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ=="],
 
     "react-draggable": ["react-draggable@4.7.0", "", { "dependencies": { "clsx": "^2.1.1", "prop-types": "^15.8.1" }, "peerDependencies": { "react": ">= 16.3.0", "react-dom": ">= 16.3.0" } }, "sha512-kTpANmKWVnFXiZ76Ag2ZowiFStuBYnJ606PI1TbUsOg29/400/JNIxI9+CuenhiAqFuXWJffz6F4UI3R51kUug=="],
 
