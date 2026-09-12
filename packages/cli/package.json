@@ -44,14 +44,14 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.79",
-    "@ai-sdk/openai": "^4.0.52",
-    "@ai-sdk/openai-compatible": "^2.0.62",
+    "@ai-sdk/anthropic": "^4.0.53",
+    "@ai-sdk/openai": "^4.0.66",
+    "@ai-sdk/openai-compatible": "^3.0.48",
     "@aws-sdk/client-s3": "^3.1056.0",
     "@duckdb/node-api": "^1.5.2-r.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@pondview/bridge-protocol": "workspace:*",
-    "ai": "6.0.204",
+    "ai": "7.0.99",
     "zod": "^4.5.4"
   },
   "devDependencies": {
