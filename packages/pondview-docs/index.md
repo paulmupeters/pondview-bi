@@ -13,6 +13,7 @@ Use this guide to learn Pondview from the product workflow first: connect data, 
 ## Common tasks
 
 - [Use MCP with local agents](/guide/mcp)
+- [MCP Apps query workspace specification](/guide/mcp-apps)
 - [Run Pondview locally with the CLI](/guide/cli)
 - [Configure AI providers](/guide/ai-provider-configuration)
 - [Connect data sources](/guide/connected-data-sources)

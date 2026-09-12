@@ -373,7 +373,7 @@ function hasAttachOption(parts: string[], keyword: string): boolean {
 function getColumns(reader: DuckDBResultReader): BridgeColumn[] {
   return reader.columnNames().map((name, index) => ({
     name,
-    type: JSON.stringify(reader.columnTypeJson(index)),
+    type: reader.columnType(index).toString(),
   }));
 }
 

@@ -234,10 +234,14 @@ export function validateStartupRuntime(input: {
   return null;
 }
 
-function formatDatabaseFileName(path: string): string {
-  const normalized = path.replace(/\\/g, "/");
+function formatPathBaseName(path: string): string {
+  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
   const segments = normalized.split("/");
   return segments.at(-1) || path;
+}
+
+function formatDatabaseFileName(path: string): string {
+  return formatPathBaseName(path);
 }
 
 export function resolveStartupProjectDisplayPath(
@@ -266,6 +270,9 @@ function StartupIntroPanel({
   showAllOptions: boolean;
 }) {
   const projectPath = resolveStartupProjectDisplayPath(project);
+  const projectFolderName = projectPath
+    ? formatPathBaseName(projectPath)
+    : null;
   const heading = showAllOptions
     ? `Set up ${project.name}`
     : `Open ${project.name}`;
@@ -326,15 +333,26 @@ function StartupIntroPanel({
 
         {projectPath ? (
           <div
-            className="startup-gate-intro-item mt-6 flex min-w-0 items-start gap-2 border-border/60 border-t pt-4 font-mono text-[11px] text-muted-foreground md:mt-auto md:pt-6"
+            className="startup-gate-intro-item mt-6 min-w-0 border-border/60 border-t pt-4 md:mt-auto md:pt-6"
             style={{ animationDelay: "240ms" }}
-            title={projectPath}
           >
-            <FolderOpen
-              className="mt-0.5 h-3.5 w-3.5 shrink-0"
-              aria-hidden="true"
-            />
-            <span className="truncate">{projectPath}</span>
+            <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-[0.14em]">
+              Project folder
+            </p>
+            <div className="mt-2 flex min-w-0 items-start gap-3 border border-primary/25 bg-background/70 p-3">
+              <FolderOpen
+                className="mt-0.5 h-4 w-4 shrink-0 text-primary"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <p className="break-words font-medium text-foreground text-sm leading-5">
+                  {projectFolderName}
+                </p>
+                <p className="mt-1 break-words font-mono text-[11px] text-foreground/65 leading-5">
+                  {projectPath}
+                </p>
+              </div>
+            </div>
           </div>
         ) : null}
       </div>
@@ -458,6 +476,7 @@ export function ProjectStartupGateView({
                   ) : (
                     <StorageStep
                       groupId={storageGroupId}
+                      projectPath={resolveStartupProjectDisplayPath(project)}
                       storageChoice={storageChoice}
                       localStorageDisabled={localStorageDisabled}
                       isWorking={isWorking}
@@ -900,17 +919,23 @@ function ExistingDatabasePicker({
 
 function StorageStep({
   groupId,
+  projectPath,
   storageChoice,
   localStorageDisabled,
   isWorking,
   onStorageChoiceChange,
 }: {
   groupId: string;
+  projectPath: string | null;
   storageChoice: StartupStorageChoice;
   localStorageDisabled: boolean;
   isWorking: boolean;
   onStorageChoiceChange: (value: StartupStorageChoice) => void;
 }) {
+  const projectFolderName = projectPath
+    ? formatPathBaseName(projectPath)
+    : null;
+
   return (
     <fieldset className="grid min-w-0 gap-3 border-0 p-0">
       <legend className="mb-1 font-mono text-[11px] text-muted-foreground uppercase tracking-[0.14em]">
@@ -926,11 +951,15 @@ function StorageStep({
           name={`${groupId}-storage`}
           value="local"
           icon={HardDrive}
-          title="Save to this folder"
+          title={
+            projectFolderName
+              ? `Save to ${projectFolderName}`
+              : "Save to the project folder"
+          }
           description={
             localStorageDisabled
               ? "Unavailable with browser-only runtime. Pick a local database on the previous step."
-              : "Keep Pondview project files and settings with this project."
+              : "Keep Pondview project files and settings in the folder shown in the project details."
           }
           selected={storageChoice === "local"}
           disabled={isWorking || localStorageDisabled}

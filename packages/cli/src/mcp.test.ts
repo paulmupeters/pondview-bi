@@ -8,9 +8,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { BridgeQueryResponse } from "@pondview/bridge-protocol";
 import {
+  createBridgeMcpServer,
   createBridgeMcpToolHandlers,
+  MCP_QUERY_RESULTS_RESOURCE_MIME_TYPE,
+  MCP_QUERY_RESULTS_RESOURCE_URI,
   resolveMcpDatabasePath,
   toToolResult,
 } from "./mcp";
@@ -58,6 +63,62 @@ async function createSeededRuntime(): Promise<DuckDbRuntime> {
 }
 
 describe("bridge MCP tools", () => {
+  test("advertises and serves the query results MCP App", async () => {
+    const runtime = createRuntime();
+    const server = createBridgeMcpServer(runtime, {
+      mcpAppHtml: "<!doctype html><title>Pondview MCP App test</title>",
+    });
+    const client = new Client(
+      { name: "pondview-mcp-app-test", version: "1.0.0" },
+      {
+        capabilities: {
+          extensions: {
+            "io.modelcontextprotocol/ui": {
+              mimeTypes: [MCP_QUERY_RESULTS_RESOURCE_MIME_TYPE],
+            },
+          },
+        },
+      },
+    );
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+
+      expect(client.getServerCapabilities()).toMatchObject({
+        extensions: {
+          "io.modelcontextprotocol/ui": {
+            mimeTypes: [MCP_QUERY_RESULTS_RESOURCE_MIME_TYPE],
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      const executeSql = tools.tools.find(
+        (tool) => tool.name === "execute_sql",
+      );
+      expect(executeSql?._meta).toMatchObject({
+        ui: { resourceUri: MCP_QUERY_RESULTS_RESOURCE_URI },
+      });
+
+      const resource = await client.readResource({
+        uri: MCP_QUERY_RESULTS_RESOURCE_URI,
+      });
+      expect(resource.contents).toEqual([
+        {
+          uri: MCP_QUERY_RESULTS_RESOURCE_URI,
+          mimeType: MCP_QUERY_RESULTS_RESOURCE_MIME_TYPE,
+          text: "<!doctype html><title>Pondview MCP App test</title>",
+        },
+      ]);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   test("handlers accept a query-only bridge client runtime", async () => {
     const calls: Array<{ sql: string; limit?: number }> = [];
     const runtime = {
@@ -186,6 +247,7 @@ describe("bridge MCP tools", () => {
       "SELECT count(*) AS total FROM users",
     );
 
+    expect(result.sql).toBe("SELECT count(*) AS total FROM users");
     expect(result.rows).toEqual([{ total: "6" }]);
   });
 

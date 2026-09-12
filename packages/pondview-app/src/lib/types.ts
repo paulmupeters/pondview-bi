@@ -24,11 +24,15 @@ export const configSchema = z
       .optional(),
     type: z.enum(["bar", "line", "area", "pie"]).describe("Type of chart"),
     title: z.string(),
-    xKey: z.string().describe("Key for x-axis or category"),
+    xKey: z
+      .string()
+      .describe(
+        "Key for the X-axis grouping/category/time dimension. Numeric dimensions such as year are valid.",
+      ),
     yKeys: z
       .array(z.string())
       .describe(
-        "Key(s) for y-axis values this is typically the quantitative column",
+        "Key(s) for numeric Y-axis measures or aggregates such as counts, sums, and averages; do not use a grouping/time dimension here",
       ),
     multipleLines: z
       .boolean()

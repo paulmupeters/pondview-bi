@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  EXTENSION_ID as MCP_APPS_EXTENSION_ID,
+  RESOURCE_MIME_TYPE,
+  registerAppResource,
+  registerAppTool,
+} from "@modelcontextprotocol/ext-apps/server";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -21,6 +29,12 @@ import {
 const DEFAULT_QUERY_LIMIT = 500;
 const DEFAULT_BRIDGE_APP_URL = "http://127.0.0.1:17817";
 const METADATA_SCHEMA = "pondview";
+export const MCP_QUERY_RESULTS_RESOURCE_URI =
+  "ui://pondview/query-results.html";
+export const MCP_QUERY_RESULTS_RESOURCE_MIME_TYPE = RESOURCE_MIME_TYPE;
+const MCP_QUERY_RESULTS_HTML_PATH = fileURLToPath(
+  new URL("../dist/mcp-app/mcp-app.html", import.meta.url),
+);
 const HIDDEN_RUNTIME_SCHEMAS = [
   "information_schema",
   "pg_catalog",
@@ -52,6 +66,11 @@ export interface McpRuntime {
 export interface BridgeMcpHttpHandler {
   handleRequest(request: Request): Promise<Response>;
   close(): Promise<void>;
+}
+
+export interface BridgeMcpServerOptions
+  extends Pick<BridgeMcpOptions, "allowWriteSql" | "appUrl"> {
+  mcpAppHtml?: string;
 }
 
 type BridgeMcpHttpSession = {
@@ -158,6 +177,7 @@ export function createBridgeMcpToolHandlers(
     executeSql: async (sql: string, limit = DEFAULT_QUERY_LIMIT) => {
       const result = await executeSql(sql, limit);
       return {
+        sql,
         columns: result.columns,
         rows: result.rows,
         rowCount: result.rowCount,
@@ -326,13 +346,47 @@ export function createBridgeMcpToolHandlers(
 
 export function createBridgeMcpServer(
   runtime: McpRuntime,
-  options: Pick<BridgeMcpOptions, "allowWriteSql" | "appUrl"> = {},
+  options: BridgeMcpServerOptions = {},
 ): McpServer {
-  const server = new McpServer({
-    name: "pondview-bridge",
-    version: "0.1.0",
-  });
+  const server = new McpServer(
+    {
+      name: "pondview-bridge",
+      version: "0.1.0",
+    },
+    {
+      capabilities: {
+        extensions: {
+          [MCP_APPS_EXTENSION_ID]: {
+            mimeTypes: [RESOURCE_MIME_TYPE],
+          },
+        },
+      },
+    },
+  );
   const handlers = createBridgeMcpToolHandlers(runtime, options);
+
+  registerAppResource(
+    server,
+    "Pondview query results",
+    MCP_QUERY_RESULTS_RESOURCE_URI,
+    {
+      description:
+        "Interactive Pondview table and chart workspace for DuckDB query results, exports, and dashboard actions.",
+      mimeType: RESOURCE_MIME_TYPE,
+    },
+    async () => {
+      const html = options.mcpAppHtml ?? (await readMcpQueryResultsAppHtml());
+      return {
+        contents: [
+          {
+            uri: MCP_QUERY_RESULTS_RESOURCE_URI,
+            mimeType: RESOURCE_MIME_TYPE,
+            text: html,
+          },
+        ],
+      };
+    },
+  );
 
   server.registerTool(
     "list_tables",
@@ -368,7 +422,8 @@ export function createBridgeMcpServer(
       toToolResult(await handlers.runPreview(table)),
   );
 
-  server.registerTool(
+  registerAppTool(
+    server,
     "execute_sql",
     {
       description:
@@ -377,6 +432,9 @@ export function createBridgeMcpServer(
         sql: z.string().min(1),
         limit: z.number().int().positive().max(5000).optional(),
       }),
+      _meta: {
+        ui: { resourceUri: MCP_QUERY_RESULTS_RESOURCE_URI },
+      },
     },
     async ({ sql, limit }: { sql: string; limit?: number }) =>
       toToolResult(
@@ -544,6 +602,17 @@ export function createBridgeMcpServer(
   );
 
   return server;
+}
+
+async function readMcpQueryResultsAppHtml(): Promise<string> {
+  try {
+    return await readFile(MCP_QUERY_RESULTS_HTML_PATH, "utf8");
+  } catch (error) {
+    const reason = error instanceof Error ? ` ${error.message}` : "";
+    throw new Error(
+      `Bundled Pondview MCP App was not found. Run bun run bridge:build-mcp-app-ui before serving or packaging the CLI.${reason}`,
+    );
+  }
 }
 
 export async function runBridgeMcpServerWithRuntime(

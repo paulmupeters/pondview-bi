@@ -78,6 +78,27 @@ navigation:
 Dashboard tools write Pondview metadata through the bridge so the web app can
 see changes live.
 
+## Interactive results with MCP Apps
+
+Pondview exposes `execute_sql` as an MCP App-enhanced tool. Hosts that support
+the `io.modelcontextprotocol/ui` extension can render the returned rows in an
+inline Pondview workspace with filtering, sorting, configurable charts, CSV and
+JSON export, and explicit add-to-dashboard actions. File downloads, MCP tool
+calls, and links are mediated by the host. The view is served by the same MCP
+endpoint and does not connect directly to the Bridge API.
+
+MCP Apps are progressive enhancement. Clients without Apps support continue to
+receive the existing text and structured JSON result, and SQL remains read-only
+unless the normal write flag is enabled.
+
+See the [MCP Apps query workspace specification](/guide/mcp-apps) for the architecture,
+security boundary, compatibility behavior, and planned follow-up phases.
+
+For a host acceptance check, run a query that returns a text dimension and a
+numeric measure, then verify the inline table, filtering, sorting, all chart
+types, CSV/JSON export, and the dashboard actions. Downloads, dashboard writes,
+and link opening are always subject to the host's approval policy.
+
 ## Write access
 
 `execute_sql` is read-only by default. Enable write SQL only for trusted local
@@ -126,5 +147,6 @@ Bridge tokens do not configure AI provider credentials.
 ## Related guides
 
 - [Pondview CLI](/guide/cli)
+- [MCP Apps query workspace specification](/guide/mcp-apps)
 - [Dashboards](/guide/dashboards)
 - [SQL Runtime Backends](/guide/sql-runtime-backends)

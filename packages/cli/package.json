@@ -49,6 +49,7 @@
     "@ai-sdk/openai-compatible": "^2.0.62",
     "@aws-sdk/client-s3": "^3.1056.0",
     "@duckdb/node-api": "^1.5.2-r.1",
+    "@modelcontextprotocol/ext-apps": "^1.7.5",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@pondview/bridge-protocol": "workspace:*",
     "ai": "6.0.204",

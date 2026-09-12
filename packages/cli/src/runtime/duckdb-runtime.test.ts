@@ -34,7 +34,7 @@ describe("DuckDbRuntime", () => {
 
     const result = await runtime.query("SELECT 42 AS answer;");
 
-    expect(result.columns.map((column) => column.name)).toEqual(["answer"]);
+    expect(result.columns).toEqual([{ name: "answer", type: "INTEGER" }]);
     expect(result.rows).toEqual([{ answer: 42 }]);
     expect(result.rowCount).toBe(1);
   });

@@ -15,7 +15,7 @@ function isNumericValue(value: unknown): boolean {
 function isLikelyTemporalColumn(name: string, values: unknown[]): boolean {
   const normalizedName = name.toLowerCase();
   if (
-    /\b(date|time|day|week|month|quarter|year|created|updated|period)\b/.test(
+    /\b(date|time|day|week|month|quarter|year|yr|created|updated|period)\b/.test(
       normalizedName,
     )
   ) {
@@ -31,6 +31,41 @@ function isLikelyTemporalColumn(name: string, values: unknown[]): boolean {
     }
     return !Number.isNaN(Date.parse(value));
   });
+}
+
+function isLikelyMeasureColumn(name: string): boolean {
+  return /(?:^|[_\s-])(count|cnt|total|sum|avg|average|min|max|median|value|amount|revenue|sales|number|num|rate|ratio|percent|percentage|share)(?:$|[_\s-])/i.test(
+    name,
+  );
+}
+
+function chooseDimensionColumn(
+  columnNames: string[],
+  numericColumns: string[],
+  rows: Result[],
+): string {
+  const nonNumericColumn = columnNames.find(
+    (columnName) => !numericColumns.includes(columnName),
+  );
+  if (nonNumericColumn) {
+    return nonNumericColumn;
+  }
+
+  const temporalColumn = columnNames.find((columnName) =>
+    isLikelyTemporalColumn(
+      columnName,
+      rows.map((row) => row[columnName]),
+    ),
+  );
+  if (temporalColumn) {
+    return temporalColumn;
+  }
+
+  const measureColumn = numericColumns.find(isLikelyMeasureColumn);
+  return (
+    columnNames.find((columnName) => columnName !== measureColumn) ??
+    columnNames[0]
+  );
 }
 
 function prettifyColumnName(name: string): string {
@@ -71,10 +106,7 @@ export function buildDeterministicChartConfig({
     return null;
   }
 
-  const xKey =
-    columnNames.find((columnName) => !numericColumns.includes(columnName)) ??
-    columnNames.find((columnName) => columnName !== numericColumns[0]) ??
-    columnNames[0];
+  const xKey = chooseDimensionColumn(columnNames, numericColumns, rows);
 
   const yKeys = numericColumns.filter((columnName) => columnName !== xKey);
   if (yKeys.length === 0) {
@@ -106,5 +138,44 @@ export function buildDeterministicChartConfig({
     showTooltip: true,
     lineSize: 2,
     labelYAngle: -90,
+  };
+}
+
+/**
+ * Repairs the most common axis inversion from a visualization model. A
+ * numeric grouping field such as `year` is still a dimension, while an
+ * aggregate such as `unicorn_count` is a measure.
+ */
+export function repairChartAxisMapping(config: Config, rows: Result[]): Config {
+  if (config.countMode || rows.length === 0) {
+    return config;
+  }
+
+  const columnNames = Object.keys(rows[0] ?? {});
+  const numericColumns = columnNames.filter((columnName) =>
+    rows.some((row) => isNumericValue(row[columnName])),
+  );
+  const inferredXKey = chooseDimensionColumn(columnNames, numericColumns, rows);
+  const configuredXIsMeasure = isLikelyMeasureColumn(config.xKey);
+  const inferredXIsDimension =
+    !numericColumns.includes(inferredXKey) ||
+    isLikelyTemporalColumn(
+      inferredXKey,
+      rows.map((row) => row[inferredXKey]),
+    );
+
+  if (
+    config.xKey === inferredXKey ||
+    !configuredXIsMeasure ||
+    !inferredXIsDimension ||
+    !config.yKeys.includes(inferredXKey)
+  ) {
+    return config;
+  }
+
+  return {
+    ...config,
+    xKey: inferredXKey,
+    yKeys: [config.xKey, ...config.yKeys.filter((key) => key !== inferredXKey)],
   };
 }
