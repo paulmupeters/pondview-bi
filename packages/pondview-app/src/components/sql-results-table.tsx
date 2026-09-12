@@ -304,7 +304,7 @@ export function SqlResultsTable({
   const shouldRenderFilterRow =
     enableColumnFilters && openFilterColumnIds.length > 0;
 
-  if (!payload || payload.stage !== "complete") {
+  if (payload?.stage !== "complete") {
     return null;
   }
 
