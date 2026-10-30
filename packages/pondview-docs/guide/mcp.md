@@ -68,15 +68,40 @@ navigation:
 | `get_table_schema` | Inspect columns and sample rows for a table. |
 | `run_preview` | Return a small preview from a table. |
 | `execute_sql` | Run read-only SQL by default. |
+| `show_chart` | Run read-only SQL and show the result inline as a chart, table, or metric card, without saving. |
 | `list_dashboards` | List existing dashboards with counts and URLs. |
 | `get_dashboard` | Inspect a dashboard, including charts and related metadata. |
 | `create_dashboard` | Create or update a dashboard metadata row. |
-| `create_visual` | Add a dashboard visual from SQL. |
+| `create_visual` | Add a dashboard visual from SQL and show it inline. |
 | `open_ui` | Return URLs for the app, dashboards, analyses, or a specific item. |
 | `open_dashboard` | Return a dashboard URL. |
 
 Dashboard tools write Pondview metadata through the bridge so the web app can
 see changes live.
+
+## Inline charts (MCP Apps)
+
+`show_chart` and `create_visual` are [MCP Apps](https://github.com/modelcontextprotocol/ext-apps)
+tools. In hosts that render MCP Apps, such as Claude Desktop, the result appears in
+the conversation as an interactive visual, with a chart-type switcher and a
+"Save to dashboard" button. Hosts without MCP Apps support, such as the Claude
+Code terminal, get a text summary with the first rows instead.
+
+To try it in Claude Desktop, add Pondview to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "pondview": {
+      "command": "pondview",
+      "args": ["mcp", "--project-dir", "/path/to/project"]
+    }
+  }
+}
+```
+
+When running from a source checkout, build the views first with
+`bun run mcp-views:build`.
 
 ## Write access
 

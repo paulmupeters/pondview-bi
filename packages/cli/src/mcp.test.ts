@@ -8,8 +8,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { BridgeQueryResponse } from "@pondview/bridge-protocol";
 import {
+  createBridgeMcpServer,
   createBridgeMcpToolHandlers,
   resolveMcpDatabasePath,
   toToolResult,
@@ -564,6 +568,180 @@ describe("bridge MCP tools", () => {
       view: "analysis",
       analysisId: "analysis:1",
       url: "http://127.0.0.1:17818/analysis?id=analysis%3A1",
+    });
+  });
+
+  test("show_chart returns a visual payload without saving", async () => {
+    const runtime = await createSeededRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime);
+
+    const { visual } = await tools.showChart({
+      title: "Users",
+      sql: "SELECT name, id FROM users ORDER BY id",
+      visualType: "bar",
+    });
+    const tables = await runtime.query(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'pondview'",
+    );
+
+    expect(visual).toMatchObject({
+      title: "Users",
+      description: null,
+      visualType: "bar",
+      rowCount: 6,
+      truncated: false,
+      saved: null,
+      config: { type: "bar", xKey: "name", yKeys: ["id"] },
+    });
+    expect(visual.rows).toHaveLength(6);
+    expect(tables.rows.map((row) => row.table_name)).toEqual([
+      "internal_state",
+    ]);
+  });
+
+  test("show_chart caps rows and flags truncation", async () => {
+    const runtime = createRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime);
+
+    const { visual } = await tools.showChart({
+      title: "Range",
+      sql: "SELECT range AS n FROM range(6000)",
+      visualType: "table",
+    });
+
+    expect(visual.rowCount).toBe(6000);
+    expect(visual.rows).toHaveLength(5000);
+    expect(visual.truncated).toBe(true);
+  });
+
+  test("show_chart rejects write SQL even when writes are allowed", async () => {
+    const runtime = await createSeededRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime, { allowWriteSql: true });
+
+    await expect(
+      tools.showChart({
+        title: "Drop",
+        sql: "DROP TABLE users",
+        visualType: "table",
+      }),
+    ).rejects.toThrow("read-only");
+  });
+
+  test("create_visual returns the saved visual payload", async () => {
+    const runtime = await createSeededRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime);
+
+    const result = await tools.createVisual({
+      dashboardId: "sales",
+      title: "Users",
+      sql: "SELECT name, id FROM users ORDER BY id",
+      visualType: "line",
+    });
+
+    expect(result.visual.saved).toEqual({
+      dashboardId: "sales",
+      visualId: result.visualId,
+    });
+    expect(result.visual.rows).toHaveLength(6);
+  });
+
+  describe("MCP App surface", () => {
+    async function connectClient(
+      options: Parameters<typeof createBridgeMcpServer>[1] = {},
+    ) {
+      const runtime = await createSeededRuntime();
+      const server = createBridgeMcpServer(runtime, options);
+      const client = new Client({ name: "test-host", version: "0.0.0" });
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await Promise.all([
+        server.connect(serverTransport),
+        client.connect(clientTransport),
+      ]);
+      return client;
+    }
+
+    test("every tool declares a title and a read-only or destructive hint", async () => {
+      const client = await connectClient();
+      const { tools } = await client.listTools();
+
+      expect(tools.length).toBeGreaterThan(0);
+      for (const tool of tools) {
+        expect(tool.title, tool.name).toBeTruthy();
+        const annotations = tool.annotations ?? {};
+        expect(
+          annotations.readOnlyHint === true ||
+            typeof annotations.destructiveHint === "boolean",
+          tool.name,
+        ).toBe(true);
+      }
+    });
+
+    test("execute_sql is marked destructive only when writes are allowed", async () => {
+      const readOnly = await connectClient();
+      const writable = await connectClient({ allowWriteSql: true });
+      const find = async (client: Client) =>
+        (await client.listTools()).tools.find(
+          (tool) => tool.name === "execute_sql",
+        );
+
+      expect((await find(readOnly))?.annotations).toMatchObject({
+        readOnlyHint: true,
+      });
+      expect((await find(writable))?.annotations).toMatchObject({
+        readOnlyHint: false,
+        destructiveHint: true,
+      });
+    });
+
+    test("show_chart and create_visual link the visual view", async () => {
+      const client = await connectClient();
+      const { tools } = await client.listTools();
+
+      for (const name of ["show_chart", "create_visual"]) {
+        const tool = tools.find((candidate) => candidate.name === name);
+        expect(tool?._meta?.ui, name).toMatchObject({
+          resourceUri: "ui://pondview/visual",
+        });
+      }
+    });
+
+    test("serves the visual view as an MCP App resource", async () => {
+      const viewsDir = createTempDir();
+      writeFileSync(join(viewsDir, "visual.html"), "<html>visual</html>");
+      const client = await connectClient({ viewsDir });
+
+      const { contents } = await client.readResource({
+        uri: "ui://pondview/visual",
+      });
+
+      expect(contents[0]).toMatchObject({
+        uri: "ui://pondview/visual",
+        mimeType: RESOURCE_MIME_TYPE,
+        text: "<html>visual</html>",
+      });
+    });
+
+    test("show_chart keeps rows out of the text summary", async () => {
+      const client = await connectClient();
+
+      const result = await client.callTool({
+        name: "show_chart",
+        arguments: {
+          title: "Range",
+          sql: "SELECT range AS n FROM range(100)",
+          visualType: "bar",
+        },
+      });
+      const text = (result.content as Array<{ text: string }>)[0].text;
+
+      expect(text).toContain('bar visual "Range" from 100 row(s).');
+      expect(text).toContain("First 20 row(s):");
+      expect(text).not.toContain('"n": 99');
+      expect(
+        (result.structuredContent as { visual: { rows: unknown[] } }).visual
+          .rows,
+      ).toHaveLength(100);
     });
   });
 });
