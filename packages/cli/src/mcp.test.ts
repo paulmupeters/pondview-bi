@@ -721,6 +721,7 @@ describe("bridge MCP tools", () => {
       ]);
       expect(dashboard.cards[0]).toMatchObject({
         kind: "visual",
+        title: "Users",
         layout: { x: 0, y: 0, w: 2, h: 2 },
         error: null,
         visual: {
@@ -805,7 +806,11 @@ describe("bridge MCP tools", () => {
       const { dashboard } = await tools.showDashboard("sales");
       const [broken, revenue, notes] = dashboard.cards;
 
-      expect(broken).toMatchObject({ kind: "visual", visual: null });
+      expect(broken).toMatchObject({
+        kind: "visual",
+        title: "Users",
+        visual: null,
+      });
       expect(broken.kind === "visual" && broken.error).toContain(
         "missing_table",
       );

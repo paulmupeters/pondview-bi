@@ -63,9 +63,10 @@ function CardContent({ card }: { card: DashboardCard }) {
   }
 
   const { visual, error } = card;
+  const title = card.title || visual?.title;
   return (
     <>
-      {visual?.title ? <CardTitle>{visual.title}</CardTitle> : null}
+      {title ? <CardTitle>{title}</CardTitle> : null}
       <div className="flex min-h-0 flex-1 flex-col">
         {error ? (
           <p className="text-xs text-destructive">{error}</p>

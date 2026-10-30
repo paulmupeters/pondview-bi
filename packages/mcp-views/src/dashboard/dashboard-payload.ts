@@ -10,6 +10,7 @@ export type DashboardCard =
   | {
       kind: "visual";
       id: string;
+      title: string;
       layout: DashboardLayout;
       visual: VisualPayload | null;
       error: string | null;

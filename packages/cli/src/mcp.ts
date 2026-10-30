@@ -110,6 +110,7 @@ export type DashboardCard =
   | {
       kind: "visual";
       id: string;
+      title: string;
       layout: DashboardLayout;
       visual: VisualPayload | null;
       error: string | null;
@@ -1541,10 +1542,11 @@ async function buildDashboardCard(
     };
   }
 
+  const title = String(chart.title ?? config.title ?? "") || id;
   try {
     const { visual, skipped } = await runStoredVisual(runtime, chart, context);
     return {
-      card: { kind: "visual", id, layout, visual, error: null },
+      card: { kind: "visual", id, title, layout, visual, error: null },
       skipped,
     };
   } catch (error) {
@@ -1552,6 +1554,7 @@ async function buildDashboardCard(
       card: {
         kind: "visual",
         id,
+        title,
         layout,
         visual: null,
         error: error instanceof Error ? error.message : String(error),

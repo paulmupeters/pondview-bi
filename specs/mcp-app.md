@@ -149,7 +149,7 @@ Shared by the server work (`packages/cli`) and the view work (`packages/mcp-view
 ```ts
 type DashboardLayout = { x: number; y: number; w: number; h: number };
 type DashboardCard =
-  | { kind: "visual"; id: string; layout: DashboardLayout;
+  | { kind: "visual"; id: string; title: string; layout: DashboardLayout;
       visual: VisualPayload | null; error: string | null }
   | { kind: "text"; id: string; layout: DashboardLayout;
       title: string; content: string /* markdown */ };
