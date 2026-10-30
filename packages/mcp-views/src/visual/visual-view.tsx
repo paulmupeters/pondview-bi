@@ -1,23 +1,28 @@
 import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps";
 import { useApp, useHostStyles } from "@modelcontextprotocol/ext-apps/react";
-import { type ReactNode, useEffect, useState } from "react";
-import { DynamicChart } from "@/components/dynamic-chart";
-import { MetricCard } from "@/components/metric-card";
-import type { Config, Result } from "@/lib/types";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { safeAreaStyle, textFromContent, useThemeClass } from "../shared/host";
+import { Message } from "../shared/message";
+import { VisualBody } from "../shared/visual-body";
 import {
   readVisualPayload,
   type VisualKind,
   type VisualPayload,
 } from "./visual-payload";
+import { summarizeVisual } from "./visual-summary";
 
 const CHART_KINDS: VisualKind[] = ["bar", "line", "area", "pie", "table"];
-const TABLE_ROW_LIMIT = 200;
 
 type SaveState =
   | { status: "idle" }
   | { status: "saving" }
   | { status: "saved"; dashboardId: string }
+  | { status: "error"; message: string };
+
+type AskState =
+  | { status: "idle" }
+  | { status: "sending" }
   | { status: "error"; message: string };
 
 export function VisualView() {
@@ -26,6 +31,7 @@ export function VisualView() {
   const [hostContext, setHostContext] = useState<McpUiHostContext>();
   const [kind, setKind] = useState<VisualKind | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
+  const [askState, setAskState] = useState<AskState>({ status: "idle" });
 
   const { app, error } = useApp({
     appInfo: { name: "pondview-visual", version: "0.1.0" },
@@ -59,12 +65,7 @@ export function VisualView() {
     }
   }, [app]);
 
-  useEffect(() => {
-    document.documentElement.classList.toggle(
-      "dark",
-      hostContext?.theme === "dark",
-    );
-  }, [hostContext?.theme]);
+  useThemeClass(hostContext?.theme);
 
   if (error) {
     return <Message>Could not connect to the host: {error.message}</Message>;
@@ -79,6 +80,8 @@ export function VisualView() {
   const canSave =
     saveState.status !== "saved" &&
     Boolean(app?.getHostCapabilities()?.serverTools);
+
+  const canAsk = Boolean(app?.getHostCapabilities()?.message);
 
   const save = async () => {
     if (!app) return;
@@ -107,21 +110,30 @@ export function VisualView() {
     }
   };
 
-  const insets = hostContext?.safeAreaInsets;
+  const ask = async () => {
+    if (!app) return;
+    setAskState({ status: "sending" });
+    try {
+      const result = await app.sendMessage({
+        role: "user",
+        content: [{ type: "text", text: summarizeVisual(payload, kind) }],
+      });
+      if (result.isError) {
+        throw new Error("The host declined the message.");
+      }
+      setAskState({ status: "idle" });
+    } catch (cause) {
+      setAskState({
+        status: "error",
+        message: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  };
 
   return (
     <main
       className="flex flex-col gap-3 bg-background p-4 text-foreground"
-      style={
-        insets
-          ? {
-              paddingTop: insets.top + 16,
-              paddingRight: insets.right + 16,
-              paddingBottom: insets.bottom + 16,
-              paddingLeft: insets.left + 16,
-            }
-          : undefined
-      }
+      style={safeAreaStyle(hostContext?.safeAreaInsets)}
     >
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
@@ -146,6 +158,16 @@ export function VisualView() {
               {saveState.status === "saving" ? "Saving…" : "Save to dashboard"}
             </button>
           ) : null}
+          {canAsk ? (
+            <button
+              type="button"
+              className="rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted/30 disabled:opacity-50"
+              disabled={askState.status === "sending"}
+              onClick={ask}
+            >
+              Ask Claude about this
+            </button>
+          ) : null}
           {saveState.status === "saved" ? (
             <span className="text-xs text-muted-foreground">
               Saved to {saveState.dashboardId}
@@ -156,6 +178,9 @@ export function VisualView() {
 
       {saveState.status === "error" ? (
         <p className="text-xs text-destructive">{saveState.message}</p>
+      ) : null}
+      {askState.status === "error" ? (
+        <p className="text-xs text-destructive">{askState.message}</p>
       ) : null}
 
       <VisualBody payload={payload} kind={kind} />
@@ -168,43 +193,6 @@ export function VisualView() {
         </p>
       ) : null}
     </main>
-  );
-}
-
-function VisualBody({
-  payload,
-  kind,
-}: {
-  payload: VisualPayload;
-  kind: VisualKind;
-}) {
-  if (payload.rows.length === 0) {
-    return <Message>The query returned no rows.</Message>;
-  }
-
-  if (kind === "card") {
-    const firstColumn = payload.columns[0]?.name;
-    const value = firstColumn ? payload.rows[0]?.[firstColumn] : undefined;
-    return (
-      <MetricCard
-        value={value as string | number | boolean | null | undefined}
-        title={payload.title}
-        showTitle={false}
-      />
-    );
-  }
-
-  if (kind === "table") {
-    return <ResultsTable payload={payload} />;
-  }
-
-  return (
-    <DynamicChart
-      chartData={payload.rows as Result[]}
-      chartConfig={{ ...payload.config, type: kind } as Config}
-      chartHeightClassName="h-[300px]"
-      showMetadata={false}
-    />
   );
 }
 
@@ -238,51 +226,6 @@ function KindSwitcher({
   );
 }
 
-function ResultsTable({ payload }: { payload: VisualPayload }) {
-  const rows = payload.rows.slice(0, TABLE_ROW_LIMIT);
-  return (
-    <div className="max-h-[360px] overflow-auto rounded-md border">
-      <table className="w-full text-left text-xs">
-        <thead className="sticky top-0 bg-background">
-          <tr>
-            {payload.columns.map((column) => (
-              <th
-                key={column.name}
-                className="border-b px-2 py-1.5 font-medium"
-              >
-                {column.name}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: result rows have no stable id
-            <tr key={index} className="border-b last:border-0">
-              {payload.columns.map((column) => (
-                <td key={column.name} className="px-2 py-1 tabular-nums">
-                  {formatCell(row[column.name])}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function Message({ children }: { children: ReactNode }) {
-  return <p className="p-4 text-sm text-muted-foreground">{children}</p>;
-}
-
-function formatCell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "number") return value.toLocaleString();
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
 function chartKeys(config: Record<string, unknown>): {
   xKey?: string;
   yKeys?: string[];
@@ -299,14 +242,4 @@ function chartKeys(config: Record<string, unknown>): {
         }
       : {}),
   };
-}
-
-function textFromContent(
-  content: Array<{ type: string; text?: string }> | undefined,
-): string | null {
-  const text = content
-    ?.filter((block) => block.type === "text" && block.text)
-    .map((block) => block.text)
-    .join("\n");
-  return text || null;
 }
