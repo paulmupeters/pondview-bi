@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  RESOURCE_MIME_TYPE,
+  registerAppResource,
+  registerAppTool,
+} from "@modelcontextprotocol/ext-apps/server";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -10,6 +17,14 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { BridgeQueryResponse } from "@pondview/bridge-protocol";
 import { z } from "zod";
+import {
+  type ApplyFiltersResult,
+  applyFiltersToSql,
+} from "./filters/apply-filters";
+import type { JoinDefinition, JoinKind } from "./filters/graph";
+import { normalizeFilterPayload } from "./filters/normalize-filters";
+import { findBaseTableReference } from "./filters/parse-tables";
+import { FILTER_OPERATORS, type Filter } from "./filters/types";
 import { BridgeProjectStore } from "./project-store";
 import { DuckDbRuntime } from "./runtime/duckdb-runtime";
 import { BridgeSecretStore } from "./secrets";
@@ -19,6 +34,17 @@ import {
 } from "./server";
 
 const DEFAULT_QUERY_LIMIT = 500;
+// Rows shipped to the inline view in structuredContent. Larger results should
+// be aggregated server-side in SQL.
+const VISUAL_ROW_LIMIT = 5000;
+// Rows echoed into the text result, which is all the model sees of a visual.
+const VISUAL_TEXT_PREVIEW_ROWS = 20;
+// Rows echoed into the text result of the query tool.
+const QUERY_TEXT_PREVIEW_ROWS = 20;
+const DEFAULT_SLICER_OPTION_LIMIT = 100;
+const MAX_SLICER_OPTION_LIMIT = 1000;
+const VISUAL_VIEW_URI = "ui://pondview/visual";
+const DASHBOARD_VIEW_URI = "ui://pondview/dashboard";
 const DEFAULT_BRIDGE_APP_URL = "http://127.0.0.1:17817";
 const METADATA_SCHEMA = "pondview";
 const HIDDEN_RUNTIME_SCHEMAS = [
@@ -43,7 +69,88 @@ export interface BridgeMcpOptions {
   allowWriteSql?: boolean;
   secretsPath?: string;
   appUrl?: string;
+  viewsDir?: string;
 }
+
+type BridgeMcpServerOptions = Pick<
+  BridgeMcpOptions,
+  "allowWriteSql" | "appUrl" | "viewsDir"
+>;
+
+type VisualInput = {
+  title: string;
+  description?: string;
+  sql: string;
+  visualType: z.infer<typeof visualTypeSchema>;
+  xKey?: string;
+  yKeys?: string[];
+  chartConfig?: Record<string, unknown>;
+};
+
+// Mirrors VisualPayload in packages/mcp-views/src/visual/visual-payload.ts.
+export type VisualPayload = {
+  title: string;
+  description: string | null;
+  sql: string;
+  visualType: z.infer<typeof visualTypeSchema>;
+  config: Record<string, unknown>;
+  columns: BridgeQueryResponse["columns"];
+  rows: BridgeQueryResponse["rows"];
+  rowCount: number;
+  truncated: boolean;
+  saved: { dashboardId: string; visualId: string } | null;
+};
+
+export type { Filter } from "./filters/types";
+
+// Mirrors the Phase 2 contract in specs/mcp-app.md, shared with the dashboard
+// view in packages/mcp-views.
+export type DashboardLayout = { x: number; y: number; w: number; h: number };
+export type DashboardCard =
+  | {
+      kind: "visual";
+      id: string;
+      title: string;
+      layout: DashboardLayout;
+      visual: VisualPayload | null;
+      error: string | null;
+    }
+  | {
+      kind: "text";
+      id: string;
+      layout: DashboardLayout;
+      title: string;
+      content: string;
+    };
+export type DashboardSlicer = {
+  id: string;
+  field: string;
+  title: string | null;
+  options: Array<string | number | boolean | null>;
+};
+export type DashboardPayload = {
+  id: string;
+  title: string;
+  columns: number;
+  cards: DashboardCard[];
+  slicers: DashboardSlicer[];
+  filters: Filter[];
+  skippedFilters: Array<{ visualId: string; field: string; reason: string }>;
+};
+
+type DashboardFilterContext = {
+  filters: Filter[];
+  joinDefs: JoinDefinition[];
+  runtimeTables: RuntimeTableMetadata[];
+};
+
+type UpdateVisualConfigInput = {
+  visualId: string;
+  visualType?: z.infer<typeof visualTypeSchema>;
+  xKey?: string;
+  yKeys?: string[];
+  title?: string;
+};
 
 export interface McpRuntime {
   query(sql: string, limit?: number): Promise<BridgeQueryResponse>;
@@ -74,6 +181,36 @@ const uiViewSchema = z.enum([
   "analysis",
   "analyses",
 ]);
+
+const chartVisualTypes = new Set<string>(["line", "bar", "area", "pie"]);
+
+const filterSchema = z.object({
+  field: z.string().min(1),
+  op: z.enum(FILTER_OPERATORS),
+  values: z.array(z.unknown()).optional(),
+});
+
+const visualInputShape = {
+  title: z.string().min(1),
+  description: z.string().optional(),
+  sql: z.string().min(1),
+  visualType: visualTypeSchema,
+  xKey: z.string().min(1).optional(),
+  yKeys: z.array(z.string().min(1)).optional(),
+  chartConfig: z.record(z.string(), z.unknown()).optional(),
+};
+
+// Every tool declares annotations; the Claude connector directory requires a
+// title plus readOnlyHint or destructiveHint on each one.
+const readOnlyAnnotations = {
+  readOnlyHint: true,
+  openWorldHint: false,
+} as const;
+const writeAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  openWorldHint: false,
+} as const;
 
 const mcpInputSchema = <Schema extends Record<string, z.ZodType>>(
   schema: Schema,
@@ -121,6 +258,82 @@ export function createBridgeMcpToolHandlers(
     return resolveRuntimeTableReferenceFromMetadata(table, tables);
   };
 
+  const buildDashboardPayload = async (
+    dashboardId: string,
+    rawFilters: unknown,
+  ): Promise<DashboardPayload> => {
+    const id = dashboardId.trim();
+    const tables = await listMetadataTables(runtime);
+    const dashboard = tables.has("dashboards")
+      ? (
+          await runtime.query(
+            `SELECT id, title, columns
+             FROM ${metadataTable("dashboards")}
+             WHERE id = ${quoteString(id)}
+             LIMIT 1;`,
+          )
+        ).rows[0]
+      : undefined;
+    if (!dashboard) {
+      throw new Error(
+        `Dashboard "${id}" not found. Use list_dashboards to see dashboard ids.`,
+      );
+    }
+
+    const context: DashboardFilterContext = {
+      filters: normalizeFilterPayload(rawFilters),
+      joinDefs: (
+        await queryDashboardRows(runtime, tables, "dashboard_join_defs", id)
+      ).map(joinDefinitionFromRow),
+      runtimeTables: await listRuntimeTables(),
+    };
+    const charts = await queryDashboardRows(
+      runtime,
+      tables,
+      "dashboard_charts",
+      id,
+      "position",
+    );
+    const slicerRows = await queryDashboardRows(
+      runtime,
+      tables,
+      "dashboard_slicers",
+      id,
+      "position",
+    );
+
+    // Run cards one at a time: the runtime shares a single DuckDB connection.
+    const cards: DashboardCard[] = [];
+    const skippedFilters: DashboardPayload["skippedFilters"] = [];
+    for (const chart of charts) {
+      const { card, skipped } = await buildDashboardCard(
+        runtime,
+        chart,
+        context,
+      );
+      cards.push(card);
+      skippedFilters.push(
+        ...skipped.map((skip) => ({ visualId: card.id, ...skip })),
+      );
+    }
+    const slicers: DashboardSlicer[] = [];
+    for (const slicer of slicerRows) {
+      slicers.push(
+        await buildDashboardSlicer(runtime, slicer, context.runtimeTables),
+      );
+    }
+
+    return {
+      id,
+      title: String(dashboard.title ?? id),
+      columns: toFiniteNumber(dashboard.columns) ?? 4,
+      cards,
+      slicers,
+      filters: context.filters,
+      skippedFilters,
+    };
+  };
+
   return {
     listTables: async () => {
       const tables = await listRuntimeTables();
@@ -137,6 +350,33 @@ export function createBridgeMcpToolHandlers(
         table: resolvedTable,
         requestedTable: table,
         columns: schema.rows,
+        sampleRows: sample.rows,
+      };
+    },
+    describeTable: async (table: string) => {
+      const tables = await listRuntimeTables();
+      const resolvedTable = resolveRuntimeTableReferenceFromMetadata(
+        table,
+        tables,
+      );
+      if (!tables.some((entry) => entry.table_reference === resolvedTable)) {
+        throw new Error(
+          `Table "${table}" not found. Use list_tables to see table_reference values.`,
+        );
+      }
+      const schema = await runtime.query(`DESCRIBE ${resolvedTable}`);
+      const sample = await runtime
+        .query(`SELECT * FROM ${resolvedTable} LIMIT 5`, 5)
+        .catch(() => ({ rows: [] }));
+      const count = await runtime
+        .query(`SELECT COUNT(*) AS row_count FROM ${resolvedTable}`)
+        .catch(() => null);
+
+      return {
+        table: resolvedTable,
+        requestedTable: table,
+        columns: schema.rows,
+        rowCount: toFiniteNumber(count?.rows[0]?.row_count) ?? null,
         sampleRows: sample.rows,
       };
     },
@@ -162,6 +402,17 @@ export function createBridgeMcpToolHandlers(
         rows: result.rows,
         rowCount: result.rowCount,
         rowsChanged: result.rowsChanged,
+      };
+    },
+    // Unlike executeSql, query never writes, even with --allow-write-sql.
+    query: async (sql: string, limit = DEFAULT_QUERY_LIMIT) => {
+      assertSqlAllowed(sql, false);
+      const result = await runtime.query(sql, limit);
+      return {
+        columns: result.columns,
+        rows: result.rows,
+        rowCount: result.rowCount,
+        truncated: result.rowCount > result.rows.length,
       };
     },
     listDashboards: async () => {
@@ -215,27 +466,32 @@ export function createBridgeMcpToolHandlers(
         url: dashboardUrl(appUrl, id),
       };
     },
-    createVisual: async (input: {
-      dashboardId?: string;
-      dashboardTitle?: string;
-      title: string;
-      description?: string;
-      sql: string;
-      visualType: z.infer<typeof visualTypeSchema>;
-      xKey?: string;
-      yKeys?: string[];
-      chartConfig?: Record<string, unknown>;
-    }) => {
+    showChart: async (input: VisualInput) => {
+      assertSqlAllowed(input.sql, false);
+      const result = await runtime.query(input.sql, VISUAL_ROW_LIMIT);
+      return { visual: buildVisualPayload(input, result, null) };
+    },
+    createVisual: async (
+      input: VisualInput & {
+        dashboardId?: string;
+        dashboardTitle?: string;
+      },
+    ) => {
       assertSqlAllowed(input.sql, Boolean(options.allowWriteSql));
-      const result = await runtime.query(input.sql, DEFAULT_QUERY_LIMIT);
+      const result = await runtime.query(input.sql, VISUAL_ROW_LIMIT);
       const dashboard = await ensureDashboardForVisual(runtime, {
         id: input.dashboardId,
-        title: input.dashboardTitle ?? "Pondview Visuals",
+        title: input.dashboardTitle,
+        fallbackTitle: "Pondview Visuals",
       });
       const chartId = createStableId(input.title, "visual");
       const now = Date.now();
       const position = await nextChartPosition(runtime, dashboard.dashboardId);
-      const chartConfig = buildVisualConfig(input, result.columns);
+      const visual = buildVisualPayload(input, result, {
+        dashboardId: dashboard.dashboardId,
+        visualId: chartId,
+      });
+      const chartConfig = visual.config;
       const layout = initialLayout(chartConfig, position);
 
       await insertDashboardChart(runtime, {
@@ -258,6 +514,7 @@ export function createBridgeMcpToolHandlers(
         rowsPreviewed: result.rows.length,
         url: dashboardUrl(appUrl, dashboard.dashboardId),
         visualUrl: visualUrl(appUrl, chartId),
+        visual,
       };
     },
     createTextCard: async (input: {
@@ -270,7 +527,8 @@ export function createBridgeMcpToolHandlers(
       const title = input.title?.trim() || "Text";
       const dashboard = await ensureDashboardForVisual(runtime, {
         id: input.dashboardId,
-        title: input.dashboardTitle ?? "Pondview Notes",
+        title: input.dashboardTitle,
+        fallbackTitle: "Pondview Notes",
       });
       const chartId = createStableId(title, "text-card");
       const now = Date.now();
@@ -300,6 +558,168 @@ export function createBridgeMcpToolHandlers(
         visualUrl: visualUrl(appUrl, chartId),
       };
     },
+    showDashboard: async (dashboardId: string, filters: unknown = []) => ({
+      dashboard: await buildDashboardPayload(dashboardId, filters),
+    }),
+    runVisual: async (visualId: string, filters: unknown = []) => {
+      const chart = await loadVisualChart(runtime, visualId);
+      const tables = await listMetadataTables(runtime);
+      const context: DashboardFilterContext = {
+        filters: normalizeFilterPayload(filters),
+        joinDefs: (
+          await queryDashboardRows(
+            runtime,
+            tables,
+            "dashboard_join_defs",
+            String(chart.dashboard_id ?? ""),
+          )
+        ).map(joinDefinitionFromRow),
+        runtimeTables: await listRuntimeTables(),
+      };
+      const { visual, skipped } = await runStoredVisual(
+        runtime,
+        chart,
+        context,
+      );
+      return { visual, skippedFilters: skipped };
+    },
+    updateVisualConfig: async (input: UpdateVisualConfigInput) => {
+      const chart = await loadVisualChart(runtime, input.visualId);
+      const sql = String(chart.sql ?? "");
+      assertSqlAllowed(sql, false);
+      const result = await runtime.query(sql, VISUAL_ROW_LIMIT);
+      const config = parseChartConfig(chart.chart_config_json);
+      const currentType = storedVisualType(config);
+      const visualType = input.visualType ?? currentType;
+      const title =
+        input.title?.trim() || String(chart.title ?? config.title ?? "");
+      // Within chart types (or with no type change) patch the stored config
+      // so app-made styling survives; otherwise rebuild it for the new type.
+      const nextConfig =
+        visualType === currentType ||
+        (chartVisualTypes.has(currentType) && chartVisualTypes.has(visualType))
+          ? {
+              ...config,
+              title,
+              ...(chartVisualTypes.has(visualType) ? { type: visualType } : {}),
+              ...(input.xKey ? { xKey: input.xKey } : {}),
+              ...(input.yKeys
+                ? { yKeys: input.yKeys, legend: input.yKeys.length > 1 }
+                : {}),
+            }
+          : buildVisualConfig(
+              {
+                title,
+                description:
+                  typeof chart.description === "string"
+                    ? chart.description
+                    : undefined,
+                visualType,
+                xKey:
+                  input.xKey ??
+                  (typeof config.xKey === "string" ? config.xKey : undefined),
+                yKeys:
+                  input.yKeys ??
+                  (Array.isArray(config.yKeys)
+                    ? config.yKeys.map(String)
+                    : undefined),
+              },
+              result.columns,
+            );
+      const now = Date.now();
+      await runtime.query(
+        `UPDATE ${metadataTable("dashboard_charts")}
+         SET title = ${quoteString(title)},
+             chart_config_json = ${quoteString(JSON.stringify(nextConfig))},
+             updated_at = ${now}
+         WHERE id = ${quoteString(String(chart.id))};`,
+      );
+      await touchDashboard(runtime, String(chart.dashboard_id ?? ""), now);
+      return {
+        visual: storedVisualPayload(
+          { ...chart, title, chart_config_json: JSON.stringify(nextConfig) },
+          result,
+        ),
+      };
+    },
+    deleteVisual: async (visualId: string) => {
+      const id = visualId.trim();
+      const tables = await listMetadataTables(runtime);
+      const existing = tables.has("dashboard_charts")
+        ? (
+            await runtime.query(
+              `SELECT dashboard_id FROM ${metadataTable("dashboard_charts")}
+               WHERE id = ${quoteString(id)};`,
+            )
+          ).rows[0]
+        : undefined;
+      if (!existing) {
+        return { visualId: id, dashboardId: null, deleted: false };
+      }
+
+      const dashboardId = String(existing.dashboard_id ?? "");
+      if (tables.has("chart_slicers")) {
+        await runtime.query(
+          `DELETE FROM ${metadataTable("chart_slicers")}
+           WHERE chart_id = ${quoteString(id)};`,
+        );
+      }
+      await runtime.query(
+        `DELETE FROM ${metadataTable("dashboard_charts")}
+         WHERE id = ${quoteString(id)};`,
+      );
+      if (tables.has("dashboards")) {
+        await touchDashboard(runtime, dashboardId, Date.now());
+      }
+      return { visualId: id, dashboardId, deleted: true };
+    },
+    deleteDashboard: async (dashboardId: string) => {
+      const id = dashboardId.trim();
+      const tables = await listMetadataTables(runtime);
+      const removed = { charts: 0, measures: 0, slicers: 0, joinDefs: 0 };
+      const existing = tables.has("dashboards")
+        ? (
+            await runtime.query(
+              `SELECT id FROM ${metadataTable("dashboards")}
+               WHERE id = ${quoteString(id)};`,
+            )
+          ).rows[0]
+        : undefined;
+      if (!existing) {
+        return { dashboardId: id, deleted: false, removed };
+      }
+
+      if (tables.has("chart_slicers") && tables.has("dashboard_charts")) {
+        await runtime.query(
+          `DELETE FROM ${metadataTable("chart_slicers")}
+           WHERE chart_id IN (
+             SELECT id FROM ${metadataTable("dashboard_charts")}
+             WHERE dashboard_id = ${quoteString(id)}
+           );`,
+        );
+      }
+      const children = [
+        ["charts", "dashboard_charts"],
+        ["measures", "dashboard_measures"],
+        ["slicers", "dashboard_slicers"],
+        ["joinDefs", "dashboard_join_defs"],
+      ] as const;
+      for (const [key, table] of children) {
+        if (!tables.has(table)) {
+          continue;
+        }
+        const result = await runtime.query(
+          `DELETE FROM ${metadataTable(table)}
+           WHERE dashboard_id = ${quoteString(id)};`,
+        );
+        removed[key] = result.rowsChanged ?? 0;
+      }
+      await runtime.query(
+        `DELETE FROM ${metadataTable("dashboards")}
+         WHERE id = ${quoteString(id)};`,
+      );
+      return { dashboardId: id, deleted: true, removed };
+    },
     openUi: async (input: {
       view?: z.infer<typeof uiViewSchema>;
       dashboardId?: string;
@@ -326,20 +746,66 @@ export function createBridgeMcpToolHandlers(
 
 export function createBridgeMcpServer(
   runtime: McpRuntime,
-  options: Pick<BridgeMcpOptions, "allowWriteSql" | "appUrl"> = {},
+  options: BridgeMcpServerOptions = {},
 ): McpServer {
   const server = new McpServer({
     name: "pondview-bridge",
     version: "0.1.0",
   });
   const handlers = createBridgeMcpToolHandlers(runtime, options);
+  const executeSqlAnnotations = options.allowWriteSql
+    ? { ...writeAnnotations, destructiveHint: true }
+    : readOnlyAnnotations;
+
+  registerAppResource(
+    server,
+    "Pondview visual",
+    VISUAL_VIEW_URI,
+    {
+      description: "Interactive chart, table, or metric card for a SQL result.",
+      _meta: { ui: { prefersBorder: true } },
+    },
+    async () => ({
+      contents: [
+        {
+          uri: VISUAL_VIEW_URI,
+          mimeType: RESOURCE_MIME_TYPE,
+          text: loadViewHtml("visual", options.viewsDir),
+          _meta: { ui: { prefersBorder: true } },
+        },
+      ],
+    }),
+  );
+
+  registerAppResource(
+    server,
+    "Pondview dashboard",
+    DASHBOARD_VIEW_URI,
+    {
+      description:
+        "Interactive Pondview dashboard with its visuals, text cards, and slicers.",
+      _meta: { ui: { prefersBorder: true } },
+    },
+    async () => ({
+      contents: [
+        {
+          uri: DASHBOARD_VIEW_URI,
+          mimeType: RESOURCE_MIME_TYPE,
+          text: loadViewHtml("dashboard", options.viewsDir),
+          _meta: { ui: { prefersBorder: true } },
+        },
+      ],
+    }),
+  );
 
   server.registerTool(
     "list_tables",
     {
+      title: "List tables",
       description:
         "List tables available in the Pondview Bridge DuckDB runtime. Use table_reference exactly in other Pondview MCP tools.",
       inputSchema: {},
+      annotations: readOnlyAnnotations,
     },
     async () => toToolResult(await handlers.listTables()),
   );
@@ -347,10 +813,13 @@ export function createBridgeMcpServer(
   server.registerTool(
     "get_table_schema",
     {
-      description: "Get column metadata and a small sample for a table.",
+      title: "Get table schema",
+      description:
+        "(deprecated: use describe_table) Get column metadata and a small sample for a table.",
       inputSchema: mcpInputSchema({
         table: z.string().min(1),
       }),
+      annotations: readOnlyAnnotations,
     },
     async ({ table }: { table: string }) =>
       toToolResult(await handlers.getTableSchema(table)),
@@ -359,10 +828,13 @@ export function createBridgeMcpServer(
   server.registerTool(
     "run_preview",
     {
-      description: "Fetch up to 5 sample rows from a table.",
+      title: "Preview table",
+      description:
+        "(deprecated: use describe_table) Fetch up to 5 sample rows from a table.",
       inputSchema: mcpInputSchema({
         table: z.string().min(1),
       }),
+      annotations: readOnlyAnnotations,
     },
     async ({ table }: { table: string }) =>
       toToolResult(await handlers.runPreview(table)),
@@ -371,12 +843,14 @@ export function createBridgeMcpServer(
   server.registerTool(
     "execute_sql",
     {
+      title: "Execute SQL",
       description:
-        "Execute SQL in the Pondview Bridge DuckDB runtime. Read-only SQL is allowed by default; writes require starting the MCP server with --allow-write-sql.",
+        "(deprecated: use query) Execute SQL in the Pondview Bridge DuckDB runtime. Read-only SQL is allowed by default; writes require starting the MCP server with --allow-write-sql.",
       inputSchema: mcpInputSchema({
         sql: z.string().min(1),
         limit: z.number().int().positive().max(5000).optional(),
       }),
+      annotations: executeSqlAnnotations,
     },
     async ({ sql, limit }: { sql: string; limit?: number }) =>
       toToolResult(
@@ -385,11 +859,62 @@ export function createBridgeMcpServer(
   );
 
   server.registerTool(
+    "describe_table",
+    {
+      title: "Describe table",
+      description:
+        "Get a table's columns, row count, and up to 5 sample rows. Use a table_reference from list_tables.",
+      inputSchema: mcpInputSchema({
+        table: z.string().min(1),
+      }),
+      annotations: readOnlyAnnotations,
+    },
+    async ({ table }: { table: string }) =>
+      toToolResult(await handlers.describeTable(table)),
+  );
+
+  server.registerTool(
+    "query",
+    {
+      title: "Query data",
+      description: `Run a read-only SQL query (SELECT, WITH, SHOW, DESCRIBE, EXPLAIN) in the Pondview DuckDB runtime. Results are capped at limit rows (default ${DEFAULT_QUERY_LIMIT}, max 5000) and the text result shows the first ${QUERY_TEXT_PREVIEW_ROWS}; aggregate in SQL instead of paging through rows. Use show_chart to answer with a chart.`,
+      inputSchema: mcpInputSchema({
+        sql: z.string().min(1),
+        limit: z.number().int().positive().max(5000).optional(),
+      }),
+      annotations: readOnlyAnnotations,
+    },
+    async ({ sql, limit }: { sql: string; limit?: number }) => {
+      const result = await handlers.query(sql, limit ?? DEFAULT_QUERY_LIMIT);
+      return toAppToolResult(queryResultText(result), result);
+    },
+  );
+
+  registerAppTool(
+    server,
+    "show_chart",
+    {
+      title: "Show chart",
+      description:
+        "Run a read-only SQL query and show the result inline in the conversation as an interactive chart, table, or metric card. Nothing is saved; use save_visual to add a visual to a dashboard. visualType can be line, bar, area, pie, table, or card. Aggregate in SQL: results over 5000 rows are truncated.",
+      inputSchema: mcpInputSchema(visualInputShape),
+      annotations: readOnlyAnnotations,
+      _meta: { ui: { resourceUri: VISUAL_VIEW_URI } },
+    },
+    async (input: VisualInput) => {
+      const { visual } = await handlers.showChart(input);
+      return toVisualToolResult(visualSummaryText(visual), { visual });
+    },
+  );
+
+  server.registerTool(
     "list_dashboards",
     {
+      title: "List dashboards",
       description:
         "List existing Pondview dashboards, including chart counts and dashboard URLs.",
       inputSchema: {},
+      annotations: readOnlyAnnotations,
     },
     async () => toToolResult(await handlers.listDashboards()),
   );
@@ -397,11 +922,13 @@ export function createBridgeMcpServer(
   server.registerTool(
     "get_dashboard",
     {
+      title: "Get dashboard",
       description:
         "Get a Pondview dashboard with its charts, measures, slicers, join definitions, and URL.",
       inputSchema: mcpInputSchema({
         dashboardId: z.string().min(1),
       }),
+      annotations: readOnlyAnnotations,
     },
     async ({ dashboardId }: { dashboardId: string }) =>
       toToolResult(await handlers.getDashboard(dashboardId)),
@@ -410,11 +937,13 @@ export function createBridgeMcpServer(
   server.registerTool(
     "list_visuals",
     {
+      title: "List visuals",
       description:
         "List Pondview dashboard visuals, optionally filtered by dashboard, including standalone visual URLs.",
       inputSchema: mcpInputSchema({
         dashboardId: z.string().min(1).optional(),
       }),
+      annotations: readOnlyAnnotations,
     },
     async ({ dashboardId }: { dashboardId?: string }) =>
       toToolResult(await handlers.listVisuals(dashboardId)),
@@ -423,11 +952,13 @@ export function createBridgeMcpServer(
   server.registerTool(
     "get_visual",
     {
+      title: "Get visual",
       description:
         "Get one Pondview dashboard visual by id, including its standalone visual URL.",
       inputSchema: mcpInputSchema({
         visualId: z.string().min(1),
       }),
+      annotations: readOnlyAnnotations,
     },
     async ({ visualId }: { visualId: string }) =>
       toToolResult(await handlers.getVisual(visualId)),
@@ -436,50 +967,206 @@ export function createBridgeMcpServer(
   server.registerTool(
     "create_dashboard",
     {
+      title: "Create dashboard",
       description:
         "Create or update a Pondview dashboard and return a local URL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered dashboard instead of a raw link.",
       inputSchema: mcpInputSchema({
         title: z.string().min(1),
         id: z.string().min(1).optional(),
       }),
+      annotations: writeAnnotations,
     },
     async (input: { title: string; id?: string }) =>
       toToolResult(await handlers.createDashboard(input)),
   );
 
-  server.registerTool(
+  registerAppTool(
+    server,
     "create_visual",
     {
+      title: "Create visual",
       description:
-        "Create a Pondview dashboard visual from SQL and return a local dashboard URL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered visual instead of a raw link. visualType can be line, bar, area, pie, table, or card.",
+        "(deprecated: use save_visual) Create a Pondview dashboard visual from SQL and save it to a dashboard. The visual is shown inline in the conversation when the host supports it; otherwise open the returned dashboard URL. visualType can be line, bar, area, pie, table, or card. Use show_chart instead to answer a question without saving.",
       inputSchema: mcpInputSchema({
         dashboardId: z.string().min(1).optional(),
         dashboardTitle: z.string().min(1).optional(),
-        title: z.string().min(1),
-        description: z.string().optional(),
-        sql: z.string().min(1),
-        visualType: visualTypeSchema,
+        ...visualInputShape,
+      }),
+      annotations: writeAnnotations,
+      _meta: { ui: { resourceUri: VISUAL_VIEW_URI } },
+    },
+    async (
+      input: VisualInput & { dashboardId?: string; dashboardTitle?: string },
+    ) => {
+      const { visual, ...saved } = await handlers.createVisual(input);
+      return toVisualToolResult(
+        `Saved "${visual.title}" to dashboard ${saved.dashboardId}.\n` +
+          `Dashboard: ${saved.url}\nVisual: ${saved.visualUrl}\n\n` +
+          visualSummaryText(visual),
+        { ...saved, visual },
+      );
+    },
+  );
+
+  registerAppTool(
+    server,
+    "save_visual",
+    {
+      title: "Save visual",
+      description:
+        "Save a visual built from SQL to a Pondview dashboard (created if dashboardId is new or omitted) and show it inline. visualType can be line, bar, area, pie, table, or card. Use show_chart instead to answer a question without saving, and show_dashboard to show the whole dashboard.",
+      inputSchema: mcpInputSchema({
+        dashboardId: z.string().min(1).optional(),
+        dashboardTitle: z.string().min(1).optional(),
+        ...visualInputShape,
+      }),
+      annotations: writeAnnotations,
+      _meta: { ui: { resourceUri: VISUAL_VIEW_URI } },
+    },
+    async (
+      input: VisualInput & { dashboardId?: string; dashboardTitle?: string },
+    ) => {
+      const { visual, ...saved } = await handlers.createVisual(input);
+      return toVisualToolResult(
+        `Saved "${visual.title}" (visual ${saved.visualId}) to dashboard ${saved.dashboardId}.\n\n` +
+          visualSummaryText(visual),
+        { ...saved, visual },
+      );
+    },
+  );
+
+  registerAppTool(
+    server,
+    "show_dashboard",
+    {
+      title: "Show dashboard",
+      description:
+        "Show a saved Pondview dashboard inline in the conversation, with its visuals, text cards, and slicers. Optional filters ({ field: 'table.column', op, values }) narrow every visual that can reach the field through the dashboard's joins. The text result summarizes each card; the user sees the data in the view.",
+      inputSchema: mcpInputSchema({
+        dashboardId: z.string().min(1),
+        filters: z.array(filterSchema).optional(),
+      }),
+      annotations: readOnlyAnnotations,
+      _meta: { ui: { resourceUri: DASHBOARD_VIEW_URI } },
+    },
+    async ({
+      dashboardId,
+      filters,
+    }: {
+      dashboardId: string;
+      filters?: Filter[];
+    }) => {
+      const result = await handlers.showDashboard(dashboardId, filters ?? []);
+      return toAppToolResult(dashboardSummaryText(result.dashboard), result);
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_dashboard_data",
+    {
+      title: "Get dashboard data",
+      description:
+        "Re-run every visual on a dashboard with the given slicer filters. Called by the dashboard view.",
+      inputSchema: mcpInputSchema({
+        dashboardId: z.string().min(1),
+        filters: z.array(filterSchema),
+      }),
+      annotations: readOnlyAnnotations,
+      _meta: { ui: { resourceUri: DASHBOARD_VIEW_URI, visibility: ["app"] } },
+    },
+    async ({
+      dashboardId,
+      filters,
+    }: {
+      dashboardId: string;
+      filters: Filter[];
+    }) => {
+      const result = await handlers.showDashboard(dashboardId, filters);
+      return toAppToolResult(dashboardSummaryText(result.dashboard), result);
+    },
+  );
+
+  registerAppTool(
+    server,
+    "run_visual",
+    {
+      title: "Run visual",
+      description:
+        "Re-run one saved visual with optional slicer filters. Called by the dashboard view.",
+      inputSchema: mcpInputSchema({
+        visualId: z.string().min(1),
+        filters: z.array(filterSchema).optional(),
+      }),
+      annotations: readOnlyAnnotations,
+      _meta: { ui: { resourceUri: DASHBOARD_VIEW_URI, visibility: ["app"] } },
+    },
+    async ({ visualId, filters }: { visualId: string; filters?: Filter[] }) => {
+      const { visual } = await handlers.runVisual(visualId, filters ?? []);
+      return toVisualToolResult(visualSummaryText(visual), { visual });
+    },
+  );
+
+  registerAppTool(
+    server,
+    "update_visual_config",
+    {
+      title: "Update visual config",
+      description:
+        "Change a saved visual's chart type, axes, or title. Called by the dashboard view.",
+      inputSchema: mcpInputSchema({
+        visualId: z.string().min(1),
+        visualType: visualTypeSchema.optional(),
         xKey: z.string().min(1).optional(),
         yKeys: z.array(z.string().min(1)).optional(),
-        chartConfig: z.record(z.string(), z.unknown()).optional(),
+        title: z.string().min(1).optional(),
       }),
+      annotations: writeAnnotations,
+      _meta: { ui: { resourceUri: DASHBOARD_VIEW_URI, visibility: ["app"] } },
     },
-    async (input: {
-      dashboardId?: string;
-      dashboardTitle?: string;
-      title: string;
-      description?: string;
-      sql: string;
-      visualType: z.infer<typeof visualTypeSchema>;
-      xKey?: string;
-      yKeys?: string[];
-      chartConfig?: Record<string, unknown>;
-    }) => toToolResult(await handlers.createVisual(input)),
+    async (input: UpdateVisualConfigInput) => {
+      const { visual } = await handlers.updateVisualConfig(input);
+      return toVisualToolResult(
+        `Updated "${visual.title}".\n\n${visualSummaryText(visual)}`,
+        { visual },
+      );
+    },
+  );
+
+  server.registerTool(
+    "delete_visual",
+    {
+      title: "Delete visual",
+      description:
+        "Permanently delete one visual or text card from its dashboard.",
+      inputSchema: mcpInputSchema({
+        visualId: z.string().min(1),
+      }),
+      annotations: { ...writeAnnotations, destructiveHint: true },
+    },
+    async ({ visualId }: { visualId: string }) =>
+      toToolResult(await handlers.deleteVisual(visualId)),
+  );
+
+  server.registerTool(
+    "delete_dashboard",
+    {
+      title: "Delete dashboard",
+      description:
+        "Permanently delete a dashboard with all of its visuals, text cards, measures, slicers, and join definitions.",
+      inputSchema: mcpInputSchema({
+        dashboardId: z.string().min(1),
+      }),
+      annotations: { ...writeAnnotations, destructiveHint: true },
+    },
+    async ({ dashboardId }: { dashboardId: string }) =>
+      toToolResult(await handlers.deleteDashboard(dashboardId)),
   );
 
   server.registerTool(
     "create_text_card",
     {
+      title: "Create text card",
       description:
         "Create a markdown text card on a Pondview dashboard and return a local dashboard URL. Use this for narrative notes, headings, and explanations that do not need SQL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered card instead of a raw link.",
       inputSchema: mcpInputSchema({
@@ -489,6 +1176,7 @@ export function createBridgeMcpServer(
         content: z.string().min(1),
         colSpan: z.number().int().min(1).max(4).optional(),
       }),
+      annotations: writeAnnotations,
     },
     async (input: {
       dashboardId?: string;
@@ -502,13 +1190,15 @@ export function createBridgeMcpServer(
   server.registerTool(
     "open_ui",
     {
+      title: "Get Pondview UI URL",
       description:
-        "Return a local Pondview UI URL for the app, dashboards, a dashboard, analyses, or an analysis. This tool does not open anything itself, but if you have a browser or in-app preview tool you should open the returned URL there so the user sees the rendered UI.",
+        "(deprecated: use show_dashboard) Return a local Pondview UI URL for the app, dashboards, a dashboard, analyses, or an analysis. This tool does not open anything itself, but if you have a browser or in-app preview tool you should open the returned URL there so the user sees the rendered UI.",
       inputSchema: mcpInputSchema({
         view: uiViewSchema.optional(),
         dashboardId: z.string().min(1).optional(),
         analysisId: z.string().min(1).optional(),
       }),
+      annotations: readOnlyAnnotations,
     },
     async (input: {
       view?: z.infer<typeof uiViewSchema>;
@@ -520,11 +1210,13 @@ export function createBridgeMcpServer(
   server.registerTool(
     "open_dashboard",
     {
+      title: "Get dashboard URL",
       description:
-        "Return the local Pondview dashboard URL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered dashboard instead of a raw link.",
+        "(deprecated: use show_dashboard) Return the local Pondview dashboard URL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered dashboard instead of a raw link.",
       inputSchema: mcpInputSchema({
         dashboardId: z.string().min(1).optional(),
       }),
+      annotations: readOnlyAnnotations,
     },
     async ({ dashboardId }: { dashboardId?: string }) =>
       toToolResult(await handlers.openDashboard(dashboardId)),
@@ -533,11 +1225,13 @@ export function createBridgeMcpServer(
   server.registerTool(
     "open_visual",
     {
+      title: "Get visual URL",
       description:
-        "Return a local Pondview standalone visual URL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered visual instead of a raw link.",
+        "(deprecated: use show_dashboard) Return a local Pondview standalone visual URL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered visual instead of a raw link.",
       inputSchema: mcpInputSchema({
         visualId: z.string().min(1),
       }),
+      annotations: readOnlyAnnotations,
     },
     async ({ visualId }: { visualId: string }) =>
       toToolResult(await handlers.openVisual(visualId)),
@@ -548,7 +1242,7 @@ export function createBridgeMcpServer(
 
 export async function runBridgeMcpServerWithRuntime(
   runtime: McpRuntime,
-  options: Pick<BridgeMcpOptions, "allowWriteSql" | "appUrl"> = {},
+  options: BridgeMcpServerOptions = {},
 ): Promise<void> {
   const server = createBridgeMcpServer(runtime, options);
   await server.connect(new StdioServerTransport());
@@ -579,7 +1273,7 @@ export async function runBridgeMcpServer(
 
 export function createBridgeMcpHttpHandler(
   runtime: McpRuntime,
-  options: Pick<BridgeMcpOptions, "allowWriteSql" | "appUrl"> = {},
+  options: BridgeMcpServerOptions = {},
 ): BridgeMcpHttpHandler {
   const sessions = new Map<string, BridgeMcpHttpSession>();
 
@@ -687,6 +1381,413 @@ export function toToolResult(value: Record<string, unknown>): CallToolResult {
     content,
     structuredContent: value,
   };
+}
+
+// Visual results keep the row payload out of the text content: the view reads
+// structuredContent, while the model only needs a summary and a short preview.
+export function toVisualToolResult(
+  text: string,
+  structuredContent: Record<string, unknown> & { visual: VisualPayload },
+): CallToolResult {
+  return toAppToolResult(text, structuredContent);
+}
+
+function toAppToolResult(
+  text: string,
+  structuredContent: Record<string, unknown>,
+): CallToolResult {
+  return {
+    content: [{ type: "text", text }],
+    structuredContent,
+  };
+}
+
+function buildVisualPayload(
+  input: VisualInput,
+  result: BridgeQueryResponse,
+  saved: VisualPayload["saved"],
+): VisualPayload {
+  return {
+    title: input.title,
+    description: input.description ?? null,
+    sql: input.sql,
+    visualType: input.visualType,
+    config: buildVisualConfig(input, result.columns),
+    columns: result.columns,
+    rows: result.rows,
+    rowCount: result.rowCount,
+    truncated: result.rowCount > result.rows.length,
+    saved,
+  };
+}
+
+function visualSummaryText(visual: VisualPayload): string {
+  const previewRows = visual.rows.slice(0, VISUAL_TEXT_PREVIEW_ROWS);
+  const lines = [
+    `${visual.visualType} visual "${visual.title}" from ${visual.rowCount} row(s).`,
+  ];
+  if (visual.truncated) {
+    lines.push(
+      `Only the first ${visual.rows.length} rows are shown; aggregate in SQL to include everything.`,
+    );
+  }
+  const xKey = visual.config.xKey;
+  const yKeys = visual.config.yKeys;
+  if (typeof xKey === "string" && Array.isArray(yKeys)) {
+    lines.push(`x: ${xKey}; y: ${yKeys.join(", ")}`);
+  }
+  lines.push(
+    `Columns: ${visual.columns.map((column) => column.name).join(", ")}`,
+  );
+  if (previewRows.length > 0) {
+    lines.push(
+      `First ${previewRows.length} row(s):`,
+      JSON.stringify(previewRows, null, 2),
+    );
+  }
+  return lines.join("\n");
+}
+
+function queryResultText(result: {
+  columns: BridgeQueryResponse["columns"];
+  rows: BridgeQueryResponse["rows"];
+  rowCount: number;
+  truncated: boolean;
+}): string {
+  const previewRows = result.rows.slice(0, QUERY_TEXT_PREVIEW_ROWS);
+  const lines = [`${result.rowCount} row(s).`];
+  if (result.truncated) {
+    lines.push(
+      `Only the first ${result.rows.length} rows were returned; aggregate in SQL or raise limit.`,
+    );
+  }
+  lines.push(
+    `Columns: ${result.columns.map((column) => `${column.name} (${column.type})`).join(", ")}`,
+  );
+  if (previewRows.length > 0) {
+    lines.push(
+      `First ${previewRows.length} row(s):`,
+      JSON.stringify(previewRows, null, 2),
+    );
+  }
+  return lines.join("\n");
+}
+
+// One or two lines per card; rows stay in structuredContent for the view.
+function dashboardSummaryText(dashboard: DashboardPayload): string {
+  const lines = [
+    `Dashboard "${dashboard.title}" (${dashboard.id}): ${dashboard.cards.length} card(s), ${dashboard.slicers.length} slicer(s).`,
+  ];
+  if (dashboard.filters.length > 0) {
+    lines.push(
+      `Active filters: ${dashboard.filters
+        .map(
+          (filter) =>
+            `${filter.field} ${filter.op} ${JSON.stringify(filter.values ?? [])}`,
+        )
+        .join("; ")}`,
+    );
+  }
+  for (const card of dashboard.cards) {
+    if (card.kind === "text") {
+      lines.push(`- text "${card.title}" (${card.id})`);
+    } else if (card.error || !card.visual) {
+      lines.push(`- visual ${card.id} failed: ${card.error ?? "no result"}`);
+    } else {
+      const { visual } = card;
+      const axes =
+        typeof visual.config.xKey === "string" &&
+        Array.isArray(visual.config.yKeys)
+          ? `; x: ${visual.config.xKey}; y: ${visual.config.yKeys.join(", ")}`
+          : "";
+      lines.push(
+        `- ${visual.visualType} "${visual.title}" (${card.id}): ${visual.rowCount} row(s)${visual.truncated ? ", truncated" : ""}${axes}`,
+      );
+    }
+  }
+  for (const slicer of dashboard.slicers) {
+    lines.push(
+      `- slicer ${slicer.title ? `"${slicer.title}" ` : ""}on ${slicer.field}: ${slicer.options.length} option(s)`,
+    );
+  }
+  for (const skipped of dashboard.skippedFilters) {
+    lines.push(
+      `Filter ${skipped.field} skipped for ${skipped.visualId}: ${skipped.reason}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+async function buildDashboardCard(
+  runtime: McpRuntime,
+  chart: Record<string, unknown>,
+  context: DashboardFilterContext,
+): Promise<{
+  card: DashboardCard;
+  skipped: ApplyFiltersResult["skippedFilters"];
+}> {
+  const id = String(chart.id ?? "");
+  const config = parseChartConfig(chart.chart_config_json);
+  const layout = dashboardCardLayout(chart, config);
+  if (config.configType === "text") {
+    return {
+      card: {
+        kind: "text",
+        id,
+        layout,
+        title: String(config.title ?? chart.title ?? ""),
+        content: typeof config.content === "string" ? config.content : "",
+      },
+      skipped: [],
+    };
+  }
+
+  const title = String(chart.title ?? config.title ?? "") || id;
+  try {
+    const { visual, skipped } = await runStoredVisual(runtime, chart, context);
+    return {
+      card: { kind: "visual", id, title, layout, visual, error: null },
+      skipped,
+    };
+  } catch (error) {
+    return {
+      card: {
+        kind: "visual",
+        id,
+        title,
+        layout,
+        visual: null,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      skipped: [],
+    };
+  }
+}
+
+async function runStoredVisual(
+  runtime: McpRuntime,
+  chart: Record<string, unknown>,
+  context: DashboardFilterContext,
+): Promise<{
+  visual: VisualPayload;
+  skipped: ApplyFiltersResult["skippedFilters"];
+}> {
+  const sql = String(chart.sql ?? "");
+  const filtered = applyDashboardFilters(sql, context);
+  assertSqlAllowed(filtered.sql, false);
+  const result = await runtime.query(filtered.sql, VISUAL_ROW_LIMIT);
+  return {
+    visual: storedVisualPayload(chart, result),
+    skipped: filtered.skippedFilters,
+  };
+}
+
+function applyDashboardFilters(
+  sql: string,
+  context: DashboardFilterContext,
+): ApplyFiltersResult {
+  if (context.filters.length === 0) {
+    return { sql, appliedFilters: 0, skippedFilters: [] };
+  }
+  // Keep the chart's own spelling of its base table; resolve joined tables
+  // against the runtime catalog, quoting anything unknown so filter fields
+  // from the view can never inject SQL.
+  const baseRef = findBaseTableReference(sql);
+  return applyFiltersToSql(sql, context.filters, context.joinDefs, {
+    resolveTableRef: (tableName) =>
+      baseRef && tableName === baseRef.tableName
+        ? baseRef.rawReference
+        : resolveRuntimeTableReferenceFromMetadata(
+            quoteIdentifier(tableName),
+            context.runtimeTables,
+          ),
+  });
+}
+
+function storedVisualPayload(
+  chart: Record<string, unknown>,
+  result: BridgeQueryResponse,
+): VisualPayload {
+  const config = parseChartConfig(chart.chart_config_json);
+  return {
+    title: String(chart.title ?? config.title ?? ""),
+    description:
+      typeof chart.description === "string" ? chart.description : null,
+    sql: String(chart.sql ?? ""),
+    visualType: storedVisualType(config),
+    config,
+    columns: result.columns,
+    rows: result.rows,
+    rowCount: result.rowCount,
+    truncated: result.rowCount > result.rows.length,
+    saved: {
+      dashboardId: String(chart.dashboard_id ?? ""),
+      visualId: String(chart.id ?? ""),
+    },
+  };
+}
+
+function storedVisualType(
+  config: Record<string, unknown>,
+): z.infer<typeof visualTypeSchema> {
+  if (config.configType === "table" || config.configType === "card") {
+    return config.configType;
+  }
+  return typeof config.type === "string" && chartVisualTypes.has(config.type)
+    ? (config.type as z.infer<typeof visualTypeSchema>)
+    : "table";
+}
+
+function parseChartConfig(value: unknown): Record<string, unknown> {
+  if (typeof value !== "string") {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function dashboardCardLayout(
+  chart: Record<string, unknown>,
+  config: Record<string, unknown>,
+): DashboardLayout {
+  const fallback = initialLayout(config, toFiniteNumber(chart.position) ?? 0);
+  return {
+    x: toFiniteNumber(chart.layout_x) ?? fallback.layoutX,
+    y: toFiniteNumber(chart.layout_y) ?? fallback.layoutY,
+    w: toFiniteNumber(chart.layout_w) ?? fallback.layoutW,
+    h: toFiniteNumber(chart.layout_h) ?? fallback.layoutH,
+  };
+}
+
+async function buildDashboardSlicer(
+  runtime: McpRuntime,
+  slicer: Record<string, unknown>,
+  runtimeTables: RuntimeTableMetadata[],
+): Promise<DashboardSlicer> {
+  const field = String(slicer.field ?? "");
+  const base = {
+    id: String(slicer.id ?? ""),
+    field,
+    title: typeof slicer.title === "string" ? slicer.title : null,
+  };
+  const parts = field
+    .split(".")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 2) {
+    return { ...base, options: [] };
+  }
+
+  const column = quoteIdentifier(parts[parts.length - 1]);
+  const limit = Math.min(
+    MAX_SLICER_OPTION_LIMIT,
+    Math.max(1, toFiniteNumber(slicer.limit) ?? DEFAULT_SLICER_OPTION_LIMIT),
+  );
+  try {
+    const tableReference = resolveRuntimeTableReferenceFromMetadata(
+      quoteIdentifier(parts[parts.length - 2]),
+      runtimeTables,
+    );
+    const result = await runtime.query(
+      `SELECT DISTINCT ${column} AS value
+       FROM ${tableReference}
+       WHERE ${column} IS NOT NULL
+       ORDER BY 1
+       LIMIT ${Math.floor(limit)};`,
+    );
+    return {
+      ...base,
+      options: result.rows.map((row) => {
+        const value = row.value;
+        return value === null ||
+          typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean"
+          ? value
+          : String(value);
+      }),
+    };
+  } catch {
+    // A slicer on a missing table or column renders with no options rather
+    // than failing the whole dashboard.
+    return { ...base, options: [] };
+  }
+}
+
+async function loadVisualChart(
+  runtime: McpRuntime,
+  visualId: string,
+): Promise<Record<string, unknown>> {
+  const id = visualId.trim();
+  const tables = await listMetadataTables(runtime);
+  const chart = tables.has("dashboard_charts")
+    ? (
+        await runtime.query(
+          `SELECT *
+           FROM ${metadataTable("dashboard_charts")}
+           WHERE id = ${quoteString(id)}
+           LIMIT 1;`,
+        )
+      ).rows[0]
+    : undefined;
+  if (!chart) {
+    throw new Error(`Visual "${id}" not found.`);
+  }
+  if (parseChartConfig(chart.chart_config_json).configType === "text") {
+    throw new Error(`"${id}" is a text card, not a visual.`);
+  }
+  return chart;
+}
+
+function joinDefinitionFromRow(row: Record<string, unknown>): JoinDefinition {
+  const type = row.join_type;
+  return {
+    leftTable: String(row.left_table ?? ""),
+    leftColumn: String(row.left_column ?? ""),
+    rightTable: String(row.right_table ?? ""),
+    rightColumn: String(row.right_column ?? ""),
+    ...(type === "inner" ||
+    type === "left" ||
+    type === "right" ||
+    type === "full"
+      ? { type: type as JoinKind }
+      : {}),
+  };
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  const number =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim() !== ""
+        ? Number(value)
+        : Number.NaN;
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function loadViewHtml(view: string, viewsDir?: string): string {
+  const candidates = [
+    viewsDir?.trim() ? resolve(viewsDir.trim()) : undefined,
+    // Published CLI: lib/cli.js -> views/ (copied in by prepack).
+    fileURLToPath(new URL("../views", import.meta.url)),
+    // Workspace: src/mcp.ts or lib/cli.js -> packages/mcp-views/dist.
+    fileURLToPath(new URL("../../mcp-views/dist", import.meta.url)),
+  ];
+  for (const dir of candidates) {
+    const path = dir ? join(dir, `${view}.html`) : undefined;
+    if (path && existsSync(path)) {
+      return readFileSync(path, "utf8");
+    }
+  }
+  return `<!doctype html><html><body style="font-family:sans-serif;padding:16px">
+<p>The Pondview ${view} view has not been built. Run <code>bun run mcp-views:build</code> and reconnect.</p>
+</body></html>`;
 }
 
 function openInBrowserNudge(url: string): string {
@@ -997,11 +2098,11 @@ async function queryDashboardRows(
   tables: Set<string>,
   table: string,
   dashboardId: string,
+  orderBy = table === "dashboard_join_defs" ? "position" : "created_at",
 ): Promise<Array<Record<string, unknown>>> {
   if (!tables.has(table)) {
     return [];
   }
-  const orderBy = table === "dashboard_join_defs" ? "position" : "created_at";
   const result = await runtime.query(
     `SELECT *
      FROM ${metadataTable(table)}
@@ -1060,12 +2161,30 @@ async function ensureDashboardMetadata(runtime: McpRuntime): Promise<void> {
 
 async function ensureDashboardForVisual(
   runtime: McpRuntime,
-  input: { id?: string; title: string },
+  input: { id?: string; title?: string; fallbackTitle: string },
 ): Promise<{ dashboardId: string }> {
+  // Adding a card to an existing dashboard keeps its title unless the caller
+  // passes a new one.
+  const id = input.id?.trim();
+  if (id && !input.title) {
+    const tables = await listMetadataTables(runtime);
+    if (tables.has("dashboards")) {
+      const existing = await runtime.query(
+        `SELECT id FROM ${metadataTable("dashboards")}
+         WHERE id = ${quoteString(id)};`,
+      );
+      if (existing.rows.length > 0) {
+        return { dashboardId: id };
+      }
+    }
+  }
   const handlers = createBridgeMcpToolHandlers(runtime, {
     allowWriteSql: true,
   });
-  return handlers.createDashboard(input);
+  return handlers.createDashboard({
+    id,
+    title: input.title ?? input.fallbackTitle,
+  });
 }
 
 async function nextChartPosition(

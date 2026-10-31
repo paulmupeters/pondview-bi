@@ -92,6 +92,8 @@ packages/pondview-docs/.vitepress/cache/
 # bridge bundled UI output
 packages/cli/dist/
 packages/cli/lib/
+packages/cli/views/
+packages/mcp-views/dist/
 packages/bridge-protocol/dist/
 packages/pondview-app/dist/
 
