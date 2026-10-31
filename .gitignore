@@ -93,6 +93,7 @@ packages/pondview-docs/.vitepress/cache/
 packages/cli/dist/
 packages/cli/lib/
 packages/bridge-protocol/dist/
+packages/pondview-app/dist/
 
 # analyzer
 stats.html
