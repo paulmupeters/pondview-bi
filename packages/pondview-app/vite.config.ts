@@ -50,6 +50,18 @@ export default defineConfig(({ command, mode }) => {
                 test: /node_modules\/(react|react-dom|react-router-dom|scheduler)\//,
               },
               {
+                // zod is shared by the AI SDK, bridge-protocol and app code.
+                // When it lands inside the (internally circular) vendor-ai
+                // chunks, one vendor-ai chunk can call zod constructors
+                // before the other has evaluated them, blanking the app in
+                // production ("undefined is not a constructor" on ZodLiteral).
+                // A dedicated leaf chunk has no imports, so it always
+                // evaluates first.
+                name: "vendor-zod",
+                test: /node_modules\/zod\//,
+                priority: 20,
+              },
+              {
                 name: "vendor-ai",
                 test: /node_modules\/(@ai-sdk|ai)\//,
                 maxSize: 2_000_000,
