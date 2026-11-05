@@ -73,6 +73,7 @@ export function DynamicChart({
   chartHeightClassName,
   showMetadata = true,
   fillAvailableHeight = false,
+  onPointClick,
 }: {
   chartData: Result[];
   chartConfig: Config;
@@ -80,6 +81,8 @@ export function DynamicChart({
   chartHeightClassName?: string;
   showMetadata?: boolean;
   fillAvailableHeight?: boolean;
+  // Called with the clicked data row (bar, line/area tick, or pie slice).
+  onPointClick?: (row: Record<string, unknown>) => void;
 }) {
   const defaultColors = useMemo(() => getChartColors(), []);
   const normalizedChartData = useMemo(
@@ -194,6 +197,14 @@ export function DynamicChart({
     const labelYAngle = chartConfig.labelYAngle ?? -90;
     const suffixLabelY = chartConfig.suffixLabelY ?? "";
 
+    const clickHandler = (data: readonly Record<string, unknown>[]) =>
+      onPointClick
+        ? (state: { activeIndex?: number | string | null }) => {
+            const row = data[Number(state?.activeIndex)];
+            if (row) onPointClick(row);
+          }
+        : undefined;
+
     switch (chartConfig.type) {
       case "line": {
         if (!lineChartState) {
@@ -204,7 +215,10 @@ export function DynamicChart({
           return suffixLabelY ? `${base} (${suffixLabelY})` : base;
         })();
         return (
-          <LineChart data={lineChartState.data}>
+          <LineChart
+            data={lineChartState.data}
+            onClick={clickHandler(lineChartState.data)}
+          >
             {showGrid && <CartesianGrid strokeDasharray="3 3" />}
             <XAxis dataKey={chartConfig.xKey} hide={!showXAxis}>
               {showXAxis && (
@@ -249,7 +263,10 @@ export function DynamicChart({
       }
       case "area":
         return (
-          <AreaChart data={processedChartData}>
+          <AreaChart
+            data={processedChartData}
+            onClick={clickHandler(processedChartData)}
+          >
             {showGrid && <CartesianGrid strokeDasharray="3 3" />}
             <XAxis dataKey={chartConfig.xKey} hide={!showXAxis} />
             <YAxis hide={!showYAxis} unit={suffixLabelY || undefined}>
@@ -282,7 +299,10 @@ export function DynamicChart({
         );
       case "bar":
         return (
-          <BarChart data={processedChartData}>
+          <BarChart
+            data={processedChartData}
+            onClick={clickHandler(processedChartData)}
+          >
             {showGrid && <CartesianGrid strokeDasharray="3 3" />}
             <XAxis dataKey={chartConfig.xKey} hide={!showXAxis}>
               {showXAxis && (
@@ -330,6 +350,14 @@ export function DynamicChart({
               cy="50%"
               outerRadius={120}
               isAnimationActive={false}
+              onClick={
+                onPointClick
+                  ? (_, index) => {
+                      const row = processedChartData[index];
+                      if (row) onPointClick(row);
+                    }
+                  : undefined
+              }
             >
               {processedChartData.map((entry, index) => (
                 <Cell
