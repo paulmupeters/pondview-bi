@@ -950,10 +950,22 @@ describe("bridge MCP tools", () => {
   describe("MCP App surface", () => {
     async function connectClient(
       options: Parameters<typeof createBridgeMcpServer>[1] = {},
+      { inlineViews = false }: { inlineViews?: boolean } = {},
     ) {
       const runtime = await createSeededRuntime();
       const server = createBridgeMcpServer(runtime, options);
-      const client = new Client({ name: "test-host", version: "0.0.0" });
+      // A host that renders MCP Apps advertises the ui extension.
+      const capabilities = inlineViews
+        ? {
+            extensions: {
+              "io.modelcontextprotocol/ui": { mimeTypes: [RESOURCE_MIME_TYPE] },
+            },
+          }
+        : {};
+      const client = new Client(
+        { name: "test-host", version: "0.0.0" },
+        { capabilities },
+      );
       const [clientTransport, serverTransport] =
         InMemoryTransport.createLinkedPair();
       await Promise.all([
@@ -1128,6 +1140,31 @@ describe("bridge MCP tools", () => {
         (result.structuredContent as { dashboard: { cards: unknown[] } })
           .dashboard.cards,
       ).toHaveLength(1);
+    });
+
+    test("dashboard tools point MCP Apps hosts at show_dashboard instead of the URL", async () => {
+      const textOf = (result: Awaited<ReturnType<Client["callTool"]>>) =>
+        (result.content as Array<{ text: string }>)
+          .map((part) => part.text)
+          .join("\n");
+      const args = {
+        name: "create_dashboard",
+        arguments: { title: "Sales", id: "sales" },
+      };
+
+      const inline = textOf(
+        await (await connectClient({}, { inlineViews: true })).callTool(args),
+      );
+      expect(inline).toContain('call show_dashboard with dashboardId "sales"');
+      expect(inline).not.toContain("Open this in a browser");
+
+      const plain = textOf(await (await connectClient()).callTool(args));
+      expect(plain).toContain("Open this in a browser");
+    });
+
+    test("the server tells the model to prefer the inline views", async () => {
+      const client = await connectClient();
+      expect(client.getInstructions()).toContain("show_chart");
     });
 
     test("query text shows only the first rows", async () => {

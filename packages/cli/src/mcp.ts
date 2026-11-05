@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  getUiCapability,
   RESOURCE_MIME_TYPE,
   registerAppResource,
   registerAppTool,
@@ -748,11 +749,20 @@ export function createBridgeMcpServer(
   runtime: McpRuntime,
   options: BridgeMcpServerOptions = {},
 ): McpServer {
-  const server = new McpServer({
-    name: "pondview-bridge",
-    version: "0.1.0",
-  });
+  const server = new McpServer(
+    {
+      name: "pondview-bridge",
+      version: "0.1.0",
+    },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
   const handlers = createBridgeMcpToolHandlers(runtime, options);
+  // Hosts that render MCP Apps get pointed at show_dashboard instead of the
+  // local URL, which only works while a separate Pondview server is running.
+  const toolResult = (value: Record<string, unknown>) =>
+    toToolResult(value, {
+      inlineViews: hostRendersViews(server.server.getClientCapabilities()),
+    });
   const executeSqlAnnotations = options.allowWriteSql
     ? { ...writeAnnotations, destructiveHint: true }
     : readOnlyAnnotations;
@@ -807,7 +817,7 @@ export function createBridgeMcpServer(
       inputSchema: {},
       annotations: readOnlyAnnotations,
     },
-    async () => toToolResult(await handlers.listTables()),
+    async () => toolResult(await handlers.listTables()),
   );
 
   server.registerTool(
@@ -822,7 +832,7 @@ export function createBridgeMcpServer(
       annotations: readOnlyAnnotations,
     },
     async ({ table }: { table: string }) =>
-      toToolResult(await handlers.getTableSchema(table)),
+      toolResult(await handlers.getTableSchema(table)),
   );
 
   server.registerTool(
@@ -837,7 +847,7 @@ export function createBridgeMcpServer(
       annotations: readOnlyAnnotations,
     },
     async ({ table }: { table: string }) =>
-      toToolResult(await handlers.runPreview(table)),
+      toolResult(await handlers.runPreview(table)),
   );
 
   server.registerTool(
@@ -853,9 +863,7 @@ export function createBridgeMcpServer(
       annotations: executeSqlAnnotations,
     },
     async ({ sql, limit }: { sql: string; limit?: number }) =>
-      toToolResult(
-        await handlers.executeSql(sql, limit ?? DEFAULT_QUERY_LIMIT),
-      ),
+      toolResult(await handlers.executeSql(sql, limit ?? DEFAULT_QUERY_LIMIT)),
   );
 
   server.registerTool(
@@ -870,7 +878,7 @@ export function createBridgeMcpServer(
       annotations: readOnlyAnnotations,
     },
     async ({ table }: { table: string }) =>
-      toToolResult(await handlers.describeTable(table)),
+      toolResult(await handlers.describeTable(table)),
   );
 
   server.registerTool(
@@ -916,7 +924,7 @@ export function createBridgeMcpServer(
       inputSchema: {},
       annotations: readOnlyAnnotations,
     },
-    async () => toToolResult(await handlers.listDashboards()),
+    async () => toolResult(await handlers.listDashboards()),
   );
 
   server.registerTool(
@@ -931,7 +939,7 @@ export function createBridgeMcpServer(
       annotations: readOnlyAnnotations,
     },
     async ({ dashboardId }: { dashboardId: string }) =>
-      toToolResult(await handlers.getDashboard(dashboardId)),
+      toolResult(await handlers.getDashboard(dashboardId)),
   );
 
   server.registerTool(
@@ -946,7 +954,7 @@ export function createBridgeMcpServer(
       annotations: readOnlyAnnotations,
     },
     async ({ dashboardId }: { dashboardId?: string }) =>
-      toToolResult(await handlers.listVisuals(dashboardId)),
+      toolResult(await handlers.listVisuals(dashboardId)),
   );
 
   server.registerTool(
@@ -961,7 +969,7 @@ export function createBridgeMcpServer(
       annotations: readOnlyAnnotations,
     },
     async ({ visualId }: { visualId: string }) =>
-      toToolResult(await handlers.getVisual(visualId)),
+      toolResult(await handlers.getVisual(visualId)),
   );
 
   server.registerTool(
@@ -969,7 +977,7 @@ export function createBridgeMcpServer(
     {
       title: "Create dashboard",
       description:
-        "Create or update a Pondview dashboard and return a local URL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered dashboard instead of a raw link.",
+        "Create or update a Pondview dashboard. Add visuals with save_visual and text with create_text_card, then call show_dashboard to show it inline. The returned URL is a fallback for hosts that cannot show Pondview views, and it only works while a Pondview server is running.",
       inputSchema: mcpInputSchema({
         title: z.string().min(1),
         id: z.string().min(1).optional(),
@@ -977,7 +985,7 @@ export function createBridgeMcpServer(
       annotations: writeAnnotations,
     },
     async (input: { title: string; id?: string }) =>
-      toToolResult(await handlers.createDashboard(input)),
+      toolResult(await handlers.createDashboard(input)),
   );
 
   registerAppTool(
@@ -1001,7 +1009,9 @@ export function createBridgeMcpServer(
       const { visual, ...saved } = await handlers.createVisual(input);
       return toVisualToolResult(
         `Saved "${visual.title}" to dashboard ${saved.dashboardId}.\n` +
-          `Dashboard: ${saved.url}\nVisual: ${saved.visualUrl}\n\n` +
+          (hostRendersViews(server.server.getClientCapabilities())
+            ? "\n"
+            : `Dashboard: ${saved.url}\nVisual: ${saved.visualUrl}\n\n`) +
           visualSummaryText(visual),
         { ...saved, visual },
       );
@@ -1145,7 +1155,7 @@ export function createBridgeMcpServer(
       annotations: { ...writeAnnotations, destructiveHint: true },
     },
     async ({ visualId }: { visualId: string }) =>
-      toToolResult(await handlers.deleteVisual(visualId)),
+      toolResult(await handlers.deleteVisual(visualId)),
   );
 
   server.registerTool(
@@ -1160,7 +1170,7 @@ export function createBridgeMcpServer(
       annotations: { ...writeAnnotations, destructiveHint: true },
     },
     async ({ dashboardId }: { dashboardId: string }) =>
-      toToolResult(await handlers.deleteDashboard(dashboardId)),
+      toolResult(await handlers.deleteDashboard(dashboardId)),
   );
 
   server.registerTool(
@@ -1168,7 +1178,7 @@ export function createBridgeMcpServer(
     {
       title: "Create text card",
       description:
-        "Create a markdown text card on a Pondview dashboard and return a local dashboard URL. Use this for narrative notes, headings, and explanations that do not need SQL. After calling this, open the returned URL in a browser or in-app preview so the user sees the rendered card instead of a raw link.",
+        "Create a markdown text card on a Pondview dashboard. Use this for narrative notes, headings, and explanations that do not need SQL. Call show_dashboard to show the result inline; the returned URL is a fallback for hosts that cannot show Pondview views.",
       inputSchema: mcpInputSchema({
         dashboardId: z.string().min(1).optional(),
         dashboardTitle: z.string().min(1).optional(),
@@ -1184,7 +1194,7 @@ export function createBridgeMcpServer(
       title?: string;
       content: string;
       colSpan?: number;
-    }) => toToolResult(await handlers.createTextCard(input)),
+    }) => toolResult(await handlers.createTextCard(input)),
   );
 
   server.registerTool(
@@ -1204,7 +1214,7 @@ export function createBridgeMcpServer(
       view?: z.infer<typeof uiViewSchema>;
       dashboardId?: string;
       analysisId?: string;
-    }) => toToolResult(await handlers.openUi(input)),
+    }) => toolResult(await handlers.openUi(input)),
   );
 
   server.registerTool(
@@ -1219,7 +1229,7 @@ export function createBridgeMcpServer(
       annotations: readOnlyAnnotations,
     },
     async ({ dashboardId }: { dashboardId?: string }) =>
-      toToolResult(await handlers.openDashboard(dashboardId)),
+      toolResult(await handlers.openDashboard(dashboardId)),
   );
 
   server.registerTool(
@@ -1234,7 +1244,7 @@ export function createBridgeMcpServer(
       annotations: readOnlyAnnotations,
     },
     async ({ visualId }: { visualId: string }) =>
-      toToolResult(await handlers.openVisual(visualId)),
+      toolResult(await handlers.openVisual(visualId)),
   );
 
   return server;
@@ -1367,8 +1377,21 @@ export function createBridgeMcpHttpHandler(
   };
 }
 
-export function toToolResult(value: Record<string, unknown>): CallToolResult {
+export function toToolResult(
+  value: Record<string, unknown>,
+  options: { inlineViews?: boolean } = {},
+): CallToolResult {
   const content: CallToolResult["content"] = [];
+  if (options.inlineViews) {
+    if (typeof value.dashboardId === "string" && value.dashboardId) {
+      content.push({
+        type: "text",
+        text: `To show this to the user, call show_dashboard with dashboardId "${value.dashboardId}". It renders inline; don't open the URL.`,
+      });
+    }
+    content.push({ type: "text", text: JSON.stringify(value, null, 2) });
+    return { content, structuredContent: value };
+  }
   const primaryUrl =
     typeof value.visualUrl === "string" && value.visualUrl.length > 0
       ? value.visualUrl
@@ -1788,6 +1811,19 @@ function loadViewHtml(view: string, viewsDir?: string): string {
   return `<!doctype html><html><body style="font-family:sans-serif;padding:16px">
 <p>The Pondview ${view} view has not been built. Run <code>bun run mcp-views:build</code> and reconnect.</p>
 </body></html>`;
+}
+
+const SERVER_INSTRUCTIONS =
+  "Pondview renders charts and dashboards inline in the conversation when the host supports MCP Apps. " +
+  "Answer data questions with show_chart, save charts with save_visual, and display dashboards with show_dashboard. " +
+  "In such hosts, never start a Pondview server or open Pondview URLs to show results; the inline views need neither.";
+
+function hostRendersViews(
+  capabilities: Parameters<typeof getUiCapability>[0],
+): boolean {
+  return Boolean(
+    getUiCapability(capabilities)?.mimeTypes?.includes(RESOURCE_MIME_TYPE),
+  );
 }
 
 function openInBrowserNudge(url: string): string {
