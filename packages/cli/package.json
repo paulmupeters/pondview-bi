@@ -56,7 +56,7 @@
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.6.6",
     "fflate": "^0.8.2",
     "typescript": "^5.9.3"
   }
