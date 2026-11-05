@@ -1,6 +1,6 @@
 # Spec: Pondview as an MCP App (Claude-first, ChatGPT-ready)
 
-Status: draft · 2026-10-30
+Status: Phases 1–2 built, awaiting real-host testing · updated 2026-11-05 (see [Current status](#current-status-2026-11-05))
 
 ## Goal
 
@@ -124,16 +124,55 @@ App-only tools (`visibility: ["app"]`):
 - Source credentials are stored server-side (from `secrets.ts`) and never returned in tool results.
 - Origin-header validation on the HTTP transport, which the directory checklist requires.
 
+## Current status (2026-11-05)
+
+Phases 1 and 2 are built on the `mcp-app` branch (PR #156) and pass `bun run check` and the CLI test suite. They have **not** been run in a real host yet.
+
+Built:
+- **Server** (`packages/cli/src/mcp.ts`):
+  - Every model-facing tool in the [tool surface](#tool-surface) except `connect_source` (hosted only): `list_tables`, `describe_table`, `query`, `show_chart`, `save_visual`, `create_dashboard`, `create_text_card`, `show_dashboard`, `list_dashboards`, `get_dashboard`, `delete_visual` and `delete_dashboard`.
+  - The app-only tools `get_dashboard_data`, `run_visual` and `update_visual_config`.
+  - Also `list_visuals` and `get_visual`, which aren't in the table.
+  - Every tool has a `title` and `readOnlyHint` or `destructiveHint`.
+  - Old tools are kept but marked deprecated in their descriptions: `create_visual`, `get_table_schema`, `run_preview`, `execute_sql`, and the `open_*` URL tools. `execute_sql` is the only destructive one, and its writes need `--allow-write-sql`.
+- **Views** (`packages/mcp-views`, single-file HTML copied to `packages/cli/views/`):
+  - `ui://pondview/visual`: chart-type switcher, "Save to dashboard" (`save_visual`), and "Ask Claude about this". Clicking a bar, line or area tick, or a pie slice selects that point, and the button then asks about the point (`sendMessage`).
+  - `ui://pondview/dashboard`: card grid, slicers (`get_dashboard_data`, then `updateModelContext` with the active filters), and a fullscreen toggle (`requestDisplayMode`). It stacks on mobile or narrow containers.
+  - Both views theme through `useHostStyles` and respect safe-area insets.
+- **Docs:** `packages/pondview-docs/guide/mcp.md` covers `show_chart` and the `claude_desktop_config.json` setup.
+
+Verified only outside a host:
+- Unit and in-memory MCP client tests: annotations, visibility, resources, and payloads.
+- A stdio smoke test that builds a dashboard with a chart, a text card and a slicer, then filters it.
+- A static HTML harness. Headless Chromium can't run in the dev container, so nothing rendered in a browser was checked automatically.
+
+Known gaps and shortcuts:
+- `packages/cli/src/filters/` is a copy of `pondview-app/src/lib/filters` (it differs only in import paths). It gets merged during the Phase 3 restructure.
+- The views import components straight from `pondview-app` through the `@` alias.
+- The optional `ui://pondview/table` view for `query` isn't built; `query` returns text only.
+- The view bundles are large, around 1.4 MB for the dashboard (390 kB gzipped), because they include the full chart and markdown stack.
+
+### Next steps
+1. **Claude Desktop (Phase 1 and 2 exit test).** Run `bun run bridge:build-views`, point `claude_desktop_config.json` at `pondview mcp`, and check that:
+   - `show_chart` renders inline, with the type switcher, Save, and Ask (whole chart and a clicked point) working;
+   - `show_dashboard` renders, a slicer change filters the cards, and the model sees the new filters on its next turn;
+   - fullscreen works;
+   - light and dark themes both look right.
+2. **Claude Code:** check that the text fallback alone is useful (no iframe).
+3. **ext-apps basic-host or MCPJam, and VS Code:** cross-host check, and inspect the `ui/*` traffic if something misbehaves.
+4. **Fix whatever the host testing finds.** Then mark Phases 1–2 done and remove the deprecated tools.
+5. **Start Phase 3.**
+
 ## Phases
 
-**Phase 1: prototype, local (days)**
+**Phase 1: prototype, local (days)** — built, awaiting the Claude Desktop exit test
 - Add `@modelcontextprotocol/ext-apps@1.7.5`, which works with the current SDK 1.29.
 - Build `ui://pondview/visual` as a single-file view using the existing chart component.
 - Wire it to `create_visual`, and add a new `show_chart`.
 - Add `title` and annotations to all existing tools.
 - *Exit:* a chart renders in Claude Desktop via `claude_desktop_config.json` → `pondview mcp`. The text fallback works in Claude Code.
 
-**Phase 2: dashboard view + app-only tools**
+**Phase 2: dashboard view + app-only tools** — built, awaiting real-host testing
 - Dashboard view, slicers, fullscreen, `updateModelContext`, and the tool-surface changes above.
 - Test in the ext-apps basic-host / MCPJam and in VS Code.
 - *Exit:* build a dashboard end to end and filter it without leaving Claude.
@@ -176,7 +215,8 @@ A per-card failure sets `error` and leaves the rest of the dashboard intact. The
 
 **Phase 3: restructure and simplify**
 - Upgrade to MCP SDK v2 (split packages) and `ext-apps` 2.x.
-- Extract `packages/mcp-server` and `packages/mcp-views`.
+- Extract `packages/mcp-server` (`packages/mcp-views` already exists).
+- Move the shared filter logic (`lib/filters`, `lib/joins/graph`, `lib/types/filters`) and the chart components into a shared package, so they're used from one place. This removes `packages/cli/src/filters/` and stops the views from reaching into `pondview-app`.
 - Ship `plugin/` with skills and the local server, and publish to our own marketplace repo.
 - Delete:
   - `pondview-app/src/ai/*`, `cli/src/ai.ts`, and the `/ai/chat` and `/secrets/ai` routes.

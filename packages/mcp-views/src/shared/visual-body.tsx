@@ -13,10 +13,12 @@ export function VisualBody({
   payload,
   kind,
   fill = false,
+  onPointClick,
 }: {
   payload: VisualPayload;
   kind: VisualKind;
   fill?: boolean;
+  onPointClick?: (row: Record<string, unknown>) => void;
 }) {
   if (payload.rows.length === 0) {
     return <Message>The query returned no rows.</Message>;
@@ -45,6 +47,7 @@ export function VisualBody({
       chartHeightClassName="h-[300px]"
       fillAvailableHeight={fill}
       showMetadata={false}
+      onPointClick={onPointClick}
     />
   );
 }

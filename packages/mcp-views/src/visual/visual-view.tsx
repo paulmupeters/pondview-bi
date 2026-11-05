@@ -10,7 +10,7 @@ import {
   type VisualKind,
   type VisualPayload,
 } from "./visual-payload";
-import { summarizeVisual } from "./visual-summary";
+import { describePoint, summarizeVisual } from "./visual-summary";
 
 const CHART_KINDS: VisualKind[] = ["bar", "line", "area", "pie", "table"];
 
@@ -32,6 +32,7 @@ export function VisualView() {
   const [kind, setKind] = useState<VisualKind | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
   const [askState, setAskState] = useState<AskState>({ status: "idle" });
+  const [point, setPoint] = useState<Record<string, unknown> | null>(null);
 
   const { app, error } = useApp({
     appInfo: { name: "pondview-visual", version: "0.1.0" },
@@ -45,6 +46,7 @@ export function VisualView() {
         const next = readVisualPayload(result.structuredContent);
         setPayload(next);
         setKind(next?.visualType ?? null);
+        setPoint(null);
         setSaveState(
           next?.saved
             ? { status: "saved", dashboardId: next.saved.dashboardId }
@@ -88,7 +90,7 @@ export function VisualView() {
     setSaveState({ status: "saving" });
     try {
       const result = await app.callServerTool({
-        name: "create_visual",
+        name: "save_visual",
         arguments: {
           title: payload.title,
           ...(payload.description ? { description: payload.description } : {}),
@@ -116,7 +118,9 @@ export function VisualView() {
     try {
       const result = await app.sendMessage({
         role: "user",
-        content: [{ type: "text", text: summarizeVisual(payload, kind) }],
+        content: [
+          { type: "text", text: summarizeVisual(payload, kind, point) },
+        ],
       });
       if (result.isError) {
         throw new Error("The host declined the message.");
@@ -146,7 +150,13 @@ export function VisualView() {
         </div>
         <div className="flex flex-wrap items-center gap-1">
           {payload.visualType !== "card" ? (
-            <KindSwitcher value={kind} onChange={setKind} />
+            <KindSwitcher
+              value={kind}
+              onChange={(next) => {
+                setKind(next);
+                setPoint(null);
+              }}
+            />
           ) : null}
           {canSave ? (
             <button
@@ -165,7 +175,7 @@ export function VisualView() {
               disabled={askState.status === "sending"}
               onClick={ask}
             >
-              Ask Claude about this
+              {point ? "Ask Claude about this point" : "Ask Claude about this"}
             </button>
           ) : null}
           {saveState.status === "saved" ? (
@@ -183,7 +193,24 @@ export function VisualView() {
         <p className="text-xs text-destructive">{askState.message}</p>
       ) : null}
 
-      <VisualBody payload={payload} kind={kind} />
+      <VisualBody
+        payload={payload}
+        kind={kind}
+        onPointClick={canAsk ? setPoint : undefined}
+      />
+
+      {point ? (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="truncate">Selected: {describePoint(point)}</span>
+          <button
+            type="button"
+            className="underline hover:text-foreground"
+            onClick={() => setPoint(null)}
+          >
+            Clear
+          </button>
+        </p>
+      ) : null}
 
       {payload.truncated ? (
         <p className="text-xs text-muted-foreground">
