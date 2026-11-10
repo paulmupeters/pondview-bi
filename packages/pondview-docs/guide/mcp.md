@@ -69,6 +69,7 @@ navigation:
 | `run_preview` | Return a small preview from a table. |
 | `execute_sql` | Run read-only SQL by default. |
 | `show_chart` | Run read-only SQL and show the result inline as a chart, table, or metric card, without saving. |
+| `import_data` | Load rows, CSV text, or a CSV/Parquet/JSON URL into a new table (or append to one). Never overwrites; records the source as a table comment. |
 | `list_dashboards` | List existing dashboards with counts and URLs. |
 | `get_dashboard` | Inspect a dashboard, including charts and related metadata. |
 | `create_dashboard` | Create or update a dashboard metadata row. |

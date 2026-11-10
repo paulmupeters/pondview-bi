@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -520,6 +522,70 @@ export function createBridgeMcpToolHandlers(
         url: dashboardUrl(appUrl, dashboard.dashboardId),
         visualUrl: visualUrl(appUrl, chartId),
         visual,
+      };
+    },
+    importData: async (input: ImportDataInput) => {
+      const table = input.table.trim();
+      if (!IMPORT_TABLE_NAME.test(table)) {
+        throw new Error(
+          `Invalid table name "${input.table}". Use letters, digits, and underscores, starting with a letter or underscore.`,
+        );
+      }
+      const sources = [input.rows, input.csv, input.url].filter(
+        (value) => value !== undefined,
+      );
+      if (sources.length !== 1) {
+        throw new Error("Pass exactly one of rows, csv, or url.");
+      }
+      const mode = input.mode ?? "create";
+      const target = quoteIdentifier(table);
+      const existing = await runtime.query(
+        `SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = current_schema() AND lower(table_name) = lower(${quoteString(table)})`,
+      );
+      const exists = Number(existing.rows[0]?.n ?? 0) > 0;
+      if (mode === "create" && exists) {
+        throw new Error(
+          `Table "${table}" already exists. Use mode "append" to add rows, or pick another name.`,
+        );
+      }
+      if (mode === "append" && !exists) {
+        throw new Error(
+          `Table "${table}" does not exist. Use mode "create" first.`,
+        );
+      }
+
+      // Collected values go through a temp file DuckDB reads, so they never
+      // become part of the SQL text.
+      const workDir = await mkdtemp(join(tmpdir(), "pondview-import-"));
+      try {
+        const source = await importSourceExpression(input, workDir);
+        await runtime.query(
+          mode === "create"
+            ? `CREATE TABLE ${target} AS SELECT * FROM ${source}`
+            : `INSERT INTO ${target} BY NAME SELECT * FROM ${source}`,
+        );
+      } finally {
+        await rm(workDir, { recursive: true, force: true });
+      }
+      if (input.source?.trim()) {
+        await runtime.query(
+          `COMMENT ON TABLE ${target} IS ${quoteString(`Source: ${input.source.trim()}`)}`,
+        );
+      }
+
+      const count = await runtime.query(
+        `SELECT COUNT(*) AS row_count FROM ${target}`,
+      );
+      const columns = await runtime.query(`DESCRIBE ${target}`);
+      return {
+        table,
+        mode,
+        rowCount: Number(count.rows[0]?.row_count ?? 0),
+        columns: columns.rows.map((row) => ({
+          name: String(row.column_name),
+          type: String(row.column_type),
+        })),
+        source: input.source?.trim() || input.url || null,
       };
     },
     createTextCard: async (input: {
@@ -1211,6 +1277,30 @@ export function createBridgeMcpServer(
   );
 
   server.registerTool(
+    "import_data",
+    {
+      title: "Import data",
+      description:
+        'Load data into a new or existing DuckDB table, for when the database doesn\'t have what the user asks about. Pass exactly one of: rows (objects you collected, e.g. from a web page), csv (CSV text with a header row), or url (an http(s) link to a CSV, Parquet, or JSON file). mode "create" (default) makes a new table and fails if it exists; "append" adds rows to an existing table by column name. Nothing is ever overwritten. Always set source to where the data came from, and tell the user. Then query it or chart it with show_chart.',
+      inputSchema: mcpInputSchema({
+        table: z.string().min(1),
+        rows: z
+          .array(z.record(z.string(), z.unknown()))
+          .min(1)
+          .max(IMPORT_ROW_LIMIT)
+          .optional(),
+        csv: z.string().min(1).max(IMPORT_CSV_CHAR_LIMIT).optional(),
+        url: z.string().url().optional(),
+        mode: z.enum(["create", "append"]).optional(),
+        source: z.string().min(1).optional(),
+      }),
+      annotations: { ...writeAnnotations, openWorldHint: true },
+    },
+    async (input: ImportDataInput) =>
+      toolResult(await handlers.importData(input)),
+  );
+
+  server.registerTool(
     "open_ui",
     {
       title: "Get Pondview UI URL",
@@ -1833,10 +1923,51 @@ function loadViewHtml(view: string, viewsDir?: string): string {
 }
 
 const INSTRUCTION_TABLE_LIMIT = 50;
+const IMPORT_TABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,62}$/;
+const IMPORT_ROW_LIMIT = 10_000;
+const IMPORT_CSV_CHAR_LIMIT = 2_000_000;
+
+type ImportDataInput = {
+  table: string;
+  rows?: Record<string, unknown>[];
+  csv?: string;
+  url?: string;
+  mode?: "create" | "append";
+  source?: string;
+};
+
+// Returns a DuckDB table function reading the import's single source.
+async function importSourceExpression(
+  input: ImportDataInput,
+  workDir: string,
+): Promise<string> {
+  if (input.rows) {
+    const path = join(workDir, "rows.json");
+    await writeFile(path, JSON.stringify(input.rows));
+    return `read_json_auto(${quoteString(path)})`;
+  }
+  if (input.csv !== undefined) {
+    const path = join(workDir, "data.csv");
+    await writeFile(path, input.csv);
+    return `read_csv_auto(${quoteString(path)})`;
+  }
+  const url = new URL(input.url ?? "");
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error("url must be an http(s) link.");
+  }
+  const path = url.pathname.toLowerCase();
+  const reader = path.endsWith(".parquet")
+    ? "read_parquet"
+    : /\.(json|jsonl|ndjson)$/.test(path)
+      ? "read_json_auto"
+      : "read_csv_auto";
+  return `${reader}(${quoteString(url.href)})`;
+}
 
 function serverInstructions(tables?: string[]): string {
   const lines = [
-    "Pondview is connected to the user's own DuckDB database. When the user asks about data in it, answer with Pondview's tools and query the database; don't search the web or make up values.",
+    "Pondview is connected to the user's own DuckDB database. When the user asks about data in it, answer with Pondview's tools and query the database rather than searching the web or making up values.",
+    "If the database doesn't have the data, you may find it on the web (or a downloadable CSV/Parquet file), load it with import_data, citing the source, and then chart it. Say that the data came from the web.",
   ];
   if (tables && tables.length > 0) {
     const shown = tables.slice(0, INSTRUCTION_TABLE_LIMIT).join(", ");

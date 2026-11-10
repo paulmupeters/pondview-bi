@@ -947,6 +947,64 @@ describe("bridge MCP tools", () => {
     await expect(tools.query("DELETE FROM users")).rejects.toThrow("read-only");
   });
 
+  test("import_data creates tables from rows and CSV, appends, and never overwrites", async () => {
+    const runtime = await createSeededRuntime();
+    const tools = createBridgeMcpToolHandlers(runtime);
+
+    const created = await tools.importData({
+      table: "web_unicorns",
+      rows: [
+        { country: "United States", unicorns: 806 },
+        { country: "O'Brien Land", unicorns: 1 },
+      ],
+      source: "https://example.com/unicorns",
+    });
+    expect(created).toMatchObject({
+      table: "web_unicorns",
+      mode: "create",
+      rowCount: 2,
+    });
+    expect(created.columns.map((column) => column.name)).toEqual([
+      "country",
+      "unicorns",
+    ]);
+
+    await expect(
+      tools.importData({
+        table: "web_unicorns",
+        rows: [{ country: "X", unicorns: 2 }],
+      }),
+    ).rejects.toThrow("already exists");
+
+    const appended = await tools.importData({
+      table: "web_unicorns",
+      mode: "append",
+      csv: "unicorns,country\n166,China\n",
+    });
+    expect(appended.rowCount).toBe(3);
+
+    const china = await tools.query(
+      "SELECT unicorns FROM web_unicorns WHERE country = 'China'",
+    );
+    expect(Number(china.rows[0]?.unicorns)).toBe(166);
+    const comment = await tools.query(
+      "SELECT comment FROM duckdb_tables() WHERE table_name = 'web_unicorns'",
+    );
+    expect(comment.rows[0]?.comment).toBe(
+      "Source: https://example.com/unicorns",
+    );
+
+    await expect(
+      tools.importData({ table: "bad name; DROP TABLE users", csv: "a\n1\n" }),
+    ).rejects.toThrow("Invalid table name");
+    await expect(
+      tools.importData({ table: "both", csv: "a\n1\n", rows: [{ a: 1 }] }),
+    ).rejects.toThrow("exactly one");
+    await expect(
+      tools.importData({ table: "missing", mode: "append", csv: "a\n1\n" }),
+    ).rejects.toThrow("does not exist");
+  });
+
   describe("MCP App surface", () => {
     async function connectClient(
       options: Parameters<typeof createBridgeMcpServer>[1] = {},
@@ -1167,7 +1225,8 @@ describe("bridge MCP tools", () => {
       const instructions = client.getInstructions() ?? "";
       expect(instructions).toContain("show_chart");
       expect(instructions).toContain("Tables: main.users.");
-      expect(instructions).toContain("don't search the web");
+      expect(instructions).toContain("rather than searching the web");
+      expect(instructions).toContain("import_data");
     });
 
     test("query text shows only the first rows", async () => {

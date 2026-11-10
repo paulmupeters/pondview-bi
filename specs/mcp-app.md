@@ -133,6 +133,7 @@ Built:
   - Every model-facing tool in the [tool surface](#tool-surface) except `connect_source` (hosted only): `list_tables`, `describe_table`, `query`, `show_chart`, `save_visual`, `create_dashboard`, `create_text_card`, `show_dashboard`, `list_dashboards`, `get_dashboard`, `delete_visual` and `delete_dashboard`.
   - The app-only tools `get_dashboard_data`, `run_visual` and `update_visual_config`.
   - Also `list_visuals` and `get_visual`, which aren't in the table.
+  - `import_data` (write, open-world): when the database lacks the data, the model can load rows it found on the web, CSV text, or a CSV/Parquet/JSON URL into a new table, or append to one. It never overwrites, and stores the source as a table comment. The server instructions name the database's tables and tell the model to query them before going to the web.
   - Every tool has a `title` and `readOnlyHint` or `destructiveHint`.
   - Old tools are kept but marked deprecated in their descriptions: `create_visual`, `get_table_schema`, `run_preview`, `execute_sql`, and the `open_*` URL tools. `execute_sql` is the only destructive one, and its writes need `--allow-write-sql`.
 - **Views** (`packages/mcp-views`, single-file HTML copied to `packages/cli/views/`):
