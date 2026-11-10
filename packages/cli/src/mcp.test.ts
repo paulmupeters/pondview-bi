@@ -1163,8 +1163,11 @@ describe("bridge MCP tools", () => {
     });
 
     test("the server tells the model to prefer the inline views", async () => {
-      const client = await connectClient();
-      expect(client.getInstructions()).toContain("show_chart");
+      const client = await connectClient({ tables: ["main.users"] });
+      const instructions = client.getInstructions() ?? "";
+      expect(instructions).toContain("show_chart");
+      expect(instructions).toContain("Tables: main.users.");
+      expect(instructions).toContain("don't search the web");
     });
 
     test("query text shows only the first rows", async () => {

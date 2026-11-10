@@ -76,7 +76,11 @@ export interface BridgeMcpOptions {
 type BridgeMcpServerOptions = Pick<
   BridgeMcpOptions,
   "allowWriteSql" | "appUrl" | "viewsDir"
->;
+> & {
+  // Table references named in the server instructions, so the model knows
+  // which questions Pondview can answer before it calls any tool.
+  tables?: string[];
+};
 
 type VisualInput = {
   title: string;
@@ -754,8 +758,17 @@ export function createBridgeMcpServer(
       name: "pondview-bridge",
       version: "0.1.0",
     },
-    { instructions: SERVER_INSTRUCTIONS },
+    { instructions: serverInstructions(options.tables) },
   );
+  server.server.oninitialized = () => {
+    const client = server.server.getClientVersion();
+    const views = hostRendersViews(server.server.getClientCapabilities())
+      ? "supported"
+      : "not advertised";
+    console.error(
+      `[pondview] connected to ${client?.name ?? "unknown client"} ${client?.version ?? ""}; MCP Apps views: ${views}`,
+    );
+  };
   const handlers = createBridgeMcpToolHandlers(runtime, options);
   // Hosts that render MCP Apps get pointed at show_dashboard instead of the
   // local URL, which only works while a separate Pondview server is running.
@@ -1254,7 +1267,13 @@ export async function runBridgeMcpServerWithRuntime(
   runtime: McpRuntime,
   options: BridgeMcpServerOptions = {},
 ): Promise<void> {
-  const server = createBridgeMcpServer(runtime, options);
+  const tables =
+    options.tables ??
+    (await createBridgeMcpToolHandlers(runtime, options)
+      .listTables()
+      .then((result) => result.tables.map((table) => table.table_reference))
+      .catch(() => undefined));
+  const server = createBridgeMcpServer(runtime, { ...options, tables });
   await server.connect(new StdioServerTransport());
 }
 
@@ -1813,10 +1832,26 @@ function loadViewHtml(view: string, viewsDir?: string): string {
 </body></html>`;
 }
 
-const SERVER_INSTRUCTIONS =
-  "Pondview renders charts and dashboards inline in the conversation when the host supports MCP Apps. " +
-  "Answer data questions with show_chart, save charts with save_visual, and display dashboards with show_dashboard. " +
-  "In such hosts, never start a Pondview server or open Pondview URLs to show results; the inline views need neither.";
+const INSTRUCTION_TABLE_LIMIT = 50;
+
+function serverInstructions(tables?: string[]): string {
+  const lines = [
+    "Pondview is connected to the user's own DuckDB database. When the user asks about data in it, answer with Pondview's tools and query the database; don't search the web or make up values.",
+  ];
+  if (tables && tables.length > 0) {
+    const shown = tables.slice(0, INSTRUCTION_TABLE_LIMIT).join(", ");
+    const more =
+      tables.length > INSTRUCTION_TABLE_LIMIT
+        ? ` and ${tables.length - INSTRUCTION_TABLE_LIMIT} more (see list_tables)`
+        : "";
+    lines.push(`Tables: ${shown}${more}.`);
+  }
+  lines.push(
+    "Use describe_table to learn columns, then show_chart to answer with a chart, save_visual to keep it on a dashboard, and show_dashboard to display a dashboard.",
+    "These render inline in the conversation when the host supports MCP Apps. In such hosts, never start a Pondview server or open Pondview URLs to show results; the inline views need neither.",
+  );
+  return lines.join("\n");
+}
 
 function hostRendersViews(
   capabilities: Parameters<typeof getUiCapability>[0],
