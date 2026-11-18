@@ -30,6 +30,7 @@ import { findBaseTableReference } from "./filters/parse-tables";
 import { FILTER_OPERATORS, type Filter } from "./filters/types";
 import { BridgeProjectStore } from "./project-store";
 import { DuckDbRuntime } from "./runtime/duckdb-runtime";
+import { IdleReleaseRuntime } from "./runtime/idle-release-runtime";
 import { BridgeSecretStore } from "./secrets";
 import {
   createProjectDatabasePath,
@@ -1372,10 +1373,16 @@ export async function runBridgeMcpServer(
 ): Promise<void> {
   const secrets = new BridgeSecretStore(options.secretsPath);
   const databasePath = resolveMcpDatabasePath(options);
-  const runtime = new DuckDbRuntime({
+  const duckDbRuntime = new DuckDbRuntime({
     databasePath,
     resolveSource: (id) => secrets.getSource(id),
   });
+  // A database file may be shared with other processes (Claude Desktop runs
+  // separate chat and agent-mode copies of this server), so only hold DuckDB's
+  // single-writer lock while queries run. An in-memory database must stay open.
+  const runtime = databasePath
+    ? new IdleReleaseRuntime(duckDbRuntime)
+    : duckDbRuntime;
 
   process.once("exit", () => {
     void runtime.close();
