@@ -239,7 +239,17 @@ export class DuckDbRuntime {
   }
 
   private async connection() {
-    this.connectionPromise ??= this.createConnection();
+    if (!this.connectionPromise) {
+      const connectionPromise = this.createConnection();
+      this.connectionPromise = connectionPromise;
+      // Don't cache a failed open (such as another process holding the file
+      // lock); the next query tries again.
+      connectionPromise.catch(() => {
+        if (this.connectionPromise === connectionPromise) {
+          this.connectionPromise = null;
+        }
+      });
+    }
     return this.connectionPromise;
   }
 

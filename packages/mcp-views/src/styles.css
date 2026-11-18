@@ -1,0 +1,34 @@
+@import "../../pondview-app/src/app/globals.css";
+
+@source "../../pondview-app/src/components";
+@source "./";
+
+/* Prefer the host's theme tokens (applied by useHostStyles) so the view blends
+   into Claude / ChatGPT, falling back to Pondview's own palette. */
+:root {
+  --background: var(--color-background-primary, oklch(1 0 0));
+  --foreground: var(--color-text-primary, oklch(0.2498 0.0125 135.0835));
+  --card: var(--color-background-primary, oklch(1 0 0));
+  --card-foreground: var(--color-text-primary, oklch(0.2498 0.0125 135.0835));
+  --muted-foreground: var(
+    --color-text-secondary,
+    oklch(0.5218 0.0047 286.2375)
+  );
+  --border: var(--color-border-primary, oklch(0.9331 0.0163 95.2327));
+}
+
+.dark {
+  --background: var(--color-background-primary, oklch(0.2498 0.0125 135.0835));
+  --foreground: var(--color-text-primary, oklch(0.8549 0.0852 96.7265));
+  --card: var(--color-background-primary, oklch(0.2498 0.0125 135.0835));
+  --card-foreground: var(--color-text-primary, oklch(0.8549 0.0852 96.7265));
+  --muted-foreground: var(--color-text-secondary, oklch(0.6884 0.0303 86.6582));
+  --border: var(--color-border-primary, oklch(0.3382 0.0211 134.1154));
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+  margin: 0;
+}
